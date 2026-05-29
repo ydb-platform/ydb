@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "opentelemetry/sdk/configuration/attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/attribute_value_configuration_visitor.h"
 #include "opentelemetry/version.h"
@@ -23,7 +25,7 @@ public:
     visitor->VisitInteger(this);
   }
 
-  long long value;
+  int64_t value;
 };
 
 }  // namespace configuration

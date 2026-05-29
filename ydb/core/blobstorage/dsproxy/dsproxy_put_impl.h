@@ -310,7 +310,7 @@ public:
     void ProcessResponse(TEvBlobStorage::TEvVPutResult& msg) {
         ++VPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
+        ui32 orderNumber = GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
         ProcessResponseBlob(orderNumber, msg.Record);
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
@@ -318,7 +318,7 @@ public:
     void ProcessResponse(TEvBlobStorage::TEvVMultiPutResult& msg) {
         ++VMultiPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
+        ui32 orderNumber = GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
         auto vputResult = History.CreateVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
         for (const auto& item : msg.Record.GetItems()) {
             ProcessResponseBlob(orderNumber, item);
@@ -331,6 +331,22 @@ public:
         const auto it = BlobMap.find(id.FullID());
         Y_ABORT_UNLESS(it != BlobMap.end());
         return it->second;
+    }
+
+    ui32 GetOrderNumber(const TVDiskIdShort& vdiskId) const {
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdiskId), "incorrect VDiskId# %s", vdiskId.ToString().data());
+        return Info->GetOrderNumber(vdiskId);
+    }
+
+    ui32 GetOrderNumber(const TVDiskID& vdiskId) const {
+        Y_ABORT_UNLESS(vdiskId.GroupID == Info->GroupID, "incorrect VDiskId# %s expected GroupId# %u",
+            vdiskId.ToString().data(), static_cast<unsigned>(Info->GroupID.GetRawId()));
+
+        // Old-generation replies may legitimately reach this path during a generation race; only
+        // the group identity and topology coordinates must match before mapping to an order number.
+        const TVDiskIdShort shortId(vdiskId);
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(shortId), "incorrect VDiskId# %s", vdiskId.ToString().data());
+        return Info->GetOrderNumber(shortId);
     }
 
 protected:

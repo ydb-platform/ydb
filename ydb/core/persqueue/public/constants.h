@@ -1,8 +1,8 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/string.h>
-#include <util/datetime/base.h>
 
 namespace NKikimr::NPQ {
 
@@ -23,5 +23,9 @@ constexpr i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS = TDur
 constexpr ui64 DEFAULT_PARTITION_SPEED = 1_MB;
 constexpr i32 MAX_READ_RULES_COUNT = 3000;
 constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;
+constexpr ui64 DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND = 1024 * 1024;
 
-}
+constexpr ui32 CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT = 500;
+constexpr ui32 CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST = 750;
+
+} // namespace NKikimr::NPQ

@@ -34,9 +34,11 @@ namespace {
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
-            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd)
+            ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
+            TFileHandle&& diskFd)
         : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true)
     {
+        PersistentBufferUniqueId = persistentBufferUniqueId;
         PDiskParams = pDiskParams;
         DiskFormat = std::move(diskFormat);
         DiskFd = std::move(diskFd);
@@ -59,13 +61,14 @@ namespace {
         : BaseInfo(std::move(baseInfo))
         , Config(std::move(ddiskConfig))
         , Info(std::move(info))
-        , CountersBase(GetServiceCounters(counters, "ddisks"))
+        , CountersParent(std::move(counters))
+        , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
         , PersistentBufferFormat(std::move(pbFormat))
     {
         StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
-        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
+        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME || BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_SSD) {
             latencyHistBounds = NvmeLatencyHistBoundsMs;
         } else {
             latencyHistBounds = GetCommonLatencyHistBounds(BaseInfo.DeviceType);
@@ -96,6 +99,8 @@ namespace {
         auto cDirectIOWrite = cDirectIO->GetSubgroup("operation", "Write");
         auto cDirectIORead = cDirectIO->GetSubgroup("operation", "Read");
 
+        auto cPersistentBuffer = counters->GetSubgroup("subsystem", "persistent_buffer");
+
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
 #define HISTOGRAM(GROUP, NAME, BUCKETS) .NAME = c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS)),
 #define COUNTER_VALUE(GROUP, NAME, DERIV) c##GROUP->GetCounter(#NAME, DERIV)
@@ -107,6 +112,7 @@ namespace {
                 .OP = [&] { \
                     TInterfaceOpCounters c; \
                     c.Requests = COUNTER_VALUE(Interface##OP, Requests, true); \
+                    c.RequestsInFlight = COUNTER_VALUE(Interface##OP, RequestsInFlight, false); \
                     c.ReplyOk = COUNTER_VALUE(Interface##OP, ReplyOk, true); \
                     c.ReplyErr = COUNTER_VALUE(Interface##OP, ReplyErr, true); \
                     c.Bytes = COUNTER_VALUE(Interface##OP, Bytes, true); \
@@ -134,6 +140,7 @@ namespace {
 #define XX(OP) \
                 .OP = { \
                     COUNTER(DirectIO##OP, Requests, true) \
+                    COUNTER(DirectIO##OP, RequestsInFlight, false) \
                     COUNTER(DirectIO##OP, Bytes, true) \
                     COUNTER(DirectIO##OP, BytesInFlight, false) \
                     HISTOGRAM(DirectIO##OP, RequestSizeKiB, RequestSizeBoundsKiB) \
@@ -153,6 +160,12 @@ namespace {
                 COUNTER(DirectIO, QueueSize, false)
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
+            },
+            .PersistentBuffer = {
+                COUNTER(PersistentBuffer, AllocatedChunks, false)
+                COUNTER(PersistentBuffer, TotalBytes, false)
+                COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
+                COUNTER(PersistentBuffer, InMemoryCacheSize, false)
             },
         };
 
@@ -181,9 +194,11 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
+            RegisterMonPage();
             InitPDiskInterface();
         }
     }
@@ -240,6 +255,7 @@ namespace {
             hFunc(TEvRead, handleQuery)
             hFunc(TEvSyncWithPersistentBuffer, handleQuery)
             hFunc(TEvSyncWithDDisk, handleQuery)
+            hFunc(TEvDeleteTabletChunks, handleQuery)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)
@@ -264,6 +280,8 @@ namespace {
             hFunc(NPDisk::TEvCheckSpaceResult, Handle);
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
+
+            hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
@@ -308,6 +326,43 @@ namespace {
                 break;
             }
         )
+    }
+
+    STFUNC(TDDiskActor::StateFuncTerminate) {
+        // Mirrors VDisk's PDISK_TERMINATE_STATE_FUNC_DEF: ignore everything except poison.
+        // Reaching this state means PDisk's session for our owner is gone (INVALID_ROUND etc).
+        // The owning environment (warden in production, test scaffolding in tests) is expected
+        // to send TEvPoison and start a replacement DDisk actor with a fresh OwnerRound.
+        switch (ev->GetTypeRewrite()) {
+            cFunc(TEvents::TSystem::Poison, PassAway)
+            default:
+                break;
+        }
+    }
+
+    bool TDDiskActor::CheckPDiskReply(NKikimrProto::EReplyStatus status,
+            const TString& errorReason, TStringBuf source) {
+        switch (status) {
+        case NKikimrProto::OK:
+            return true;
+        case NKikimrProto::ERROR:
+        case NKikimrProto::INVALID_OWNER:
+        case NKikimrProto::INVALID_ROUND:
+        case NKikimrProto::CORRUPTED:
+        case NKikimrProto::OUT_OF_SPACE:
+            STLOG(PRI_NOTICE, BS_DDISK, BSDD44,
+                "TDDiskActor: PDisk session lost, switching to terminate state",
+                (DDiskId, DDiskId),
+                (Source, source),
+                (Status, NKikimrProto::EReplyStatus_Name(status)),
+                (ErrorReason, errorReason));
+            Become(&TThis::StateFuncTerminate);
+            return false;
+        default:
+            Y_ABORT("Unexpected PDisk status %s in %.*s: %s",
+                NKikimrProto::EReplyStatus_Name(status).c_str(),
+                static_cast<int>(source.size()), source.data(), errorReason.c_str());
+        }
     }
 
     void TDDiskActor::PassAway() {

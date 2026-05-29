@@ -18,7 +18,7 @@ import sys
 import threading
 import uuid
 import warnings
-from asyncio import Task, create_task
+from asyncio import AbstractEventLoop, Task, create_task
 from concurrent.futures import Future
 from contextlib import (
     asynccontextmanager,
@@ -41,6 +41,7 @@ from typing import (
     Generic,
     Iterable,
     Iterator,
+    Mapping,
     NamedTuple,
     Sequence,
     TextIO,
@@ -53,7 +54,7 @@ from weakref import WeakKeyDictionary, WeakSet
 import rich
 import rich.repr
 from platformdirs import user_downloads_path
-from rich.console import Console, RenderableType
+from rich.console import Console, ConsoleDimensions, ConsoleOptions, RenderableType
 from rich.control import Control
 from rich.protocol import is_renderable
 from rich.segment import Segment, Segments
@@ -74,7 +75,7 @@ from textual._animator import DEFAULT_EASING, Animatable, Animator, EasingFuncti
 from textual._ansi_sequences import SYNC_END, SYNC_START
 from textual._ansi_theme import ALABASTER, MONOKAI
 from textual._callback import invoke
-from textual._compose import compose
+from textual._compat import cached_property
 from textual._compositor import CompositorUpdate
 from textual._context import active_app, active_message_pump
 from textual._context import message_hook as message_hook_context_var
@@ -93,6 +94,8 @@ from textual.await_complete import AwaitComplete
 from textual.await_remove import AwaitRemove
 from textual.binding import Binding, BindingsMap, BindingType, Keymap
 from textual.command import CommandListItem, CommandPalette, Provider, SimpleProvider
+from textual.compose import compose
+from textual.content import Content
 from textual.css.errors import StylesheetError
 from textual.css.query import NoMatches
 from textual.css.stylesheet import RulesMap, Stylesheet
@@ -107,6 +110,7 @@ from textual.keys import (
     REPLACED_KEYS,
     _character_to_key,
     _get_unicode_name_from_key,
+    _normalize_key_list,
     format_key,
 )
 from textual.messages import CallbackType, Prune
@@ -481,15 +485,53 @@ class App(Generic[ReturnType], DOMNode):
     SUSPENDED_SCREEN_CLASS: ClassVar[str] = ""
     """Class to apply to suspended screens, or empty string for no class."""
 
+    HORIZONTAL_BREAKPOINTS: ClassVar[list[tuple[int, str]]] | None = []
+    """List of horizontal breakpoints for responsive classes.
+
+    This allows for styles to be responsive to the dimensions of the terminal.
+    For instance, you might want to show less information, or fewer columns on a narrow displays -- or more information when the terminal is sized wider than usual.
+    
+    A breakpoint consists of a tuple containing the minimum width where the class should applied, and the name of the class to set.
+
+    Note that only one class name is set, and you should avoid having more than one breakpoint set for the same size.
+
+    Example:
+        ```python
+        # Up to 80 cells wide, the app has the class "-normal"
+        # 80 - 119 cells wide, the app has the class "-wide"
+        # 120 cells or wider, the app has the class "-very-wide"
+        HORIZONTAL_BREAKPOINTS = [(0, "-normal"), (80, "-wide"), (120, "-very-wide")]
+        ```
+    
+    """
+    VERTICAL_BREAKPOINTS: ClassVar[list[tuple[int, str]]] | None = []
+    """List of vertical breakpoints for responsive classes.
+    
+    Contents are the same as [`HORIZONTAL_BREAKPOINTS`][textual.app.App.HORIZONTAL_BREAKPOINTS], but the integer is compared to the height, rather than the width.
+    """
+
+    # TODO: Enable by default after suitable testing period
+    PAUSE_GC_ON_SCROLL: ClassVar[bool] = False
+    """Pause Python GC (Garbage Collection) when scrolling, for potentially smoother scrolling with many widgets (experimental)."""
+
+    ENABLE_SELECT_AUTO_SCROLL: ClassVar[bool] = True
+    """Enable automatic scrolling if selecting and the mouse is at the top or bottom of the widget?"""
+
+    SELECT_AUTO_SCROLL_LINES: ClassVar[int] = 3
+    """Number of lines in auto-scrolling regions at the top and bottom of a widget."""
+
+    SELECT_AUTO_SCROLL_SPEED: ClassVar[float] = 60.0
+    """Maximum speed of select auto-scroll in lines per second."""
+
     _PSEUDO_CLASSES: ClassVar[dict[str, Callable[[App[Any]], bool]]] = {
         "focus": lambda app: app.app_focus,
         "blur": lambda app: not app.app_focus,
         "dark": lambda app: app.current_theme.dark,
         "light": lambda app: not app.current_theme.dark,
         "inline": lambda app: app.is_inline,
-        "ansi": lambda app: app.ansi_color,
+        "ansi": lambda app: app.native_ansi_color,
         "nocolor": lambda app: app.no_color,
-    }  # type: ignore[assignment]
+    }
 
     title: Reactive[str] = Reactive("", compute=False)
     """The title of the app, displayed in the header."""
@@ -512,7 +554,7 @@ class App(Generic[ReturnType], DOMNode):
     ansi_theme_light = Reactive(ALABASTER, init=False)
     """Maps ANSI colors to hex colors using a Rich TerminalTheme object while using a light theme."""
 
-    ansi_color = Reactive(False)
+    ansi_color: Reactive[bool | None] = Reactive(None)
     """Allow ANSI colors in UI?"""
 
     def __init__(
@@ -520,7 +562,7 @@ class App(Generic[ReturnType], DOMNode):
         driver_class: Type[Driver] | None = None,
         css_path: CSSPathType | None = None,
         watch_css: bool = False,
-        ansi_color: bool = False,
+        ansi_color: bool | None = None,
     ):
         """Create an instance of an app.
 
@@ -532,13 +574,13 @@ class App(Generic[ReturnType], DOMNode):
                 will be loaded in order.
             watch_css: Reload CSS if the files changed. This is set automatically if
                 you are using `textual run` with the `dev` switch.
-            ansi_color: Allow ANSI colors if `True`, or convert ANSI colors to to RGB if `False`.
+            ansi_color: Allow ANSI colors if `True`, or convert ANSI colors to RGB if `False`, `None` to use "ansi" parameter from themes.
 
         Raises:
             CssPathError: When the supplied CSS path(s) are an unexpected type.
         """
         self._start_time = perf_counter()
-        super().__init__()
+        super().__init__(classes=self.DEFAULT_CLASSES)
         self.features: frozenset[FeatureFlag] = parse_features(os.getenv("TEXTUAL", ""))
 
         self._registered_themes: dict[str, Theme] = {}
@@ -554,12 +596,12 @@ class App(Generic[ReturnType], DOMNode):
         )
         self.set_reactive(App.ansi_color, ansi_color)
         self._filters: list[LineFilter] = [
-            ANSIToTruecolor(ansi_theme, enabled=not ansi_color)
+            ANSIToTruecolor(ansi_theme, enabled=not self.native_ansi_color)
         ]
         environ = dict(os.environ)
         self.no_color = environ.pop("NO_COLOR", None) is not None
         if self.no_color:
-            self._filters.append(NoColor() if self.ansi_color else Monochrome())
+            self._filters.append(NoColor() if self.native_ansi_color else Monochrome())
 
         for filter_name in constants.FILTERS.split(","):
             filter = filter_name.lower().strip()
@@ -588,6 +630,9 @@ class App(Generic[ReturnType], DOMNode):
         self._sync_available = False
 
         self.mouse_over: Widget | None = None
+        """The widget directly under the mouse."""
+        self.hover_over: Widget | None = None
+        """The first widget with a hover style under the mouse."""
         self.mouse_captured: Widget | None = None
         self._driver: Driver | None = None
         self._exit_renderables: list[RenderableType] = []
@@ -595,7 +640,12 @@ class App(Generic[ReturnType], DOMNode):
         self._action_targets = {"app", "screen", "focused"}
         self._animator = Animator(self)
         self._animate = self._animator.bind(self)
+
         self.mouse_position = Offset(0, 0)
+        """The current screen-space mouse position."""
+
+        self.mouse_position_high_resolution: tuple[float, float] = (0.0, 0.0)
+        """A high resolution (floating point) mouse position. If supported by the terminal, this may be more granular than `mouse_position`"""
 
         self._mouse_down_widget: Widget | None = None
         """The widget that was most recently mouse downed (used to create click events)."""
@@ -621,9 +671,6 @@ class App(Generic[ReturnType], DOMNode):
         self._exception: Exception | None = None
         """The unhandled exception which is leading to the app shutting down,
         or None if the app is still running with no unhandled exceptions."""
-
-        self._exception_event: asyncio.Event = asyncio.Event()
-        """An event that will be set when the first exception is encountered."""
 
         self.title = (
             self.TITLE if self.TITLE is not None else f"{self.__class__.__name__}"
@@ -658,7 +705,7 @@ class App(Generic[ReturnType], DOMNode):
         will be ignored.
         """
 
-        self._logger = Logger(self._log)
+        self._logger = Logger(self._log, app=self)
 
         self._css_has_errors = False
 
@@ -767,8 +814,14 @@ class App(Generic[ReturnType], DOMNode):
         perform work after the app has resumed.
         """
 
-        self.set_class(self.current_theme.dark, "-dark-mode")
-        self.set_class(not self.current_theme.dark, "-light-mode")
+        self.mode_change_signal: Signal[str] = Signal(self, "mode-change")
+        """A signal published when the current screen mode changes."""
+
+        self.screen_change_signal: Signal[Screen] = Signal(self, "screen-change")
+        """A signal published when the current screen changes."""
+
+        self.set_class(self.current_theme.dark, "-dark-mode", update=False)
+        self.set_class(not self.current_theme.dark, "-light-mode", update=False)
 
         self.animation_level: AnimationLevel = constants.TEXTUAL_ANIMATIONS
         """Determines what type of animations the app will display.
@@ -789,6 +842,8 @@ class App(Generic[ReturnType], DOMNode):
         self._resize_event: events.Resize | None = None
         """A pending resize event, sent on idle."""
 
+        self._size: Size | None = None
+
         self._css_update_count: int = 0
         """Incremented when CSS is invalidated."""
 
@@ -797,6 +852,12 @@ class App(Generic[ReturnType], DOMNode):
 
         self.supports_smooth_scrolling: bool = False
         """Does the terminal support smooth scrolling?"""
+
+        self._compose_screen: Screen | None = None
+        """The screen composed by App.compose."""
+
+        self._realtime_animation_count = 0
+        """Number of current realtime animations, such as scrolling."""
 
         if self.ENABLE_COMMAND_PALETTE:
             for _key, binding in self._bindings:
@@ -814,6 +875,27 @@ class App(Generic[ReturnType], DOMNode):
                         tooltip="Open the command palette",
                     )
                 )
+
+        self._resize_timer: Timer | None = None
+        """Timer used to invoke screen resize."""
+
+    def get_line_filters(self) -> Sequence[LineFilter]:
+        """Get currently enabled line filters.
+
+        Returns:
+            A list of [LineFilter][textual.filters.LineFilter] instances.
+        """
+        return [filter for filter in self._filters if filter.enabled]
+
+    @property
+    def _is_devtools_connected(self) -> bool:
+        """Is the app connected to the devtools?"""
+        return self.devtools is not None and self.devtools.is_connected
+
+    @cached_property
+    def _exception_event(self) -> asyncio.Event:
+        """An event that will be set when the first exception is encountered."""
+        return asyncio.Event()
 
     def __init_subclass__(cls, *args, **kwargs) -> None:
         for variable_name, screen_collection in (
@@ -833,6 +915,21 @@ class App(Generic[ReturnType], DOMNode):
 
         return super().__init_subclass__(*args, **kwargs)
 
+    def _thread_init(self):
+        """Initialize threading primitives for the current thread.
+
+        https://github.com/Textualize/textual/issues/5845
+
+        """
+        self._message_queue
+        self._mounted_event
+        self._exception_event
+        self._thread_id = threading.get_ident()
+
+    def _get_dom_base(self) -> DOMNode:
+        """When querying from the app, we want to query the default screen."""
+        return self.default_screen
+
     def validate_title(self, title: Any) -> str:
         """Make sure the title is set to a string."""
         return str(title)
@@ -840,6 +937,11 @@ class App(Generic[ReturnType], DOMNode):
     def validate_sub_title(self, sub_title: Any) -> str:
         """Make sure the subtitle is set to a string."""
         return str(sub_title)
+
+    @property
+    def default_screen(self) -> Screen:
+        """The default screen instance."""
+        return self.screen if self._compose_screen is None else self._compose_screen
 
     @property
     def workers(self) -> WorkerManager:
@@ -906,6 +1008,43 @@ class App(Generic[ReturnType], DOMNode):
         """
         return self._clipboard
 
+    def _realtime_animation_begin(self) -> None:
+        """A scroll or other animation that must be smooth has begun."""
+        if self.PAUSE_GC_ON_SCROLL:
+            import gc
+
+            gc.disable()
+        self._realtime_animation_count += 1
+
+    def _realtime_animation_complete(self) -> None:
+        """A scroll or other animation that must be smooth has completed."""
+        self._realtime_animation_count -= 1
+        if self._realtime_animation_count == 0 and self.PAUSE_GC_ON_SCROLL:
+            import gc
+
+            gc.enable()
+
+    def format_title(self, title: str, sub_title: str) -> Content:
+        """Format the title for display.
+
+        Args:
+            title: The title.
+            sub_title: The sub title.
+
+        Returns:
+            Content instance with title and subtitle.
+        """
+        title_content = Content(title)
+        sub_title_content = Content(sub_title)
+        if sub_title_content:
+            return Content.assemble(
+                title_content,
+                (" — ", "dim"),
+                sub_title_content.stylize("dim"),
+            )
+        else:
+            return title_content
+
     @contextmanager
     def batch_update(self) -> Generator[None, None, None]:
         """A context manager to suspend all repaints until the end of the batch."""
@@ -926,10 +1065,11 @@ class App(Generic[ReturnType], DOMNode):
         if not self._batch_count:
             self.check_idle()
 
-    def _delay_update(self, delay: float = 0.05) -> None:
+    def delay_update(self, delay: float = 0.05) -> None:
         """Delay updates for a short period of time.
 
         May be used to mask a brief transition.
+        Consider this method only if you aren't able to use `App.batch_update`.
 
         Args:
             delay: Delay before updating.
@@ -942,7 +1082,7 @@ class App(Generic[ReturnType], DOMNode):
             if not self._batch_count:
                 self.screen.refresh()
 
-        self.set_timer(delay, end_batch, name="_delay_update")
+        self.set_timer(delay, end_batch, name="delay_update")
 
     @contextmanager
     def _context(self) -> Generator[None, None, None]:
@@ -955,8 +1095,12 @@ class App(Generic[ReturnType], DOMNode):
             active_message_pump.reset(message_pump_reset_token)
             active_app.reset(app_reset_token)
 
-    def _watch_ansi_color(self, ansi_color: bool) -> None:
+    def _watch_ansi_color(self, ansi_color: bool | None) -> None:
         """Enable or disable the truecolor filter when the reactive changes"""
+        if ansi_color is None:
+            if (theme := self.get_theme(self.theme)) is not None:
+                ansi_color = theme.ansi
+
         for filter in self._filters:
             if isinstance(filter, ANSIToTruecolor):
                 filter.enabled = not ansi_color
@@ -1026,7 +1170,7 @@ class App(Generic[ReturnType], DOMNode):
     @property
     def debug(self) -> bool:
         """Is debug mode enabled?"""
-        return "debug" in self.features
+        return "debug" in self.features or constants.DEBUG
 
     @property
     def is_headless(self) -> bool:
@@ -1071,6 +1215,45 @@ class App(Generic[ReturnType], DOMNode):
     def current_mode(self) -> str:
         """The name of the currently active mode."""
         return self._current_mode
+
+    @property
+    def console_options(self) -> ConsoleOptions:
+        """Get options for the Rich console.
+
+        Returns:
+            Console options (same object returned from `console.options`).
+        """
+        size = ConsoleDimensions(*self.size)
+        console = self.console
+        return ConsoleOptions(
+            max_height=size.height,
+            size=size,
+            legacy_windows=console.legacy_windows,
+            min_width=1,
+            max_width=size.width,
+            encoding=console.encoding,
+            is_terminal=console.is_terminal,
+        )
+
+    def get_screen_stack(self, mode: str | None = None) -> list[Screen]:
+        """Get the screen stack for the given mode, or the current mode if no mode is specified.
+
+        Args:
+            mode: Name of a model
+
+        Raises:
+            KeyError: If there is no mode.
+
+        Returns:
+            A list of screens. Note that this is a copy, and modifying the list will not impact the app's screen stack.
+        """
+        if mode is None:
+            mode = self._current_mode
+        try:
+            stack = self._screen_stacks[mode]
+        except KeyError:
+            raise KeyError(f"No mode called {mode!r}") from None
+        return stack.copy()
 
     def exit(
         self,
@@ -1141,27 +1324,26 @@ class App(Generic[ReturnType], DOMNode):
         Yields:
             [SystemCommand][textual.app.SystemCommand] instances.
         """
-        if not self.ansi_color:
-            yield SystemCommand(
-                "Change theme",
-                "Change the current theme",
-                self.action_change_theme,
-            )
         yield SystemCommand(
-            "Quit the application",
+            "Theme",
+            "Change the current theme",
+            self.action_change_theme,
+        )
+        yield SystemCommand(
+            "Quit",
             "Quit the application as soon as possible",
             self.action_quit,
         )
 
         if screen.query("HelpPanel"):
             yield SystemCommand(
-                "Hide keys and help panel",
+                "Keys",
                 "Hide the keys and widget help panel",
                 self.action_hide_help_panel,
             )
         else:
             yield SystemCommand(
-                "Show keys and help panel",
+                "Keys",
                 "Show help for the focused widget and a summary of available keys",
                 self.action_show_help_panel,
             )
@@ -1178,9 +1360,9 @@ class App(Generic[ReturnType], DOMNode):
             )
 
         yield SystemCommand(
-            "Save screenshot",
+            "Screenshot",
             "Save an SVG 'screenshot' of the current screen",
-            self.deliver_screenshot,
+            lambda: self.set_timer(0.1, self.deliver_screenshot),
         )
 
     def get_default_screen(self) -> Screen:
@@ -1313,12 +1495,17 @@ class App(Generic[ReturnType], DOMNode):
         """
         theme = self.current_theme
         dark = theme.dark
-        self.ansi_color = theme_name == "textual-ansi"
-        self.set_class(dark, "-dark-mode", update=False)
-        self.set_class(not dark, "-light-mode", update=False)
+        # Setting the theme adds class "-theme-<THEME NAME>" to the App
+        classes = {name: False for name in self.classes if name.startswith("-theme-")}
+        classes[f"-theme-{self.current_theme.name}"] = True
+        classes["-dark-mode"] = dark
+        classes["-light-mode"] = not dark
+
+        self.update_classes(classes, update=False)
+
         self._refresh_truecolor_filter(self.ansi_theme)
         self._invalidate_css()
-        self.call_next(self.refresh_css)
+        self.call_next(partial(self.refresh_css, animate=False))
         self.call_next(self.theme_changed_signal.publish, theme)
 
     def _invalidate_css(self) -> None:
@@ -1348,6 +1535,16 @@ class App(Generic[ReturnType], DOMNode):
             self.ansi_theme_dark if self.current_theme.dark else self.ansi_theme_light
         )
 
+    @property
+    def native_ansi_color(self) -> bool:
+        """Use native ANSI colors?
+
+        This will return `self.current_theme.ansi` if `self.ansi_color` is `None`,
+        otherwise it will return `self.ansi_color`.
+        """
+        ansi = self.current_theme.ansi if self.ansi_color is None else self.ansi_color
+        return ansi
+
     def _refresh_truecolor_filter(self, theme: TerminalTheme) -> None:
         """Update the ANSI to Truecolor filter, if available, with a new theme mapping.
 
@@ -1355,9 +1552,10 @@ class App(Generic[ReturnType], DOMNode):
             theme: The new terminal theme to use for mapping ANSI to truecolor.
         """
         filters = self._filters
+        ansi_color = self.native_ansi_color
         for index, filter in enumerate(filters):
             if isinstance(filter, ANSIToTruecolor):
-                filters[index] = ANSIToTruecolor(theme, enabled=not self.ansi_color)
+                filters[index] = ANSIToTruecolor(theme, enabled=not ansi_color)
                 return
 
     def get_driver_class(self) -> Type[Driver]:
@@ -1448,11 +1646,23 @@ class App(Generic[ReturnType], DOMNode):
         Returns:
             Size of the terminal.
         """
+        if self._size is not None:
+            return self._size
         if self._driver is not None and self._driver._size is not None:
             width, height = self._driver._size
         else:
             width, height = self.console.size
+            if self._driver is not None:
+                self._driver._size = (width, height)
         return Size(width, height)
+
+    @property
+    def viewport_size(self) -> Size:
+        """Get the viewport size (size of the screen)."""
+        try:
+            return self.screen.size
+        except (ScreenStackError, NoScreen):
+            return self.size
 
     def _get_inline_height(self) -> int:
         """Get the inline height (height when in inline mode).
@@ -1701,7 +1911,7 @@ class App(Generic[ReturnType], DOMNode):
     ) -> str | None:
         """Deliver a screenshot of the app.
 
-        This with save the screenshot when running locally, or serve it when the app
+        This will save the screenshot when running locally, or serve it when the app
         is running in a web browser.
 
         Args:
@@ -1772,6 +1982,10 @@ class App(Generic[ReturnType], DOMNode):
         key_display: str | None = None,
     ) -> None:
         """Bind a key to an action.
+
+        !!! warning
+            This method may be private or removed in a future version of Textual.
+            See [dynamic actions](/guide/actions#dynamic-actions) for a more flexible alternative to updating bindings.
 
         Args:
             keys: A comma separated list of keys, i.e.
@@ -1972,7 +2186,7 @@ class App(Generic[ReturnType], DOMNode):
 
         # Launch the app in the "background"
 
-        app_task = create_task(run_app(app), name=f"run_test {app}")
+        self._task = app_task = create_task(run_app(app), name=f"run_test {app}")
 
         # Wait until the app has performed all startup routines.
         await app_ready_event.wait()
@@ -1983,6 +2197,7 @@ class App(Generic[ReturnType], DOMNode):
                 await pilot._wait_for_screen()
                 yield pilot
             finally:
+                await asyncio.sleep(0)
                 # Shutdown the app cleanly
                 await app._shutdown()
                 await app_task
@@ -2017,7 +2232,6 @@ class App(Generic[ReturnType], DOMNode):
         from textual.pilot import Pilot
 
         app = self
-
         auto_pilot_task: Task | None = None
 
         if auto_pilot is None and constants.PRESS:
@@ -2050,27 +2264,32 @@ class App(Generic[ReturnType], DOMNode):
                     run_auto_pilot(auto_pilot, pilot), name=repr(pilot)
                 )
 
-        try:
-            app._loop = asyncio.get_running_loop()
-            app._thread_id = threading.get_ident()
+        self._thread_init()
 
-            await app._process_messages(
-                ready_callback=None if auto_pilot is None else app_ready,
-                headless=headless,
-                inline=inline,
-                inline_no_clear=inline_no_clear,
-                mouse=mouse,
-                terminal_size=size,
-            )
-        finally:
+        loop = app._loop = asyncio.get_running_loop()
+        if hasattr(asyncio, "eager_task_factory"):
+            loop.set_task_factory(asyncio.eager_task_factory)
+        with app._context():
             try:
-                if auto_pilot_task is not None:
-                    await auto_pilot_task
+                await app._process_messages(
+                    ready_callback=None if auto_pilot is None else app_ready,
+                    headless=headless,
+                    inline=inline,
+                    inline_no_clear=inline_no_clear,
+                    mouse=mouse,
+                    terminal_size=size,
+                )
             finally:
                 try:
-                    await asyncio.shield(app._shutdown())
-                except asyncio.CancelledError:
-                    pass
+                    if auto_pilot_task is not None:
+                        await auto_pilot_task
+                finally:
+                    try:
+                        await asyncio.shield(app._shutdown())
+                    except asyncio.CancelledError:
+                        pass
+                app._loop = None
+                app._thread_id = 0
 
         return app.return_value
 
@@ -2083,6 +2302,7 @@ class App(Generic[ReturnType], DOMNode):
         mouse: bool = True,
         size: tuple[int, int] | None = None,
         auto_pilot: AutopilotCallbackType | None = None,
+        loop: AbstractEventLoop | None = None,
     ) -> ReturnType | None:
         """Run the app.
 
@@ -2094,37 +2314,40 @@ class App(Generic[ReturnType], DOMNode):
             size: Force terminal size to `(WIDTH, HEIGHT)`,
                 or None to auto-detect.
             auto_pilot: An auto pilot coroutine.
-
+            loop: Asyncio loop instance, or `None` to use default.
         Returns:
             App return value.
         """
 
-        async def run_app() -> None:
+        async def run_app() -> ReturnType | None:
             """Run the app."""
-            self._loop = asyncio.get_running_loop()
-            self._thread_id = threading.get_ident()
-            with self._context():
-                try:
-                    await self.run_async(
-                        headless=headless,
-                        inline=inline,
-                        inline_no_clear=inline_no_clear,
-                        mouse=mouse,
-                        size=size,
-                        auto_pilot=auto_pilot,
-                    )
-                finally:
-                    self._loop = None
-                    self._thread_id = 0
+            return await self.run_async(
+                headless=headless,
+                inline=inline,
+                inline_no_clear=inline_no_clear,
+                mouse=mouse,
+                size=size,
+                auto_pilot=auto_pilot,
+            )
 
-        if _ASYNCIO_GET_EVENT_LOOP_IS_DEPRECATED:
-            # N.B. This doesn't work with Python<3.10, as we end up with 2 event loops:
-            asyncio.run(run_app())
-        else:
-            # However, this works with Python<3.10:
-            event_loop = asyncio.get_event_loop()
-            event_loop.run_until_complete(run_app())
-        return self.return_value
+        if loop is None:
+            if _ASYNCIO_GET_EVENT_LOOP_IS_DEPRECATED:
+                # N.B. This does work with Python<3.10, but global Locks, Events, etc
+                # eagerly bind the event loop, and result in Future bound to wrong
+                # loop errors.
+                return asyncio.run(run_app())
+            try:
+                global_loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # the global event loop may have been destroyed by someone running
+                # asyncio.run(), or asyncio.set_event_loop(None), in which case
+                # we need to use asyncio.run() also. (We run this outside the
+                # context of an exception handler)
+                pass
+            else:
+                return global_loop.run_until_complete(run_app())
+            return asyncio.run(run_app())
+        return loop.run_until_complete(run_app())
 
     async def _on_css_change(self) -> None:
         """Callback for the file monitor, called when CSS files change."""
@@ -2266,16 +2489,26 @@ class App(Generic[ReturnType], DOMNode):
         """
         return self.screen.get_child_by_type(expect_type)
 
-    def update_styles(self, node: DOMNode) -> None:
+    def update_styles(self, node: DOMNode, animate: bool = True) -> None:
         """Immediately update the styles of this node and all descendant nodes.
 
-        Should be called whenever CSS classes / pseudo classes change.
+        Called by Textual whenever CSS classes / pseudo classes change.
         For example, when you hover over a button, the :hover pseudo class
         will be added, and this method is called to apply the corresponding
         :hover styles.
+
+        Args:
+            node: Node to update.
+            animate: Enable animation?
         """
-        descendants = node.walk_children(with_self=True)
-        self.stylesheet.update_nodes(descendants, animate=True)
+        if isinstance(node, App):
+            for screen in reversed(self.screen_stack):
+                screen.update_node_styles(animate=animate)
+                if not (screen.is_modal and screen.styles.background.a < 1):
+                    break
+        else:
+            descendants = node.walk_children(with_self=True)
+            self.stylesheet.update_nodes(descendants, animate=animate)
 
     def mount(
         self,
@@ -2301,8 +2534,8 @@ class App(Generic[ReturnType], DOMNode):
             MountError: If there is a problem with the mount request.
 
         Note:
-            Only one of ``before`` or ``after`` can be provided. If both are
-            provided a ``MountError`` will be raised.
+            Only one of `before` or `after` can be provided. If both are
+            provided a `MountError` will be raised.
         """
         return self.screen.mount(*widgets, before=before, after=after)
 
@@ -2331,8 +2564,8 @@ class App(Generic[ReturnType], DOMNode):
             MountError: If there is a problem with the mount request.
 
         Note:
-            Only one of ``before`` or ``after`` can be provided. If both are
-            provided a ``MountError`` will be raised.
+            Only one of `before` or `after` can be provided. If both are
+            provided a `MountError` will be raised.
         """
         return self.mount(*widgets, before=before, after=after)
 
@@ -2403,6 +2636,8 @@ class App(Generic[ReturnType], DOMNode):
         if mode not in self._modes:
             raise UnknownModeError(f"No known mode {mode!r}")
 
+        self.delay_update()
+
         self.screen.post_message(events.ScreenSuspend())
         self.screen.refresh()
 
@@ -2414,7 +2649,12 @@ class App(Generic[ReturnType], DOMNode):
         self._current_mode = mode
         if self.screen._css_update_count != self._css_update_count:
             self.refresh_css()
+
+        self.mode_change_signal.publish(mode)
+        self.screen_change_signal.publish(self.screen)
+
         self.screen._screen_resized(self.size)
+
         self.screen.post_message(events.ScreenResume())
 
         self.log.system(f"{self._current_mode!r} is the current mode")
@@ -2613,6 +2853,7 @@ class App(Generic[ReturnType], DOMNode):
         if not self.is_screen_installed(screen) and all(
             screen not in stack for stack in self._screen_stacks.values()
         ):
+            self.capture_mouse(None)
             await screen.remove()
             self.log.system(f"{screen} REMOVED")
         return screen
@@ -2625,6 +2866,8 @@ class App(Generic[ReturnType], DOMNode):
             screen: Screen[ScreenResultType] | str,
             callback: ScreenResultCallbackType[ScreenResultType] | None = None,
             wait_for_dismiss: Literal[False] = False,
+            *,
+            mode: str | None = None,
         ) -> AwaitMount: ...
 
         @overload
@@ -2633,6 +2876,8 @@ class App(Generic[ReturnType], DOMNode):
             screen: Screen[ScreenResultType] | str,
             callback: ScreenResultCallbackType[ScreenResultType] | None = None,
             wait_for_dismiss: Literal[True] = True,
+            *,
+            mode: str | None = None,
         ) -> asyncio.Future[ScreenResultType]: ...
 
     def push_screen(
@@ -2640,6 +2885,8 @@ class App(Generic[ReturnType], DOMNode):
         screen: Screen[ScreenResultType] | str,
         callback: ScreenResultCallbackType[ScreenResultType] | None = None,
         wait_for_dismiss: bool = False,
+        *,
+        mode: str | None = None,
     ) -> AwaitMount | asyncio.Future[ScreenResultType]:
         """Push a new [screen](/guide/screens) on the screen stack, making it the current screen.
 
@@ -2648,6 +2895,7 @@ class App(Generic[ReturnType], DOMNode):
             callback: An optional callback function that will be called if the screen is [dismissed][textual.screen.Screen.dismiss] with a result.
             wait_for_dismiss: If `True`, awaiting this method will return the dismiss value from the screen. When set to `False`, awaiting
                 this method will wait for the screen to be mounted. Note that `wait_for_dismiss` should only be set to `True` when running in a worker.
+            mode: The mode to push the screen to, or `None` to the currently active mode. If pushing to a non-current mode, the screen will not be immediately visible.
 
         Raises:
             NoActiveWorker: If using `wait_for_dismiss` outside of a worker.
@@ -2669,8 +2917,19 @@ class App(Generic[ReturnType], DOMNode):
         else:
             future = loop.create_future()
 
-        if self._screen_stack:
-            self.screen.post_message(events.ScreenSuspend())
+        if mode is None:
+            mode = self._current_mode
+
+        try:
+            screen_stack = self._screen_stacks[mode]
+        except KeyError:
+            raise UnknownModeError(f"No such mode {mode!r}")
+
+        if screen_stack and screen_stack[-1].is_active:
+            self.app.capture_mouse(None)
+            mode_screen = screen_stack[-1]
+            mode_screen.post_message(events.ScreenSuspend())
+            mode_screen.refresh()
         next_screen, await_mount = self._get_screen(screen)
         try:
             message_pump = active_message_pump.get()
@@ -2679,9 +2938,11 @@ class App(Generic[ReturnType], DOMNode):
 
         next_screen._push_result_callback(message_pump, callback, future)
         self._load_screen_css(next_screen)
-        self._screen_stack.append(next_screen)
-        next_screen.post_message(events.ScreenResume())
-        self.log.system(f"{self.screen} is current (PUSHED)")
+        next_screen._update_auto_focus()
+        screen_stack.append(next_screen)
+        if next_screen.is_active:
+            next_screen.post_message(events.ScreenResume())
+        self.screen_change_signal.publish(next_screen)
         if wait_for_dismiss:
             try:
                 get_current_worker()
@@ -2697,14 +2958,16 @@ class App(Generic[ReturnType], DOMNode):
 
         @overload
         async def push_screen_wait(
-            self, screen: Screen[ScreenResultType]
+            self, screen: Screen[ScreenResultType], *, mode: str | None = None
         ) -> ScreenResultType: ...
 
         @overload
-        async def push_screen_wait(self, screen: str) -> Any: ...
+        async def push_screen_wait(
+            self, screen: str, *, mode: str | None = None
+        ) -> Any: ...
 
     async def push_screen_wait(
-        self, screen: Screen[ScreenResultType] | str
+        self, screen: Screen[ScreenResultType] | str, *, mode: str | None = None
     ) -> ScreenResultType | Any:
         """Push a screen and wait for the result (received from [`Screen.dismiss`][textual.screen.Screen.dismiss]).
 
@@ -2712,13 +2975,16 @@ class App(Generic[ReturnType], DOMNode):
 
         Args:
             screen: A screen or the name of an installed screen.
+            mode: The mode to push the screen to, or `None` to the currently active mode. If pushing to a non-current mode, the screen will not be immediately visible.
 
         Returns:
             The screen's result.
         """
         await self._flush_next_callbacks()
         # The shield prevents the cancellation of the current task from canceling the push_screen awaitable
-        return await asyncio.shield(self.push_screen(screen, wait_for_dismiss=True))
+        return await asyncio.shield(
+            self.push_screen(screen, wait_for_dismiss=True, mode=mode)
+        )
 
     def switch_screen(self, screen: Screen | str) -> AwaitComplete:
         """Switch to another [screen](/guide/screens) by replacing the top of the screen stack with a new screen.
@@ -2736,6 +3002,7 @@ class App(Generic[ReturnType], DOMNode):
             self.log.system(f"Screen {screen} is already current.")
             return AwaitComplete.nothing()
 
+        self.app.capture_mouse(None)
         top_screen = self._screen_stack.pop()
 
         top_screen._pop_result_callback()
@@ -2743,6 +3010,7 @@ class App(Generic[ReturnType], DOMNode):
         self._screen_stack.append(next_screen)
         self.screen.post_message(events.ScreenResume())
         self.screen._push_result_callback(self.screen, None)
+        self.screen_change_signal.publish(self.screen)
         self.log.system(f"{self.screen} is current (SWITCHED)")
 
         async def do_switch() -> None:
@@ -2828,7 +3096,10 @@ class App(Generic[ReturnType], DOMNode):
 
         previous_screen = screen_stack.pop()
         previous_screen._pop_result_callback()
-        self.screen.post_message(events.ScreenResume())
+        self.screen.post_message(
+            events.ScreenResume(refresh_styles=previous_screen.styles.background.a < 0)
+        )
+        self.screen_change_signal.publish(self.screen)
         self.log.system(f"{self.screen} is active")
 
         async def do_pop() -> None:
@@ -2873,7 +3144,9 @@ class App(Generic[ReturnType], DOMNode):
         """
         self.screen.set_focus(widget, scroll_visible)
 
-    def _set_mouse_over(self, widget: Widget | None) -> None:
+    def _set_mouse_over(
+        self, widget: Widget | None, hover_widget: Widget | None
+    ) -> None:
         """Called when the mouse is over another widget.
 
         Args:
@@ -2895,6 +3168,18 @@ class App(Generic[ReturnType], DOMNode):
                 finally:
                     self.mouse_over = widget
 
+        current_hover_over = self.hover_over
+        if current_hover_over is not None:
+            current_hover_over.mouse_hover = False
+
+        if hover_widget is not None:
+            hover_widget.mouse_hover = True
+            if hover_widget._has_hover_style:
+                hover_widget.update_node_styles()
+        if current_hover_over is not None and current_hover_over._has_hover_style:
+            current_hover_over.update_node_styles()
+        self.hover_over = hover_widget
+
     def _update_mouse_over(self, screen: Screen) -> None:
         """Updates the mouse over after the next refresh.
 
@@ -2909,12 +3194,16 @@ class App(Generic[ReturnType], DOMNode):
         async def check_mouse() -> None:
             """Check if the mouse over widget has changed."""
             try:
-                widget, _ = screen.get_widget_at(*self.mouse_position)
+                hover_widgets = screen.get_hover_widgets_at(*self.mouse_position)
             except NoWidget:
                 pass
             else:
-                if widget is not self.mouse_over:
-                    self._set_mouse_over(widget)
+                mouse_over, hover_over = hover_widgets.widgets
+                if (
+                    mouse_over is not self.mouse_over
+                    or hover_over is not self.hover_over
+                ):
+                    self._set_mouse_over(mouse_over, hover_over)
 
         self.call_after_refresh(check_mouse)
 
@@ -2934,6 +3223,7 @@ class App(Generic[ReturnType], DOMNode):
         self.mouse_captured = widget
         if widget is not None:
             widget.post_message(events.MouseCapture(self.mouse_position))
+        self.screen.update_pointer_shape()
 
     def panic(self, *renderables: RenderableType) -> None:
         """Exits the app and display error message(s).
@@ -3069,6 +3359,8 @@ class App(Generic[ReturnType], DOMNode):
         terminal_size: tuple[int, int] | None = None,
         message_hook: Callable[[Message], None] | None = None,
     ) -> None:
+        self._thread_init()
+
         async def app_prelude() -> bool:
             """Work required before running the app.
 
@@ -3193,8 +3485,9 @@ class App(Generic[ReturnType], DOMNode):
                         if self._driver.is_inline:
                             cursor_x, cursor_y = self._previous_cursor_position
                             self._driver.write(
-                                Control.move(-cursor_x, -cursor_y + 1).segment.text
+                                Control.move(-cursor_x, -cursor_y).segment.text
                             )
+                            self._driver.flush()
                             if inline_no_clear and not self.app._exit_renderables:
                                 console = Console()
                                 try:
@@ -3203,9 +3496,7 @@ class App(Generic[ReturnType], DOMNode):
                                     console.print()
                             else:
                                 self._driver.write(
-                                    Control.move(
-                                        -cursor_x, -self.INLINE_PADDING - 1
-                                    ).segment.text
+                                    Control.move(0, -self.INLINE_PADDING).segment.text
                                 )
 
                         driver.stop_application_mode()
@@ -3240,6 +3531,7 @@ class App(Generic[ReturnType], DOMNode):
 
     async def _on_compose(self) -> None:
         _rich_traceback_omit = True
+        self._compose_screen = self.screen
         try:
             widgets = [*self.screen._nodes, *compose(self)]
         except TypeError as error:
@@ -3277,7 +3569,6 @@ class App(Generic[ReturnType], DOMNode):
         Args:
             parent: Parent node.
             child: The child widget to register.
-            widgets: The widget to register.
             before: A location to mount before.
             after: A location to mount after.
         """
@@ -3314,7 +3605,6 @@ class App(Generic[ReturnType], DOMNode):
             self._registry.add(child)
             child._attach(parent)
             child._post_register(self)
-            child._start_messages()
 
     def _register(
         self,
@@ -3367,6 +3657,7 @@ class App(Generic[ReturnType], DOMNode):
                     self._register(widget, *widget._nodes, cache=cache)
         for widget in new_widgets:
             apply_stylesheet(widget, cache=cache)
+            widget._start_messages()
 
         if not self._running:
             # If the app is not running, prevent awaiting of the widget tasks
@@ -3502,8 +3793,9 @@ class App(Generic[ReturnType], DOMNode):
         stylesheet.reparse()
         stylesheet.update(self.app, animate=animate)
         try:
-            self.screen._refresh_layout(self.size)
-            self.screen._css_update_count = self._css_update_count
+            if self.screen.is_mounted:
+                self.screen._refresh_layout(self.size)
+                self.screen._css_update_count = self._css_update_count
         except ScreenError:
             pass
         # The other screens in the stack will need to know about some style
@@ -3609,6 +3901,24 @@ class App(Generic[ReturnType], DOMNode):
         if not self.is_headless and self._driver is not None:
             self._driver.write("\07")
 
+    def _set_pointer_shape(self, shape: str) -> None:
+        """Generate escape sequence to set pointer (cursor) shape using Kitty protocol.
+
+        Args:
+            shape: The pointer shape name (e.g., "default", "pointer", "text", "crosshair", etc.)
+
+        Returns:
+            The escape sequence to set the pointer shape.
+
+        See: https://sw.kovidgoyal.net/kitty/pointer-shapes/
+        """
+        # Kitty pointer shape protocol: ESC ] 22 ; <shape> ST
+        # where ST is ESC \ or BEL (\x07)
+        # Using BEL as terminator for better compatibility
+        if self._driver is not None:
+            shape_sequence = f"\x1b]22;{shape}\x07"
+            self._driver.write(shape_sequence)
+
     @property
     def _binding_chain(self) -> list[tuple[DOMNode, BindingsMap]]:
         """Get a chain of nodes and bindings to consider.
@@ -3679,6 +3989,13 @@ class App(Generic[ReturnType], DOMNode):
                 )
                 return
 
+    @classmethod
+    def _normalize_keymap(cls, keymap: Keymap) -> Keymap:
+        """Normalizes the keys in a keymap, so they use long form, i.e. "question_mark" rather than "?"."""
+        return {
+            binding_id: _normalize_key_list(keys) for binding_id, keys in keymap.items()
+        }
+
     def set_keymap(self, keymap: Keymap) -> None:
         """Set the keymap, a mapping of binding IDs to key strings.
 
@@ -3691,7 +4008,9 @@ class App(Generic[ReturnType], DOMNode):
         Args:
             keymap: A mapping of binding IDs to key strings.
         """
-        self._keymap = keymap
+
+        self._keymap = self._normalize_keymap(keymap)
+        self.refresh_bindings()
 
     def update_keymap(self, keymap: Keymap) -> None:
         """Update the App's keymap, merging with `keymap`.
@@ -3702,7 +4021,9 @@ class App(Generic[ReturnType], DOMNode):
         Args:
             keymap: A mapping of binding IDs to key strings.
         """
-        self._keymap = {**self._keymap, **keymap}
+
+        self._keymap = {**self._keymap, **self._normalize_keymap(keymap)}
+        self.refresh_bindings()
 
     def handle_bindings_clash(
         self, clashed_bindings: set[Binding], node: DOMNode
@@ -3736,6 +4057,7 @@ class App(Generic[ReturnType], DOMNode):
             if isinstance(event, events.MouseEvent):
                 # Record current mouse position on App
                 self.mouse_position = Offset(event.x, event.y)
+                self.mouse_position_high_resolution = (event.screen_x, event.screen_y)
                 if isinstance(event, events.MouseDown):
                     try:
                         self._mouse_down_widget, _ = self.get_widget_at(
@@ -3831,12 +4153,17 @@ class App(Generic[ReturnType], DOMNode):
         )
 
     def _parse_action(
-        self, action: str | ActionParseResult, default_namespace: DOMNode
+        self,
+        action: str | ActionParseResult,
+        default_namespace: DOMNode,
+        namespaces: Mapping[str, DOMNode] | None = None,
     ) -> tuple[DOMNode, str, tuple[object, ...]]:
         """Parse an action.
 
         Args:
             action: An action string.
+            default_namespace: Namespace to user when none is supplied in the action.
+            namespaces: Mapping of namespaces.
 
         Raises:
             ActionError: If there are any errors parsing the action string.
@@ -3849,8 +4176,10 @@ class App(Generic[ReturnType], DOMNode):
         else:
             destination, action_name, params = actions.parse(action)
 
-        action_target: DOMNode | None = None
-        if destination:
+        action_target: DOMNode | None = (
+            None if namespaces is None else namespaces.get(destination)
+        )
+        if destination and action_target is None:
             if destination not in self._action_targets:
                 raise ActionError(f"Action namespace {destination} is not known")
             action_target = getattr(self, destination, None)
@@ -3883,6 +4212,7 @@ class App(Generic[ReturnType], DOMNode):
         self,
         action: str | ActionParseResult,
         default_namespace: DOMNode | None = None,
+        namespaces: Mapping[str, DOMNode] | None = None,
     ) -> bool:
         """Perform an [action](/guide/actions).
 
@@ -3892,14 +4222,14 @@ class App(Generic[ReturnType], DOMNode):
             action: Action encoded in a string.
             default_namespace: Namespace to use if not provided in the action,
                 or None to use app.
+            namespaces: Mapping of namespaces.
 
         Returns:
             True if the event has been handled.
         """
         action_target, action_name, params = self._parse_action(
-            action, self if default_namespace is None else default_namespace
+            action, self if default_namespace is None else default_namespace, namespaces
         )
-
         if action_target.check_action(action_name, params):
             return await self._dispatch_action(action_target, action_name, params)
         else:
@@ -4003,6 +4333,15 @@ class App(Generic[ReturnType], DOMNode):
     async def _on_resize(self, event: events.Resize) -> None:
         event.stop()
         self._resize_event = event
+        if self._size is None:
+            self._size = event.size
+            self._check_resize()
+            return
+        if self._size == event.size:
+            return
+        self._size = event.size
+        if self._resize_timer is None:
+            self._resize_timer = self.set_timer(1 / 120, self._check_resize)
 
     async def _on_app_focus(self, event: events.AppFocus) -> None:
         """App has focus."""
@@ -4066,7 +4405,7 @@ class App(Generic[ReturnType], DOMNode):
 
     def _watch_app_focus(self, focus: bool) -> None:
         """Respond to changes in app focus."""
-        self.screen._update_styles()
+        self.screen.update_node_styles()
         if focus:
             # If we've got a last-focused widget, if it still has a screen,
             # and if the screen is still the current screen and if nothing
@@ -4217,9 +4556,9 @@ class App(Generic[ReturnType], DOMNode):
         from textual.widgets import HelpPanel
 
         try:
-            self.query_one(HelpPanel)
+            self.screen.query_one(HelpPanel)
         except NoMatches:
-            self.mount(HelpPanel())
+            self.screen.mount(HelpPanel())
 
     def action_notify(
         self, message: str, title: str = "", severity: str = "information"
@@ -4260,6 +4599,13 @@ class App(Generic[ReturnType], DOMNode):
             # Update the toast rack.
             self.call_later(toast_rack.show, self._notifications)
 
+    def clear_selection(self) -> None:
+        """Clear text selection on the active screen."""
+        try:
+            self.screen.clear_selection()
+        except NoScreen:
+            pass
+
     def notify(
         self,
         message: str,
@@ -4267,6 +4613,7 @@ class App(Generic[ReturnType], DOMNode):
         title: str = "",
         severity: SeverityLevel = "information",
         timeout: float | None = None,
+        markup: bool = True,
     ) -> None:
         """Create a notification.
 
@@ -4280,6 +4627,7 @@ class App(Generic[ReturnType], DOMNode):
             title: The title for the notification.
             severity: The severity of the notification.
             timeout: The timeout (in seconds) for the notification, or `None` for default.
+            markup: Render the message as content markup?
 
         The `notify` method is used to create an application-wide
         notification, shown in a [`Toast`][textual.widgets._toast.Toast],
@@ -4316,7 +4664,7 @@ class App(Generic[ReturnType], DOMNode):
         """
         if timeout is None:
             timeout = self.NOTIFICATION_TIMEOUT
-        notification = Notification(message, title, severity, timeout)
+        notification = Notification(message, title, severity, timeout, markup=markup)
         self.post_message(Notify(notification))
 
     def _on_notify(self, event: Notify) -> None:
@@ -4391,9 +4739,11 @@ class App(Generic[ReturnType], DOMNode):
             # app, and we don't want to have the driver auto-restart
             # application mode when the application comes back to the
             # foreground, in this context.
-            with self._driver.no_automatic_restart(), redirect_stdout(
-                sys.__stdout__
-            ), redirect_stderr(sys.__stderr__):
+            with (
+                self._driver.no_automatic_restart(),
+                redirect_stdout(sys.__stdout__),
+                redirect_stderr(sys.__stderr__),
+            ):
                 yield
             # We're done with the dev's code so resume application mode.
             self._driver.resume_application_mode()
@@ -4639,7 +4989,7 @@ class App(Generic[ReturnType], DOMNode):
                 self.notify("Saved screenshot", title="Screenshot")
             else:
                 self.notify(
-                    f"Saved screenshot to [green]{str(event.path)!r}",
+                    f"Saved screenshot to [$text-success]{str(event.path)!r}",
                     title="Screenshot",
                 )
 
@@ -4658,9 +5008,20 @@ class App(Generic[ReturnType], DOMNode):
         self.log.debug(message)
 
     def _on_idle(self) -> None:
-        """Send app resize events on idle, so we don't do more resizing that necessary."""
+        if self._resize_event is not None and self._resize_timer is None:
+            self._check_resize()
+
+    def _check_resize(self) -> None:
+        """Send a resize event to screen(s) (invoked from `self._resize_timer`)."""
         event = self._resize_event
+        if self._resize_timer is not None:
+            self._resize_timer.stop()
+            self._resize_timer = None
         if event is not None:
+            try:
+                self.screen
+            except ScreenError:
+                return
             self._resize_event = None
             self.screen.post_message(event)
             for screen in self._background_screens:

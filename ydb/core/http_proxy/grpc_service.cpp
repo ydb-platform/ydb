@@ -1,25 +1,21 @@
 #include "grpc_service.h"
 
+#include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
-#include <ydb/core/grpc_services/grpc_helper.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
+
 #include <library/cpp/uri/uri.h>
 
 #include <util/generic/guid.h>
 
 namespace NKikimr::NHttpProxy {
 
-
 using namespace NGRpcService;
-
-
-
 class TGRpcRequestActor : public NActors::TActorBootstrapped<TGRpcRequestActor> {
 public:
     using TBase = NActors::TActorBootstrapped<TGRpcRequestActor>;
@@ -126,10 +122,9 @@ private:
     TString RequestId;
 };
 
-TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
                                  TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
     : ActorSystem_(system)
-    , CredentialsProvider_(credentialsProvider)
     , Counters_(counters)
 {
 
@@ -164,4 +159,4 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #undef SETUP_LEGACY_EVENT_METHOD
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NHttpProxy

@@ -5,6 +5,7 @@
 #include <ydb/core/ymq/actor/error.h>
 #include <ydb/core/ymq/actor/proxy_actor.h>
 #include <ydb/core/ymq/actor/serviceid.h>
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/folder_service/events.h>
@@ -518,7 +519,7 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 
 void THttpProxyAuthRequestProxy::DoReply() {
     auto response = Error_.Empty()
-        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_, AuthType_)
+        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
         : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
 
     Send(Requester_, response.Release());
@@ -553,7 +554,8 @@ void TMultiAuthFactory::Initialize(
     }
 
     IsYandexCloudMode_ = true;
-    CredentialsProvider_ = CreateCredentialsProviderFactory(config)->CreateProvider();
+    CoreFacility_ = NYdb::CreateSimpleCoreFacility();
+    CredentialsProvider_ = CreateCredentialsProviderFactory(config)->CreateProvider(CoreFacility_);
 
     const auto& rootCAPath = appData.AuthConfig.GetPathToRootCA();
 

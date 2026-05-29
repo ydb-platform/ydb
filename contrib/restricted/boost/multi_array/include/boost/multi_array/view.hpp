@@ -90,7 +90,7 @@ public:
   }
 
   void reindex(index value) {
-    index_base_list_.assign(value);
+    index_base_list_.fill(value);
     origin_offset_ =
       this->calculate_indexing_offset(stride_list_,index_base_list_);
   }
@@ -231,7 +231,7 @@ public: // should be protected
                            const boost::array<Index,NumDims>& strides): 
     base_(base), origin_offset_(0) {
 
-    index_base_list_.assign(0);
+    index_base_list_.fill(0);
 
     // Get the extents and strides
     boost::detail::multi_array::

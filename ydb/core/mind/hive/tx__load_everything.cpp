@@ -293,6 +293,7 @@ public:
                     domain.SetScaleRecommenderPolicies(domainRowset.GetValue<Schema::SubDomain::ScaleRecommenderPolicies>());
                 }
                 domain.Stopped = domainRowset.GetValueOrDefault<Schema::SubDomain::Stopped>();
+                domain.ParseShrinkingPools(domainRowset.GetValueOrDefault<Schema::SubDomain::ShrinkingStoragePools>());
 
                 if (!domainRowset.Next())
                     return false;
@@ -960,6 +961,16 @@ public:
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
             Self->ScheduleUnlockTabletExecution(it->second, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
+        }
+
+        for (const auto& [_, domainInfo] : Self->Domains) {
+            for (const auto& pool : domainInfo.ShrinkingStoragePools) {
+                auto& poolInfo = Self->GetStoragePool(pool);
+                if (domainInfo.HiveId) {
+                    poolInfo.NeedShrinkFromTenant = true;
+                }
+                Self->StartShrinkPool(poolInfo);
+            }
         }
     }
 };

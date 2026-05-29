@@ -1,5 +1,6 @@
 #include "keyvalue_storage_read_request.h"
 #include "keyvalue_const.h"
+#include "keyvalue_state.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/stlog.h>
@@ -53,6 +54,8 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
     TString ErrorDescription;
 
     TStackVec<TReadItemInfo, 1> ReadItems;
+    TKeyValueState *State;
+    std::weak_ptr<TKeyValueStateLifetimeToken> StateLifetimeToken;
 
     NWilson::TSpan Span;
 
@@ -136,7 +139,7 @@ public:
                     << " readCount# " << readCount);
 
                 NKikimrKeyValue::Statuses::ReplyStatus replyStatus;
-                if (status == NKikimrProto::UNKNOWN || status == NKikimrProto::NODATA) {
+                if (status == NKikimrProto::UNKNOWN || (!IsRead() && status == NKikimrProto::NODATA)) {
                     replyStatus = NKikimrKeyValue::Statuses::RSTATUS_OK;
                 } else {
                     replyStatus = ConvertStatus(status);
@@ -294,11 +297,26 @@ public:
                 IntermediateResult->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), batch.GroupId)] += response.Buffer.size();
                 IntermediateResult->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), batch.GroupId)] += 1;
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
+            } else if (response.Status == NKikimrProto::NODATA) {
+                const ui32 refCount = StateLifetimeToken.lock() ? State->GetRefCount(readItem.LogoBlobId) : 0;
+                if (refCount != 0) {
+                    TStringStream str;
+                    str << "NODATA received for TEvGet, but blob is still referenced"
+                        << " TabletId# " << TabletInfo->TabletID
+                        << " BlobId# " << readItem.LogoBlobId.ToString()
+                        << " GroupId# " << batch.GroupId
+                        << " RefCount# " << refCount;
+                    Y_DEBUG_ABORT_UNLESS(false, "%s", str.Str().c_str());
+                    STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV324,
+                        "NODATA received for TEvGet, but blob is still referenced",
+                        (KeyValue, TabletInfo->TabletID),
+                        (BlobId, readItem.LogoBlobId),
+                        (GroupId, batch.GroupId),
+                        (RefCount, refCount));
+                    ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
+                    return;
+                }
             } else {
-                Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
-                    << " TabletId# " << TabletInfo->TabletID
-                    << " Id# " << response.Id
-                    << " Key# " << read.Key);
                 STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV317,
                         "Unexpected EvGetResult.",
                         (KeyValue, TabletInfo->TabletID),
@@ -324,9 +342,13 @@ public:
 
         ReceivedGetResults++;
         if (ReceivedGetResults == Batches.size()) {
-            SendResponseAndPassAway(IntermediateResult->IsTruncated ?
-                    NKikimrKeyValue::Statuses::RSTATUS_OVERRUN :
-                    NKikimrKeyValue::Statuses::RSTATUS_OK);
+            auto status = NKikimrKeyValue::Statuses::RSTATUS_OK;
+            if (IntermediateResult->IsTruncated) {
+                status = NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
+            } else if (IsRead()) {
+                status = ConvertStatus(std::get<TIntermediate::TRead>(GetCommand()).CumulativeStatus());
+            }
+            SendResponseAndPassAway(status);
         }
     }
 
@@ -429,6 +451,8 @@ public:
     NKikimrKeyValue::Statuses::ReplyStatus ConvertStatus(NKikimrProto::EReplyStatus status) {
         if (status == NKikimrProto::OK) {
             return NKikimrKeyValue::Statuses::RSTATUS_OK;
+        } else if (status == NKikimrProto::NODATA) {
+            return NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND;
         } else if (status == NKikimrProto::OVERRUN) {
             return NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
         } else if (status == NKikimrProto::BLOCKED) {
@@ -520,10 +544,14 @@ public:
    }
 
     TKeyValueStorageReadRequest(THolder<TIntermediate> &&intermediate,
-            const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
+            const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
+            TKeyValueState *state,
+            std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
+        , State(state)
+        , StateLifetimeToken(std::move(stateLifetimeToken))
         , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
     {
         IntermediateResult->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
@@ -532,9 +560,11 @@ public:
 
 
 IActor* CreateKeyValueStorageReadRequest(THolder<TIntermediate>&& intermediate,
-        const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
+        const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
+        TKeyValueState *state,
+        std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)
 {
-    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo, tabletGeneration);
+    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo, tabletGeneration, state, std::move(stateLifetimeToken));
 }
 
 } // NKeyValue

@@ -3,6 +3,7 @@ PY23_LIBRARY()
 PY_SRCS(
     TOP_LEVEL
     solomon_runner.py
+    udf_test_common.py
     yql_utils.py
     yql_ports.py
     yqlrun.py
@@ -29,6 +30,7 @@ PEERDIR(
 
 RESOURCE(
     yql/essentials/data/language/features.json yql/essentials/data/language/features.json
+    yql/essentials/data/language/langver.json yql/essentials/data/language/langver.json
 )
 
 END()

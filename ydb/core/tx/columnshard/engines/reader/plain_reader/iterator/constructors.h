@@ -43,18 +43,22 @@ private:
     virtual void DoClear() override {
         Sources.clear();
     }
+
     virtual void DoAbort() override {
         Sources.clear();
     }
+
     virtual bool DoIsFinished() const override {
         return Sources.empty();
     }
+
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override;
 
 public:
     TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources)
-        : Sources(sources.begin(), sources.end()) {
+        : Sources(sources.begin(), sources.end())
+    {
     }
 
     static std::unique_ptr<TPortionSources> BuildEmpty() {

@@ -183,6 +183,7 @@ bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
             return false;
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+        case Ydb::Table::TableIndex::kLocalMinMaxIndex:
             return true;
     }
 }

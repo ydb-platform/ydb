@@ -8,20 +8,21 @@
 #include "kqp_rbo_physical_source_builder.h"
 #include "kqp_rbo_physical_query_builder.h"
 
-#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
@@ -161,7 +162,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
 
-            currentStageBody = Build<TPhysicalJoinBuilder>(join, ctx, op->Pos, leftInput, rightInput, join->Props);
+            currentStageBody = Build<TPhysicalJoinBuilder>(join, ctx, op->Pos, leftInput, rightInput, rboCtx.KqpCtx.Config->GetUseBlockHashJoin());
 
             if (!join->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, join->GetNumOfConsumers(), ctx, op->Pos);
@@ -229,5 +230,5 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
 
     return TPhysicalQueryBuilder(root, std::move(graph), std::move(stages), std::move(stageArgs), std::move(stagePos), rboCtx).BuildPhysicalQuery();
 }
-} // namespace NKqp
-} // namespace NKikimr
+
+} // namespace NKikimr::NKqp

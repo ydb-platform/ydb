@@ -142,10 +142,16 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
         return res;
     } else {
         bool res = true;
+        params->SetGroupSizeInUnits(GroupSizeInUnits);
+        if (VDisksInGroup.empty()
+            || !Topology
+            || !Topology->GetTotalVDisksNum()
+            || !Topology->GetTotalFailDomainsNum()) {
+            return false;
+        }
         res &= FillInResources(params->MutableAssuredResources(), true);
         res &= FillInResources(params->MutableCurrentResources(), false);
         res &= FillInVDiskResources(params);
-        params->SetGroupSizeInUnits(GroupSizeInUnits);
         return res;
     }
 }
@@ -1170,6 +1176,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadDDiskPool:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteDDiskPool:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveDDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

@@ -1,9 +1,9 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/testing/hook/hook.h>
 

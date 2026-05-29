@@ -550,7 +550,7 @@ std::vector<TExprNode::TListType> GroupNodeChildrenByType(const TExprNode::TPtr&
             YQL_ENSURE(groupIndex == groups.size());
             groups.resize(groupIndex + 1);
         }
-        groups[groupIndex].push_back(child);
+        groups[groupIndex].emplace_back(child);
     }
     return groups;
 }
@@ -716,7 +716,7 @@ TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext
             newChildren.push_back(child.HeadPtr());
         } else {
             haveOptional = haveOptional || child.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-            newChildren.push_back(&child);
+            newChildren.emplace_back(&child);
         }
     });
     YQL_CLOG(DEBUG, Core) << node->Content() << " over Just";
@@ -4565,7 +4565,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Add(0, expandedItemType)
                     .Seal()
                     .Callable(2, "Uint32")
-                        .Atom(0, 0u)
+                        .Atom(0, 0U)
                     .Seal()
                 .Seal()
             .Seal()
@@ -4637,7 +4637,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                 .Add(0, setCreate)
                                 .Arg(1, "item")
                                 .Callable(2, "Uint32")
-                                    .Atom(0, 0u)
+                                    .Atom(0, 0U)
                                 .Seal()
                             .Seal()
                         .Seal()
@@ -6546,6 +6546,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                 .Callable(1, "DependsOn")
                                     .Arg(0, "parent")
                                 .Seal()
+                                .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                                    for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                                        builder.Callable(i + 1, "DependsOn")
+                                            .Add(0, node->ChildPtr(i))
+                                            .Seal();
+                                    }
+
+                                    return builder;
+                                })
                             .Seal()
                         .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
                             for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
@@ -6991,7 +7000,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         auto input = node->HeadPtr();
         if (input->IsCallable("AssumeColumnOrder")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << input->Content();
-            return ctx.ChangeChild(*node, 0u, input->HeadPtr());
+            return ctx.ChangeChild(*node, 0U, input->HeadPtr());
         }
 
         return node;

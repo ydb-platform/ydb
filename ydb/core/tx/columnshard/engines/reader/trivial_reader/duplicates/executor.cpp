@@ -20,8 +20,7 @@ private:
         ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-                std::make_unique<TEvBordersConstructionResult>(std::move(Request),
-                    TConclusionStatus::Fail(errorAddresses.GetErrorMessage())));
+                std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorAddresses.GetErrorMessage())));
             return;
         }
 
@@ -43,8 +42,8 @@ public:
 
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Request.GetGlobalContext().GetOwner());
-        TActorContext::AsActorContext().Send(
-            Request.GetGlobalContext().GetOwner(), std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorMessage)));
+        TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+            std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorMessage)));
     }
 };
 
@@ -54,9 +53,11 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-        TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-            std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
+        TActorContext::AsActorContext().Send(
+            Request.GetGlobalContext().GetOwner(), std::make_unique<TEvBordersConstructionResult>(std::move(Request),
+                                                       TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         THashSet<TPortionAddress> portionAddresses;
@@ -64,9 +65,7 @@ private:
             AFL_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
         }
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-            ("component", "duplicates_manager")
-            ("type", "ask_column_data")
-            ("addresses_count", portionAddresses.size());
+        ("component", "duplicates_manager")("type", "ask_column_data")("addresses_count", portionAddresses.size());
         auto columnDataManager = Request.GetGlobalContext().GetColumnDataManager();
         auto columns = Request.GetGlobalContext().GetFetchingColumnIds();
         columnDataManager->AskColumnData(NBlobOperations::EConsumer::DUPLICATE_FILTERING, portionAddresses, std::move(columns),
@@ -91,8 +90,7 @@ private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         if (result.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-                std::make_unique<TEvBordersConstructionResult>(std::move(Request),
-                    TConclusionStatus::Fail(result.GetErrorMessage())));
+                std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(result.GetErrorMessage())));
             return;
         }
 
@@ -113,6 +111,7 @@ private:
             Request.GetGlobalContext().GetRequestGuard()->GetMemoryGroupId(),
             { std::make_shared<TColumnDataAllocation>(std::move(Request), mem) }, (ui64)TFilterAccumulator::EFetchingStage::COLUMN_DATA);
     }
+
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Request.GetGlobalContext().GetAbortionFlag();
     }
@@ -140,9 +139,11 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-        TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-            std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
+        TActorContext::AsActorContext().Send(
+            Request.GetGlobalContext().GetOwner(), std::make_unique<TEvBordersConstructionResult>(std::move(Request),
+                                                       TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         std::shared_ptr<TDataAccessorsRequest> request =
@@ -185,16 +186,15 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     ui64 portionsCount = bordersBatch.GetPortionIds().size();
 
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-        ("component", "duplicates_manager")
-        ("type", "schedule_next")
-        ("portions_count", portionsCount);
+    ("component", "duplicates_manager")("type", "schedule_next")("portions_count", portionsCount);
 
     TActorId owner = context.GetOwner();
     TBuildFilterTaskContext request(std::move(context), shared_from_this(), std::move(bordersBatch));
     if (portionsCount == 0) {
         AFL_VERIFY(BordersIterator.IsDone());
-        TActorContext::AsActorContext().Send(owner,
-            std::make_unique<TEvBordersConstructionResult>(std::move(request), THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>{}, nullptr));
+        TActorContext::AsActorContext().Send(
+            owner, std::make_unique<TEvBordersConstructionResult>(std::move(request),
+                       THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>{}, nullptr));
         return true;
     }
 

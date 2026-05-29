@@ -1,0 +1,47 @@
+# Проверка translation PR: лейбл doc_verify на PR с переводом (ветка ydbdoc-review/pr-*).
+# EN на ветке PR сверяется с RU на main; критик + переводчик, без нового перевода.
+
+name: ydbdoc-review (doc_verify label)
+
+on:
+  pull_request_target:
+    types: [labeled]
+    paths:
+      - "ydb/docs/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  ydbdoc-verify:
+    if: github.event.label.name == 'doc_verify'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ydbdoc-verify-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch merge base ref
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
+
+      - name: Verify translation PR
+        uses: ydb-platform/ydbdoc-review@main
+        with:
+          mode: verify
+          repo: ${{ github.repository }}
+          pr: ${{ github.event.pull_request.number }}
+          merge_base_with: origin/${{ github.event.pull_request.base.ref }}
+        env:
+          YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDBDOC_REVIEW_ENABLED: ${{ vars.YDBDOC_REVIEW_ENABLED }}
+          YDBDOC_MODEL_TRANSLATION_VERIFY: ${{ vars.YDBDOC_MODEL_TRANSLATION_VERIFY }}
+          YDBDOC_REPO_PATH: ${{ github.workspace }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

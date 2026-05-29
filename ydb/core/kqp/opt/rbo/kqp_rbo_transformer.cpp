@@ -1,16 +1,32 @@
 #include "kqp_rbo_transformer.h"
 #include "kqp_operator.h"
 #include "kqp_plan_conversion_utils.h"
+#include "kqp_rbo_rules.h"
 
+#include <ydb/core/kqp/host/kqp_transform.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
+
 namespace {
 
-TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
+NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
+    const auto& cboStats = kqpCtx.CBOStats;
+
+    NJson::TJsonValue optimizerStats(NJson::EJsonValueType::JSON_MAP);
+    optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;
+    optimizerStats["CBOTreesOptimized"] = cboStats.TreesOptimized;
+    return optimizerStats;
+}
+
+TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     Y_UNUSED(typeCtx);
     auto take = TCoTake(node);
     auto takeInput = take.Input();
@@ -34,7 +50,7 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx,
     }
 }
 
-TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, bool pgSyntax) {
+TExprNode::TPtr RewriteSublink(const TExprNode::TPtr& node, TExprContext& ctx, bool pgSyntax) {
     if (node->Child(0)->Content() == "expr") {
         // clang-format off
         return Build<TKqpExprSublink>(ctx, node->Pos())
@@ -64,7 +80,7 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
 
 }
 
-TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext &ctx) {
+TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto sublink = TKqpSublinkBase(node);
     if (auto root = sublink.Subquery().Maybe<TKqpOpRoot>()) {
         if (TKqpExprSublink::Match(node.Get())) {
@@ -94,12 +110,10 @@ TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext 
     }
     return node;
 }
-} // namespace
 
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
-IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
+IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
@@ -215,7 +229,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
     for (const auto& column : colNames) {
         const auto it = mapping.find(column.GetFullName());
-        if (it != mapping.end()) {
+        if (it != mapping.end() && it->second.TableName != "") {
             const auto& tableName = it->second.TableName;
             const auto& colName = it->second.ColumnName;
             CMColumnsByTableName[tableName].insert(colName);
@@ -226,7 +240,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
     Y_ENSURE(OpRoot);
-    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
     OpRoot->ComputePlanMetadata(rboCtx);
     for (auto it : *OpRoot) {
         if (IsSuitableToCollectStatistics(it.Current)) {
@@ -293,7 +307,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
-                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 auto output = RBO.Optimize(*OpRoot, rboCtx);
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;
@@ -324,42 +338,22 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode:
     return ContinueOptimizations(input, output, ctx);
 }
 
+//FIXME: We currently support only a single plan, throw an exception if that's not the case
 void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan) {
     if (!execPlan.has_value() || !explainPlan.has_value()) {
-        return;
+        Y_ENSURE(false, "Explain plan wasn't computed in the optimizer");
     }
 
-    if (!TransformCtx->PlanJson.has_value()) {
-        auto planJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+    Y_ENSURE(!TransformCtx->PlanJson.has_value(), "Only a single explain is supported");
 
-        auto planList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        auto planElement = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-        planElement["Node Type"] = "Query";
-        planElement["PlanNodeType"] = "Query";
-        planElement["Plans"] = planList;
-        planJson["Plan"] = planElement;
+    auto planJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+    auto plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+    plans.AppendValue(execPlan.value());
+    planJson["Plans"] = plans;
+    planJson["SimplifiedPlan"] = explainPlan.value();
+    planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx);
 
-        auto simplifiedPlanList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        auto simplifiedPlanElement = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-        simplifiedPlanElement["Node Type"] = "Query";
-        simplifiedPlanElement["PlanNodeType"] = "Query";
-        simplifiedPlanElement["Plans"] = simplifiedPlanList;
-
-        planJson["SimplifiedPlan"] = simplifiedPlanElement;
-
-        auto meta = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-        meta["version"] = "0.2";
-        meta["type"] = "query";
-        planJson["meta"] = meta;
-        
-        TransformCtx->PlanJson = planJson;
-    }
-
-    auto & plan = TransformCtx->PlanJson.value();
-    auto & planList = plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe();
-    planList.push_back(*execPlan);
-    auto & simplifiedPlanList = plan.GetMapSafe().at("SimplifiedPlan").GetMapSafe().at("Plans").GetArraySafe();
-    simplifiedPlanList.push_back(*explainPlan);
+    TransformCtx->PlanJson = planJson;
 }
 
 void TKqpNewRBOTransformer::Rewind() {
@@ -381,13 +375,12 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
 }
 
 TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-                                             TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
+                                             TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
                                              TKikimrTablesData& tables, const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                              const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx)
     : TypeCtx(typeCtx)
     , KqpCtx(*kqpCtx)
     , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
-    , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
     , FuncRegistry(funcRegistry)
     , TransformCtx(transformCtx)
     , Tables(tables)
@@ -438,9 +431,9 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
     physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>());
-    physicalStageRules.emplace_back(std::make_unique<TPeepholePredicate>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());
+    physicalStageRules.emplace_back(std::make_unique<TDisableBlocksOnColumnsLimitRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));
 
     // CBO stages.
@@ -469,6 +462,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
+
+    RBO.AddStage(std::make_unique<TPropagateHashFuncStage>());
 }
 
 void TKqpRBOCleanupTransformer::Rewind() {
@@ -479,11 +474,10 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
+                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TKikimrTablesData& tables,
                                                        const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                                        const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), tables, cluster, database,
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), tables, cluster, database,
                                      actorSystem, funcRegistry, transformCtx);
 }
 
@@ -491,5 +485,4 @@ TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContex
     return new TKqpRBOCleanupTransformer(typeCtx);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

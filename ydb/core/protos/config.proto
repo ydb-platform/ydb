@@ -1596,6 +1596,21 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 411000000000,
             DefaultValue: 3600 }];
+        optional int64 MaxIncrementalRestoreTablesInFlight = 16 [(ControlOptions) = {
+            Description: "Max concurrent per-table restore sub-operations within a single incremental backup. -1 disables the cap.",
+            MinValue: -1,
+            MaxValue: 1000000,
+            DefaultValue: 32 }];
+        optional int64 MaxIncrementalRestoreOverallDurationSeconds = 17 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) of the whole incremental restore (across all incremental backups in the chain), from first dispatch to terminal state. -1 disables the deadline.",
+            MinValue: -1,
+            MaxValue: 604800,
+            DefaultValue: 86400 }];
+        optional int64 MaxIncrementalRestoreStageDurationSeconds = 18 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) for restoring a single incremental backup in the chain; resets when the orchestrator advances to the next incremental. Must be <= MaxIncrementalRestoreOverallDurationSeconds. -1 disables the per-incremental deadline (only the overall deadline applies). Defaults to the overall deadline so single-incremental restores see one effective limit; lower this knob if per-incremental progress should be enforced.",
+            MinValue: -1,
+            MaxValue: 604800,
+            DefaultValue: 86400 }];
     }
 
     message TTCMallocControls {
@@ -1622,6 +1637,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 8388608 }];
+        optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
+            Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TVDiskControls {
@@ -1847,6 +1867,30 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 MaxInProgressStartupDataSyncCount = 43 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressStartupDataSyncPerPDiskCount = 44 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryCount = 45 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryPerPDiskCount = 46 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1943,6 +1987,32 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 60 }]; // 1 minute
+
+        optional uint64 PostponePumpMsHDD = 14 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for HDD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 50 }];
+
+        optional uint64 PostponePumpMsSSD = 15 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for SSD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 5 }];
+
+        optional uint64 PostponePumpResetAfterMs = 16 [(ControlOptions) = {
+            Description: "Postpone backpressure pump reset exponential backoff after this duration, ms",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 1000 }];
+    }
+
+    message TBlobDepotControls {
+        optional uint64 MaxLoadedTrashRecords = 1 [(ControlOptions) = {
+            Description: "Maximum number of trash records kept in BlobDepot memory at once",
+            MinValue: 1,
+            MaxValue: 100000000,
+            DefaultValue: 1000000 }];
     }
 
     message TPDiskControls {
@@ -2238,6 +2308,7 @@ message TImmediateControlsConfig {
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
     optional TBootstrapperControls BootstrapperControls = 20;
+    optional TBlobDepotControls BlobDepotControls = 22;
 
     message TQuoterControls {
         optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {
@@ -2599,7 +2670,7 @@ message TColumnShardConfig {
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
 
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "tiling++"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
 
@@ -3036,6 +3107,8 @@ message TSystemTabletBackupConfig {
     }
     optional EFailBehaviour FailBehaviour = 6 [default = RETRY_BACKUP];
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
+    optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
+    optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
 }
 
 message TClusterDiagnosticsConfig {

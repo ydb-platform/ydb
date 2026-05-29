@@ -1,5 +1,6 @@
 #include "flat_dbase_apply.h"
 #include "util_fmt_abort.h"
+#include "bloom_filter_defaults.h"
 
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -177,6 +178,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
                     Y_ENSURE(len <= keyCount,
                         "Bloom filter prefix " << len << " exceeds key column count " << keyCount);
                     double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : DefaultBloomFilterFpp;
+                    Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
                     prefixMap[len] = fpp;
                 }
             }

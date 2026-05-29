@@ -21,7 +21,8 @@ private:
     public:
         TPortionKey(const ui64 pathId, const ui64 portionId)
             : PathId(pathId)
-            , PortionId(portionId) {
+            , PortionId(portionId)
+        {
         }
 
         bool operator==(const TPortionKey& other) const {
@@ -31,6 +32,7 @@ private:
         auto operator<=>(const TPortionKey& other) const {
             return std::tie(PathId, PortionId) <=> std::tie(other.PathId, other.PortionId);
         }
+
         explicit operator size_t() const {
             return CombineHashes(PathId, PortionId);
         }
@@ -101,8 +103,10 @@ public:
 
     public:
         TUpdate() = default;
+
         TUpdate(NKikimrTxColumnShard::TIndexPortionMeta&& portionMeta)
-            : PortionMeta(std::move(portionMeta)) {
+            : PortionMeta(std::move(portionMeta))
+        {
         }
     };
 
@@ -122,7 +126,8 @@ public:
             const NColumnShard::TTablesManager& tablesManager)
             : Key(std::move(key))
             , PathId(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>())
-            , CLContext(rowset, dsGroupSelector) {
+            , CLContext(rowset, dsGroupSelector)
+        {
             InitSchema(tablesManager);
         }
 
@@ -146,7 +151,8 @@ public:
 public:
     TChunksV0MetaNormalizer(const TNormalizationController::TInitContext& info)
         : TBase(info)
-        , DsGroupSelector(std::make_shared<NColumnShard::TBlobGroupSelector>(info.GetStorageInfo())) {
+        , DsGroupSelector(std::make_shared<NColumnShard::TBlobGroupSelector>(info.GetStorageInfo()))
+    {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(

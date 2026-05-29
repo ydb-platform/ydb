@@ -1,7 +1,8 @@
 #include "gc.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -19,4 +20,4 @@ bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, 
     return true;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

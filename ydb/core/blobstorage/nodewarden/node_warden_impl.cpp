@@ -3,6 +3,8 @@
 #include "node_warden_impl.h"
 #include "distconf.h"
 
+#include <ydb/core/blob_depot/s3_router_events.h>
+
 #include <google/protobuf/util/message_differencer.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
@@ -13,6 +15,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
@@ -59,6 +62,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , ThrottlingMinLogChunkCount(100, 1, 100000)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
+    , MaxInProgressStartupDataSyncCount(0, 0, 10000)
+    , MaxInProgressStartupDataSyncPerPDiskCount(0, 0, 10000)
+    , MaxInProgressLocalRecoveryCount(0, 0, 10000)
+    , MaxInProgressLocalRecoveryPerPDiskCount(0, 0, 10000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , EnablePhantomFlagStorage(1, 0, 1)
     , EnablePersistentPhantomFlagStorage(0, 0, 1)
@@ -211,6 +218,9 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvNodeWardenListLocalDDisks, Handle);
 
+        hFunc(TEvNodeWardenAcquireBlobDepotS3Router, Handle);
+        hFunc(TEvNodeWardenReleaseBlobDepotS3Router, Handle);
+
         default:
             EnqueuePendingMessage(ev);
             break;
@@ -359,6 +369,7 @@ void TNodeWarden::PassAway() {
 
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
     StopInvalidGroupProxy();
+    TerminateBlobDepotS3Routers();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
     return TActorBootstrapped::PassAway();
 }
@@ -437,6 +448,11 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
 
+        TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncCount, icb->VDiskControls.MaxInProgressStartupDataSyncCount);
+        TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, icb->VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount);
+        TControlBoard::RegisterSharedControl(MaxInProgressLocalRecoveryCount, icb->VDiskControls.MaxInProgressLocalRecoveryCount);
+        TControlBoard::RegisterSharedControl(MaxInProgressLocalRecoveryPerPDiskCount, icb->VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount);
+
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksHDD, icb->PDiskControls.MaxCommonLogChunksHDD);
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksSSD, icb->PDiskControls.MaxCommonLogChunksSSD);
         TControlBoard::RegisterSharedControl(CommonStaticLogChunks, icb->PDiskControls.CommonStaticLogChunks);
@@ -495,6 +511,12 @@ void TNodeWarden::Bootstrap() {
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageLocalRecoveryBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressLocalRecoveryCount, MaxInProgressLocalRecoveryPerPDiskCount)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageStartupDataSyncBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressStartupDataSyncCount, MaxInProgressStartupDataSyncPerPDiskCount)));
 
     actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
@@ -1479,6 +1501,47 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
     return true;
 }
 
+static void CleanupRemovedNodeEntries(NKikimrBlobStorage::TStorageConfig& config) {
+    if (!config.GetSelfManagementConfig().GetEnabled() || !config.HasBlobStorageConfig() || !config.GetBlobStorageConfig().HasServiceSet()) {
+        return;
+    }
+
+    THashSet<ui32> nodeIds;
+    for (const auto& node : config.GetAllNodes()) {
+        nodeIds.insert(node.GetNodeId());
+    }
+
+    auto& bsConfig = *config.MutableBlobStorageConfig();
+    auto& ss = *bsConfig.MutableServiceSet();
+
+    EraseIf(*ss.MutableVDisks(), [&](const auto& vdisk) {
+        if (vdisk.HasVDiskLocation()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            return !nodeIds.contains(loc.GetNodeID()) && vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY;
+        }
+        return false;
+    });
+
+    THashSet<std::pair<ui32, ui32>> referencedPDisks;
+    for (const auto& vdisk : ss.GetVDisks()) {
+        if (vdisk.HasVDiskLocation()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            referencedPDisks.emplace(loc.GetNodeID(), loc.GetPDiskID());
+        }
+    }
+
+    EraseIf(*ss.MutablePDisks(), [&](const auto& pdisk) {
+        return !nodeIds.contains(pdisk.GetNodeID()) && !referencedPDisks.contains(std::pair(pdisk.GetNodeID(), pdisk.GetPDiskID()));
+    });
+
+    if (bsConfig.HasDefineBox()) {
+        auto *hosts = bsConfig.MutableDefineBox()->MutableHost();
+        EraseIf(*hosts, [&](const auto& host) {
+            return host.GetEnforcedNodeId() && !nodeIds.contains(host.GetEnforcedNodeId());
+        });
+    }
+}
+
 bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig,
         NKikimrBlobStorage::TStorageConfig *config, TString *errorReason) {
     // copy blob storage config
@@ -1506,6 +1569,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
         return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
     };
+    const bool distconfManagedStaticGroupInfo = !hasStaticGroupInfo(bsFrom.GetServiceSet()) && config->GetSelfManagementConfig().GetEnabled();
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
@@ -1524,7 +1588,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
 
         // update static group information unless distconf is enabled
-        if (!hasStaticGroupInfo(ssFrom) && config->GetSelfManagementConfig().GetEnabled()) {
+        if (distconfManagedStaticGroupInfo) {
             // distconf enabled, keep it as is
         } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());
@@ -1726,6 +1790,10 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;
         }
+    }
+
+    if (distconfManagedStaticGroupInfo) {
+        CleanupRemovedNodeEntries(*config);
     }
 
     // and copy ClusterUUID from there too

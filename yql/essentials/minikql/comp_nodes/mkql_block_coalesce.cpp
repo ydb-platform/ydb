@@ -35,24 +35,24 @@ void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, a
         if (right.is_scalar()) {
             out = left;
         } else {
-            MKQL_ENSURE(TDatumStorageView<TType>(right).bitMask(), "Right array must have a null mask");
+            MKQL_ENSURE(TDatumStorageView<const TType>(right).bitMask(), "Right array must have a null mask");
             BlendCoalesce<TType, /*isScalar=*/false, /*rightHasBitmask=*/true>(
-                TDatumStorageView<TType>(left),
-                TDatumStorageView<TType>(right),
+                TDatumStorageView<const TType>(left),
+                TDatumStorageView<const TType>(right),
                 TDatumStorageView<TType>(out),
                 left.array()->length);
         }
     } else {
         if (right.is_scalar()) {
             BlendCoalesce<TType, /*isScalar=*/true, /*rightHasBitmask=*/false>(
-                TDatumStorageView<TType>(left),
-                TDatumStorageView<TType>(right),
+                TDatumStorageView<const TType>(left),
+                TDatumStorageView<const TType>(right),
                 TDatumStorageView<TType>(out),
                 left.array()->length);
         } else {
             BlendCoalesce<TType, /*isScalar=*/false, /*rightHasBitmask=*/false>(
-                TDatumStorageView<TType>(left),
-                TDatumStorageView<TType>(right),
+                TDatumStorageView<const TType>(left),
+                TDatumStorageView<const TType>(right),
                 TDatumStorageView<TType>(out),
                 left.array()->length);
         }

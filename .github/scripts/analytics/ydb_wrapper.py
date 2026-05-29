@@ -27,55 +27,43 @@ class YDBWrapper:
     when exiting the ``with`` block.
     """
 
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = True):
-        # If use_local_config=True: use only local config file (ignore YDB_QA_CONFIG env)
-        # If use_local_config=False: Priority: YDB_QA_CONFIG env > config file (JSON)
+    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = None):
+        # use_local_config=None (default): YDB_QA_CONFIG env if set, else local config file
+        # use_local_config=True: only local config file (ignore YDB_QA_CONFIG env)
+        # use_local_config=False: YDB_QA_CONFIG env > config file (JSON)
         # By default logs go to stdout (as before)
         # If silent=True, logs go to stderr (for scripts called from other scripts)
         self._log_stream = sys.stderr if silent else sys.stdout
-        
+
+        _explicit_local = use_local_config  # remember if caller forced the choice
+        if use_local_config is None:
+            use_local_config = not os.environ.get("YDB_QA_CONFIG")
+
         if use_local_config:
-            # Force use local config file, ignore environment variable
-            if config_path is None:
-                dir_path = os.path.dirname(__file__)
-                config_path = f"{dir_path}/../../config/ydb_qa_config.json"
-            
-            # Load JSON config
-            try:
-                with open(config_path, 'r') as f:
-                    config_dict = json.load(f)
-                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-            except FileNotFoundError:
-                raise RuntimeError(f"Config file not found: {config_path}")
-            except json.JSONDecodeError as e:
-                raise RuntimeError(f"Invalid JSON config file: {e}")
+            resolved_path = self._default_config_path(config_path)
+            enable_statistics = self._load_config_from_file(resolved_path, enable_statistics)
+            if _explicit_local is True:
+                self._config_source = f"file:{resolved_path} (forced, vars.YDB_QA_CONFIG ignored)"
+            else:
+                self._config_source = f"file:{resolved_path} (vars.YDB_QA_CONFIG not set)"
         else:
-            # Original behavior: YDB_QA_CONFIG env > config file
             ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
-            
             if ydb_qa_config_env:
-                # Parse JSON from ENV
                 try:
                     config_dict = json.loads(ydb_qa_config_env)
                     enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-                    
+                    self._config_source = "env:YDB_QA_CONFIG"
                 except (json.JSONDecodeError, KeyError) as e:
                     raise RuntimeError(f"Invalid YDB_QA_CONFIG format: {e}")
             else:
-                # Fallback to JSON file for local development
-                if config_path is None:
-                    dir_path = os.path.dirname(__file__)
-                    config_path = f"{dir_path}/../../config/ydb_qa_config.json"
-                
-                # Load JSON config
-                try:
-                    with open(config_path, 'r') as f:
-                        config_dict = json.load(f)
-                    enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-                except FileNotFoundError:
-                    raise RuntimeError(f"Config file not found: {config_path}")
-                except json.JSONDecodeError as e:
-                    raise RuntimeError(f"Invalid JSON config file: {e}")
+                resolved_path = self._default_config_path(config_path)
+                enable_statistics = self._load_config_from_file(resolved_path, enable_statistics)
+                if _explicit_local is False:
+                    self._config_source = f"file:{resolved_path} (fallback: vars.YDB_QA_CONFIG not set)"
+                else:
+                    self._config_source = f"file:{resolved_path} (vars.YDB_QA_CONFIG not set)"
+
+        self._log("info", f"YDB config source: {self._config_source}")
         
         # Statistics settings
         self._enable_statistics = enable_statistics
@@ -117,7 +105,31 @@ class YDBWrapper:
                     self._log("warning", "Statistics database is not available, statistics will not be logged")
         else:
             self._log("info", "Statistics logging disabled")
-    
+
+    @property
+    def config_source(self) -> str:
+        """Human-readable description of where YDB QA config was loaded from."""
+        return self._config_source
+
+    @staticmethod
+    def _default_config_path(config_path: Optional[str]) -> str:
+        """Resolve default config path relative to this file if not provided."""
+        if config_path is not None:
+            return config_path
+        dir_path = os.path.dirname(__file__)
+        return os.path.normpath(os.path.join(dir_path, "..", "..", "config", "ydb_qa_config.json"))
+
+    def _load_config_from_file(self, config_path: str, enable_statistics: Optional[bool]) -> Optional[bool]:
+        """Load config dict from JSON file and apply it."""
+        try:
+            with open(config_path, 'r') as f:
+                config_dict = json.load(f)
+            return self._load_config_from_dict(config_dict, enable_statistics)
+        except FileNotFoundError:
+            raise RuntimeError(f"Config file not found: {config_path}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Invalid JSON config file: {e}")
+
     def _load_config_from_dict(self, config_dict: dict, enable_statistics: bool = None):
         """Load configuration from dictionary"""
         dbs = config_dict["databases"]
@@ -503,7 +515,7 @@ class YDBWrapper:
                         result = next(it)
                         batch_count += 1
                         batch_size = len(result.result_set.rows) if result.result_set.rows else 0
-                        results = results + result.result_set.rows
+                        results.extend(result.result_set.rows)
                         rows_affected += batch_size
 
                         if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:

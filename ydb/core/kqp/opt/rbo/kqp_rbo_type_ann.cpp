@@ -1,11 +1,19 @@
 #include "kqp_operator.h"
+
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
 
 using TStatus = NYql::IGraphTransformer::TStatus;
 
 namespace {
+
 using namespace NKikimr;
 using namespace NKqp;
 using namespace NYql;
@@ -278,6 +286,9 @@ TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
 TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const bool scalarAggregation = aggregate->KeyColumns.empty();
+    TPositionHandle pos = aggregate->Pos;
+    const auto aggregationPhase = aggregate->GetAggregationPhase();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
@@ -287,28 +298,50 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     }
 
     for (const auto& keyColumn : aggregate->KeyColumns) {
-        auto it = aggTraitsMap.find(keyColumn.GetFullName());
+        const auto it = aggTraitsMap.find(keyColumn.GetFullName());
         Y_ENSURE(it != aggTraitsMap.end());
         newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+    }
+
+    // In case type annotation is running for final aggregation.
+    // (resultColName, (aggFunction, isOptional)).
+    THashMap<TString, std::pair<TString, bool>> intermediateAggregation;
+    if (aggregate->GetInput()->GetKind() == EOperator::Aggregate && aggregationPhase == EOpPhase::Final) {
+        const auto& aggTraitsList = CastOperator<TOpAggregate>(aggregate->GetInput())->AggregationTraitsList;
+        for (const auto& aggTraits : aggTraitsList) {
+            const auto resultColName = aggTraits.ResultColName.GetFullName();
+            const auto& aggFunc = aggTraits.AggFunction;
+            const auto itemType = structType->FindItemType(resultColName);
+            Y_ENSURE(itemType, "Cannot find field name in input type.");
+            intermediateAggregation.emplace(resultColName, std::make_pair(aggFunc, itemType->IsOptionalOrNull()));
+        }
     }
 
     for (const auto& traits : aggregate->AggregationTraitsList) {
         const auto originalColName = traits.OriginalColName.GetFullName();
         const auto& aggFunction = traits.AggFunction;
         const auto resultColName = traits.ResultColName.GetFullName();
-        auto it = aggTraitsMap.find(originalColName);
+        const auto it = aggTraitsMap.find(originalColName);
         Y_ENSURE(it != aggTraitsMap.end());
-        const auto* aggFieldType = it->second;
-        TPositionHandle dummyPos;
+        auto aggFieldType = it->second;
 
         if (aggFunction == "count") {
             aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
         } else if (aggFunction == "sum") {
-            Y_ENSURE(GetSumResultType(dummyPos, *it->second, aggFieldType, ctx.ExprCtx),
-                        "Unsupported type for sum aggregation function");
+            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for sum aggregation function");
         } else if (aggFunction == "avg") {
-            Y_ENSURE(GetAvgResultType(dummyPos, *it->second, aggFieldType, ctx.ExprCtx),
-                        "Unsupported type for avg aggregation function");
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for avg aggregation function");
+        }
+
+        // Special case for scalar aggregation (aka aggregation with empty keys).
+        if (aggregationPhase != EOpPhase::Intermediate && scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg")) {
+
+            const auto it = intermediateAggregation.find(originalColName);
+            // count -> count::intermediate + sum::final
+            if ((it == intermediateAggregation.end()) || (it->second.first != "count")) {
+                aggFieldType = ctx.ExprCtx.MakeType<TOptionalExprType>(aggFieldType);
+            }
         }
 
         newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(resultColName, aggFieldType));
@@ -468,14 +501,11 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
 }
 
-}
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
     for (auto it = begin(); it != end(); it++) {
-        auto status = ::ComputeTypes((*it).Current, ctx, PlanProps);
+        auto status = ::NKikimr::NKqp::ComputeTypes((*it).Current, ctx, PlanProps);
         if (status != TStatus::Ok) {
             return status;
         }
@@ -483,5 +513,4 @@ TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-}
-}
+} // namespace NKikimr::NKqp

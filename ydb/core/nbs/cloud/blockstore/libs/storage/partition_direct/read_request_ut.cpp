@@ -31,6 +31,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         auto readHint = DirtyMap.MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),
@@ -47,7 +48,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         auto future = readRequest->GetFuture();
         readRequest->Run();
-        SetReadResult({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)}, false);
     }
 
     Y_UNIT_TEST_F(ShouldCreateMultipleLocationExecutor, TBaseFixture)
@@ -67,11 +68,12 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(20, 10),
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.PBufferHosts.GetPrimary());
         auto readHint = DirtyMap.MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),
@@ -88,7 +90,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         auto future = readRequest->GetFuture();
         readRequest->Run();
-        SetReadResult({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)}, false);
     }
 
     Y_UNIT_TEST_F(ShouldRead, TBaseFixture)
@@ -108,6 +110,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),
@@ -118,7 +121,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        SetReadResult({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)}, false);
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
@@ -131,14 +134,14 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(20, 10),
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.PBufferHosts.GetPrimary());
 
         DirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(40, 10),
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.PBufferHosts.GetPrimary());
 
         const TBlockRange64 range = TBlockRange64::WithLength(10, 100);
         ExpectedRange = range;
@@ -160,6 +163,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),
@@ -170,7 +174,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        SetReadResult({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)}, false);
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());

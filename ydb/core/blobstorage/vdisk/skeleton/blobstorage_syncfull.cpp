@@ -119,6 +119,8 @@ namespace NKikimr {
             // copy data until we have some space
             ui32 result = 0;
             while (it.Valid()) {
+                key = it.GetCurKey();
+
                 if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
                     return MsgFullFlag;
                 }
@@ -127,7 +129,6 @@ namespace NKikimr {
                     return LongProcessing;
                 }
 
-                key = it.GetCurKey();
                 if (filter.Check(key, it.GetMemRec(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
                     Serialize(data, key, it.GetMemRec());
                 it.Next();

@@ -1,8 +1,9 @@
 #include "auth_actors.h"
 
+#include "http_req.h"
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/security/ticket_parser_impl.h>
@@ -12,6 +13,7 @@
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
+
 #include <util/stream/file.h>
 
 namespace NKikimr::NHttpProxy {
@@ -54,7 +56,6 @@ namespace NKikimr::NHttpProxy {
             , IamToken(context.IamToken)
             , Authorize(!context.Driver)
             , DatabasePath(CanonizePath(context.DatabasePath))
-            , StreamName(context.StreamName)
             , SourceAddress(context.SourceAddress)
         {
         }
@@ -154,9 +155,15 @@ namespace NKikimr::NHttpProxy {
                     }
                 }
                 if (!found) {
-                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                    if (ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion().empty()) {
+                        return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
+                            TStringBuilder() << "YandexCloudServiceRegion is not configured",
+                            NYds::EErrorCodes::ERROR);
+                    } else {
+                        return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
                                           TStringBuilder() << "Wrong service region: got " << Signature->GetRegion() << " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0),
                                           NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
+                    }
                 }
 
                 if (!TInstant::TryParseIso8601(Signature->GetSigningTimestamp(), signedAt)) {
@@ -317,7 +324,6 @@ namespace NKikimr::NHttpProxy {
         TString CloudId;
         TString DatabaseId;
         TString DatabasePath;
-        TString StreamName;
         TString SourceAddress;
     };
 

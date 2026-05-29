@@ -580,7 +580,7 @@ Issues & Limitations
 ~~~~~~~~~~~~~~~~~~~~
 
 - This project is in maintenance mode. Projects using Python 3.9 or later
-  are best served by using the timezone functionaly now included in core
+  are best served by using the timezone functionality now included in core
   Python and packages that work with it such as `tzdata <https://pypi.org/project/tzdata/>`_.
 
 - Offsets from UTC are rounded to the nearest whole minute, so timezones

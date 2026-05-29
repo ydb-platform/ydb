@@ -7,7 +7,7 @@ from rich.segment import Segment
 from rich.style import Style
 from rich.terminal_theme import TerminalTheme
 
-from textual.color import Color
+from textual.color import TRANSPARENT, Color
 from textual.filter import ANSIToTruecolor
 
 
@@ -30,7 +30,11 @@ class Tint:
 
     @classmethod
     def process_segments(
-        cls, segments: Iterable[Segment], color: Color, ansi_theme: TerminalTheme
+        cls,
+        segments: Iterable[Segment],
+        color: Color,
+        ansi_theme: TerminalTheme,
+        background: Color = TRANSPARENT,
     ) -> Iterable[Segment]:
         """Apply tint to segments.
 
@@ -38,6 +42,7 @@ class Tint:
             segments: Incoming segments.
             color: Color of tint.
             ansi_theme: The TerminalTheme defining how to map ansi colors to hex.
+            background: Background color.
 
         Returns:
             Segments with applied tint.
@@ -47,6 +52,7 @@ class Tint:
         _Segment = Segment
 
         truecolor_style = ANSIToTruecolor(ansi_theme).truecolor_style
+        background_rich_color = background.rich_color
 
         NULL_STYLE = Style()
         for segment in segments:
@@ -54,7 +60,11 @@ class Tint:
             if control:
                 yield segment
             else:
-                style = truecolor_style(style) if style is not None else NULL_STYLE
+                style = (
+                    truecolor_style(style, background_rich_color)
+                    if style is not None
+                    else NULL_STYLE
+                )
                 yield _Segment(
                     text,
                     (

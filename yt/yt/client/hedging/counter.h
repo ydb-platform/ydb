@@ -22,21 +22,22 @@ struct TCounter final
         const std::string& clusterName,
         TDuration requestDurationHistogramMin = TDuration::MilliSeconds(1),
         TDuration requestDurationHistogramMax = TDuration::MilliSeconds(70),
-        const std::optional<TDuration>& requestDurationHistogramGranularity = std::nullopt);
+        std::optional<TDuration> requestDurationHistogramGranularity = std::nullopt);
     explicit TCounter(
         const NProfiling::TTagSet& tagSet,
         TDuration requestDurationHistogramMin = TDuration::MilliSeconds(1),
         TDuration requestDurationHistogramMax = TDuration::MilliSeconds(70),
-        const std::optional<TDuration>& requestDurationHistogramGranularity = std::nullopt);
+        std::optional<TDuration> requestDurationHistogramGranularity = std::nullopt);
     explicit TCounter(
         const NProfiling::TRegistry& registry,
         TDuration requestDurationHistogramMin = TDuration::MilliSeconds(1),
         TDuration requestDurationHistogramMax = TDuration::MilliSeconds(70),
-        const std::optional<TDuration>& requestDurationHistogramGranularity = std::nullopt);
+        std::optional<TDuration> requestDurationHistogramGranularity = std::nullopt);
 
     NProfiling::TCounter SuccessRequestCount;
     NProfiling::TCounter CancelRequestCount;
     NProfiling::TCounter ErrorRequestCount;
+    NProfiling::TCounter TotalRequestCount;
     NProfiling::TTimeGauge EffectivePenalty;
     NProfiling::TTimeGauge ExternalPenalty;
     NProfiling::TEventTimer RequestDuration;

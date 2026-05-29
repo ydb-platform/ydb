@@ -210,6 +210,8 @@ private:
 
     bool RequestApiToken();
 
+    friend class TInteractiveConfigurationManager;
+
     const TYamlConfigBase::TPtr BaseConfig;
     const TString Id;
     YAML::Node Config;
@@ -227,6 +229,8 @@ class TInteractiveConfigurationManager final : public std::enable_shared_from_th
     static constexpr char CURRENT_PROFILE_PROPERTY[] = "current_profile";
     static constexpr char INTERACTIVE_MODE_PROPERTY[] = "interactive_mode";
     static constexpr char AI_PROFILES_PROPERTY[] = "ai_profiles";
+    static constexpr char TOOL_AUTO_ACTION_PROPERTY[] = "tool_auto_action";
+    static constexpr char SYSTEM_PROMPT_ENABLED_PROPERTY[] = "system_prompt_enabled";
 
 public:
     using TPtr = std::shared_ptr<TInteractiveConfigurationManager>;
@@ -237,9 +241,21 @@ public:
         Max, // Last value, do not use
     };
 
+    enum class EToolAutoAction {
+        Ask,
+        Execute,
+        Reject, // Reject tool execution when it called by agent
+        Hide, // Do not register tool in model
+        Max, // Last value, do not use
+    };
+
     TInteractiveConfigurationManager(const TString& configurationPath, bool readOnly);
 
     ~TInteractiveConfigurationManager();
+
+    bool IsSystemPromptEnabled() const;
+
+    EToolAutoAction GetToolAutoAction(const TString& toolName);
 
     TString GetActiveAiProfileId() const;
 
@@ -253,6 +269,12 @@ public:
 
     TAiModelConfig::TPtr SelectAiProfile();
 
+    // Persist an in-memory profile (one with an empty Id, returned by the
+    // default-preset path of ActivateAiProfile) to ai_profiles and update
+    // current_profile. Returns a new TAiModelConfig pointing at the persisted
+    // entry. The original in-memory profile should be discarded by the caller.
+    TAiModelConfig::TPtr PromoteInMemoryProfile(TAiModelConfig::TPtr profile);
+
     void RemoveAiProfile(const TString& id);
 
     void Flush();
@@ -265,6 +287,16 @@ private:
     void ChangeActiveAiProfile(const TString& id);
 
     TAiModelConfig::TPtr CreateAiProfile(const TString& presetId = ""); // Empty for empty preset
+
+    // Insert the given YAML config into ai_profiles under a unique id derived
+    // from preferredName, update current_profile, and return a fresh
+    // TAiModelConfig pointing at the persisted entry. Shared helper used by
+    // CreateAiProfile and PromoteInMemoryProfile.
+    TAiModelConfig::TPtr PersistProfile(YAML::Node config, const TString& preferredName);
+
+    // Build a profile in memory directly from a preset, without persisting it to YAML.
+    // The returned profile has an empty Id, which is used as a marker of an unsaved profile.
+    TAiModelConfig::TPtr CreateInMemoryProfileFromPreset(const TString& presetId);
 
     void LoadProfile();
 

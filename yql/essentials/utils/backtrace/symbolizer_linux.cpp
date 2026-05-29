@@ -115,7 +115,7 @@ void Symbolize(const TStackFrame* frames, size_t count, IOutputStream* out) {
     }
     const std::lock_guard lock{Mutex};
 
-    std::iota(Order, Order + count, 0u);
+    std::iota(Order, Order + count, 0U);
     std::sort(Order, Order + count, [&frames](auto a, auto b) { return strcmp(frames[a].File, frames[b].File) < 0; });
 
     struct backtrace_state* state = nullptr;

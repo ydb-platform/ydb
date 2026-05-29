@@ -3,6 +3,7 @@
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ext_ut.pb.h>
+#include <yt/yt/core/yson/unittests/proto/protobuf_scalar_type_ut.pb.h>
 
 #include <yt/yt/core/yson/config.h>
 #include <yt/yt/core/yson/protobuf_interop.h>
@@ -1073,7 +1074,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         // Basic usage of custom resolver with state.
         TProtobufWriterOptions options;
         int unknownKeyCount = 0;
-        options.UnknownYsonFieldModeResolver = [&unknownKeyCount] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [&unknownKeyCount] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/nested_message/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             } else if (path == "/nested_message1/nested_message/unknown_map/first_unknown_key" || path == "/nested_message1/nested_message/unknown_map/second_unknown_key") {
@@ -1146,7 +1147,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         TString protobufString;
         StringOutputStream protobufOutput(&protobufString);
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/unknown_map1") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1202,7 +1203,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1230,7 +1231,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     {
         // Don't fail if Forward is returned on empty map or empty list.
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1263,7 +1264,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         // Fail if leaf is scalar and returns Forward.
         {
             TProtobufWriterOptions options;
-            options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+            options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
                 if (path == "/nested_message1/unknown_map") {
                     return NYson::EUnknownYsonFieldsMode::Forward;
                 }
@@ -1287,7 +1288,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         {
             // Fail on forwarded scalar value on the top level.
             TProtobufWriterOptions options;
-            options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+            options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
                 if (path == "/nested_message1/unknown_map") {
                     return NYson::EUnknownYsonFieldsMode::Forward;
                 }
@@ -1315,7 +1316,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1383,7 +1384,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         TString protobufString;
         StringOutputStream protobufOutput(&protobufString);
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map1") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1442,7 +1443,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             if (path == "/forwarded_attr") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1499,7 +1500,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             if (path == R"(/nested_message1/unknown_field\x01)") {
                 return EUnknownYsonFieldsMode::Forward;
             }
@@ -3082,7 +3083,7 @@ TEST(TStrictEnumValueCheckTest, ProtoToYsonUnknownChecked)
 TEST(TProtobufWriterOptionsTest, CreateChildOptions)
 {
     TProtobufWriterOptions options{
-        .UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        .UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             return path.StartsWith("/foo")
                 ? EUnknownYsonFieldsMode::Keep
                 : EUnknownYsonFieldsMode::Fail;
@@ -3103,6 +3104,103 @@ TEST(TProtobufWriterOptionsTest, CreateChildOptions)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+YT_STATIC_INITIALIZER(
+    RegisterCustomProtobufIntFieldConverter(
+        NProto::TExampleMessage::descriptor(),
+        1,
+        {.Serializer = [] (IYsonConsumer* consumer, int64_t value) {
+            consumer->OnInt64Scalar(value * 2);
+        }})
+);
+
+TEST(TCustomIntFieldConverterTest, Basic)
+{
+    NProto::TExampleMessage message;
+    message.set_int32_field(21);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"int32_field\"=42;}", ysonString);
+}
+
+TEST(TCustomIntFieldConverterTest, OtherFieldsWorkingDefault)
+{
+    NProto::TExampleMessage message;
+    message.set_uint64_field(73);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"uint64_field\"=73u;}", ysonString);
+}
+
+TEST(TCustomEnumFieldConverterTest, Basic)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceEnumStringType = true;
+    SetProtobufInteropConfig(newConfig);
+
+    NProto::TExampleMessage message;
+    message.set_enum_int(NProto::TExampleMessage::EEnum::TExampleMessage_EEnum_VALUE0);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"enum_int\"=\"VALUE0\";}", ysonString);
+}
+
+TEST(TCustomEnumFieldConverterTest, OtherEnumsWorkingDefault)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceEnumStringType = true;
+    SetProtobufInteropConfig(newConfig);
+
+    NProto::TExampleMessage message;
+    message.set_enum_string(NProto::TExampleMessage::EAnotherEnum::TExampleMessage_EAnotherEnum_ANOTHER_VALUE1);
+
+    TString protobufString;
+    ASSERT_TRUE(message.SerializeToString(&protobufString));
+
+    TString ysonString;
+    TStringOutput ysonOutput(ysonString);
+    TYsonWriter ysonWriter(&ysonOutput, EYsonFormat::Text);
+
+    google::protobuf::io::ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+    ParseProtobuf(&ysonWriter, &protobufInput, NYson::ReflectProtobufMessageType<NProto::TExampleMessage>());
+    EXPECT_EQ("{\"enum_string\"=\"ANOTHER_VALUE1\";}", ysonString);
+}
+
+//////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

@@ -82,6 +82,7 @@ public:
     class TTxCheckUnsynced;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
+    class TTxCleanupStaleStorageEntries;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -792,9 +793,10 @@ public:
 
         bool Listable() const {
             return VDisksInGroup
-                || !VirtualGroupState
-                || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING
-                || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED;
+                || BridgeGroupInfo
+                || (VirtualGroupState
+                    && (*VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING
+                        || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED));
         }
 
         void ClearVDisksInGroup() {
@@ -1531,6 +1533,11 @@ private:
     bool Loaded = false;
     bool EnableConfigV2 = false;
     bool PendingV2MigrationCheck = false;
+
+    std::vector<Schema::BoxHostV2::TKey::Type> StaleBoxHostKeys;
+    std::vector<TPDiskId> StalePDiskKeys;
+    std::vector<TVSlotId> StaleVSlotKeys;
+
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
     TMonotonic LoadedAt;
 
@@ -1957,6 +1964,7 @@ private:
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateEnableConfigV2(bool value);
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
+    ITransaction* CreateTxCleanupStaleStorageEntries();
 
     struct TAuditLogInfo {
         TString PeerName;

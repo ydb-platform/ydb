@@ -10,6 +10,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/util/backoff.h>
 
@@ -30,6 +31,8 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenWriteMetadata;
     struct TEvNodeWardenQueryCacheResult;
     struct TEvNodeWardenNotifySyncerFinished;
+    struct TEvNodeWardenAcquireBlobDepotS3Router;
+    struct TEvNodeWardenReleaseBlobDepotS3Router;
 
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
@@ -240,6 +243,10 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
 
+        TControlWrapper MaxInProgressStartupDataSyncCount;
+        TControlWrapper MaxInProgressStartupDataSyncPerPDiskCount;
+        TControlWrapper MaxInProgressLocalRecoveryCount;
+        TControlWrapper MaxInProgressLocalRecoveryPerPDiskCount;
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper EnablePersistentPhantomFlagStorage;
@@ -607,6 +614,22 @@ namespace NKikimr::NStorage {
         void RegisterPendingActor(const TActorId& actorId);
         void EnqueuePendingMessage(TAutoPtr<IEventHandle> ev);
         void IssuePendingMessages(const TActorId& actorId);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // BlobDepot S3 router lifecycle (one router actor per BlobDepot tablet on the node).
+        // The router is created lazily on the first acquire and destroyed when the last
+        // consumer (tablet or agent) releases it.
+
+        struct TBlobDepotS3RouterRec {
+            TActorId Router;
+            NKikimrBlobDepot::TS3BackendSettings Settings;
+            THashSet<TActorId> Consumers;
+        };
+        THashMap<ui64 /*tabletId*/, TBlobDepotS3RouterRec> BlobDepotS3Routers;
+
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenAcquireBlobDepotS3Router>> ev);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenReleaseBlobDepotS3Router>> ev);
+        void TerminateBlobDepotS3Routers();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

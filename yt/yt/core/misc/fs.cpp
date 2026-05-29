@@ -469,14 +469,14 @@ i64 GetDirectoriesSize(const std::vector<std::string>& paths, bool ignoreUnavail
         for (const auto& file : files) {
             wrapNoEntryError([&] {
                 auto fileStatistics = GetPathStatistics(CombinePaths(directory, file));
+                if (deviceId && fileStatistics.DeviceId != *deviceId) {
+                    return;
+                }
                 if (deduplicateByINodes) {
                     auto insertResult = visitedInodes.insert(fileStatistics.INode);
                     if (!insertResult.second) { // File already visited
                         return;
                     }
-                }
-                if (deviceId && fileStatistics.DeviceId != *deviceId) {
-                    return;
                 }
                 if (fileStatistics.Size > 0) {
                     size += fileStatistics.Size;
@@ -1005,7 +1005,6 @@ void Splice(
 TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
-    bool pipeIsSrc,
     const IInvokerPtr& ioInvoker,
     const NConcurrency::IPollerPtr& poller,
     i64 chunkSize)
@@ -1014,27 +1013,34 @@ TFuture<TSpliceResult> SpliceAsync(
     YT_VERIFY(src.GetHandle() >= 0 && dst.GetHandle() >= 0);
     YT_VERIFY(chunkSize > 0);
 
-    static constexpr auto isPipe = [] (int fd) -> bool {
+    constexpr auto isPipe = [] (int fd) -> bool {
         struct stat statBuf;
         YT_VERIFY(::fstat(fd, &statBuf) != -1);
         return (statBuf.st_mode & S_IFMT) == S_IFIFO;
     };
 
-    static constexpr auto isNonblocking = [] (int fd) -> bool {
+    constexpr auto isNonblocking = [] (int fd) -> bool {
         int flags = ::fcntl(fd, F_GETFL);
         YT_VERIFY(flags != -1);
         return flags & O_NONBLOCK;
     };
 
-    auto fdPipe = (pipeIsSrc ? src : dst).GetHandle();
-    YT_ASSERT(isPipe(fdPipe));
+    bool srcIsPipe = isPipe(src.GetHandle());
+    auto fdPipe = (srcIsPipe ? src : dst).GetHandle();
+    auto fdOther = (srcIsPipe ? dst : src).GetHandle();
 
-    auto fdOther = (pipeIsSrc ? dst : src).GetHandle();
-    YT_ASSERT(!isNonblocking(fdOther));
-    YT_ASSERT(!isPipe(fdOther));
+    // These syscalls don't do IO so we can afford to make them even in release builds. Sources:
+    // 1. For as long as the file is open, it keeps the dentry in use, which in turn means that the
+    //    VFS inode is still in use. (https://docs.kernel.org/filesystems/vfs.html#the-file-object)
+    // 2. The stat(2) operation is fairly simple: once the VFS has the dentry, it peeks at the inode
+    //    data and passes some of it back to userspace. (https://docs.kernel.org/filesystems/vfs.html#the-inode-object)
+    // 3. Each open file description has certain associated status flags, initialized by open(2) and
+    //    possibly modified by fcntl(2). (https://man7.org/linux/man-pages/man2/f_getfl.2const.html#DESCRIPTION)
+    YT_VERIFY(isPipe(dst.GetHandle()) != srcIsPipe);
+    YT_VERIFY(!isNonblocking(fdOther));
 
     auto control = NConcurrency::EPollControl::EdgeTriggered | (
-        pipeIsSrc
+        srcIsPipe
             ? NConcurrency::EPollControl::Read
             : NConcurrency::EPollControl::Write);
 
@@ -1099,7 +1105,7 @@ TFuture<TSpliceResult> SpliceAsync(
         }));
     }));
 #else
-    Y_UNUSED(src, dst, pipeIsSrc, ioInvoker, poller, chunkSize);
+    Y_UNUSED(src, dst, ioInvoker, poller, chunkSize);
     ThrowNotSupported();
 #endif
 }
@@ -1172,6 +1178,16 @@ std::optional<std::string> FindBinaryPath(const std::string& binary)
     }
 
     return std::nullopt;
+}
+
+bool IsOutOfDiskSpaceError(const TError& error)
+{
+#ifdef _linux_
+    return error.FindMatching(ELinuxErrorCode::NOSPC).has_value();
+#else
+    Y_UNUSED(error);
+    YT_UNIMPLEMENTED();
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////

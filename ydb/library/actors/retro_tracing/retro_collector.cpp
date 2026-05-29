@@ -1,38 +1,22 @@
 #include "retro_collector.h"
 #include "span_buffer.h"
 
+#include "events.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 namespace NRetroTracing {
 
-struct TEvPrivate {
-    enum EEv {
-        EvCollectRetroTrace = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvCollectAllRetroTraces
-    };
-
-    struct TEvCollectRetroTrace : NActors::TEventLocal<TEvCollectRetroTrace, EvCollectRetroTrace> {
-        NWilson::TTraceId TraceId;
-
-        TEvCollectRetroTrace(const NWilson::TTraceId& traceId)
-            : TraceId(traceId)
-        {}
-    };
-
-    struct TEvCollectAllRetroTraces : NActors::TEventLocal<TEvCollectAllRetroTraces, EvCollectAllRetroTraces> {};
-};
-
 class TRetroCollector : public NActors::TActorBootstrapped<TRetroCollector> {
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvCollectRetroTrace, Handle);
-        cFunc(TEvPrivate::TEvCollectAllRetroTraces::EventType, HandleCollectAll);
+        hFunc(TEvCollectRetroTrace, Handle);
+        cFunc(TEvCollectAllRetroTraces::EventType, HandleCollectAll);
         cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway);
     );
 
-    void Handle(const TEvPrivate::TEvCollectRetroTrace::TPtr& ev) {
+    void Handle(const TEvCollectRetroTrace::TPtr& ev) {
         if (!ev->Get()->TraceId) {
             return;
         }
@@ -65,13 +49,13 @@ NActors::IActor* CreateRetroCollector() {
 void DemandTrace(const NWilson::TTraceId& traceId) {
     NActors::TActivationContext::Send(std::make_unique<NActors::IEventHandle>(
             MakeRetroCollectorId(), NActors::TActorId{},
-            new TEvPrivate::TEvCollectRetroTrace(traceId)));
+            new TEvCollectRetroTrace(traceId)));
 }
 
 void DemandAllTraces() {
     NActors::TActivationContext::Send(std::make_unique<NActors::IEventHandle>(
             MakeRetroCollectorId(), NActors::TActorId{},
-            new TEvPrivate::TEvCollectAllRetroTraces));
+            new TEvCollectAllRetroTraces));
 }
 
 } // namespace NRetroTracing

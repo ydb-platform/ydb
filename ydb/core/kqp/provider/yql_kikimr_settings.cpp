@@ -84,6 +84,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptEnableOlapPushdownAggregate);
+    REGISTER_SETTING(*this, OptForceOlapPushdownDistinct);
+    REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
@@ -91,6 +93,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
+    REGISTER_SETTING(*this, OptUseSortForPartitionsByKeys);
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OverridePlanner);
@@ -152,11 +155,51 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
             } else if (mode == "StaleRO") {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+            } else if (mode == "ReadCommittedRW") {
+                return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
             } else {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }
         });
 
+    /* CBO internal constants for tuning */
+    REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
+
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinMult);
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsSelMult);
+    REGISTER_SETTING(*this, OptCBOConstsSelPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsShuffleLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleRightSidePow);
+
+    REGISTER_SETTING(*this, OptCBOConstsRightSideCostMult);
+    REGISTER_SETTING(*this, OptCBOConstsByteSizeMult);
+
+    REGISTER_SETTING(*this, OptCBOConstsLeftSideByteSizeFactor);
+    REGISTER_SETTING(*this, OptCBOConstsRightSideByteSizeFactor);
+    REGISTER_SETTING(*this, OptCBOConstsOutputSideByteSizeFactor);
+
+    REGISTER_SETTING(*this, OptCBOConstsInteractionsMult);
+    REGISTER_SETTING(*this, OptCBOConstsInteractionsPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinRightSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinOutputMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinOutputPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputPow);
+    
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "direct_block_group.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
@@ -8,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -22,9 +24,12 @@ class TFastPathService
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const NActors::TActorId PartitionActorId;
+    const TStorageConfigPtr StorageConfig;
     const TString DiskId;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
+    const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;
@@ -34,23 +39,29 @@ private:
 
     TVolumeCounters Counters;
     TVolumeConfigPtr VolumeConfig;
-    const EWriteMode WriteMode;
-    TDuration PBufferReplyTimeout;
+
+    TAdaptiveLock DumpLock;
+    size_t DumpCount = 0;
+    TMap<size_t, TDBGDumpResponse> DebugDumps;
 
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
+        NActors::TActorId partitionActorId,
         ui64 tabletId,
         const TString& diskId,
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
+        TVChunkConfigByIndex vChunkConfigs,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
-    ~TFastPathService() override = default;
+    ~TFastPathService() override;
+
+    void Run();
 
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
@@ -76,8 +87,13 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
+    void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+
 private:
     ui64 GenerateSequenceNumber();
+    void ScheduleDirtyMapDebugPrint();
+    void QueryDirtyMapDebugDump();
+    void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

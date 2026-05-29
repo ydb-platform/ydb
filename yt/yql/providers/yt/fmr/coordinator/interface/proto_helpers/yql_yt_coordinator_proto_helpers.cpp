@@ -93,6 +93,10 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
         auto protoFmrResourceOperationInfo = FmrResourceOperationInfoToProto(fmrResourceInfo);
         protoStartOperationRequest.AddFmrResources()->Swap(&protoFmrResourceOperationInfo);
     }
+    if (startOperationRequest.FmrJob) {
+        auto protoFmrJob = YtResourceInfoToProto(*startOperationRequest.FmrJob);
+        protoStartOperationRequest.MutableFmrJob()->Swap(&protoFmrJob);
+    }
     return protoStartOperationRequest;
 }
 
@@ -175,6 +179,9 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
     for (ui64 i = 0; i < protoStartOperationRequest.FmrResourcesSize(); ++i) {
         startOperationRequest.FmrResources.emplace_back(FmrResourceOperationInfoFromProto(protoStartOperationRequest.GetFmrResources(i)));
     }
+    if (protoStartOperationRequest.HasFmrJob()) {
+        startOperationRequest.FmrJob = YtResourceInfoFromProto(protoStartOperationRequest.GetFmrJob());
+    }
     return startOperationRequest;
 }
 
@@ -216,6 +223,13 @@ NProto::TGetOperationResponse GetOperationResponseToProto(const TGetOperationRes
     for (auto& operationResult: getOperationResponse.OperationResultsYson) {
         protoGetOperationResponse.AddOperationResultsYson(operationResult);
     }
+    auto* protoJobCounters = protoGetOperationResponse.MutableJobCounters();
+    protoJobCounters->SetTotal(getOperationResponse.JobCounters.Total);
+    protoJobCounters->SetPending(getOperationResponse.JobCounters.Pending);
+    protoJobCounters->SetRunning(getOperationResponse.JobCounters.Running);
+    protoJobCounters->SetCompleted(getOperationResponse.JobCounters.Completed);
+    protoJobCounters->SetFailed(getOperationResponse.JobCounters.Failed);
+    protoJobCounters->SetLost(getOperationResponse.JobCounters.Lost);
     return protoGetOperationResponse;
 }
 
@@ -240,6 +254,17 @@ TGetOperationResponse GetOperationResponseFromProto(const NProto::TGetOperationR
     getOperationResponse.ErrorMessages = errorMessages;
     getOperationResponse.OutputTablesStats = outputTableStats;
     getOperationResponse.OperationResultsYson = operationResultsYson;
+    if (protoGetOperationReponse.HasJobCounters()) {
+        const auto& protoJobCounters = protoGetOperationReponse.GetJobCounters();
+        getOperationResponse.JobCounters = TJobCounters{
+            .Total = protoJobCounters.GetTotal(),
+            .Pending = protoJobCounters.GetPending(),
+            .Running = protoJobCounters.GetRunning(),
+            .Completed = protoJobCounters.GetCompleted(),
+            .Failed = protoJobCounters.GetFailed(),
+            .Lost = protoJobCounters.GetLost(),
+        };
+    }
     return getOperationResponse;
 }
 

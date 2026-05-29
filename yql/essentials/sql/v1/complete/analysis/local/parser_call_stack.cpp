@@ -35,6 +35,7 @@ const TVector<TRuleId> PreferredRules = {
     RULE(Type_name_simple),
     RULE(Type_name_composite),
     RULE(Type_name_decimal),
+    RULE(Type_name_null),
     RULE(Value_constructor),
 };
 
@@ -74,6 +75,7 @@ bool IsLikelyTypeStack(const TParserCallStack& stack) {
     return EndsWith({RULE(Type_name_simple)}, stack) ||
            EndsWith({RULE(Type_name_composite)}, stack) ||
            EndsWith({RULE(Type_name_decimal)}, stack) ||
+           EndsWith({RULE(Type_name_null)}, stack) ||
            (Contains({RULE(Invoke_expr),
                       RULE(Named_expr_list),
                       RULE(Named_expr),
@@ -133,6 +135,9 @@ bool IsLikelyClusterStack(const TParserCallStack& stack) {
 
 bool IsLikelyColumnStack(const TParserCallStack& stack) {
     return Contains({RULE(Select_core)}, stack) &&
+           !EndsWith({RULE(Atom_expr), RULE(Id_or_type)}, stack) &&          // UDF
+           !Contains({RULE(Result_column), RULE(An_id_or_type)}, stack) &&   // ... AS _
+           !Contains({RULE(Result_column), RULE(An_id_as_compat)}, stack) && // ... AS _
            (Contains({RULE(Result_column)}, stack) ||
             Contains({RULE(Expr)}, stack) ||
             Contains({RULE(Sort_specification)}, stack));

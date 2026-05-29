@@ -85,6 +85,7 @@ namespace NKikimr::NStorage {
                EvConfigProposed,
                EvRetryCollectConfigsAndPropose,
                EvRetryPersistConfig,
+               EvFlushRetroTraceBatch,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -271,6 +272,10 @@ namespace NKikimr::NStorage {
         TBindQueue OtherPilesBindQueue;
         bool Scheduled = false;
 
+        // unbound-state diagnostic
+        ui32 BindFailuresStreak = 0;
+        TInstant LastUnboundWarnAt = TInstant::Zero();
+
         // incoming bindings
         struct TIndirectBoundNode {
             std::list<TStorageConfigMeta> Configs; // last one is the latest one
@@ -352,6 +357,14 @@ namespace NKikimr::NStorage {
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
+        // retro trace root-side batching
+        static constexpr TDuration RetroTraceBatchInterval = TDuration::Seconds(2);
+        std::vector<NWilson::TTraceId> PendingRetroTraceIds;
+        bool RetroTraceBatchFlushScheduled = false;
+
+        void HandleFlushRetroTraceBatch();
+        void FlushRetroTraceBatch();
+
         // cache subsystem
         struct TCacheItem {
             ui32 Generation; // item generation
@@ -418,6 +431,7 @@ namespace NKikimr::NStorage {
         void UnsubscribeInterconnect(ui32 nodeId);
         TActorId SubscribeToPeerNode(ui32 nodeId, TActorId sessionId);
         void AbortBinding(const char *reason, bool sendUnbindMessage = true, bool sendUpdate = true);
+        void LogUnboundBindingWarning();
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
         void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
@@ -454,7 +468,7 @@ namespace NKikimr::NStorage {
             bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TStringBuf> selfAssemblyUUID, bool dryRun = false);
+            std::optional<TString> selfAssemblyUUID, bool dryRun = false);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
@@ -479,6 +493,7 @@ namespace NKikimr::NStorage {
         void PerformScatterTask(TScatterTask& task);
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
+        void Perform(TEvGather::TDemandRetroTrace *response, const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
 

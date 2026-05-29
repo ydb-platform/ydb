@@ -3,6 +3,22 @@
 
 namespace NYdb::inline Dev::NTopic::NTests::NTxUsage {
 
+class TFixtureSinksTableSkipConflictOn : public TFixtureSinksTable {
+protected:
+    void AugmentServerSettings(NKikimr::Tests::TServerSettings& settings) override {
+        TFixtureSinksTable::AugmentServerSettings(settings);
+        settings.SetEnableSkipConflictCheckForTopicsInTransaction(true);
+    }
+};
+
+class TFixtureSinksQuerySkipConflictOn : public TFixtureSinksQuery {
+protected:
+    void AugmentServerSettings(NKikimr::Tests::TServerSettings& settings) override {
+        TFixtureSinksQuery::AugmentServerSettings(settings);
+        settings.SetEnableSkipConflictCheckForTopicsInTransaction(true);
+    }
+};
+
 Y_UNIT_TEST_SUITE(TxUsage) {
 
 Y_UNIT_TEST_F(EmptySourceId_ParallelTx_Table, TFixtureTable)
@@ -440,6 +456,46 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Table, TFixtureSinksTable)
 Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Query, TFixtureSinksQuery)
 {
     TestSinksOlapWriteToTopicAndTable4();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_6_Table_SkipConflictOn, TFixtureSinksTableSkipConflictOn)
+{
+    TestSinksOltpWriteToTopicAndTable6();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_6_Query_SkipConflictOn, TFixtureSinksQuerySkipConflictOn)
+{
+    TestSinksOltpWriteToTopicAndTable6();
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Table_SkipConflictOn, TFixtureSinksTableSkipConflictOn)
+{
+    TestSinksOlapWriteToTopicAndTable4();
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Query_SkipConflictOn, TFixtureSinksQuerySkipConflictOn)
+{
+    TestSinksOlapWriteToTopicAndTable4();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5_Table_SkipConflictOn, TFixtureSinksTableSkipConflictOn)
+{
+    TestSinksOltpWriteToTopicAndTable5();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5_Query_SkipConflictOn, TFixtureSinksQuerySkipConflictOn)
+{
+    TestSinksOltpWriteToTopicAndTable5();
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3_Table_SkipConflictOn, TFixtureSinksTableSkipConflictOn)
+{
+    TestSinksOlapWriteToTopicAndTable3();
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3_Query_SkipConflictOn, TFixtureSinksQuerySkipConflictOn)
+{
+    TestSinksOlapWriteToTopicAndTable3();
 }
 
 Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixtureNoClient)

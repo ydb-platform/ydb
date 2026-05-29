@@ -14,6 +14,7 @@
 #include <yql/essentials/sql/v1/proto_parser/statement.h>
 #include <yql/essentials/sql/v1/proto_parser/token.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/yql_paths.h>
 #include <yql/essentials/public/udf/udf_log.h>
 
@@ -147,11 +148,7 @@ bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
         }
     }
 
-    if (!VerifyAndAdjustSecretSettings(out, ctx.Context(), REPLICATION_AND_TRANSFER_SECRETS_SETTINGS, tablePathPrefix)) {
-        return false;
-    }
-
-    return true;
+    return VerifyAndAdjustSecretSettings(out, ctx.Context(), REPLICATION_AND_TRANSFER_SECRETS_SETTINGS, tablePathPrefix);
 }
 
 bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
@@ -287,11 +284,7 @@ bool TransferSettings(std::map<TString, TNodePtr>& out,
         }
     }
 
-    if (!VerifyAndAdjustSecretSettings(out, ctx.Context(), REPLICATION_AND_TRANSFER_SECRETS_SETTINGS, tablePathPrefix)) {
-        return false;
-    }
-
-    return true;
+    return VerifyAndAdjustSecretSettings(out, ctx.Context(), REPLICATION_AND_TRANSFER_SECRETS_SETTINGS, tablePathPrefix);
 }
 
 } // namespace
@@ -1325,11 +1318,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto& rule = core.GetAlt_sql_stmt_core37().GetRule_drop_topic_stmt1();
 
             TDropTopicParameters params;
-            if (rule.HasBlock3()) { // IF EXISTS
-                params.MissingOk = true;
-            } else {
-                params.MissingOk = false;
-            }
+            params.MissingOk = rule.HasBlock3(); // IF EXISTS
 
             TTopicRef tr;
             if (!TopicRefImpl(rule.GetRule_topic_ref4(), tr)) {
@@ -1474,8 +1463,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                        stmtPos, "CREATE VIEW", MakeLangVersion(2025, 5))) {
+                if (!Ctx_.EnsureAvailable(stmtPos, NYql::NFeature::YtCreateView)) {
                     return false;
                 }
             }
@@ -1540,8 +1528,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                        Ctx_.Pos(), "DROP VIEW", MakeLangVersion(2025, 5))) {
+                if (!Ctx_.EnsureAvailable(Ctx_.Pos(), NYql::NFeature::YtDropView)) {
                     return false;
                 }
             }
@@ -2980,10 +2967,7 @@ bool TSqlQuery::AlterTableResetTableSetting(
 }
 
 bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params) {
-    if (!CreateTableIndex(node.GetRule_table_index2(), params.AddIndexes)) {
-        return false;
-    }
-    return true;
+    return CreateTableIndex(node.GetRule_table_index2(), params.AddIndexes);
 }
 
 void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) {
@@ -3449,11 +3433,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
 
             literalPtr->second = values[index].Build()->GetPos();
 
-            if (!values[index].GetLiteral(literalPtr->first, ctx)) {
-                return false;
-            }
-
-            return true;
+            return values[index].GetLiteral(literalPtr->first, ctx);
         };
 
         // fill url
@@ -3901,8 +3881,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
-        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                ctx.Pos(), "YqlSelect", YqlSelectLangVersion())) {
+        if (!ctx.EnsureAvailable(ctx.Pos(), NYql::NFeature::YqlSelect)) {
             return Nothing();
         }
 
@@ -3929,11 +3908,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
-        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                ctx.Pos(),
-                "FailOnNonPersistableFlattenAndAggrExprs",
-                MakeLangVersion(2025, 03)))
-        {
+        if (!ctx.EnsureAvailable(ctx.Pos(), NYql::NFeature::PersistableFlattenAndAggrExprs)) {
             return Nothing();
         }
 
@@ -4400,10 +4375,7 @@ bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& ta
     targetList.push_back(ColumnNameAsSingleStr(*this, node.GetRule_set_target1().GetRule_column_name1()));
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
     TSqlExpression sqlExpr(*this);
-    if (!Unwrap(Expr(sqlExpr, values, node.GetRule_expr3()))) {
-        return false;
-    }
-    return true;
+    return Unwrap(Expr(sqlExpr, values, node.GetRule_expr3()));
 }
 
 TSourcePtr TSqlQuery::Build(const TRule_set_clause_list& stmt) {
@@ -4609,7 +4581,7 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
 }
 namespace {
 
-static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& translation) {
+bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& translation) {
     const TString columnName(Id(columnSchema.GetRule_an_id_schema1(), translation));
     TString columnType;
 

@@ -728,7 +728,7 @@ TErrorCodicils& TErrorCodicils::GetOrCreate()
     return *ErrorCodicilsSlot().GetOrCreate();
 }
 
-TErrorCodicils* TErrorCodicils::TryGet()
+const TErrorCodicils* TErrorCodicils::TryGet()
 {
     return ErrorCodicilsSlot().TryGet();
 }
@@ -781,6 +781,13 @@ void TErrorCodicils::Set(std::string key, TGetter getter)
 auto TErrorCodicils::Get(const std::string& key) const -> TGetter
 {
     return GetOrDefault(Getters_, key);
+}
+
+TErrorCodicils::TGuard MakeSourceLocationErrorCodicil(TSourceLocation location)
+{
+    return TErrorCodicils::MakeGuard("location", [location = std::move(location)] () -> std::string {
+        return NYT::ToString(location);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

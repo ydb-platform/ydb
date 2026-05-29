@@ -6,6 +6,7 @@
 
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
@@ -106,6 +107,7 @@
 
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/other/mon_blob_range_page.h>
+#include <ydb/core/blobstorage/other/mon_check_integrity.h>
 #include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
@@ -758,7 +760,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    if (runConfig.AppConfig.GetTableServiceConfig().HasCompileCacheWarmupConfig()) {
+    if (runConfig.AppConfig.GetTableServiceConfig().GetEnableCompileCacheWarmup()) {
         auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
             runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
         GRpcWarmupTimeout = warmupConfig.HardDeadline;
@@ -1643,11 +1645,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
-    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
+    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize()) {
         AppData->ResourceProfiles->LoadProfiles(runConfig.AppConfig.GetBootstrapConfig().GetResourceProfiles());
+    }
 
-    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection())
+    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection()) {
         AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection();
+    }
 
     if (runConfig.AppConfig.HasClusterDiagnosticsConfig()) {
         AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
@@ -1656,6 +1660,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasLongTxServiceConfig()) {
         AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
     }
+
+    AppData->KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(Counters, runConfig.AppConfig);
 
     TAppDataInitializersList appDataInitializers;
     // setup domain info
@@ -1802,6 +1808,8 @@ void TKikimrRunner::InitializeActorSystem(
             TMailboxType::HTSwap, AppData->SystemPoolId));
         setup->LocalServices.emplace_back(MakeMonBlobRangeId(), TActorSetupCmd(CreateMonBlobRangeActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonCheckIntegrityId(), TActorSetupCmd(CreateMonCheckIntegrityActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
     }
 
     ApplyLogSettings(runConfig);
@@ -1872,6 +1880,14 @@ void TKikimrRunner::InitializeActorSystem(
                 false,
                 ActorSystem.Get(),
                 MakeMonBlobRangeId());
+
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "check_integrity",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonCheckIntegrityId());
 
         Monitoring->RegisterActorPage(
                 nullptr,
@@ -2284,7 +2300,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
             THolder<TEvent> event = MakeHolder<TEvent>();
             event->Record.SetNodeId(nodeId);
 
-            NTabletPipe::SendData({}, nodeBrokerPipe, event.Release());
+            auto pipeEv = new IEventHandle(nodeBrokerPipe, TActorId(), event.Release());
+            pipeEv->Rewrite(TEvTabletPipe::EvSend, nodeBrokerPipe);
+            ActorSystem->Send(pipeEv);
         }
     }
 

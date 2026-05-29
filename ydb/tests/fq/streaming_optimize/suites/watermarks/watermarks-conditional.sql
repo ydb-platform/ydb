@@ -8,9 +8,10 @@ WITH(
     FORMAT=json_each_row,
     SCHEMA(
         ts String,
+        ts_imp String,
         kind String
     ),
-    WATERMARK = CAST(ts AS Timestamp) - (CASE WHEN kind = "important" THEN Interval("PT5S") ELSE Interval("PT1M") END),
+    WATERMARK = (CASE WHEN kind = "important" THEN CAST(ts_imp AS Timestamp) ELSE CAST(ts AS Timestamp) END) - Interval("PT5S"),
     WATERMARK_GRANULARITY="PT2S",
     WATERMARK_IDLE_TIMEOUT="PT3S"
 );

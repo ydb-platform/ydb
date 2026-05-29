@@ -16,7 +16,9 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_INFO, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvYardInitResult)")) {
+            return;
+        }
         Y_ABORT_UNLESS(msg.DiskFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
@@ -55,6 +57,7 @@ namespace NKikimr::NDDisk {
             for (auto idx : chunkMap.GetChunkIdxs()) {
                 PersistentBufferChunks.emplace_back(idx);
             }
+            PersistentBufferUniqueId = chunkMap.GetUniqueId();
         }
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
     }
@@ -63,8 +66,8 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::Handle(TEvReadLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvReadLogResult)")) {
+            return;
         }
 
         ++*Counters.RecoveryLog.ReadLogChunks;
@@ -108,9 +111,12 @@ namespace NKikimr::NDDisk {
         auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;
         });
+        if (PersistentBufferUniqueId == 0) {
+            PersistentBufferUniqueId = RandomNumber<ui64>();
+        }
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
-            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), AppData()->Counters,
-            PersistentBufferChunks, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
+            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
@@ -183,7 +189,8 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit,
-            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback) {
+            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete) {
         TString buffer;
         const bool success = data.SerializeToString(&buffer);
         Y_ABORT_UNLESS(success);
@@ -199,6 +206,7 @@ namespace NKikimr::NDDisk {
         if (chunkIdxToCommit) {
             cr.CommitChunks.push_back(chunkIdxToCommit);
         }
+        cr.DeleteChunks = std::move(chunksToDelete);
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr,
             TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr));
@@ -210,8 +218,8 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD05, "TDDiskActor::Handle(TEvLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvLogResult)")) {
+            return;
         }
 
         for (const auto& result : msg.Results) {

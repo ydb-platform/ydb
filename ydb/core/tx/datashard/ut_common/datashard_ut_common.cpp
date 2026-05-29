@@ -17,6 +17,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -1110,7 +1111,7 @@ bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, T
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml,
-                                                      NACLib::TUserContext::TPtr userCtx /*= nullptr*/)
+                                                      TIntrusivePtr<NACLib::TUserContext> userCtx /*= nullptr*/)
 {
     auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(userCtx);
     if (dml) {
@@ -2122,7 +2123,7 @@ void ExecSQL(Tests::TServer::TPtr server,
              bool dml,
              Ydb::StatusIds::StatusCode code,
              NYdb::NUt::TTestContext testCtx,
-             NACLib::TUserContext::TPtr userCtx)
+             TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml, userCtx);
@@ -2145,7 +2146,7 @@ void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-             NACLib::TUserContext::TPtr userCtx)
+             TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     ExecSQL(server, sender, sql, dml, Ydb::StatusIds::SUCCESS, NYdb::NUt::TTestContext(), userCtx);
 }
@@ -2931,6 +2932,26 @@ ui64 AsyncTruncateTable(
     op->SetTableName(tableName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
+}
+
+TString FormatIntReadResult(const TEvDataShard::TEvReadResult* msg) {
+    TStringBuilder sb;
+    if (msg->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
+        size_t count = msg->GetRowsCount();
+        for (size_t i = 0; i < count; ++i) {
+            auto cells = msg->GetCells(i);
+            for (size_t j = 0; j < cells.size(); ++j) {
+                if (j != 0) {
+                    sb << ", ";
+                }
+                sb << cells[j].AsValue<i32>();
+            }
+            sb << "\n";
+        }
+    } else {
+        sb << "ERROR: " << msg->Record.GetStatus().GetCode();
+    }
+    return sb;
 }
 
 }

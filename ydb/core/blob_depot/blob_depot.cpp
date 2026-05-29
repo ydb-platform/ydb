@@ -139,6 +139,8 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvUploadResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvScanFound, S3Manager->Handle);
+                fFunc(TEvPrivate::EvDeleteThrottleWakeup, S3Manager->Handle);
+                fFunc(TEvPrivate::EvPutThrottleWakeup, S3Manager->Handle);
 
                 default:
                     if (!HandleDefaultEvents(ev, SelfId())) {
@@ -152,12 +154,14 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId, S3Manager->GetWrapperId()}) {
+        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
 
+        // S3Manager owns the S3 router lifecycle via NodeWarden; releasing it happens
+        // inside TerminateAllActors().
         S3Manager->TerminateAllActors();
 
         TActor::PassAway();

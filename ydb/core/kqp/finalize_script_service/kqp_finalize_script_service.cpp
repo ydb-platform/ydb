@@ -19,23 +19,17 @@ class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptSe
 
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        bool enableBackgroundLeaseChecks,
-        TDuration leaseCheckStartupTimeout)
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
-        , EnableBackgroundLeaseChecks(enableBackgroundLeaseChecks)
-        , LeaseCheckStartupTimeout(leaseCheckStartupTimeout)
-        , FederatedQuerySetupFactory(federatedQuerySetupFactory)
+        , FederatedQuerySetup(federatedQuerySetup)
+        , EnableBackgroundLeaseChecks(FederatedQuerySetup && FederatedQuerySetup->ScriptExecutionSettings.EnableBackgroundLeaseChecks)
+        , LeaseCheckStartupTimeout(FederatedQuerySetup ? FederatedQuerySetup->ScriptExecutionSettings.LeaseCheckStartupTimeout : TDuration::Zero())
         , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
-
-        if (FederatedQuerySetupFactory) {
-            FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
-        }
 
         Become(&TKqpFinalizeScriptService::MainState);
 
@@ -188,12 +182,11 @@ private:
 
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const bool EnableBackgroundLeaseChecks = true;
     const TDuration LeaseCheckStartupTimeout;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
-    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     TRetryPolicy::IRetryState::TPtr RetryState;  // Used for check script execution tables existence
     TActorId ScriptExecutionLeaseCheckActor;
 
@@ -207,11 +200,9 @@ private:
 }  // anonymous namespace
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    bool enableBackgroundLeaseChecks,
-    TDuration leaseCheckStartupTimeout) {
-    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory), enableBackgroundLeaseChecks, leaseCheckStartupTimeout);
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
+    return new TKqpFinalizeScriptService(queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }
 
 }  // namespace NKikimr::NKqp

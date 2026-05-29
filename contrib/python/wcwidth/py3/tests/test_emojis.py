@@ -1,4 +1,5 @@
 """Tests for emoji width measurement and ZWJ sequences."""
+
 # std imports
 import os
 

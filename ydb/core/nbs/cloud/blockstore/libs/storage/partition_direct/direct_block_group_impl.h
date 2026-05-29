@@ -31,11 +31,10 @@ public:
     TDirectBlockGroup(
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
-        ISchedulerPtr scheduler,
-        ITimerPtr timer,
         TExecutorPtr executor,
         ui64 tabletId,
         ui32 generation,
+        size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
 
@@ -47,24 +46,26 @@ public:
 
     TExecutorPtr GetExecutor() override;
 
+    IOraclePtr GetOracle() override;
+
     void Schedule(TDuration delay, TCallback callback) override;
 
     std::shared_ptr<NWilson::TSpan> CreateChildSpan(
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void EstablishConnections() override;
+    void Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
@@ -72,14 +73,14 @@ public:
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
@@ -88,7 +89,8 @@ public:
     NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
-        std::vector<ui8> hostIndexes,
+        THostIndex coordinatorHostIndex,
+        TVector<THostIndex> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -97,14 +99,14 @@ public:
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
-        ui8 pbufferHostIndex,
-        ui8 ddiskHostIndex,
+        THostIndex pbufferHostIndex,
+        THostIndex ddiskHostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
@@ -112,18 +114,20 @@ public:
         ui32 vChunkIndex) override;
 
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
-        ui8 hostIndex) override;
+        THostIndex hostIndex) override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     // IHostStateController implementation
-    void SetHostState(ui8 hostIndex, THostState::EState state) override;
-    ui64 GetHostPBufferUsedSize(ui8 hostIndex) const override;
+    void SetHostState(THostIndex hostIndex, EHostState state) override;
+    ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
     using TEvSyncWithPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
-        TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
+        TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
 
     struct TDDiskConnection
     {
@@ -152,7 +156,7 @@ private:
     void OnWriteBlocksToManyPBuffersResponse(
         const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
             response,
-        ui8 coordinatorHostIndex,
+        THostIndex coordinatorHostIndex,
         NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
         TDuration executionTime);
 
@@ -166,30 +170,32 @@ private:
 
     // Called right before a request is sent to the given host. Updates the
     // per-host inflight counter for the given operation type.
-    void OnRequest(ui8 hostIndex, EOperation operation);
+    void OnRequest(THostIndex hostIndex, EOperation operation);
 
     void OnResponse(
-        ui8 hostIndex,
+        THostIndex hostIndex,
         TDuration executionTime,
         EOperation operation,
         const NProto::TError& error);
     void OnMultiFlushResponse(
-        ui8 pbufferHostIndex,
-        ui8 ddiskHostIndex,
+        THostIndex pbufferHostIndex,
+        THostIndex ddiskHostIndex,
         TDuration executionTime,
         const TVector<NProto::TError>& errors);
 
+    void Thinking();
     void ScheduleOracleThinking();
+    TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
-    const ISchedulerPtr Scheduler;
-    const ITimerPtr Timer;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
+    const size_t DirectBlockGroupIndex;
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
+    IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
     TVector<THostStat> HostStatistics;

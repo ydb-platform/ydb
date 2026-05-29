@@ -45,7 +45,8 @@ public:
     TPortionPage(const ui32 startIndex, const ui32 recordsCount, const ui64 memoryBytes)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , MemoryBytes(memoryBytes) {
+        , MemoryBytes(memoryBytes)
+    {
     }
 };
 
@@ -73,9 +74,11 @@ protected:
     std::optional<ui64> UsedRawBytes;
 
     virtual void DoAbort() = 0;
+
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
+
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
@@ -200,6 +203,7 @@ public:
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
+
     bool HasFetchingPlan() const {
         return !!FetchingPlan;
     }
@@ -298,7 +302,9 @@ private:
         result.InsertValue("read_memory", GetColumnRawBytes(GetPortionAccessor().GetColumnIds()));
         return result;
     }
+
     virtual void DoAbort() override;
+
     virtual TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }
@@ -338,6 +344,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
+
     const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
@@ -442,6 +449,7 @@ private:
         AFL_VERIFY(false);
         return true;
     }
+
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& /*columns*/, const bool /*sequential*/) override {
         AFL_VERIFY(false);
     }
@@ -457,26 +465,32 @@ private:
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& /*policy*/) override {
         return TConclusionStatus::Fail("not implemented DoStartReserveMemory for TAggregationDataSource");
     }
+
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchIndex for TAggregationDataSource");
     }
+
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
         const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
         return TConclusionStatus::Fail("not implemented DoCheckIndex for TAggregationDataSource");
     }
+
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchHeader for TAggregationDataSource");
     }
+
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
         return TConclusionStatus::Fail("not implemented DoCheckHeader for TAggregationDataSource");
     }
+
     virtual void DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
     }
+
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*addr*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchData for TAggregationDataSource");

@@ -37,6 +37,8 @@
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/distributed_file_session.h>
 
+#include <yt/yt/client/rpc/request_info.h>
+
 #include <yt/yt/client/ypath/rich.h>
 
 #include <yt/yt/library/auth/credentials_injecting_channel.h>
@@ -2113,6 +2115,11 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
 
     FillRequest(req.Get(), path, format, options);
 
+    SetReadTableRequestInfo(
+        req,
+        path,
+        *req);
+
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
             return inputStream->Read().Apply(BIND([inputStream] (const TSharedRef& metaRef) -> IFormattedTableReaderPtr {
@@ -2224,6 +2231,30 @@ TFuture<void> TClient::MasterExitReadOnly(const TMasterExitReadOnlyOptions& opti
     req->set_retry(options.Retry);
 
     return req->Invoke().As<void>();
+}
+
+TFuture<void> TClient::FreezeHydraPeer(
+    NHydra::TCellId /*cellId*/,
+    const std::string& /*address*/,
+    const TFreezeHydraPeerOptions& /*options*/)
+{
+    ThrowUnimplemented("FreezeHydraPeer");
+}
+
+TFuture<void> TClient::TruncateChangelog(
+    NHydra::TCellId /*cellId*/,
+    const std::string& /*address*/,
+    const TTruncateChangelogOptions& /*options*/)
+{
+    ThrowUnimplemented("TruncateChangelog");
+}
+
+TFuture<void> TClient::ScheduleRestart(
+    NHydra::TCellId /*cellId*/,
+    const std::string& /*address*/,
+    const TScheduleRestartOptions& /*options*/)
+{
+    ThrowUnimplemented("ScheduleRestart");
 }
 
 TFuture<void> TClient::ResetDynamicallyPropagatedMasterCells(

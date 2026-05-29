@@ -68,6 +68,12 @@ namespace NKikimr::NKqp::NScheduler {
         const TDuration MaxRandomDelay;
     };
 
+    struct TOptions {
+        bool Enabled = true;
+        TDelayParams DelayParams;
+        NHdrf::NSnapshot::ELeafFairShare FairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT;
+    };
+
 } // namespace NKikimr::NKqp::NScheduler
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NKqp::NScheduler::NHdrf::TId, out, id) {

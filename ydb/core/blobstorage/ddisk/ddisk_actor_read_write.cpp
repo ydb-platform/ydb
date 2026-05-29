@@ -47,6 +47,9 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {
+        STLOG(PRI_TRACE, BS_DDISK, BSDD50, "TDDiskActor::Handle(TEvWrite)", (DDiskId, DDiskId),
+            (Sender, ev->Sender), (Cookie, ev->Cookie));
+
         if (!CheckQuery(*ev, &Counters.Interface.Write)) {
             return;
         }
@@ -66,6 +69,10 @@ namespace NKikimr::NDDisk {
                     << ", contiguousSize# " << dataIter.ContiguousSize()
                     << " dataSize# " << data.size()
                     << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
+
+                LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
+                    "DDiskId#: " << DDiskId << ": " << ss.Str());
+
                 SendReply(*ev, std::make_unique<TEvWriteResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     ss.Str()));
@@ -116,9 +123,8 @@ namespace NKikimr::NDDisk {
         STLOG(PRI_DEBUG, BS_DDISK, BSDD07,
             "TDDiskActor::Handle(TEvChunkWriteRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        // TODO: should we really abort or propagate the error?
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
+            return;
         }
 
         auto it = WriteCallbacks.find(ev->Cookie);
@@ -190,9 +196,8 @@ namespace NKikimr::NDDisk {
         STLOG(PRI_DEBUG, BS_DDISK, BSDD08,
             "TDDiskActor::Handle(TEvChunkReadRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
 
-        // TODO: should we really abort or propagate the error?
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
+            return;
         }
 
         auto it = ReadCallbacks.find(ev->Cookie);
@@ -362,6 +367,10 @@ namespace NKikimr::NDDisk {
             }
             case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
                 UpdateFreeSpaceInfo();
+                break;
+            }
+            case EWakeupTag::WakeupCollectPbStats: {
+                CollectPbStatsSnapshot();
                 break;
             }
         }

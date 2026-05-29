@@ -10,7 +10,8 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 ISourcesCollection::ISourcesCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : Context(context)
-    , SourcesConstructor(std::move(sourcesConstructor)) {
+    , SourcesConstructor(std::move(sourcesConstructor))
+{
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }

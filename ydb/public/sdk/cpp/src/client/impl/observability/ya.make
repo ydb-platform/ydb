@@ -1,9 +1,9 @@
 LIBRARY()
 
 SRCS(
+    metric_buffer.cpp
     metrics.cpp
     observation.cpp
-    operation_name.cpp
     span.cpp
 )
 

@@ -439,10 +439,19 @@ class CommandList(OptionList, can_focus=False):
     """The command palette command list."""
 
     DEFAULT_CSS = """
+    
+    CommandList:ansi {
+        & > .option-list--option-highlighted {             
+            color: $block-cursor-foreground;
+            background: $block-cursor-background;
+            text-style: $block-cursor-text-style;    
+        }               
+    }       
+    
     CommandList {
         visibility: hidden;
         border-top: blank;
-        border-bottom: hkey $border;
+        border-bottom: hkey black;
         border-left: none;
         border-right: none;
         height: auto;
@@ -466,8 +475,9 @@ class CommandList(OptionList, can_focus=False):
     CommandList > .option-list--option-highlighted {
         color: $block-cursor-blurred-foreground;
         background: $block-cursor-blurred-background;
-        text-style: $block-cursor-blurred-text-style;
+        text-style: $block-cursor-blurred-text-style;        
     }
+    
 
     CommandList:nocolor > .option-list--option-highlighted {       
         text-style: reverse;
@@ -524,7 +534,7 @@ class CommandPalette(SystemModalScreen[None]):
 
     AUTO_FOCUS = "CommandInput"
 
-    COMPONENT_CLASSES: ClassVar[set[str]] = {
+    COMPONENT_CLASSES: ClassVar[set[str]] = Screen.COMPONENT_CLASSES | {
         "command-palette--help-text",
         "command-palette--highlight",
     }
@@ -561,10 +571,10 @@ class CommandPalette(SystemModalScreen[None]):
         }
     }
 
-    CommandPalette > .command-palette--help-text {                   
-        color: $text-muted;
-        background: transparent;
-        text-style: not bold;       
+
+    CommandPalette > .command-palette--help-text  {
+        color: transparent;
+        text-style: dim not bold;
     }
     
     CommandPalette > .command-palette--highlight {
@@ -586,7 +596,7 @@ class CommandPalette(SystemModalScreen[None]):
     CommandPalette #--input {
         height: auto;
         visibility: visible;
-        border: hkey $border;
+        border: hkey black 50%;
     }
 
     CommandPalette #--input.--list-visible {
@@ -1230,7 +1240,7 @@ class CommandPalette(SystemModalScreen[None]):
                 # decide what to do with it (hopefully it'll run it).
                 self._cancel_gather_commands()
                 self.app.post_message(CommandPalette.Closed(option_selected=True))
-                self.app._delay_update()
+                self.app.delay_update()
                 self.dismiss()
                 self.app.call_later(self._selected_command.command)
 

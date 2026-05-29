@@ -1,0 +1,14 @@
+{
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token_enabled]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth-enforce_user_token_enabled/mon_endpoints_auth-enforce_user_token_enabled.json"
+    },
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[require_counters_authentication]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth-require_counters_authentication/mon_endpoints_auth-require_counters_authentication.json"
+    },
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[require_healthcheck_authentication]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth-require_healthcheck_authentication/mon_endpoints_auth-require_healthcheck_authentication.json"
+    },
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token_disabled]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth-enforce_user_token_disabled/mon_endpoints_auth-enforce_user_token_disabled.json"
+    }
+}

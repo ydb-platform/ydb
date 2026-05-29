@@ -2680,7 +2680,10 @@ deleted:
 		workitem->avw_active = true;
 		LWLockRelease(AutovacuumLock);
 
+		PushActiveSnapshot(GetTransactionSnapshot());
 		perform_work_item(workitem);
+		if (ActiveSnapshotSet())	/* transaction could have aborted */
+			PopActiveSnapshot();
 
 		/*
 		 * Check for config changes before acquiring lock for further jobs.

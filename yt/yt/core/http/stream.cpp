@@ -399,7 +399,7 @@ void THttpInput::FinishHeaders()
 void THttpInput::EnsureHeadersReceived()
 {
     if (!ReceiveHeaders()) {
-        THROW_ERROR(AnnotateError(TError("Connection was closed before the first byte of HTTP message")));
+        THROW_ERROR(AnnotateError(TError(NRpc::EErrorCode::TransportError, "Connection was closed before the first byte of HTTP message")));
     }
 }
 
@@ -624,7 +624,12 @@ const THeadersPtr& THttpOutput::GetHeaders()
 void THttpOutput::SetHost(TStringBuf host, TStringBuf port)
 {
     if (!port.empty()) {
-        HostHeader_ = Format("%v:%v", host, port);
+        auto parseResult = TNetworkAddress::TryParse(host);
+        if (parseResult.IsOK() && parseResult.Value().IsIP6()) {
+            HostHeader_ = Format("[%v]:%v", host, port);
+        } else {
+            HostHeader_ = Format("%v:%v", host, port);
+        }
     } else {
         HostHeader_ = std::string(host);
     }

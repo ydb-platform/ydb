@@ -2305,7 +2305,7 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     return result;
 }
 
-template <ui8 FirstLambdaIndex = 1u, ui8 LastLambdaIndex = FirstLambdaIndex>
+template <ui8 FirstLambdaIndex = 1U, ui8 LastLambdaIndex = FirstLambdaIndex>
 TExprNode::TPtr CleckClosureOnUpperLambdaOverList(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
         for (auto i = FirstLambdaIndex; i <= LastLambdaIndex; ++i) {
@@ -2999,7 +2999,7 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
     if (input->ChildrenSize() > 1) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
         TExprNode::TListType newChildren;
-        newChildren.push_back(input->Child(0));
+        newChildren.emplace_back(input->Child(0));
         return ctx.ChangeChildren(*input, std::move(newChildren));
     }
     return input;
@@ -6376,10 +6376,7 @@ private:
 
         auto resolveStatus = Types_.ArrowResolver->AreTypesSupported(Ctx_.GetPosition(pos), allInputTypes, Ctx_, OnUnsupportedTypeCallback_);
         YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
-        if (resolveStatus != IArrowResolver::OK) {
-            return false;
-        }
-        return true;
+        return resolveStatus == IArrowResolver::OK;
     }
 
     TExprNode::TListType CreateArgs(size_t size, TPositionHandle pos) {
@@ -8680,7 +8677,8 @@ TExprNode::TPtr SqlCompareVariants(const TExprNode& node, TExprContext& ctx) {
             for (const auto& item : structType->GetItems()) {
                 variants.emplace_back(ctx.NewAtom(node.Pos(), item->GetName()), std::nullopt);
                 if (const auto idx = oppositeType->FindItem(item->GetName())) {
-                    variants.back().second.emplace(!IsDistinct && ECompareOptions::Optional == CanCompare<true>(item->GetItemType(), items[*idx]->GetItemType()));
+                    auto r = CanCompare<true>(item->GetItemType(), items[*idx]->GetItemType());
+                    variants.back().second.emplace(!IsDistinct && (r == ECompareOptions::Optional || r == ECompareOptions::Null));
                 }
             }
 
@@ -9300,8 +9298,8 @@ TExprNode::TPtr OptimizeCoalesce(const TExprNode::TPtr& node, TExprContext& ctx)
     return node;
 }
 
-ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86400000000ull); }
-ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ull); }
+ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86400000000ULL); }
+ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ULL); }
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
 
 struct TPeepHoleRules {

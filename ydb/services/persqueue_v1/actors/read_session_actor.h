@@ -379,7 +379,6 @@ private:
     TString Session;
     TString PeerName;
 
-    bool CommitsDisabled;
     bool ReadWithoutConsumer;
 
     bool InitDone;

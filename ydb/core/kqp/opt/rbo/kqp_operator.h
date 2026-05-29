@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <iterator>
+#include <optional>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -75,6 +76,12 @@ struct TPhysicalOpProps {
     std::optional<TRBOStatistics> Statistics;
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
+
+    // CBO decision for this join's input edges.
+    // std::nullopt means there was no explicit decision.
+    // Empty vector means shuffle is eliminated.
+    std::optional<TVector<TInfoUnit>> LeftShuffleBy;
+    std::optional<TVector<TInfoUnit>> RightShuffleBy;
 };
 
 /**
@@ -329,6 +336,7 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Map"; }
 
     bool IsOrdered() const {
@@ -403,6 +411,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Aggregate"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -434,6 +443,7 @@ public:
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Filter"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
@@ -467,6 +477,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Join"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -482,6 +493,7 @@ public:
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "UnionAll"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -502,6 +514,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Limit"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
@@ -533,6 +546,7 @@ public:
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     EOpPhase GetSortPhase() const {
         return SortPhase;
     }
@@ -547,7 +561,7 @@ public:
     }
     bool IsTopSort() const { return LimitCond.has_value(); }
     
-    virtual TString GetExplainName() const override { return "Sort"; }
+    virtual TString GetExplainName() const override { return IsTopSort() ? "TopSort" : "Sort"; }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;
@@ -661,8 +675,8 @@ public:
         return TOpIterator(nullptr);
     }
 
-    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
-    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;

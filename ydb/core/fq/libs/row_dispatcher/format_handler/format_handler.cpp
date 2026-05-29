@@ -285,7 +285,7 @@ private:
             const auto numberRows = newNumberRows - NumberRows;
             const auto rowSize = newDataPackerSize - DataPackerSize;
 
-            if (!numberRows && !rowSize && !Watermark) {
+            if (!numberRows && !Watermark) {
                 return;
             }
 
@@ -382,6 +382,8 @@ public:
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
+        ForceRefresh(); // Clear parser before client is started (otherwise the client may receive too many new messages).
+
         if (Filters) {
             Filters->OnCompileResponse(ev);
         }

@@ -23,24 +23,31 @@ public:
         AppliedFlag = true;
         return DoApply(indexedDataRead);
     }
+
     virtual ui64 GetSourceId() const {
         return 0;
     }
+
     virtual ui64 GetBlobBytes() const {
         return 0;
     }
+
     virtual ui64 GetRawBytes() const {
         return 0;
     }
+
     virtual ui32 GetFilteredRows() const {
         return 0;
     }
+
     virtual ui32 GetTotalRows() const {
         return 0;
     }
+
     virtual ui64 GetTotalReservedBytes() const {
         return 0;
     }
+
     virtual ~IApplyAction() = default;
 };
 
@@ -63,7 +70,8 @@ public:
 
         ITask(const NActors::TActorId& ownerId, NColumnShard::TCounterGuard&& scanCounter)
             : OwnerId(ownerId)
-            , Guard(std::move(scanCounter)) {
+            , Guard(std::move(scanCounter))
+        {
         }
     };
 };

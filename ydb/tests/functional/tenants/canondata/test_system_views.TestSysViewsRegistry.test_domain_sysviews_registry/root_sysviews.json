@@ -440,14 +440,6 @@
   "ds_storage_stats": {
     "columns": [
       {
-        "name": "AvailableGroupsToCreate",
-        "type": "Uint32?"
-      },
-      {
-        "name": "AvailableSizeToCreate",
-        "type": "Uint64?"
-      },
-      {
         "name": "PDiskFilter",
         "type": "Utf8?"
       },
@@ -465,6 +457,22 @@
       },
       {
         "name": "CurrentAvailableSize",
+        "type": "Uint64?"
+      },
+      {
+        "name": "AvailableGroupsToCreate",
+        "type": "Uint32?"
+      },
+      {
+        "name": "AvailableSizeToCreate",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ImmediateGroupsToCreate",
+        "type": "Uint32?"
+      },
+      {
+        "name": "ImmediateSizeToCreate",
         "type": "Uint64?"
       }
     ],

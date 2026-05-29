@@ -14,6 +14,7 @@ SRCS(
     remove_consumer.cpp
     schema.cpp
     schema_operation.cpp
+    schema_propose.cpp
     validation.cpp
 )
 
@@ -27,5 +28,5 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
-#    ut
+    ut
 )

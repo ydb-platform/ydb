@@ -1,379 +1,385 @@
 #include "kqp_statement_rewrite.h"
 
-#include <yql/essentials/core/yql_expr_optimize.h>
+#include <ydb/core/kqp/host/kqp_host_impl.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/provider/rewrite_io_utils.h>
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/core/kqp/host/kqp_host_impl.h>
-#include <ydb/core/kqp/provider/rewrite_io_utils.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 namespace {
-    struct TCreateTableAsResult {
-        NYql::TExprNode::TPtr CreateTable = nullptr;
-        NYql::TExprNode::TPtr ReplaceInto = nullptr;
-        NYql::TExprNode::TPtr MoveTable = nullptr;
-    };
 
-    bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
-        if (!tableSettings) {
-            return false;
-        }
-        for (const auto& field : tableSettings.Cast()) {
-            if (field.Name().Value() == "storeType") {
-                YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
-                if (to_lower(field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue()) == "column") {
-                    return true;
-                }
+struct TCreateTableAsResult {
+    NYql::TExprNode::TPtr CreateTable = nullptr;
+    NYql::TExprNode::TPtr ReplaceInto = nullptr;
+    NYql::TExprNode::TPtr MoveTable = nullptr;
+};
+
+bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
+    if (!tableSettings) {
+        return false;
+    }
+    for (const auto& field : tableSettings.Cast()) {
+        if (field.Name().Value() == "storeType") {
+            YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
+            if (to_lower(field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue()) == "column") {
+                return true;
             }
         }
+    }
+    return false;
+}
+
+bool IsCreateTableAs(
+        NYql::TExprNode::TPtr root,
+        NYql::TExprContext& exprCtx) {
+    NYql::NNodes::TExprBase expr(root);
+    auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
+    if (!maybeWrite) {
+        return false;
+    }
+    auto write = maybeWrite.Cast();
+
+    if (write.DataSink().FreeArgs().Count() < 2
+        || write.DataSink().Category() != "kikimr"
+        || write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() != "db") {
         return false;
     }
 
-    bool IsCreateTableAs(
-            NYql::TExprNode::TPtr root,
-            NYql::TExprContext& exprCtx) {
-        NYql::NNodes::TExprBase expr(root);
-        auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
-        if (!maybeWrite) {
-            return false;
-        }
-        auto write = maybeWrite.Cast();
-
-        if (write.DataSink().FreeArgs().Count() < 2
-            || write.DataSink().Category() != "kikimr"
-            || write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() != "db") {
-            return false;
-        }
-
-        auto writeArgs = write.FreeArgs();
-        if (writeArgs.Count() < 5) {
-            return false;
-        }
-
-        auto maybeKey = writeArgs.Get(2).Maybe<NYql::NNodes::TCoKey>();
-        if (!maybeKey) {
-            return false;
-        }
-        auto key = maybeKey.Cast();
-        if (key.ArgCount() == 0) {
-            return false;
-        }
-
-        if (key.Ptr()->Child(0)->Child(0)->Content() != "tablescheme") {
-            return false;
-        }
-
-        auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
-        if (!maybeList) {
-            return false;
-        }
-        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
-        if (!settings.Mode) {
-            return false;
-        }
-
-        auto mode = settings.Mode.Cast();
-        if (mode != "create" && mode != "create_if_not_exists" && mode != "create_or_replace") {
-            return false;
-        }
-
-        const auto& insertData = writeArgs.Get(3);
-        if (insertData.Ptr()->Content() == "Void") {
-            return false;
-        }
-        return true;
+    auto writeArgs = write.FreeArgs();
+    if (writeArgs.Count() < 5) {
+        return false;
     }
 
-    bool IsOlapCreateTableAs(
-            NYql::TExprNode::TPtr root,
-            NYql::TExprContext& exprCtx) {
-        NYql::NNodes::TExprBase expr(root);
-        auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
-        YQL_ENSURE(maybeWrite);
-        auto write = maybeWrite.Cast();
-
-        YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
-            && write.DataSink().Category() == "kikimr"
-            && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
-
-        auto writeArgs = write.FreeArgs();
-        YQL_ENSURE(writeArgs.Count() > 4);
-
-        auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
-        YQL_ENSURE(maybeList);
-        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
-        YQL_ENSURE(settings.Mode);
-
-        return IsOlap(settings.TableSettings);
+    auto maybeKey = writeArgs.Get(2).Maybe<NYql::NNodes::TCoKey>();
+    if (!maybeKey) {
+        return false;
+    }
+    auto key = maybeKey.Cast();
+    if (key.ArgCount() == 0) {
+        return false;
     }
 
-    TPrepareRewriteInfo PrepareCreateTableAs(
-            NYql::TExprNode::TPtr root,
-            NYql::TExprContext& exprCtx,
-            NYql::TTypeAnnotationContext& typeCtx,
-            const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
-            const NMiniKQL::IFunctionRegistry& funcRegistry,
-            const TString& cluster) {
-        NYql::NNodes::TExprBase expr(root);
-        auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
-        YQL_ENSURE(maybeWrite);
-        auto write = maybeWrite.Cast();
-
-        YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
-            && write.DataSink().Category() == "kikimr"
-            && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
-
-        auto writeArgs = write.FreeArgs();
-        YQL_ENSURE(writeArgs.Count() > 4);
-
-        auto maybeKey = writeArgs.Get(2).Maybe<NYql::NNodes::TCoKey>();
-        YQL_ENSURE(maybeKey);
-
-        auto key = maybeKey.Cast();
-        YQL_ENSURE(key.ArgCount() != 0);
-
-        YQL_ENSURE(key.Ptr()->Child(0)->Child(0)->Content() == "tablescheme");
-
-        auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
-        const TString tableName(tableNameNode->Content());
-
-        auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
-        YQL_ENSURE(maybeList);
-        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
-        YQL_ENSURE(settings.Mode);
-
-        auto mode = settings.Mode.Cast();
-        YQL_ENSURE(mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace");
-
-        const auto& insertData = writeArgs.Get(3);
-        YQL_ENSURE(insertData.Ptr()->Content() != "Void");
-
-        auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
-            .AddServiceTransformers()
-            .AddExpressionEvaluation(funcRegistry)
-            .AddPreTypeAnnotation()
-            .AddIOAnnotation()
-            .AddTypeAnnotationTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
-            .Build(false);
-
-        return TPrepareRewriteInfo{
-            .InputExpr = insertData.Ptr(),
-            .Transformer = typeTransformer,
-        };
+    if (key.Ptr()->Child(0)->Child(0)->Content() != "tablescheme") {
+        return false;
     }
 
-    std::optional<TCreateTableAsResult> RewriteCreateTableAs(
-            NYql::TExprNode::TPtr root,
-            NYql::TExprContext& exprCtx,
-            const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
-            NYql::TExprNode::TPtr insertDataPtr) {
-        NYql::NNodes::TExprBase expr(root);
-        auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
-        YQL_ENSURE(maybeWrite);
-        auto write = maybeWrite.Cast();
+    auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
+    if (!maybeList) {
+        return false;
+    }
+    auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
+    if (!settings.Mode) {
+        return false;
+    }
 
-        YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
-            && write.DataSink().Category() == "kikimr"
-            && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
+    auto mode = settings.Mode.Cast();
+    if (mode != "create" && mode != "create_if_not_exists" && mode != "create_or_replace") {
+        return false;
+    }
 
-        auto writeArgs = write.FreeArgs();
-        YQL_ENSURE(writeArgs.Count() > 4);
+    const auto& insertData = writeArgs.Get(3);
+    if (insertData.Ptr()->Content() == "Void") {
+        return false;
+    }
+    return true;
+}
 
-        auto maybeKey = writeArgs.Get(2).Maybe<NYql::NNodes::TCoKey>();
-        YQL_ENSURE(maybeKey);
+bool IsOlapCreateTableAs(
+        NYql::TExprNode::TPtr root,
+        NYql::TExprContext& exprCtx) {
+    NYql::NNodes::TExprBase expr(root);
+    auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
+    YQL_ENSURE(maybeWrite);
+    auto write = maybeWrite.Cast();
 
-        auto key = maybeKey.Cast();
-        YQL_ENSURE(key.ArgCount() != 0);
+    YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
+        && write.DataSink().Category() == "kikimr"
+        && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
 
-        YQL_ENSURE(key.Ptr()->Child(0)->Child(0)->Content() == "tablescheme");
+    auto writeArgs = write.FreeArgs();
+    YQL_ENSURE(writeArgs.Count() > 4);
 
-        auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
-        const TString tableName(tableNameNode->Content());
+    auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
+    YQL_ENSURE(maybeList);
+    auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
+    YQL_ENSURE(settings.Mode);
 
-        auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
-        YQL_ENSURE(maybeList);
-        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
-        YQL_ENSURE(settings.Mode);
+    return IsOlap(settings.TableSettings);
+}
 
-        auto mode = settings.Mode.Cast();
-        YQL_ENSURE(mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace");
+TPrepareRewriteInfo PrepareCreateTableAs(
+        NYql::TExprNode::TPtr root,
+        NYql::TExprContext& exprCtx,
+        NYql::TTypeAnnotationContext& typeCtx,
+        const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+        const NMiniKQL::IFunctionRegistry& funcRegistry,
+        const TString& cluster) {
+    NYql::NNodes::TExprBase expr(root);
+    auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
+    YQL_ENSURE(maybeWrite);
+    auto write = maybeWrite.Cast();
 
-        const auto& insertData = writeArgs.Get(3);
-        YQL_ENSURE(insertData.Ptr()->Content() != "Void");
+    YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
+        && write.DataSink().Category() == "kikimr"
+        && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
 
-        const auto pos = insertData.Ref().Pos();
+    auto writeArgs = write.FreeArgs();
+    YQL_ENSURE(writeArgs.Count() > 4);
 
-        auto type = insertDataPtr->GetTypeAnn();
-        YQL_ENSURE(type);
-        type = type->Cast<NYql::TListExprType>()->GetItemType();
-        YQL_ENSURE(type);
-        const auto rowType = type->Cast<NYql::TStructExprType>();
-        YQL_ENSURE(rowType);
+    auto maybeKey = writeArgs.Get(2).Maybe<NYql::NNodes::TCoKey>();
+    YQL_ENSURE(maybeKey);
 
-        auto create = exprCtx.ReplaceNode(std::move(root), insertData.Ref(), exprCtx.NewCallable(pos, "Void", {}));
+    auto key = maybeKey.Cast();
+    YQL_ENSURE(key.ArgCount() != 0);
 
-        auto columns = create->Child(4)->Child(1)->Child(1);
-        if (columns->ChildrenSize() != 0) {
-            exprCtx.AddError(NYql::TIssue(exprCtx.GetPosition(pos), "CREATE TABLE AS with columns is not supported"));
-            return std::nullopt;
-        }
+    YQL_ENSURE(key.Ptr()->Child(0)->Child(0)->Content() == "tablescheme");
 
-        auto primaryKey = create->Child(4)->Child(2)->Child(1);
-        THashSet<TStringBuf> primariKeyColumns;
-        primaryKey->ForEachChild([&](const auto& child) {
-            primariKeyColumns.insert(child.Content());
-        });
+    auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
+    const TString tableName(tableNameNode->Content());
 
-        std::vector<NYql::TExprNodePtr> columnNodes;
-        for (const auto* item : rowType->GetItems()) {
-            const auto name = item->GetName();
-            auto currentType = item->GetItemType();
+    auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
+    YQL_ENSURE(maybeList);
+    auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
+    YQL_ENSURE(settings.Mode);
 
-            const bool notNull = (currentType->GetKind() != NYql::ETypeAnnotationKind::Optional);
-            auto typeNode = NYql::ExpandType(pos, *currentType, exprCtx);
+    auto mode = settings.Mode.Cast();
+    YQL_ENSURE(mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace");
 
-            columnNodes.push_back(exprCtx.NewList(pos, {
-                exprCtx.NewAtom(pos, name),
-                typeNode,
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "columnConstrains"),
-                    notNull
-                        ? exprCtx.NewList(pos, {
-                            exprCtx.NewList(pos, {
-                                exprCtx.NewAtom(pos, "not_null"),
-                            }),
-                        })
-                        : exprCtx.NewList(pos, {}),
+    const auto& insertData = writeArgs.Get(3);
+    YQL_ENSURE(insertData.Ptr()->Content() != "Void");
+
+    sessionCtx->SetInternalTypeAnnTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), sessionCtx->ConfigPtr()));
+
+    auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
+        .AddServiceTransformers()
+        .AddExpressionEvaluation(funcRegistry)
+        .AddPreTypeAnnotation()
+        .AddIOAnnotation()
+        .AddTypeAnnotationTransformer()
+        .Build(false);
+
+    return TPrepareRewriteInfo{
+        .InputExpr = insertData.Ptr(),
+        .Transformer = typeTransformer,
+    };
+}
+
+std::optional<TCreateTableAsResult> RewriteCreateTableAs(
+        NYql::TExprNode::TPtr root,
+        NYql::TExprContext& exprCtx,
+        const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+        NYql::TExprNode::TPtr insertDataPtr) {
+    NYql::NNodes::TExprBase expr(root);
+    auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
+    YQL_ENSURE(maybeWrite);
+    auto write = maybeWrite.Cast();
+
+    YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
+        && write.DataSink().Category() == "kikimr"
+        && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
+
+    auto writeArgs = write.FreeArgs();
+    YQL_ENSURE(writeArgs.Count() > 4);
+
+    auto maybeKey = writeArgs.Get(2).Maybe<NYql::NNodes::TCoKey>();
+    YQL_ENSURE(maybeKey);
+
+    auto key = maybeKey.Cast();
+    YQL_ENSURE(key.ArgCount() != 0);
+
+    YQL_ENSURE(key.Ptr()->Child(0)->Child(0)->Content() == "tablescheme");
+
+    auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
+    const TString tableName(tableNameNode->Content());
+
+    auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
+    YQL_ENSURE(maybeList);
+    auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
+    YQL_ENSURE(settings.Mode);
+
+    auto mode = settings.Mode.Cast();
+    YQL_ENSURE(mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace");
+
+    const auto& insertData = writeArgs.Get(3);
+    YQL_ENSURE(insertData.Ptr()->Content() != "Void");
+
+    const auto pos = insertData.Ref().Pos();
+
+    auto type = insertDataPtr->GetTypeAnn();
+    YQL_ENSURE(type);
+    type = type->Cast<NYql::TListExprType>()->GetItemType();
+    YQL_ENSURE(type);
+    const auto rowType = type->Cast<NYql::TStructExprType>();
+    YQL_ENSURE(rowType);
+
+    auto create = exprCtx.ReplaceNode(std::move(root), insertData.Ref(), exprCtx.NewCallable(pos, "Void", {}));
+
+    auto columns = create->Child(4)->Child(1)->Child(1);
+    if (columns->ChildrenSize() != 0) {
+        exprCtx.AddError(NYql::TIssue(exprCtx.GetPosition(pos), "CREATE TABLE AS with columns is not supported"));
+        return std::nullopt;
+    }
+
+    auto primaryKey = create->Child(4)->Child(2)->Child(1);
+    THashSet<TStringBuf> primariKeyColumns;
+    primaryKey->ForEachChild([&](const auto& child) {
+        primariKeyColumns.insert(child.Content());
+    });
+
+    std::vector<NYql::TExprNodePtr> columnNodes;
+    for (const auto* item : rowType->GetItems()) {
+        const auto name = item->GetName();
+        auto currentType = item->GetItemType();
+
+        const bool notNull = (currentType->GetKind() != NYql::ETypeAnnotationKind::Optional);
+        auto typeNode = NYql::ExpandType(pos, *currentType, exprCtx);
+
+        columnNodes.push_back(exprCtx.NewList(pos, {
+            exprCtx.NewAtom(pos, name),
+            typeNode,
+            exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "columnConstrains"),
+                notNull
+                    ? exprCtx.NewList(pos, {
+                        exprCtx.NewList(pos, {
+                            exprCtx.NewAtom(pos, "not_null"),
+                        }),
+                    })
+                    : exprCtx.NewList(pos, {}),
+            }),
+            exprCtx.NewList(pos, {}),
+        }));
+    }
+
+    const bool isTemporary = settings.Temporary.IsValid() && settings.Temporary.Cast().Value() == "true";
+    if (isTemporary) {
+        exprCtx.AddError(NYql::TIssue(exprCtx.GetPosition(pos), "CREATE TEMPORARY TABLE AS is not supported at current time"));
+        return std::nullopt;
+    }
+
+    const TString tmpTableName = TStringBuilder()
+            << tableName
+            << "_"
+            << TAppData::RandomProvider->GenUuid4().AsUuidString();
+
+    const TString createTableName = (TStringBuilder()
+            << CanonizePath(sessionCtx->GetDatabase())
+            << "/.tmp/sessions/"
+            << sessionCtx->GetTempTablesState()->TempDirName
+            << CanonizePath(tmpTableName));
+
+    create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
+
+    std::vector<NYql::TExprNodePtr> settingsNodes;
+    for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
+        settingsNodes.push_back(create->Child(4)->ChildPtr(index));
+    }
+    settingsNodes.push_back(
+        exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
+    settingsNodes.push_back(
+        exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "ctas")}));
+    create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
+    create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
+
+    NYql::TNodeOnNodeOwnedMap deepClones;
+    auto insertDataCopy = exprCtx.DeepCopy(insertData.Ref(), exprCtx, deepClones, false, false);
+    const auto topLevelRead = NYql::FindTopLevelRead(insertDataCopy);
+
+    NYql::TExprNode::TListType insertSettings;
+    insertSettings.push_back(
+        exprCtx.NewList(pos, {
+            exprCtx.NewAtom(pos, "mode"),
+            exprCtx.NewAtom(pos, "fill_table"),
+        }));
+    insertSettings.push_back(
+        exprCtx.NewList(pos, {
+            exprCtx.NewAtom(pos, "OriginalPath"),
+            exprCtx.NewAtom(pos, tableName),
+        }));
+    insertSettings.push_back(
+        exprCtx.NewList(pos, {
+            exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
+        }));
+
+    const auto insert = exprCtx.NewCallable(pos, "Write!", {
+        topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
+        exprCtx.NewCallable(pos, "DataSink", {
+            exprCtx.NewAtom(pos, "kikimr"),
+            exprCtx.NewAtom(pos, "db"),
+        }),
+        exprCtx.NewCallable(pos, "Key", {
+            exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "table"),
+                exprCtx.NewCallable(pos, "String", {
+                    exprCtx.NewAtom(pos, createTableName),
                 }),
-                exprCtx.NewList(pos, {}),
-            }));
-        }
+            }),
+        }),
+        insertDataCopy,
+        exprCtx.NewList(pos, std::move(insertSettings)),
+    });
 
-        const bool isTemporary = settings.Temporary.IsValid() && settings.Temporary.Cast().Value() == "true";
-        if (isTemporary) {
-            exprCtx.AddError(NYql::TIssue(exprCtx.GetPosition(pos), "CREATE TEMPORARY TABLE AS is not supported at current time"));
-            return std::nullopt;
-        }
-
-        const TString tmpTableName = TStringBuilder()
-                << tableName
-                << "_"
-                << TAppData::RandomProvider->GenUuid4().AsUuidString();
-
-        const TString createTableName = (TStringBuilder()
-                << CanonizePath(sessionCtx->GetDatabase())
-                << "/.tmp/sessions/"
-                << sessionCtx->GetTempTablesState()->TempDirName
-                << CanonizePath(tmpTableName));
-
-        create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
-
-        std::vector<NYql::TExprNodePtr> settingsNodes;
-        for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
-            settingsNodes.push_back(create->Child(4)->ChildPtr(index));
-        }
-        settingsNodes.push_back(
-            exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
-        settingsNodes.push_back(
-            exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "ctas")}));
-        create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
-        create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
-
-        NYql::TNodeOnNodeOwnedMap deepClones;
-        auto insertDataCopy = exprCtx.DeepCopy(insertData.Ref(), exprCtx, deepClones, false, false);
-        const auto topLevelRead = NYql::FindTopLevelRead(insertDataCopy);
-
-        NYql::TExprNode::TListType insertSettings;
-        insertSettings.push_back(
+    TCreateTableAsResult result;
+    result.CreateTable = create;
+    result.ReplaceInto = exprCtx.NewCallable(pos, "Commit!", {
+        insert,
+        exprCtx.NewCallable(pos, "DataSink", {
+            exprCtx.NewAtom(pos, "kikimr"),
+            exprCtx.NewAtom(pos, "db"),
+        }),
+        exprCtx.NewList(pos, {
             exprCtx.NewList(pos, {
                 exprCtx.NewAtom(pos, "mode"),
-                exprCtx.NewAtom(pos, "fill_table"),
-            }));
-        insertSettings.push_back(
-            exprCtx.NewList(pos, {
-                exprCtx.NewAtom(pos, "OriginalPath"),
-                exprCtx.NewAtom(pos, tableName),
-            }));
-        insertSettings.push_back(
-            exprCtx.NewList(pos, {
-                exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
-            }));
+                exprCtx.NewAtom(pos, "flush"),
+            }),
+        }),
+    });
 
-        const auto insert = exprCtx.NewCallable(pos, "Write!", {
-            topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
-            exprCtx.NewCallable(pos, "DataSink", {
-                exprCtx.NewAtom(pos, "kikimr"),
-                exprCtx.NewAtom(pos, "db"),
-            }),
-            exprCtx.NewCallable(pos, "Key", {
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "table"),
-                    exprCtx.NewCallable(pos, "String", {
-                        exprCtx.NewAtom(pos, createTableName),
-                    }),
+    result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
+        exprCtx.NewWorld(pos),
+        exprCtx.NewCallable(pos, "DataSink", {
+            exprCtx.NewAtom(pos, "kikimr"),
+            exprCtx.NewAtom(pos, "db"),
+        }),
+        exprCtx.NewCallable(pos, "Key", {
+            exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "tablescheme"),
+                exprCtx.NewCallable(pos, "String", {
+                    exprCtx.NewAtom(pos, createTableName),
                 }),
             }),
-            insertDataCopy,
-            exprCtx.NewList(pos, std::move(insertSettings)),
-        });
-
-        TCreateTableAsResult result;
-        result.CreateTable = create;
-        result.ReplaceInto = exprCtx.NewCallable(pos, "Commit!", {
-            insert,
-            exprCtx.NewCallable(pos, "DataSink", {
-                exprCtx.NewAtom(pos, "kikimr"),
-                exprCtx.NewAtom(pos, "db"),
+        }),
+        exprCtx.NewCallable(pos, "Void", {}),
+        exprCtx.NewList(pos, {
+            exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "mode"),
+                exprCtx.NewAtom(pos, "alter"),
             }),
             exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "actions"),
                 exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "mode"),
-                    exprCtx.NewAtom(pos, "flush"),
-                }),
-            }),
-        });
-
-        result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
-            exprCtx.NewWorld(pos),
-            exprCtx.NewCallable(pos, "DataSink", {
-                exprCtx.NewAtom(pos, "kikimr"),
-                exprCtx.NewAtom(pos, "db"),
-            }),
-            exprCtx.NewCallable(pos, "Key", {
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "tablescheme"),
-                    exprCtx.NewCallable(pos, "String", {
-                        exprCtx.NewAtom(pos, createTableName),
-                    }),
-                }),
-            }),
-            exprCtx.NewCallable(pos, "Void", {}),
-            exprCtx.NewList(pos, {
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "mode"),
-                    exprCtx.NewAtom(pos, "alter"),
-                }),
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "actions"),
                     exprCtx.NewList(pos, {
-                        exprCtx.NewList(pos, {
-                            exprCtx.NewAtom(pos, "renameTo"),
-                            exprCtx.NewAtom(pos, tableName),
-                        }),
+                        exprCtx.NewAtom(pos, "renameTo"),
+                        exprCtx.NewAtom(pos, tableName),
                     }),
                 }),
             }),
-        });
+        }),
+    });
 
-        return result;
-    }
+    return result;
 }
+
+} // anonymous namespace
 
 bool NeedToSplit(
         const NYql::TExprNode::TPtr& root,
@@ -489,5 +495,4 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
     return result;
 }
 
-}
-}
+} // namespace NKikimr::NKqp

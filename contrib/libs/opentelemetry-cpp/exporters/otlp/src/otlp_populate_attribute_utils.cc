@@ -1,6 +1,10 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#if defined(ENABLE_OTLP_UTF8_VALIDITY)
+#  error #include <utf8_validity.h>
+#endif
+
 #include <stdint.h>
 #include <string>
 #include <unordered_map>
@@ -81,12 +85,35 @@ void OtlpPopulateAttributeUtils::PopulateAnyValue(
   }
   else if (nostd::holds_alternative<const char *>(value))
   {
-    proto_value->set_string_value(nostd::get<const char *>(value));
+    const char *str_value = nostd::get<const char *>(value);
+#if defined(ENABLE_OTLP_UTF8_VALIDITY)
+    if (utf8_range::IsStructurallyValid(str_value))
+    {
+      proto_value->set_string_value(str_value);
+    }
+    else
+    {
+      proto_value->set_bytes_value(str_value, strlen(str_value));
+    }
+#else
+    proto_value->set_string_value(str_value);
+#endif
   }
   else if (nostd::holds_alternative<nostd::string_view>(value))
   {
-    proto_value->set_string_value(nostd::get<nostd::string_view>(value).data(),
-                                  nostd::get<nostd::string_view>(value).size());
+    nostd::string_view str_value = nostd::get<nostd::string_view>(value);
+#if defined(ENABLE_OTLP_UTF8_VALIDITY)
+    if (utf8_range::IsStructurallyValid({str_value.data(), str_value.size()}))
+    {
+      proto_value->set_string_value(str_value.data(), str_value.size());
+    }
+    else
+    {
+      proto_value->set_bytes_value(str_value.data(), str_value.size());
+    }
+#else
+    proto_value->set_string_value(str_value.data(), str_value.size());
+#endif
   }
   else if (nostd::holds_alternative<nostd::span<const uint8_t>>(value))
   {
@@ -159,7 +186,18 @@ void OtlpPopulateAttributeUtils::PopulateAnyValue(
     auto array_value = proto_value->mutable_array_value();
     for (const auto &val : nostd::get<nostd::span<const nostd::string_view>>(value))
     {
+#if defined(ENABLE_OTLP_UTF8_VALIDITY)
+      if (utf8_range::IsStructurallyValid({val.data(), val.size()}))
+      {
+        array_value->add_values()->set_string_value(val.data(), val.size());
+      }
+      else
+      {
+        array_value->add_values()->set_bytes_value(val.data(), val.size());
+      }
+#else
       array_value->add_values()->set_string_value(val.data(), val.size());
+#endif
     }
   }
 }
@@ -224,7 +262,19 @@ void OtlpPopulateAttributeUtils::PopulateAnyValue(
   }
   else if (nostd::holds_alternative<std::string>(value))
   {
-    proto_value->set_string_value(nostd::get<std::string>(value));
+    const std::string &str_value = nostd::get<std::string>(value);
+#if defined(ENABLE_OTLP_UTF8_VALIDITY)
+    if (utf8_range::IsStructurallyValid(str_value))
+    {
+      proto_value->set_string_value(str_value);
+    }
+    else
+    {
+      proto_value->set_bytes_value(str_value);
+    }
+#else
+    proto_value->set_string_value(str_value);
+#endif
   }
   else if (nostd::holds_alternative<std::vector<bool>>(value))
   {
@@ -281,7 +331,18 @@ void OtlpPopulateAttributeUtils::PopulateAnyValue(
     auto array_value = proto_value->mutable_array_value();
     for (const auto &val : nostd::get<std::vector<std::string>>(value))
     {
+#if defined(ENABLE_OTLP_UTF8_VALIDITY)
+      if (utf8_range::IsStructurallyValid(val))
+      {
+        array_value->add_values()->set_string_value(val);
+      }
+      else
+      {
+        array_value->add_values()->set_bytes_value(val);
+      }
+#else
       array_value->add_values()->set_string_value(val);
+#endif
     }
   }
 }

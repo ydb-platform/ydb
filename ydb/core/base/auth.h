@@ -15,6 +15,8 @@ bool IsTokenAllowed(const TString& userTokenSerialized, const NProtoBuf::Repeate
 bool IsAdministrator(const TAppData* appData, const TString& userTokenSerialized);
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken);
 
+bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userTokenSerialized);
+
 // Check token against database owner
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner);
 

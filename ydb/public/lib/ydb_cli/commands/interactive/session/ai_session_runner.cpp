@@ -9,6 +9,9 @@
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+#include <util/generic/scope.h>
+#include <util/system/backtrace.h>
+
 namespace NYdb::NConsoleClient {
 
 namespace NAi {
@@ -23,11 +26,12 @@ public:
         : TBase(CreateSessionSettings(settings))
         , ConfigurationManager(settings.ConfigurationManager)
         , Database(settings.Database)
-        , Driver(settings.Driver)
+        , AiLazyDriver(settings.AiLazyDriver)
         , ConnectionString(settings.ConnectionString)
         , UsageInfoGetter(settings.UsageInfoGetter)
     {
         Y_VALIDATE(ConfigurationManager, "ConfigurationManager is not initialized");
+        Y_VALIDATE(AiLazyDriver, "TAiSessionRunner requires a non-null AiLazyDriver");
     }
 
     ILineReader::TPtr Setup() final {
@@ -62,19 +66,26 @@ public:
         Y_VALIDATE(AiModel, "Can not handle input while AiModel is not initialized");
         Y_VALIDATE(ConfigurationManager->GetActiveAiProfileId() == AiModel->GetId(), "Unexpected active AI profile");
 
+        // Create the AI driver up front so it is ready for tool calls within
+        // this turn, and release it before control goes back to the user.
+        AiLazyDriver->Init();
+        Y_DEFER { AiLazyDriver->Stop(true); };
+
         if (!ModelHandler) {
             try {
                 ModelHandler = TModelHandler({
+                    .ConfigurationManager = ConfigurationManager,
                     .Profile = AiModel,
                     .Prompt = Settings.Prompt,
                     .Database = Database,
-                    .Driver = Driver,
+                    .LazyDriver = AiLazyDriver,
                     .ConnectionString = ConnectionString,
                     .UsageInfoGetter = UsageInfoGetter,
                 });
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
                 Cerr << Colors.Red() << "Failed to setup AI model session: " << e.what() << Colors.OldColor() << Endl;
+                YDB_CLI_LOG(Debug, "Exception call stack:\n" << TBackTrace::FromCurrentException().PrintToString());
                 return;
             }
         }
@@ -143,7 +154,7 @@ private:
 
     static TLineReaderSettings CreateSessionSettings(const TAiSessionSettings& settings) {
         return {
-            .Driver = settings.Driver,
+            .LazyDriver = nullptr,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << "> ",
             .HistoryFilePath = NLocalPaths::GetAiHistoryFile(),
@@ -180,20 +191,36 @@ private:
                 }
 
                 if (changed) {
-                    ChangeAiProfile(AiModel);                    
+                    // For an in-memory profile (built from the default preset on
+                    // the fly, empty Id) any user-confirmed change is treated as
+                    // an explicit choice: promote the profile to disk now.
+                    // If the user did not change anything or aborted with Esc,
+                    // no promotion happens and the profile stays in memory.
+                    if (AiModel->GetId().empty()) {
+                        auto persisted = ConfigurationManager->PromoteInMemoryProfile(AiModel);
+                        if (!persisted) {
+                            std::exit(EXIT_FAILURE);
+                        }
+                        AiModel = std::move(persisted);
+                    }
+                    ChangeAiProfile(AiModel);
                 }
             });
 
-            options.emplace_back("Remove current AI model", [&]() {
-                ConfigurationManager->RemoveAiProfile(AiModel->GetId());
-                AiModel = ConfigurationManager->ActivateAiProfile();
-                if (!AiModel) {
-                    // Can not continue in AI mode
-                    std::exit(EXIT_FAILURE);
-                }
+            // Remove only makes sense for persisted profiles — nothing to remove
+            // on disk for an in-memory default-preset profile.
+            if (!AiModel->GetId().empty()) {
+                options.emplace_back("Remove current AI model", [&]() {
+                    ConfigurationManager->RemoveAiProfile(AiModel->GetId());
+                    AiModel = ConfigurationManager->ActivateAiProfile();
+                    if (!AiModel) {
+                        // Can not continue in AI mode
+                        std::exit(EXIT_FAILURE);
+                    }
 
-                ChangeAiProfile(AiModel);
-            });
+                    ChangeAiProfile(AiModel);
+                });
+            }
 
             if (!RunFtxuiMenuWithActions("Please choose setting to change:", options)) {
                 exit = true;
@@ -238,7 +265,7 @@ private:
 private:
     const TInteractiveConfigurationManager::TPtr ConfigurationManager;
     const TString Database;
-    const TDriver Driver;
+    const TLazyDriver::TPtr AiLazyDriver;
     const TString ConnectionString;
     const TClientCommand::TConfig::TUsageInfoGetter UsageInfoGetter;
 

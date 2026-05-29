@@ -12,8 +12,10 @@
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/network/socket.h>
 #include <util/system/getpid.h>
+#include <util/system/hp_timer.h>
 #include <util/random/entropy.h>
 #include <util/generic/overloaded.h>
 
@@ -23,9 +25,30 @@
 #include <variant>
 
 namespace NActors {
-    static constexpr size_t StackSize = 64 * 1024; // 64k should be enough
+    static constexpr ui32 StackSize = 64 * 1024; // 64k should be enough
 
     static constexpr size_t RdmaHandshakeRegionSize = 4096;
+
+    namespace {
+        class THandshakeActorCreateTimer {
+            const NMonitoring::THistogramPtr Histogram;
+            const ui64 Start;
+
+        public:
+            explicit THandshakeActorCreateTimer(const TInterconnectProxyCommon::TPtr& common)
+                : Histogram(common->MonCounters
+                    ? common->MonCounters->GetHistogram("HandshakeActorCreateUs", NMonitoring::ExponentialHistogram(16, 2, 4))
+                    : nullptr)
+                , Start(Histogram ? GetCycleCountFast() : 0)
+            {}
+
+            ~THandshakeActorCreateTimer() {
+                if (Histogram) {
+                    Histogram->Collect(NHPTimer::GetSeconds(GetCycleCountFast() - Start) * 1000000.0);
+                }
+            }
+        };
+    }
 
     class THandshakeActor
        : public TActorCoroImpl
@@ -360,7 +383,7 @@ namespace NActors {
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
                         ui32 nodeId, ui64 nextPacket, TString peerHostName, TSessionParams params)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , SelfVirtualId(self)
             , PeerVirtualId(peer)
@@ -383,7 +406,7 @@ namespace NActors {
         }
 
         THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , MainChannel(this, std::move(socket))
             , ExternalDataChannel(this, nullptr)
@@ -996,7 +1019,7 @@ namespace NActors {
 
                 if (reply.HasErrorExplaination()) {
                     notify(reply, false);
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "error from peer: " + reply.GetErrorExplaination());
+                    FailFromPeer(reply.GetErrorExplaination());
                 } else if (!reply.HasSuccess()) {
                     notify(reply, false);
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "empty reply");
@@ -1680,23 +1703,38 @@ namespace NActors {
             return WaitForSpecificEvent<T1, T2, TOther...>(std::move(state));
         }
 
-        void Fail(TEvHandshakeFail::EnumHandshakeFail reason, TString explanation, bool network = false) {
+        TEvHandshakeFail::EReason ClassifyPeerError(TStringBuf error) const {
+            const TString peerDoesNotKnowSelf = "DynamicNS knows nothing about the node " + ToString(SelfActorId.NodeId());
+            return error.Contains(peerDoesNotKnowSelf) || error.Contains("Peer node not registered in nameservice")
+                   ? TEvHandshakeFail::EReason::RemoteNodeDoesNotKnowLocalNode
+                   : TEvHandshakeFail::EReason::Unspecified;
+        }
+
+        void FailFromPeer(TString peerError) {
+            const auto detailedReason = ClassifyPeerError(peerError);
+            TString explanation = "error from peer: " + peerError;
+            Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, std::move(explanation), false, detailedReason, std::move(peerError));
+        }
+
+        void Fail(TEvHandshakeFail::EnumHandshakeFail failType, TString explanation, bool network = false,
+                  TEvHandshakeFail::EReason detailedReason = TEvHandshakeFail::EReason::Unspecified,
+                  TString peerError = {}) {
             TString msg = Sprintf("%s Peer# %s(%s) %s", HandshakeKind.data(), PeerHostName ? PeerHostName.data() : "<unknown>",
                 PeerAddr.size() ? PeerAddr.data() : "<unknown>", explanation.data());
 
             if (network) {
-                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
+                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occurred on handshake: %s", msg.data());
             } else {
-                // calculate log severity based on failure type; permanent failures lead to error log messages
-                auto severity = reason == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT
-                                    ? NActors::NLog::PRI_NOTICE
-                                    : NActors::NLog::PRI_INFO;
+                // proxy emits throttled NOTICE summaries for permanent failures
+                auto severity = failType == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT
+                                    ? NActors::NLog::PRI_INFO
+                                    : NActors::NLog::PRI_DEBUG;
 
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH03", severity, "handshake failed, explanation# %s", msg.data());
             }
 
             if (PeerNodeId) {
-                SendToProxy(MakeHolder<TEvHandshakeFail>(reason, std::move(msg)));
+                SendToProxy(MakeHolder<TEvHandshakeFail>(failType, std::move(msg), PeerHostName, std::move(peerError), detailedReason));
             }
 
             throw TExHandshakeFailed() << explanation;
@@ -1732,11 +1770,13 @@ namespace NActors {
     IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self,
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
             std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
             IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }

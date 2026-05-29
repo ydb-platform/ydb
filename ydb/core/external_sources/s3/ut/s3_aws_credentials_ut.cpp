@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>

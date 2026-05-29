@@ -1,14 +1,17 @@
 #pragma once
 
-#include <library/cpp/threading/future/core/future.h>
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 namespace NACLib {
+
 class TUserToken;
-}
+
+} // namespace NACLib
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -101,6 +104,7 @@ NActors::IActor* CreateRemoveConsumerActor(const NActors::TActorId& parentId, TR
 // Create Topic
 //
 struct TCreateTopicResponse {
+    TString Path;
     Ydb::StatusIds::StatusCode Status;
     TString ErrorMessage;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
@@ -109,11 +113,12 @@ struct TCreateTopicResponse {
 struct TEvCreateTopicResponse: public NActors::TEventLocal<TEvCreateTopicResponse, EEv::EvCreateTopicResponse>
                              , public TCreateTopicResponse {
     TEvCreateTopicResponse(
+        const TString& path,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         TString&& errorMessage = {},
         NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
     )
-        : TCreateTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
+        : TCreateTopicResponse(path, status, std::move(errorMessage), std::move(modifyScheme))
     {
     }
 };

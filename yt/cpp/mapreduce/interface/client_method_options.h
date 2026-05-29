@@ -135,6 +135,41 @@ struct TMasterReadOptions
 };
 
 ///
+/// @brief Expected revision of a Cypress node, used as a precondition.
+///
+/// The command fails if the node at @ref Path has a revision different from @ref Revision.
+struct TPrerequisiteRevisionOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TPrerequisiteRevisionOptions;
+    /// @endcond
+
+    /// @brief Cypress node's path.
+    FLUENT_FIELD_OPTION(TYPath, Path);
+
+    /// @brief Expected revision.
+    FLUENT_FIELD_OPTION(ui64, Revision);
+};
+
+///
+/// @brief Server-side preconditions checked before the request is processed.
+///
+/// If any of the listed prerequisites is not satisfied, the command fails.
+template <typename TDerived>
+struct TPrerequisiteOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Transactions that must be alive.
+    FLUENT_VECTOR_FIELD(TTransactionId, PrerequisiteTransactionId);
+
+    /// @brief Cypress nodes whose current revisions must match the expected ones.
+    FLUENT_VECTOR_FIELD(TPrerequisiteRevisionOptions, PrerequisiteRevision);
+};
+
+///
 /// @brief Options for @ref NYT::ICypressClient::Exists
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#exists
@@ -151,6 +186,7 @@ struct TExistsOptions
 struct TGetOptions
     : public TMasterReadOptions<TGetOptions>
     , public TSuppressableAccessTrackingOptions<TGetOptions>
+    , public TPrerequisiteOptions<TGetOptions>
 {
     /// @brief Attributes that should be fetched with each node.
     FLUENT_FIELD_OPTION(TAttributeFilter, AttributeFilter);

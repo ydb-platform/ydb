@@ -13,6 +13,7 @@
 
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/scope.h>
@@ -948,17 +949,17 @@ bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compa
             Ctx_.Error() << to_upper(id.Name) << " value should be a boolean";
             return false;
         }
-    } else if (to_lower(id.Name) == "max_shards_in_flight") {
-        if (compactEntry.MaxShardsInFlight) {
+    } else if (to_lower(id.Name) == "parallel") {
+        if (compactEntry.Parallel) {
             Ctx_.Error() << "Duplicated " << to_upper(id.Name);
             return false;
         }
-        compactEntry.MaxShardsInFlight = ParseLiteral(value, *this, "Int32");
-        if (!compactEntry.MaxShardsInFlight) {
+        compactEntry.Parallel = ParseLiteral(value, *this, "Int32");
+        if (!compactEntry.Parallel) {
             Ctx_.Error() << to_upper(id.Name) << " value should be a Int32";
             return false;
         }
-        i32 value = FromString<i32>(compactEntry.MaxShardsInFlight->GetLiteralValue());
+        i32 value = FromString<i32>(compactEntry.Parallel->GetLiteralValue());
         if (value <= 0) {
             Ctx_.Error() << to_upper(id.Name) << " value should be positive" << value;
             return false;
@@ -1522,10 +1523,23 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 hints = *tmp;
             }
 
+            TNodePtr watermarkLambda;
+            if (auto it = hints.find("watermark"); it != hints.end()) {
+                auto& exprs = it->second;
+                YQL_ENSURE(exprs.size() == 1);
+                watermarkLambda = std::move(exprs[0]);
+                hints.erase(it);
+            }
+
             if (hints || contextHints) {
                 if (!ret->SetTableHints(Ctx_, Ctx_.Pos(), hints, contextHints)) {
                     return false;
                 }
+            }
+
+            if (watermarkLambda) {
+                auto pos = watermarkLambda->GetPos();
+                ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda));
             }
 
             result.Source = ret;
@@ -3026,19 +3040,13 @@ bool TSqlTranslation::AlterTopicConsumer(
     auto iter = alterConsumers.insert(std::make_pair(
                                           name, TTopicConsumerDescription(std::move(consumerId))))
                     .first;
-    if (!AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second)) {
-        return false;
-    }
-    return true;
+    return AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second);
 }
 
 bool TSqlTranslation::CreateTopicEntry(const TRule_create_topic_entry& node, TCreateTopicParameters& params) {
     // Will need a switch() here if (ever) create_topic_entry gets more than 1 type of statement
     auto& consumer = node.GetRule_topic_create_consumer_entry1();
-    if (!CreateTopicConsumer(consumer, params.Consumers)) {
-        return false;
-    }
-    return true;
+    return CreateTopicConsumer(consumer, params.Consumers);
 }
 
 namespace {
@@ -3449,7 +3457,7 @@ TNodePtr TSqlTranslation::TypeNodeOrBind(const TRule_type_name_or_bind& node) {
 TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
     // type_name:
     //     type_name_composite
-    //   | (type_name_decimal | type_name_simple) QUESTION*;
+    //   | (type_name_decimal | type_name_simple | type_name_null) QUESTION*;
     if (node.Alt_case() == TRule_type_name::kAltTypeName1) {
         return TypeNode(node.GetAlt_type_name1().GetRule_type_name_composite1());
     }
@@ -3468,6 +3476,10 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
         case TRule_type_name::TAlt2::TBlock1::kAlt2: {
             auto& simpleType = block.GetAlt2().GetRule_type_name_simple1();
             result = TypeSimple(simpleType, false);
+            break;
+        }
+        case TRule_type_name::TAlt2::TBlock1::kAlt3: {
+            result = new TCallNodeImpl(pos, "NullType", {});
             break;
         }
         case TRule_type_name::TAlt2::TBlock1::ALT_NOT_SET:
@@ -5116,7 +5128,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
 
         winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
-        if (Ctx_.AnsiCurrentRow) {
+        if (Ctx_.AnsiCurrentRow && ordered) {
             // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             winSpecPtr->Frame->FrameType = EFrameType::FrameByRange;
             winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
@@ -5372,12 +5384,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
 
-    if (!isEvaluate &&
-        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            GetPos(stmt.GetToken2()),
-            "IF without EVALUATE",
-            GetMaxLangVersion()))
-    {
+    if (!isEvaluate && !Ctx_.EnsureAvailable(GetPos(stmt.GetToken2()), NYql::NFeature::IfWithoutEvaluate)) {
         return {};
     }
 
@@ -5407,21 +5414,11 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     bool isParallel = stmt.HasBlock2();
 
-    if (isParallel &&
-        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            GetPos(stmt.GetBlock2().GetToken1()),
-            "PARALLEL FOR",
-            GetMaxLangVersion()))
-    {
+    if (isParallel && !Ctx_.EnsureAvailable(GetPos(stmt.GetBlock2().GetToken1()), NYql::NFeature::ParallelFor)) {
         return {};
     }
 
-    if (!isEvaluate &&
-        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            GetPos(stmt.GetToken3()),
-            "FOR without EVALUATE",
-            GetMaxLangVersion()))
-    {
+    if (!isEvaluate && !Ctx_.EnsureAvailable(GetPos(stmt.GetToken3()), NYql::NFeature::ForWithoutEvaluate)) {
         return {};
     }
 
@@ -5598,10 +5595,7 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
     switch (alterAction.Alt_case()) {
         case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction1: {
             const auto& action = alterAction.GetAlt_alter_external_data_source_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                return false;
-            }
-            return true;
+            return StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result);
         }
         case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction2: {
             const auto& action = alterAction.GetAlt_alter_external_data_source_action2().GetRule_alter_table_set_table_setting_compat1();
@@ -5797,11 +5791,13 @@ bool TSqlTranslation::ParseViewQuery(
 
     // The AST is needed solely for the validation of the CREATE VIEW statement.
     // The final storage format for the query is a plain text, not an AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx_);
-    if (!viewSelect) {
-        return false;
+    if (Ctx_.Settings.ValidateViewStatement) {
+        const auto viewSelect = BuildViewSelect(query, Ctx_);
+        if (!viewSelect) {
+            return false;
+        }
+        features["query_ast"] = {viewSelect, Ctx_};
     }
-    features["query_ast"] = {viewSelect, Ctx_};
 
     return true;
 }
@@ -5873,7 +5869,7 @@ bool TSqlTranslation::ParseViewQuery(
 
 namespace {
 
-static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
+TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString StatementSeparator = ";\n";
 
     TVector<TString> statements;
@@ -6462,7 +6458,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
 
     EYqlSelect mode = prevMode;
 
-    if (position && Ctx_.IsBackwardCompatibleFeatureAvailable(YqlSelectLangVersion())) {
+    if (position && Ctx_.IsAvailable(NYql::NFeature::YqlSelect)) {
         if (const auto hint = Ctx_.PullHintForToken(*position, "yqlselect")) {
             if (auto result = ParseYqlSelectHint(*hint)) {
                 mode = *result;
@@ -6482,9 +6478,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
-    if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            Ctx_.Pos(), "YqlSelect", YqlSelectLangVersion()))
-    {
+    if (!Ctx_.EnsureAvailable(Ctx_.Pos(), NYql::NFeature::YqlSelect)) {
         return nullptr;
     }
 

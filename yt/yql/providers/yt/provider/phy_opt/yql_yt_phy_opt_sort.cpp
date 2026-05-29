@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
@@ -94,8 +95,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         firstNativeType = inputInfos.front()->GetNativeYtType();
     }
     auto maybeReadSettings = sort.Input().template Maybe<TCoRight>().Input().template Maybe<TYtReadTable>().Input().Item(0).Settings();
-    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(*cluster, *State_->Configuration);
-    const ui64 nativeTypeFlags = GetNativeYtTypeFlags(*outType) & nativeTypeCompatibility;
+    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES)
+         ? GetNativeYtTypeFlags(*outType)
+         : 0ul;
     const bool needMap = (maybeReadSettings && NYql::HasSetting(maybeReadSettings.Ref(), EYtSettingType::SysColumns))
         || AnyOf(inputInfos, [nativeTypeFlags, firstNativeType] (const TYtPathInfo::TPtr& path) {
             return path->RequiresRemap()
@@ -115,7 +117,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     TKeySelectorBuilder builder(node.Pos(), ctx, useNativeDescSort, outType);
     builder.ProcessKeySelector(keySelectorLambda.Ptr(), sortDirections.Ptr());
 
-    TYtOutTableInfo sortOut(outType, nativeTypeCompatibility);
+    TYtOutTableInfo sortOut(outType, nativeTypeFlags);
     builder.FillRowSpecSort(*sortOut.RowSpec, useNativeYtDefaultColumnOrder);
     sortOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
 
@@ -130,7 +132,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
             return {};
         }
 
-        TYtOutTableInfo mapOut(builder.MakeRemapType(), nativeTypeCompatibility);
+        TYtOutTableInfo mapOut(builder.MakeRemapType(), nativeTypeFlags);
         mapOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
 
         sortInput = Build<TYtOutput>(ctx, node.Pos())
@@ -152,7 +154,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         unordered = false;
     }
     else if (needMerge) {
-        TYtOutTableInfo mergeOut(outType, nativeTypeCompatibility);
+        TYtOutTableInfo mergeOut(outType, nativeTypeFlags);
         mergeOut.SetUnique(sort.Ref().template GetConstraint<TDistinctConstraintNode>(), node.Pos(), ctx);
         if (firstNativeType) {
             mergeOut.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
@@ -430,8 +432,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
             .Build()
         .Build().Done();
 
-
-    TYtOutTableInfo outTable(inputItemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(sort.DataSink().Cluster().StringValue(), *State_->Configuration));
+    TYtOutTableInfo outTable(inputItemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
     outTable.RowSpec->SetConstraints(sort.Ref().GetConstraintSet());
 
     return Build<TYtSort>(ctx, sort.Pos())
@@ -526,7 +527,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
     }
 
     if (needSeparateOp) {
-        TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(*cluster, *State_->Configuration));
+        TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
         outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());
 
         if (auto maybeReadSettings = input.Maybe<TCoRight>().Input().Maybe<TYtReadTable>().Input().Item(0).Settings()) {
@@ -646,23 +647,49 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
     auto op = GetOutputOp(input.Cast<TYtOutput>());
     TExprNode::TPtr newOp = op.Ptr();
 
-    if (builder && builder->NeedMap() && maybeOp.Maybe<TYtDqProcessWrite>()) {
+    if (maybeOp.Maybe<TYtDqProcessWrite>()) {
         TNodeOnNodeOwnedMap remaps;
-        VisitExpr(maybeOp.Cast<TYtDqProcessWrite>().Input().Ptr(), [&builder, &remaps, &ctx](const TExprNode::TPtr& n) {
-            if (TYtOutput::Match(n.Get())) {
-                // Stop traversing dependent operations
-                return false;
+        if (builder && builder->NeedMap()) {
+            VisitExpr(maybeOp.Cast<TYtDqProcessWrite>().Input().Ptr(), [&builder, &remaps, &ctx](const TExprNode::TPtr& n) {
+                if (TYtOutput::Match(n.Get())) {
+                    // Stop traversing dependent operations
+                    return false;
+                }
+                if (TYtDqWrite::Match(n.Get())) {
+                    auto newInput = Build<TExprApplier>(ctx, n->Pos())
+                        .Apply(TCoLambda(builder->MakeRemapLambda(true)))
+                        .With(0, TExprBase(n->ChildPtr(TYtDqWrite::idx_Input)))
+                        .Done();
+                    remaps[n.Get()] = ctx.ChangeChild(*n, TYtDqWrite::idx_Input, newInput.Ptr());
+                }
+                return true;
+            });
+        }
+        if (sorted) {
+            YQL_ENSURE(State_->DqHelper); // TYtDqProcessWrite cannot be created without DqHelper
+            VisitExpr(maybeOp.Cast<TYtDqProcessWrite>().Input().Ptr(), [&remaps, &ctx, this](const TExprNode::TPtr& n) {
+                if (TYtOutput::Match(n.Get())) {
+                    // Stop traversing dependent operations
+                    return false;
+                }
+                if (auto stage = TMaybeNode<NNodes::NDq::TDqStage>(n); stage && !State_->DqHelper->IsSinglePartitionMode(stage.Ref())) {
+                    if (const auto& writes = FindNodes(stage.Cast().Program().Ptr(),
+                        [] (const TExprNode::TPtr& node) { return !TYtOutputOpBase::Match(node.Get()); },
+                        [] (const TExprNode::TPtr& node) { return TYtDqWrite::Match(node.Get()); });
+                        !writes.empty()) {
+
+                        remaps[n.Get()] = State_->DqHelper->SetSinglePartitionMode(n, ctx);
+                    }
+                }
+                return true;
+            });
+        }
+        if (!remaps.empty()) {
+            auto status = RemapExpr(newOp, newOp, remaps, ctx, TOptimizeExprSettings{State_->Types});
+            if (status.Level == IGraphTransformer::TStatus::Error) {
+                return {};
             }
-            if (TYtDqWrite::Match(n.Get())) {
-                auto newInput = Build<TExprApplier>(ctx, n->Pos())
-                    .Apply(TCoLambda(builder->MakeRemapLambda(true)))
-                    .With(0, TExprBase(n->ChildPtr(TYtDqWrite::idx_Input)))
-                    .Done();
-                remaps[n.Get()] = ctx.ChangeChild(*n, TYtDqWrite::idx_Input, newInput.Ptr());
-            }
-            return true;
-        });
-        newOp = ctx.ChangeChild(*newOp, TYtDqProcessWrite::idx_Input, ctx.ReplaceNodes(newOp->ChildPtr(TYtDqProcessWrite::idx_Input), remaps));
+        }
     }
 
     if (!op.Maybe<TYtSort>() && sorted) {

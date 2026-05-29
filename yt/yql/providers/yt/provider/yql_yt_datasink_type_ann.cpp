@@ -70,7 +70,7 @@ const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, co
             const auto& items = structType->GetItems();
             types.reserve(items.size());
 
-            std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
+            std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind_front(&TItemExprType::GetItemType));
             if (blockInputAppliedSetting) {
                 std::transform(types.begin(), types.end(), types.begin(), [&](auto type) {
                     return ctx.MakeType<TBlockExprType>(type);
@@ -669,7 +669,7 @@ private:
 
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {
-                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *State_->Configuration));
+                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
                     if (State_->Types->OrderedColumns) {
                         YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
                         nextRowSpec->SetColumnOrder(contentColumnOrder);
@@ -1129,7 +1129,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::ReplaceParentCache, ctx)) {
             return TStatus::Error;
         }
 
@@ -1903,7 +1903,7 @@ private:
                 next.RowType = rowType;
                 next.IsReplaced = true;
 
-                const TYtOutTableInfo outTable(rowType, GetNativeYtTypeCompatibility(create.DataSink().Cluster().StringValue(), *State_->Configuration), columnOrder);
+                const TYtOutTableInfo outTable(rowType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, columnOrder);
 
                 const auto orderBySize = create.OrderBy().Size();
                 outTable.RowSpec->SortedBy.reserve(orderBySize);

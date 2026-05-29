@@ -6,6 +6,7 @@ SRCS(
     boot_queue.cpp
     boot_queue.h
     bridge_pile_info.h
+    compact_actor.cpp
     data_center_info.h
     domain_info.cpp
     domain_info.h
@@ -117,4 +118,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_manual
 )

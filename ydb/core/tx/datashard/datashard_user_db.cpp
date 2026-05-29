@@ -4,6 +4,8 @@
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NDataShard {
 
 TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& mvccVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
@@ -58,7 +60,7 @@ NTable::EReady TDataShardUserDb::SelectRow(
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
 
-    if (LockMode != ELockMode::OptimisticSnapshotIsolation && stats.InvisibleRowSkips > 0) {
+    if (LockMode == ELockMode::Optimistic && stats.InvisibleRowSkips > 0) {
         if (LockTxId) {
             Self.SysLocksTable().BreakSetLocks();
         }
@@ -118,7 +120,7 @@ void TDataShardUserDb::UpsertRow(
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
     const ui32 DefaultFilledColumnCount,
-    NACLib::TUserContext::TPtr userCtx
+    TIntrusivePtr<NACLib::TUserContext> userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -133,7 +135,7 @@ void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    NACLib::TUserContext::TPtr userCtx
+    TIntrusivePtr<NACLib::TUserContext> userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -189,7 +191,7 @@ void TDataShardUserDb::ReplaceRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
@@ -203,7 +205,7 @@ void TDataShardUserDb::InsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
@@ -224,13 +226,13 @@ void TDataShardUserDb::UpdateRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     if (!RowExists(tableId, key)) {
-        if (LockTxId && LockMode != ELockMode::OptimisticSnapshotIsolation) {
+        if (LockTxId && LockMode == ELockMode::Optimistic) {
             // We don't perform an update, but this key may be modified later
             // by a different transaction. Make sure we set the read lock to
             // guard against that.
@@ -253,7 +255,7 @@ void TDataShardUserDb::IncrementRow(
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
     bool insertMissing,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
@@ -302,7 +304,7 @@ void TDataShardUserDb::IncrementRow(
 void TDataShardUserDb::EraseRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -346,7 +348,7 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 }
 
 void TDataShardUserDb::IncreaseSelectCounters(
-    const TArrayRef<const TRawTypeValue> key) 
+    const TArrayRef<const TRawTypeValue> key)
 {
     ui64 keyBytes = CalculateKeyBytes(key);
 
@@ -360,8 +362,8 @@ void TDataShardUserDb::UpsertRowInt(
     const TTableId& tableId,
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops, 
-    NACLib::TUserContext::TPtr userCtx)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 
@@ -1066,7 +1068,7 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
             Self.SysLocksTable().BreakSetLocks();
         }
         MvccReadConflict = true;
-    } else if (rowVersion > SnapshotVersion) {
+    } else if (rowVersion > SnapshotVersion && LockMode == ELockMode::OptimisticSnapshotIsolation) {
         // During commit we read at the current mvcc version, however we may
         // notice there have been changes between the snapshot and current
         // commit version. This is not necessarily an error, but indicates

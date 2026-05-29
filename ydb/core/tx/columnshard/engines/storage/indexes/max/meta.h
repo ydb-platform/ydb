@@ -22,6 +22,7 @@ protected:
         Y_UNUSED(newMeta);
         return TConclusionStatus::Fail("max index not modifiable");
     }
+
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
@@ -46,6 +47,7 @@ protected:
 
 public:
     TIndexMeta() = default;
+
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage, const ui32& columnId)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, std::make_shared<TDefaultDataExtractor>())
     {

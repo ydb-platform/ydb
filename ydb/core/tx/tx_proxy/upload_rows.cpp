@@ -2,6 +2,7 @@
 #include "upload_rows_common_impl.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -14,7 +15,7 @@ public:
         const TString& table,
         std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
-        NACLib::TUserContext::TPtr userCtx,
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
         bool writeToIndexImplTable,

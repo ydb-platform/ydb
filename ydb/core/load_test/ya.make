@@ -8,12 +8,16 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/base
+    ydb/core/blobstorage/ddisk
     ydb/core/blobstorage/pdisk
     ydb/core/control/lib
     ydb/core/keyvalue
     ydb/core/jaeger_tracing
     ydb/core/kqp/common
     ydb/core/kqp/rm_service
+    ydb/core/mind/hive
+    ydb/core/tablet
+    ydb/core/tablet_flat
     ydb/core/tx/columnshard
     ydb/core/tx/datashard
     ydb/library/workload/abstract
@@ -37,6 +41,10 @@ SRCS(
     keyvalue_write.cpp
     kqp.cpp
     memory.cpp
+    nbs_dbg_like_alloc_helper.cpp
+    nbs_dbg_like_load.cpp
+    nbs_dbg_like_load_service.cpp
+    nbs_dbg_like_load_tablet.cpp
     persistent_buffer_write.cpp
     pdisk_log.cpp
     pdisk_read.cpp
@@ -81,6 +89,7 @@ PEERDIR(
     ydb/core/nbs/cloud/storage/core/protos
 )
 
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(nbs_dbg_like_load_defs.h)
 GENERATE_ENUM_SERIALIZATION(percentile.h)
 
 END()

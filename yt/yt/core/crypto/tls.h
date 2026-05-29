@@ -2,11 +2,15 @@
 
 #include "public.h"
 
+#include <yt/yt/core/actions/public.h>
+
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/logging/public.h>
 
 #include <yt/yt/core/concurrency/public.h>
+
+#include <yt/yt/library/profiling/sensor.h>
 
 #include <openssl/ossl_typ.h>
 
@@ -14,7 +18,7 @@ namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError GetLastSslError(TString message);
+TError GetLastSslError(std::string message);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -35,7 +39,24 @@ using TSslPtr = std::unique_ptr<SSL, TSslDeleter>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetFingerprintSHA256(const TX509Ptr& certificate);
+struct TCertProfiler
+{
+    //! Profiler to output certificate data.
+    NProfiling::TProfiler Profiler;
+    //! Invoker to read certificate data periodically.
+    IInvokerPtr Invoker;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string GetFingerprintSHA256(const TX509Ptr& certificate);
+
+//! Reads the first X.509 certificate from a PEM blob config.
+TX509Ptr ReadCertFromPemBlob(const TPemBlobConfigPtr& pem);
+
+//! Returns the number of seconds until the certificate expires (negative if already expired).
+double GetCertTimeToExpiry(const TX509Ptr& cert);
+double GetCertTimeToExpiry(const TPemBlobConfigPtr& pem);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -55,17 +76,17 @@ public:
 
     void UseBuiltinOpenSslX509Store();
 
-    void SetCipherList(const TString& list);
+    void SetCipherList(const std::string& list);
 
-    void AddCertificateAuthorityFromFile(const TString& path);
-    void AddCertificateFromFile(const TString& path);
-    void AddCertificateChainFromFile(const TString& path);
-    void AddPrivateKeyFromFile(const TString& path);
+    void AddCertificateAuthorityFromFile(const std::string& path);
+    void AddCertificateFromFile(const std::string& path);
+    void AddCertificateChainFromFile(const std::string& path);
+    void AddPrivateKeyFromFile(const std::string& path);
 
-    void AddCertificateAuthority(const TString& ca);
-    void AddCertificate(const TString& certificate);
-    void AddCertificateChain(const TString& certificateChain);
-    void AddPrivateKey(const TString& privateKey);
+    void AddCertificateAuthority(const std::string& ca);
+    void AddCertificate(const std::string& certificate);
+    void AddCertificateChain(const std::string& certificateChain);
+    void AddPrivateKey(const std::string& privateKey);
 
     void AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);
     void AddCertificate(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);

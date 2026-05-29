@@ -7,8 +7,7 @@ namespace NKikimr::NOlap::NIndexes {
 TConclusionStatus TReadDataExtractorContainer::DeserializeFromJson(const NJson::TJsonValue& jsonValue) {
     if (!jsonValue.IsDefined() || jsonValue.IsNull()) {
         if (!Initialize(TDefaultDataExtractor::GetClassNameStatic())) {
-            return TConclusionStatus::Fail(
-                "cannot build default data extractor ('" + TDefaultDataExtractor::GetClassNameStatic() + "')");
+            return TConclusionStatus::Fail("cannot build default data extractor ('" + TDefaultDataExtractor::GetClassNameStatic() + "')");
         }
         return TConclusionStatus::Success();
     }

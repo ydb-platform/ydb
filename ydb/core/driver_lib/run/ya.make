@@ -92,7 +92,8 @@ PEERDIR(
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
-    ydb/core/retro_tracing_impl
+    ydb/core/retro_tracing_impl/distributed_collector
+    ydb/core/retro_tracing_impl/spans
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
@@ -140,6 +141,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/actors/retro_tracing
     ydb/library/actors/util
+    ydb/library/aws_init
     ydb/library/folder_service
     ydb/library/folder_service/proto
     ydb/library/global_plugins

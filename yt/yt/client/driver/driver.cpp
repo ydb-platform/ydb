@@ -193,7 +193,7 @@ public:
 
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Structured, true,  true , ApiVersion4);
-        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, false);
+        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, true);
         REGISTER_ALL(TReadTableCommand,                    "read_table",                      Null,       Tabular,    false, true );
         REGISTER_ALL(TReadBlobTableCommand,                "read_blob_table",                 Null,       Binary,     false, true );
         REGISTER_ALL(TLocateSkynetShareCommand,            "locate_skynet_share",             Null,       Structured, false, true );
@@ -338,6 +338,7 @@ public:
         REGISTER_ALL(TExecuteBatchCommand,                 "execute_batch",                   Null,       Structured, true,  false);
 
         REGISTER    (TDiscoverProxiesCommand,              "discover_proxies",                Null,       Structured, false, false, ApiVersion4);
+        REGISTER_ALL(TCheckClusterLivenessCommand,         "check_cluster_liveness",          Null,       Structured, false, false);
 
         REGISTER_ALL(TBuildSnapshotCommand,                "build_snapshot",                  Null,       Structured, true,  false);
         REGISTER_ALL(TBuildMasterSnapshotsCommand,         "build_master_snapshots",          Null,       Structured, true,  false);

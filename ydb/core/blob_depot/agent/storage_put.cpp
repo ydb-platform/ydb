@@ -9,6 +9,8 @@ namespace NKikimr::NBlobDepot {
             const bool SuppressFooter = true;
             const bool IssueUncertainWrites = false;
 
+            enum : ui32 { MaxS3SlowDownRetries = 100 };
+
             ui32 PutsInFlight = 0;
             bool PutsIssued = false;
             bool WaitingForCommitBlobSeq = false;
@@ -19,24 +21,38 @@ namespace NKikimr::NBlobDepot {
             std::optional<TS3Locator> LocatorInFlight;
             TActorId WriterActorId;
             ui64 ConnectionInstanceOnStart;
+            ui32 S3SlowDownRetries = 0;
 
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
+            // Send TEvDiscardSpoiledBlobSeq with currently spoiled BlobSeqId/LocatorInFlight (whichever is set),
+            // clear them, and optionally tag the message as caused by S3 SlowDown so the tablet arms its put throttle.
+            void SendDiscardSpoiled(bool s3SlowDown) {
+                if (!IsInFlight && !LocatorInFlight) {
+                    return;
+                }
+                if (IsInFlight) {
+                    RemoveBlobSeqFromInFlight();
+                }
+                NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
+                if (IsInFlight) {
+                    BlobSeqId.ToProto(msg.AddItems());
+                }
+                if (LocatorInFlight) {
+                    LocatorInFlight->ToProto(msg.AddS3Locators());
+                    if (s3SlowDown) {
+                        msg.SetS3SlowDown(true);
+                    }
+                }
+                LocatorInFlight.reset();
+                Agent.Issue(std::move(msg), this, nullptr);
+            }
+
             void OnDestroy(bool success) override {
                 if (IsInFlight || LocatorInFlight) {
                     Y_ABORT_UNLESS(!success);
-                    if (IsInFlight) {
-                        RemoveBlobSeqFromInFlight();
-                    }
-                    NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
-                    if (IsInFlight) {
-                        BlobSeqId.ToProto(msg.AddItems());
-                    }
-                    if (LocatorInFlight) {
-                        LocatorInFlight->ToProto(msg.AddS3Locators());
-                    }
-                    Agent.Issue(std::move(msg), this, nullptr);
+                    SendDiscardSpoiled(false);
                 }
 
                 if (WriterActorId) {
@@ -377,7 +393,8 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Key, key));
 
-                WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id, temp);
+                // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
+                WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
 
                 ConnectionInstanceOnStart = Agent.ConnectionInstance;
 #else
@@ -386,30 +403,62 @@ namespace NKikimr::NBlobDepot {
 #endif
             }
 
-            void OnPutS3ObjectResponse(std::optional<TString>&& error) override {
+            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) override {
                 STLOG(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, BDA53, "OnPutS3ObjectResponse",
-                    (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error));
+                    (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error), (SlowDown, slowDown));
 
                 WriterActorId = {};
 
                 if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
                     error = "BlobDepot tablet disconnected";
+                    slowDown = false;
                     LocatorInFlight.reset(); // prevent discarding this locator
                 }
 
-                if (error) {
-                    ++*Agent.S3PutsError;
-
-                    // LocatorInFlight is not reset here on purpose: OnDestroy will generate spoiled blob message to the
-                    // tablet
-                    EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to put object to S3: " << *error);
-                } else {
+                if (!error) {
                     ++*Agent.S3PutsOk;
                     *Agent.S3PutBytesOk += LocatorInFlight->Len;
 
                     LocatorInFlight.reset();
                     IssueCommitBlobSeq(false);
+                    return;
                 }
+
+                ++*Agent.S3PutsError;
+                if (slowDown) {
+                    ++*Agent.S3PutsSlowDown;
+                }
+
+                if (slowDown && !Request.FailOnSlowDown && S3SlowDownRetries < MaxS3SlowDownRetries) {
+                    // Transparent retry: report SlowDown to the tablet via the discard message, then immediately
+                    // re-issue TEvPrepareWriteS3. Pipe ordering guarantees the discard (which arms throttling) is
+                    // processed before the retry, so the retry will be parked by the tablet until backoff clears.
+                    BDEV_QUERY(BDEV41, "S3_put_slow_down", (Locator, LocatorInFlight),
+                        (Retry, S3SlowDownRetries));
+                    ++S3SlowDownRetries;
+                    SendDiscardSpoiled(/*s3SlowDown=*/true);
+                    // Reset the per-attempt S3Locator from CommitBlobSeq so HandlePrepareWriteS3Result repopulates it.
+                    if (CommitBlobSeq.ItemsSize()) {
+                        CommitBlobSeq.MutableItems(0)->ClearS3Locator();
+                    }
+                    IssueS3Put();
+                    return;
+                }
+
+                if (slowDown) {
+                    // Either fail-fast was requested or we ran out of retries. Discard the spoiled locator with the
+                    // SlowDown flag so other agents still get throttled, then fail the query.
+                    SendDiscardSpoiled(/*s3SlowDown=*/true);
+                    const TString reason = Request.FailOnSlowDown
+                        ? TString("SlowDown")
+                        : TStringBuilder() << "too many S3 SlowDown retries: " << *error;
+                    EndWithError(NKikimrProto::ERROR, reason);
+                    return;
+                }
+
+                // Generic (non-SlowDown) error: LocatorInFlight is not reset here on purpose -- OnDestroy will
+                // generate a spoiled blob message to the tablet.
+                EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to put object to S3: " << *error);
             }
         };
 

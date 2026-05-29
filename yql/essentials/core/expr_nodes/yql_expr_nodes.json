@@ -2779,6 +2779,20 @@
                 {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
                 {"Index": 1, "Name": "AssumeAs", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TCoWatermarkGenerator",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "WatermarkGenerator"},
+            "Children": [
+                {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
+                {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoTableSource",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "TableSource"}
         }
     ]
 }

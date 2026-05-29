@@ -47,6 +47,62 @@ CreateSyncDoubleMetricGenAiClientOperationDuration(metrics::Meter *meter)
 }
 
 /**
+  Time per output chunk, recorded for each chunk received after the first one, measured as the time
+  elapsed from the end of the previous chunk to the end of the current chunk. <p> This metrics
+  SHOULD be reported for streaming calls and SHOULD NOT be reported otherwise. <p> histogram
+ */
+static constexpr const char *kMetricGenAiClientOperationTimePerOutputChunk =
+    "gen_ai.client.operation.time_per_output_chunk";
+static constexpr const char *descrMetricGenAiClientOperationTimePerOutputChunk =
+    "Time per output chunk, recorded for each chunk received after the first one, measured as the time elapsed from the end of the previous chunk to the end of the current chunk.
+    ";
+    static constexpr const char *unitMetricGenAiClientOperationTimePerOutputChunk = "s";
+
+static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
+CreateSyncInt64MetricGenAiClientOperationTimePerOutputChunk(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Histogram(kMetricGenAiClientOperationTimePerOutputChunk,
+                                      descrMetricGenAiClientOperationTimePerOutputChunk,
+                                      unitMetricGenAiClientOperationTimePerOutputChunk);
+}
+
+static inline nostd::unique_ptr<metrics::Histogram<double>>
+CreateSyncDoubleMetricGenAiClientOperationTimePerOutputChunk(metrics::Meter *meter)
+{
+  return meter->CreateDoubleHistogram(kMetricGenAiClientOperationTimePerOutputChunk,
+                                      descrMetricGenAiClientOperationTimePerOutputChunk,
+                                      unitMetricGenAiClientOperationTimePerOutputChunk);
+}
+
+/**
+  Time to receive the first chunk, measured from when the client issues the generation request to
+  when the first chunk is received in the response stream. <p> This metrics SHOULD be reported for
+  streaming calls and SHOULD NOT be reported otherwise. <p> histogram
+ */
+static constexpr const char *kMetricGenAiClientOperationTimeToFirstChunk =
+    "gen_ai.client.operation.time_to_first_chunk";
+static constexpr const char *descrMetricGenAiClientOperationTimeToFirstChunk =
+    "Time to receive the first chunk, measured from when the client issues the generation request "
+    "to when the first chunk is received in the response stream.";
+static constexpr const char *unitMetricGenAiClientOperationTimeToFirstChunk = "s";
+
+static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
+CreateSyncInt64MetricGenAiClientOperationTimeToFirstChunk(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Histogram(kMetricGenAiClientOperationTimeToFirstChunk,
+                                      descrMetricGenAiClientOperationTimeToFirstChunk,
+                                      unitMetricGenAiClientOperationTimeToFirstChunk);
+}
+
+static inline nostd::unique_ptr<metrics::Histogram<double>>
+CreateSyncDoubleMetricGenAiClientOperationTimeToFirstChunk(metrics::Meter *meter)
+{
+  return meter->CreateDoubleHistogram(kMetricGenAiClientOperationTimeToFirstChunk,
+                                      descrMetricGenAiClientOperationTimeToFirstChunk,
+                                      unitMetricGenAiClientOperationTimeToFirstChunk);
+}
+
+/**
   Number of input and output tokens used.
   <p>
   histogram

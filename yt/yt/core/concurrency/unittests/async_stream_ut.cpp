@@ -12,22 +12,17 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetString(const TSharedRef& sharedRef)
+std::string GetString(const TSharedRef& sharedRef)
 {
-    return TString(sharedRef.Begin(), sharedRef.Size());
+    return std::string(sharedRef.Begin(), sharedRef.Size());
 }
 
 TSharedRef ReadAlreadySetValue(const IAsyncZeroCopyInputStreamPtr& input)
 {
-
     auto result = input->Read();
-    {
-        EXPECT_TRUE(result.IsSet());
-        // We can't use ASSERT_ in non-void functions (check gtest FAQ)
-        // so we use TryGet() here in order to avoid hanging and make test crash.
-        EXPECT_TRUE(result.TryGet()->IsOK());
-    }
-    return result.TryGet()->Value();
+    EXPECT_TRUE(result.IsSet());
+    EXPECT_TRUE(result.GetOrCrash().IsOK());
+    return result.GetOrCrash().Value();
 }
 
 TEST(TAsyncOutputStreamTest, Simple)
@@ -84,10 +79,11 @@ TEST(TAsyncOutputStreamTest, MultipleWrites)
     ASSERT_TRUE(writeResult1.IsSet());
     ASSERT_TRUE(writeResult2.IsSet());
     ASSERT_TRUE(writeResult3.IsSet());
-    ASSERT_TRUE(closeResult.IsSet());
+    ASSERT_FALSE(closeResult.IsSet());
 
     auto readResult4 = ReadAlreadySetValue(pipe);
     ASSERT_FALSE(readResult4);
+    ASSERT_TRUE(closeResult.IsSet());
 }
 
 TEST(TAsyncOutputStreamTest, TestEmptyString)
@@ -139,7 +135,7 @@ private:
 //! over a small block size async input stream to provoke a stack overflow.
 TEST(TIAsyncZeroCopyInputStreamTest, NoStackOverflow)
 {
-    TString buf(512_KB, 'a');
+    std::string buf(512_KB, 'a');
     TMemoryInput memoryInput(buf.data(), buf.size());
     TMaxBlockSizeInputStream maxBlockSizeInputStream(&memoryInput, 1);
     auto asyncInputStream = CreateAsyncAdapter(&maxBlockSizeInputStream);

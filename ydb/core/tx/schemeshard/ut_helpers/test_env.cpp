@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -583,6 +584,13 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TTableServiceConfig tableServiceConfig;
     SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
 
+    // Used by KqpComputeSchedulerService
+    {
+        NKikimrConfig::TAppConfig appConfig;
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        runtime.GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, appConfig);
+    }
+
     NKikimrConfig::TLogConfig logConfig;
     NKikimrConfig::TQueryServiceConfig queryServiceConfig;
     auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
@@ -682,6 +690,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
     if (opts.CondEraseResponseBatchMaxTimeMs_) {
         app.SchemeShardConfig.SetCondEraseResponseBatchMaxTimeMs(*opts.CondEraseResponseBatchMaxTimeMs_);
+    }
+    if (opts.MaxBuildIndexShardsInFlight_) {
+        app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
     }
 
     // graph settings

@@ -513,6 +513,25 @@ private:
             TYtOutput ytOutput(node);
             const auto oldOp = GetOutputOp(ytOutput);
 
+            auto settingsBuilder =
+                Build<TCoNameValueTupleList>(ctx, oldOp.Pos())
+                    .Add()
+                        .Name().Value(ToString(EYtSettingType::CombineChunks)).Build()
+                    .Build();
+
+            const auto queryCacheMode = State_->Configuration->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+            if (State_->Configuration->QueryCacheCombineChunksReplace.Get().GetOrElse(DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE)
+                && queryCacheMode != EQueryCacheMode::Disable
+                && queryCacheMode != EQueryCacheMode::Readonly)
+            {
+                settingsBuilder
+                    .Add()
+                        .Name().Value(ToString(EYtSettingType::ReplaceParentCache)).Build()
+                    .Build();
+            }
+
+            auto settings = settingsBuilder.Done();
+
             auto combiningOp =
                 Build<TYtMerge>(ctx, oldOp.Pos())
                     .World<TCoWorld>().Build()
@@ -541,11 +560,7 @@ private:
                             .Build()
                         .Build()
                     .Build()
-                    .Settings()
-                        .Add()
-                            .Name().Value(ToString(EYtSettingType::CombineChunks)).Build()
-                        .Build()
-                    .Build()
+                    .Settings(settings)
                 .Done();
 
             auto newYtOutput =
@@ -828,7 +843,6 @@ private:
                 distinct = distinct->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); });
             }
 
-            const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(TYtTransientOpBase(writer).DataSink().Cluster().StringValue(), *State_->Configuration);
             TExprNode::TPtr newOp;
             if (auto maybeMap = TMaybeNode<TYtMap>(writer)) {
                 TYtMap map = maybeMap.Cast();
@@ -865,7 +879,7 @@ private:
                     .Seal()
                     .Build();
 
-                TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
+                TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
 
                 if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                     if (auto sorted = outTable.Ref().GetConstraint<TSortedConstraintNode>()) {
@@ -920,7 +934,7 @@ private:
             else  {
                 auto merge = TYtMerge(writer);
                 auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
-                TYtOutTableInfo mergeOut(outStructType, nativeTypeCompatibility);
+                TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
                 mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 mergeOut.SetUnique(distinct, merge.Pos(), ctx);
                 mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());

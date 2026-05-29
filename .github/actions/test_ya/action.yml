@@ -210,9 +210,6 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
-            if [ -z $TEST_RETRY_COUNT ]; then
-              TEST_RETRY_COUNT=1
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
@@ -328,38 +325,6 @@ runs:
             $YA_MAKE_TARGET
         fi
 
-        # Scripts to checkout from main
-        MAIN_SCRIPTS=(
-          ".github/scripts/config/ydb_qa_config.json"
-          ".github/scripts/analytics/upload_tests_results.py"
-          ".github/scripts/analytics/ydb_wrapper.py"
-          ".github/scripts/send_build_stats.py"
-          ".github/scripts/get_build_diff.py"
-          ".github/scripts/get_current_build_size.py"
-          ".github/scripts/get_main_build_size.py"
-          ".github/scripts/check_ydb_qa_config.py"
-          ".github/scripts/tests/generate-summary.py"
-          ".github/scripts/tests/fail-checker.py"
-        )
-        
-        # Ensure main is available (may be missing in shallow clone)
-        if ! git rev-parse --verify main >/dev/null 2>&1; then
-          git fetch origin main:main --depth=1 2>/dev/null || true
-        fi
-        
-        # For each script: if unchanged in PR - use from main
-        # git checkout main -- "$script" doesn't change HEAD, only files in working directory
-        for script in "${MAIN_SCRIPTS[@]}"; do
-          if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
-            git checkout main -- "$script" 2>/dev/null && echo "✅ $script"
-          else
-            echo "✅ $script (PR version)"
-          fi
-        done
-        
-        # Check YDB configuration (after checkout from main)
-        python3 .github/scripts/check_ydb_qa_config.py || true
-
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
@@ -427,7 +392,7 @@ runs:
               set +x
               rm -f ram_usage.txt
               while true; do
-                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
                   echo "$(date +%s) $used_kb" >> ram_usage.txt
                   sleep 3
@@ -442,13 +407,43 @@ runs:
             GRAPH_OPTS=""
           fi
 
+          TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+          # Allocate 95% of total memory to ya make cgroup.
+          YA_MAKE_MEM_MAX_KB=$(( TOTAL_MEM_KB * 95 / 100 ))
+          YA_MAKE_MEM_MAX="${YA_MAKE_MEM_MAX_KB}K"
+          YA_MAKE_SCOPE_NAME="ya-make-${GITHUB_RUN_ID:-local}-${RETRY}-$$.scope"
+
+          echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
+
+          YA_MAKE_CMD=(
+            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
+            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
+            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
+          )
+
+          # Timestamp for filtering dmesg to this try only.
+          DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+
           set +e
-          (./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
-            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+          (sudo -n -E systemd-run --scope \
+             --unit="${YA_MAKE_SCOPE_NAME}" \
+             -p MemoryMax="${YA_MAKE_MEM_MAX}" \
+             -p MemorySwapMax=0 \
+             --uid=$(id -u) --gid=$(id -g) \
+             -- \
+             "${YA_MAKE_CMD[@]}"
+           echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+
+          # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
+          OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
+          OOM_DMESG_LOG_URL="$CURRENT_PUBLIC_DIR_URL/oom_dmesg.txt"
+          sudo dmesg -T --since="$DMESG_SINCE" 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true
+          if [ -s "$OOM_DMESG_LOG" ]; then
+            echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
+          fi
 
           kill $MONITOR_PID
 
@@ -540,6 +535,7 @@ runs:
               --comment_text_file summary_text.txt \
               $PR_ARG \
               --workflow_run_id "${{ github.run_id }}" \
+              --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
           fi
 
@@ -590,6 +586,15 @@ runs:
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
 
+    - name: resolve-status-sha
+      shell: bash
+      run: |
+        status_sha="$ORIGINAL_HEAD"
+        if [[ -n "${{ github.event.pull_request.head.sha }}" ]]; then
+          status_sha="${{ github.event.pull_request.head.sha }}"
+        fi
+        echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
+
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash
@@ -600,11 +605,11 @@ runs:
 
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
         else
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
         fi
 
@@ -622,7 +627,7 @@ runs:
             testmessage="The check has been failed"
           fi
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+              https://api.github.com/repos/${{github.repository}}/statuses/${STATUS_SHA} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
 
           if [[ $teststatus != "success" ]]; then

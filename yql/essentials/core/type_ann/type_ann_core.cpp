@@ -6666,6 +6666,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    IGraphTransformer::TStatus AsOptionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& inputType = input->Head().GetTypeAnn();
+        if (inputType->IsOptionalOrNull()) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (inputType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(inputType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        output = ctx.Expr.NewCallable(input->Pos(), "Just", { input->HeadPtr() });
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus OptionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -9592,6 +9616,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 description.UserType = userType;
                 description.TypeConfig = typeConfig;
                 description.LangVer = ctx.Types.LangVer;
+                description.RuntimeSettings = ctx.Types.RuntimeSettings;
                 ctx.Types.Credentials->ForEach([&description](const TString& name, const TCredential& cred) {
                     description.SecureParams[TString("token:") + name] = cred.Content;
                     if (name.StartsWith("default_")) {
@@ -16023,6 +16048,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["DictRemove"] = &DictBlindOpWrapper<false>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
+        Functions["AsOptional"] = &AsOptionalWrapper;
         ExtFunctions["List"] = &ListWrapper;
         ExtFunctions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
         Functions["Dict"] = &DictWrapper;
@@ -16104,9 +16130,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
-        ExtFunctions["HoppingTraits"] = &HoppingTraitsWrapper;
-        Functions["HoppingCore"] = &HoppingCoreWrapper;
-        Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
         Functions["EquiJoin"] = &EquiJoinWrapper;
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
         ExtFunctions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
@@ -16442,6 +16465,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RoundDown"] = &RoundWrapper;
         Functions["NextValue"] = &NextValueWrapper;
 
+        ExtFunctions["HoppingTraits"] = &HoppingTraitsWrapper;
+        Functions["HoppingCore"] = &HoppingCoreWrapper;
+        Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
         Functions["MatchRecognize"] = &MatchRecognizeWrapper;
         Functions["MatchRecognizeMeasuresCallables"] = &MatchRecognizeMeasuresCallablesWrapper;
         Functions["MatchRecognizeMeasuresCallable"] = &MatchRecognizeMeasuresCallableWrapper;
@@ -16451,6 +16477,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MatchRecognizeDefines"] = &MatchRecognizeDefinesWrapper;
         ExtFunctions["MatchRecognizeCore"] = &MatchRecognizeCoreWrapper;
         Functions["TimeOrderRecover"] = &TimeOrderRecoverWrapper;
+        Functions["WatermarkGenerator"] = &WatermarkGeneratorWrapper;
 
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;

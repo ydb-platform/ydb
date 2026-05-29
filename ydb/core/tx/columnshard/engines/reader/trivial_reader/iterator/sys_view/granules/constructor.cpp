@@ -4,13 +4,10 @@
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NGranules {
 
-TConstructor::TConstructor(const IPathIdTranslator& translator,
-                           const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
-                           const IColumnEngine& engine,
-                           const ui64 tabletId,
-                           const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-                           const ERequestSorting sorting)
-    : TBase(sorting, tabletId) {
+TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
+    const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
+    : TBase(sorting, tabletId)
+{
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& [internalPathId, granuleMeta] : engineImpl->GetTables()) {
@@ -26,7 +23,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator,
             }
             continue;
         }
-        for (const auto& schemeShardLocalPathId: translator.ResolveSchemeShardLocalPathIdsVerified(granuleMeta->GetPathId())) {
+        for (const auto& schemeShardLocalPathId : translator.ResolveSchemeShardLocalPathIdsVerified(granuleMeta->GetPathId())) {
             constructors.emplace_back(schemeShardLocalPathId, TabletId, granuleMeta);
             if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
                     constructors.back().GetFinish().GetValue().BuildSortablePosition())) {

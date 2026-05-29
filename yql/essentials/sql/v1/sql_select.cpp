@@ -6,6 +6,8 @@
 #include "sql_values.h"
 #include "sql_match_recognize.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
@@ -35,6 +37,8 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
             newStrategy = TJoinLinkSettings::EStrategy::ForceMap;
         } else if (canonizedName == "grace") {
             newStrategy = TJoinLinkSettings::EStrategy::ForceGrace;
+        } else if (canonizedName == "star") {
+            newStrategy = TJoinLinkSettings::EStrategy::ForceStar;
         } else if (canonizedName == "compact") {
             linkSettings.Compact = true;
             continue;
@@ -1201,6 +1205,71 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
                            std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
+TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteSettings& settings, TPosition& selectPos) {
+    // COMBINE named_single_source (PRESORT sort_specification_list)?
+    // WITH named_single_source (PRESORT sort_specification_list)?
+    // ON expr USING using_call_expr
+
+    if (!Ctx_.EnsureAvailable(GetPos(node.GetToken1()), NYql::NFeature::Combine)) {
+        return {};
+    }
+
+    TPosition startPos(Ctx_.Pos());
+    if (!selectPos) {
+        selectPos = startPos;
+    }
+
+    Token(node.GetToken1());
+
+    TSourcePtr leftSource(NamedSingleSource(node.GetRule_named_single_source2(), true));
+    if (!leftSource) {
+        return {};
+    }
+
+    TVector<TSortSpecificationPtr> leftPresort;
+    if (node.HasBlock3() && !SortSpecificationList(node.GetBlock3().GetRule_sort_specification_list2(), leftPresort)) {
+        return {};
+    }
+
+    Token(node.GetToken4());
+
+    TSourcePtr rightSource(NamedSingleSource(node.GetRule_named_single_source5(), true));
+    if (!rightSource) {
+        return {};
+    }
+
+    TVector<TSortSpecificationPtr> rightPresort;
+    if (node.HasBlock6() && !SortSpecificationList(node.GetBlock6().GetRule_sort_specification_list2(), rightPresort)) {
+        return {};
+    }
+
+    Token(node.GetToken7());
+
+    TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+    TSqlExpression expr(*this);
+    TNodePtr combineKeyExpr = Unwrap(expr.Build(node.GetRule_expr8()));
+
+    Token(node.GetToken9());
+
+    TSqlCallExpr call(*this);
+    bool initRet = call.Init(node.GetRule_using_call_expr10());
+    if (!initRet) {
+        return {};
+    }
+
+    auto args = call.GetArgs();
+
+    TSqlCallExpr finalCall(call, args);
+    TNodePtr udf(finalCall.BuildUdf(true));
+    if (!udf) {
+        return {};
+    }
+
+    return BuildCombine(startPos, std::move(leftSource), std::move(leftPresort),
+                        std::move(rightSource), std::move(rightPresort),
+                        std::move(combineKeyExpr), udf, std::move(args), settings);
+}
+
 bool TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy) {
     return SortSpecificationList(node.GetRule_sort_specification_list3(), orderBy);
 }
@@ -1338,6 +1407,10 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
         case TRule_select_kind_TBlock2::kAlt3: {
             res.Source = SelectCore(node.GetBlock2().GetAlt3().GetRule_select_core1(), settings, selectPos,
                                     placement, res.SelectOpOrderBy, res.SelectOpAssumeOrderBy);
+            break;
+        }
+        case TRule_select_kind_TBlock2::kAlt4: {
+            res.Source = CombineCore(node.GetBlock2().GetAlt4().GetRule_combine_core1(), settings, selectPos);
             break;
         }
         case TRule_select_kind_TBlock2::ALT_NOT_SET:
@@ -1491,10 +1564,7 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
         TString nextOp = ToLowerUTF8(Token(token));
         if (nextOp != "union" &&
             !Ctx_.ExceptIntersectBefore202503 &&
-            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                Ctx_.TokenPosition(token),
-                "EXCEPT/INTERSECT",
-                MakeLangVersion(2025, 3)))
+            !Ctx_.EnsureAvailable(Ctx_.TokenPosition(token), NYql::NFeature::ExceptIntersect))
         {
             return nullptr;
         }
@@ -1504,10 +1574,7 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
             const TString qualifier = ToLowerUTF8(Token(token));
             if (qualifier == "distinct" &&
                 !Ctx_.ExceptIntersectBefore202503 &&
-                !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                    Ctx_.TokenPosition(token),
-                    "UNION DISTINCT",
-                    MakeLangVersion(2025, 3)))
+                !Ctx_.EnsureAvailable(Ctx_.TokenPosition(token), NYql::NFeature::UnionDistinct))
             {
                 return nullptr;
             }
@@ -1601,10 +1668,7 @@ TSourcePtr TSqlSelect::BuildIntersection(
 
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_intersect_op1().GetToken1();
         if (!Ctx_.ExceptIntersectBefore202503 &&
-            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                Ctx_.TokenPosition(token),
-                "EXCEPT/INTERSECT",
-                MakeLangVersion(2025, 3)))
+            !Ctx_.EnsureAvailable(Ctx_.TokenPosition(token), NYql::NFeature::ExceptIntersect))
         {
             return nullptr;
         }

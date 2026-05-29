@@ -107,6 +107,8 @@ enum ECumulativeCounters {
     COUNTER_WRITE_BYTES_CHANNEL_13 = 80                              [(CounterOpts) = {Name: "WriteBytesChannel13"}];
     COUNTER_WRITE_BYTES_CHANNEL_14 = 81                              [(CounterOpts) = {Name: "WriteBytesChannel14"}];
     COUNTER_WRITE_BYTES_CHANNEL_15 = 82                              [(CounterOpts) = {Name: "WriteBytesChannel15"}];
+
+    COUNTER_STORAGE_CHANNEL_FALLBACK_TO_MAIN = 83                    [(CounterOpts) = {Name: "StorageChannelFallbackToMain"}];
 }
 
 enum ESimpleCounters {
@@ -133,6 +135,7 @@ enum ESimpleCounters {
     COUNTER_UNCOMMITTED_TRASH_BYTES = 14                             [(CounterOpts) = {Name: "UncommittedTrashBytes"}];
     COUNTER_VIRTUAL_TRASH_COUNT = 15                                 [(CounterOpts) = {Name: "VirtualTrashCount"}];
     COUNTER_VIRTUAL_TRASH_BYTES = 16                                 [(CounterOpts) = {Name: "VirtualTrashBytes"}];
+
 }
 
 enum EPercentileCounters {
@@ -915,4 +918,3 @@ enum ETxTypes {
     TXTYPE_REQUEST = 1                                               [(TxTypeOpts) = {Name: "TxRequest"}];
     TXTYPE_DROP_REF_COUNTS_ON_ERROR = 2                              [(TxTypeOpts) = {Name: "TxDropRefCountsOnError"}];
 }
-

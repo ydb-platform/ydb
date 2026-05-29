@@ -397,6 +397,10 @@ void TKeyValueState::CountOverrun() {
     TabletCounters->Cumulative()[COUNTER_REQ_OVERRUN].Increment(1);
 }
 
+void TKeyValueState::CountStorageChannelFallbackToMain() {
+    TabletCounters->Cumulative()[COUNTER_STORAGE_CHANNEL_FALLBACK_TO_MAIN].Increment(1);
+}
+
 void TKeyValueState::CountLatencyBsOps(const TRequestStat &stat) {
     ui64 bsDuration = (TAppData::TimeProvider->Now() - stat.KeyvalueStorageRequestSentAt).MilliSeconds();
     TabletCounters->Percentile()[COUNTER_LATENCY_BS_OPS].IncrementFor(bsDuration);
@@ -2378,6 +2382,7 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
                 ui32 endChannel = info->Channels.size();
                 if (storageChannelIdx >= endChannel) {
                     storageChannelIdx = BLOB_CHANNEL;
+                    CountStorageChannelFallbackToMain();
                     ALOG_INFO(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                             << " CmdWrite StorageChannel# " << storageChannelOffset
                             << " does not exist, using MAIN");
@@ -2537,6 +2542,7 @@ bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TK
             ui32 endChannel = info->Channels.size();
             if (storageChannelIdx >= endChannel) {
                 storageChannelIdx = BLOB_CHANNEL;
+                CountStorageChannelFallbackToMain();
                 ALOG_INFO(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                         << " CmdPatch StorageChannel# " << storageChannelOffset
                         << " does not exist, using MAIN");
@@ -2761,6 +2767,10 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
         ui32 endChannel = info->Channels.size();
         if (storageChannelIdx >= endChannel) {
             storageChannelIdx = BLOB_CHANNEL;
+            CountStorageChannelFallbackToMain();
+            ALOG_INFO(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " ExecuteTransaction Write StorageChannel# " << storageChannelOffset
+                    << " does not exist, using MAIN");
         }
     }
     SplitIntoBlobs(cmd, isInline, storageChannelIdx);

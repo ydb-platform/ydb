@@ -2888,5 +2888,66 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit)
         tc);
 }
 
+ui64 GetStorageChannelFallbackToMainCounter(TTestContext &tc) {
+    const auto sender = tc.Runtime->AllocateEdgeActor();
+    tc.Runtime->SendToPipe(tc.TabletId, sender, new TEvTablet::TEvGetCounters,
+            0, GetPipeConfigWithRetries());
+    TAutoPtr<IEventHandle> handle;
+    auto *result = tc.Runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(handle);
+    UNIT_ASSERT(result);
+    const auto &appCounters = result->Record.GetTabletCounters().GetAppCounters();
+    return appCounters
+            .GetCumulativeCounters(NKeyValue::COUNTER_STORAGE_CHANNEL_FALLBACK_TO_MAIN)
+            .GetValue();
+}
+
+Y_UNIT_TEST(TestStorageChannelFallbackToMainCounter) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 0u);
+
+    // Write to MAIN: should not trigger fallback.
+    CmdWrite("key-main", "value-main",
+            NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 0u);
+
+    // Write to INLINE: should not trigger fallback either.
+    CmdWrite("key-inline", "value-inline",
+            NKikimrClient::TKeyValueRequest::INLINE,
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 0u);
+
+    // Write to a non-existing storage channel: should silently fall back to MAIN
+    // and bump the cumulative counter once.
+    CmdWrite("key-extra9", "value-extra9",
+            NKikimrClient::TKeyValueRequest::EXTRA9,
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 1u);
+
+    // Another write to the same non-existing channel increments cumulative again.
+    CmdWrite("key-extra9-2", "value-extra9-2",
+            NKikimrClient::TKeyValueRequest::EXTRA9,
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 2u);
+
+    // Make sure both keys are readable (data ended up on MAIN).
+    CmdRead({"key-extra9"},
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            {"value-extra9"}, {false},
+            tc);
+    CmdRead({"key-extra9-2"},
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            {"value-extra9-2"}, {false},
+            tc);
+}
+
 } // TKeyValueTest
 } // NKikimr

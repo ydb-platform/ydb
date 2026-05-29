@@ -205,7 +205,7 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
             : TTxState::ConfigureParts;
 
     txState.Shards.reserve(table->GetPartitionStore().size());
-    for (auto& [shardIdx, shard] : table->GetPartitionStore()) {
+    for (const auto& shardIdx : table->GetPartitionStore() | std::views::keys) {
         TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
 
         auto shardOp = commonShardOp;
@@ -408,7 +408,7 @@ public:
             table->ScheduleAllCondErase();
 
             const auto now = context.Ctx.Now();
-            for (const auto& [_, shard] : table->GetPartitionStore()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -420,7 +420,7 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Sub(1);
             table->ClearCondEraseSchedule();
 
-            for (const auto& [_, shard] : table->GetPartitionStore()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 if (auto& lag = shard.LastCondEraseLag) {
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                     lag.Clear();

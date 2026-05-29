@@ -2,81 +2,64 @@
 
 {% note warning %}
 
-Функциональность JSON-индексов находится в разработке. Функция должна быть явно включена (флаги `EnableJsonIndex` и, для автоматического выбора индекса, `EnableJsonIndexAutoSelect`). В конфигурации по умолчанию оба флага выключены.
+Функциональность JSON-индексов находится в разработке. Функция должна быть явно включена (требуется [включить флаги](../reference/configuration/feature_flags.md): `enable_json_index` и, для автоматического выбора индекса, `enable_json_index_auto_select`). В конфигурации по умолчанию оба флага выключены.
 
 {% endnote %}
 
+JSON-индексы — это специализированный тип [вторичного индекса](../concepts/glossary.md#secondary-index), который ускоряет фильтрацию строк таблицы по условиям, накладываемым на содержимое колонок типа `Json` и `JsonDocument`. Индекс задействуется, если в предикате `WHERE` используются функции [JSON_EXISTS](../yql/reference/builtins/json.md) и [JSON_VALUE](../yql/reference/builtins/json.md) с выражениями [JsonPath](../yql/reference/builtins/json.md#jsonpath). В отличие от традиционных вторичных индексов, оптимизированных для поиска по равенству или диапазону отдельных колонок таблицы, JSON-индекс работает с произвольными путями внутри JSON-документа.
+
+Общее описание поиска по JSON и устройства инвертированного индекса по путям JSON-документа см. в разделе [{#T}](../concepts/query_execution/json_search.md).
+
 ## Характеристики JSON-индексов {#characteristics}
 
-JSON-индекс — глобальный синхронный вторичный индекс для [строковых](../concepts/datamodel/table.md#row-oriented-tables) таблиц. Он ускоряет фильтрацию строк по содержимому колонки типа `Json` или `JsonDocument`, если в предикате `WHERE` используются функции [JSON_EXISTS](../yql/reference/builtins/json.md) и [JSON_VALUE](../yql/reference/builtins/json.md) с выражениями [JsonPath](../yql/reference/builtins/json.md#jsonpath).
+JSON-индексы в {{ ydb-short-name }} позволяют:
 
-Индекс обновляется синхронно вместе с основной таблицей и может быть выбран при выполнении запроса:
+* быстро фильтровать строки по [JSON_EXISTS](#json-exists) и [JSON_VALUE](#json-value) с выражениями [JsonPath](../yql/reference/builtins/json.md#jsonpath);
+* комбинировать индексируемые условия операторами `AND` и `OR`;
+* подставлять параметры запроса, переданные приложением, в проверяемые предикаты.
 
-- явно — через оператор `<имя таблицы> VIEW <имя_индекса>`;
-- автоматически — оптимизатором запросов, если на кластере включён автовыбор и предикат подходит под формальные правила.
+JSON-индекс является [глобальным синхронным](../concepts/glossary.md#secondary-index) индексом — его данные всегда согласованы с основной таблицей.
 
-Каждый путь в JSON-документе (и при необходимости скалярные значения в списках в составе JSON-документа) кодируется в токен. Поиск по пути или по равенству значения сводится к инвертированному поиску по токенам — по той же схеме, что и у [базового полнотекстового индекса](../dev/fulltext-indexes.md#basic), но с собственным токенизатором JSON.
+При выполнении запроса JSON-индекс может быть применён:
 
-JSON-индекс сужает множество строк по токенам в запросе (и, для проверки на равенство значению, по токену «путь + значение»). Затем движок исполнения запросов повторно проверяет полный предикат. Запросы с `!=`, `<`, `>=`, `BETWEEN`, `starts with`, `like_regex` и т. п. могут использовать индекс для отсечения по пути, но итоговую точность сравнения обеспечивает пост-фильтр. Результат поиска по индексу всегда совпадает с выполнением того же запроса без индекса.
+- явно — через оператор `<имя_таблицы> VIEW <имя_индекса>`;
+- автоматически — [оптимизатором](../concepts/glossary.md#optimizer), если на кластере включён автовыбор и предикат подходит под формальные правила.
 
-Ограничения реализации JSON-индексов:
+## Синтаксис JSON-индексов {#syntax}
 
-- поддерживаются только для строковых таблиц;
-- первичный ключ таблицы должен состоять из единственной колонки типа `Uint64` (временное ограничение, будет снято в ходе дальнейшего развития);
-- JSON-индекс строится над единственной колонкой типа `Json` или `JsonDocument`;
-- пакетные операции (операторы `BATCH UPDATE` и `BATCH DELETE`) для таблиц с JSON-индексами запрещены;
-- значения числовых атрибутов в JSON-документе, превышающие по модулю 2⁵³, не индексируются (ограничение внутреннего представления).
+Создание JSON-индекса:
 
-## Создание индекса {#create}
+* при создании таблицы: [INDEX (CREATE TABLE)](../yql/reference/syntax/create_table/json_index.md);
+* добавление к существующей таблице: [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#add-index).
 
-### Создание индекса вместе с таблицей
-
-```yql
-CREATE TABLE `Documents` (
-    `id` Uint64,
-    `payload` JsonDocument,
-    PRIMARY KEY (`id`),
-    INDEX `json_idx` GLOBAL SYNC USING json ON (`payload`)
-);
-```
-
-### Добавление индекса к существующей таблице
+Удаление JSON-индексов выполняется через [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#drop-index):
 
 ```yql
-ALTER TABLE `Documents`
-    ADD INDEX `json_idx` GLOBAL SYNC USING json ON (`payload`);
+ALTER TABLE `Documents` DROP INDEX `json_idx`;
 ```
 
-Ключевое слово `SYNC` можно опустить — для JSON-индекса синхронный режим является единственным поддерживаемым вариантом.
+Синтаксис запроса с явным указанием JSON-индекса:
 
-При добавлении индекса к непустой таблице выполняется фоновое построение, как у других глобальных индексов. До завершения построения индекс в состоянии «не готов» и не используется.
+* [VIEW (JSON-индекс)](../yql/reference/syntax/select/json_index.md).
 
-## Запросы с использованием индекса {#queries}
+Функции и выражения для работы с JSON в предикатах:
 
-### Явное обращение через оператор VIEW {#view}
+* [Функции для работы с JSON](../yql/reference/builtins/json.md) — `JSON_EXISTS`, `JSON_VALUE`, `JSON_QUERY`;
+* [JsonPath](../yql/reference/builtins/json.md#jsonpath) — язык запросов для обращения к значениям внутри JSON.
 
-Как и для других вторичных индексов, имя индекса может указываться в секции `VIEW`:
+Готовые сценарии использования собраны в разделе [рецептов поиска по JSON-документам](../recipes/json-search/index.md).
 
-```yql
-SELECT *
-FROM `Documents` VIEW `json_idx`
-WHERE JSON_EXISTS(`payload`, '$.user.id');
-```
+## Обновление JSON-индексов {#update}
 
-Если предикат не поддерживается для выполнения через JSON-индекс, запрос с указанием `VIEW` завершится ошибкой на этапе компиляции или планирования (сообщение вида «Failed to extract jsonpath tokens from the predicate»).
+JSON-индексы автоматически поддерживаются при модификации данных и обновляются синхронно вместе с основной таблицей. Таблицы с JSON-индексами поддерживают:
 
-### Автоматический выбор индекса {#autoselect}
+* `INSERT`
+* `UPSERT`
+* `REPLACE`
+* `UPDATE`
+* `DELETE`
 
-При включённом флаге `EnableJsonIndexAutoSelect` оптимизатор может подставить JSON-индекс без `VIEW`, если:
-
-- не выбран другой вторичный индекс для этого чтения;
-- индекс готов к использованию (построен);
-- предикат в секции `WHERE` полностью поддерживается для выполнения через JSON-индекс;
-- все индексируемые фрагменты `JSON_EXISTS` / `JSON_VALUE` ссылаются на одну и ту же индексированную колонку.
-
-Если автовыбор невозможен, запрос выполняется обычным сканированием таблицы или другого индекса, без ошибки.
-
-Для отладки и гарантированного использования индекса рекомендуется явное указание секции `VIEW`.
+Пакетные операции (`BATCH UPDATE` и `BATCH DELETE`) для таблиц с JSON-индексами не поддерживаются.
 
 ## Поддерживаемые предикаты {#predicates}
 
@@ -102,7 +85,7 @@ WHERE JSON_EXISTS(doc, '$.items ? (@.price == 100)')
 WHERE JSON_EXISTS(doc, '$.items ? (@.qty >= 1 && @.qty <= 10)')
 WHERE JSON_EXISTS(doc, '$.items ? (@.tag == $t)' PASSING "sale" AS t)
 
--- Методы JsonPath (путь индексируется до метода; точная проверка — пост-фильтр)
+-- Методы JsonPath (путь индексируется до метода; точную проверку выполняет пост-фильтр)
 WHERE JSON_EXISTS(doc, '$.value.type()')
 WHERE JSON_EXISTS(doc, '$.arr.size()')
 
@@ -111,7 +94,7 @@ WHERE JSON_EXISTS(doc, '$.a') AND JSON_EXISTS(doc, '$.b')
 WHERE JSON_EXISTS(doc, '$.a') OR JSON_EXISTS(doc, '$.b')
 ```
 
-**Запрещено** (ошибка при использовании оператора `VIEW` или отказ автовыбора):
+**Запрещено** (ошибка при использовании оператора `VIEW` или отказ автовыбора индекса):
 
 ```yql
 -- Предикаты сравнения на верхнем уровне пути (вне ? (...))
@@ -139,32 +122,34 @@ WHERE JSON_EXISTS(doc, '1')
 
 Извлечение скалярного значения с обязательным `RETURNING <тип>`.
 
-Поддерживаемые типы для секции RETURNING: `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`.
+Поддерживаемые типы для секции `RETURNING`: `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`.
 
 **Разрешено:**
 
 ```yql
 -- Равенство (путь + значение попадают в индекс)
-WHERE JSON_VALUE(doc, '$.user.age' RETURNING Int32) == 25
+WHERE JSON_VALUE(doc, '$.user.age' RETURNING Int32) = 25
 WHERE JSON_VALUE(doc, '$.flag' RETURNING Bool) = true
 WHERE JSON_VALUE(doc, '$.name' RETURNING Utf8) = "Alice"u
 
 -- Неявное сравнение с true для Bool
 WHERE JSON_VALUE(doc, '$.active' RETURNING Bool)
 
--- Сравнения по пути (в индекс идёт только путь; точность — пост-фильтр)
+-- Параметры
+WHERE JSON_VALUE(doc, '$.user.id' RETURNING Int64) = $id
+WHERE JSON_VALUE(doc, '$.tag' RETURNING Utf8) = $tag
+
+-- Сравнения (в индексе задействован только путь, сравнение выполняет пост-фильтр)
 WHERE JSON_VALUE(doc, '$.score' RETURNING Int64) > 0
 WHERE JSON_VALUE(doc, '$.score' RETURNING Int64) != 100
 WHERE JSON_VALUE(doc, '$.score' RETURNING Int64) BETWEEN 1 AND 10
 WHERE JSON_VALUE(doc, '$.score' RETURNING Int64) NOT BETWEEN 0 AND 5
 
--- IN: список литералов — OR токенов; параметр-список — один токен пути
+-- IN: список литералов
 WHERE JSON_VALUE(doc, '$.status' RETURNING Utf8) IN ("open"u, "pending"u)
-WHERE JSON_VALUE(doc, '$.status' RETURNING Utf8) IN $status_list
 
--- Параметры
-WHERE JSON_VALUE(doc, '$.user.id' RETURNING Int64) = $id
-WHERE JSON_VALUE(doc, '$.tag' RETURNING Utf8) = $tag
+-- IN: заданный параметр типа List<Utf8>
+WHERE JSON_VALUE(doc, '$.status' RETURNING Utf8) IN $status_list
 
 -- PASSING для переменных JsonPath
 WHERE JSON_VALUE(doc, '$.x ? (@.y == $v)' RETURNING Int64 PASSING 42 AS v) = 10
@@ -192,7 +177,7 @@ WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8 DEFAULT "x" ON ERROR) = "y"
 -- Типы даты/времени
 WHERE JSON_VALUE(doc, '$.ts' RETURNING Timestamp) = ...
 
--- RETURNING Bool с операторами сравнения (кроме неявного = true)
+-- RETURNING Bool с операторами сравнения
 WHERE JSON_VALUE(doc, '$.flag' RETURNING Bool) >= true
 
 -- IS NULL / IS NOT NULL — семантически противоречат индексу «существования пути»
@@ -211,74 +196,27 @@ WHERE JSON_VALUE(JSON_VALUE(doc, '$.a' RETURNING Utf8), '$.b' RETURNING Utf8) = 
 
 {% endnote %}
 
-### Обработка AND и OR на уровне SQL-запроса {#and-or}
+## Ограничения {#limitations}
 
-| Контекст | Поведение |
-|----------|-----------|
-| `AND` | Индексируемые части объединяются для проверки через индекс. Неиндексируемое условие игнорируется для построения токенов, но остаётся в пост-фильтре (например, `JSON_EXISTS(doc,'$.a') AND Data = 'x'`). |
-| `OR` | Обе ветки должны быть индексируемы; иначе вся `OR`-группа не использует индекс. |
-| `NOT` | Не индексируется. В `AND` выражение с `NOT` отбрасывается из индекса; в `OR` — вся ветка не индексируется. |
-| Смешение режимов `AND`/`OR` | При конфликте побеждает режим OR (более широкое чтение). |
+* JSON-индексы поддерживаются только для [строковых](../concepts/datamodel/table.md#row-oriented-tables) таблиц.
+* Первичный ключ таблицы должен состоять из единственной колонки типа `Uint64` (временное ограничение, будет снято в ходе дальнейшего развития).
+* В одном JSON-индексе индексируется ровно одна колонка типа `Json` или `JsonDocument`.
+* Покрывающие индексы (выражение `COVER`) для JSON-индексов не поддерживаются.
+* Пакетные операции (`BATCH UPDATE` и `BATCH DELETE`) для таблиц с JSON-индексами запрещены.
+* Значения числовых атрибутов в JSON-документе, превышающие по модулю 2⁵³, не индексируются (ограничение внутреннего представления).
 
-Пример: условие `JSON_EXISTS(doc, '$.a') OR JSON_EXISTS(doc, '$.b') AND other_col = 1` в SQL трактуется как `(JE(a) OR JE(b)) AND (other_col = 1)`; индексируемая часть — `OR` двух `JSON_EXISTS`, фильтр по `other_col` обрабатывается как пост-фильтр.
+## Рецепты {#recipes}
 
-### Передача параметров в предикаты {#parameters}
+Готовые сценарии работы с JSON-индексом:
 
-Поддерживаются:
-
-1. Прямое сравнение результата с параметром: `JSON_VALUE(doc, '$.k' RETURNING Text) = $p`
-2. Проверка наличия результата в списке значений: `JSON_VALUE(doc, '$.k' RETURNING Text) IN $list`
-3. Передача параметра через секцию PASSING: `JSON_EXISTS(doc, '$.k ? (@ == $v)' PASSING $p AS v)`
-
-Поддерживаемые типы параметров: `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`.
-
-## Примеры сценариев {#examples}
-
-### Каталог со вложенными атрибутами
-
-```yql
-CREATE TABLE `Products` (
-    `sku_id` Uint64,
-    `attrs` JsonDocument,
-    PRIMARY KEY (`sku_id`),
-    INDEX `attrs_json_idx` GLOBAL USING json ON (`attrs`)
-);
-
--- Товары с брендом и ценой в диапазоне
-SELECT `sku_id`, `attrs`
-FROM `Products` VIEW `attrs_json_idx`
-WHERE JSON_VALUE(`attrs`, '$.brand' RETURNING Utf8) = "ACME"u
-  AND JSON_VALUE(`attrs`, '$.price' RETURNING Double) BETWEEN 10.0 AND 100.0;
-
--- Есть вложенный массив с элементом, у которого stock > 0
-SELECT `sku_id`
-FROM `Products` VIEW `attrs_json_idx`
-WHERE JSON_EXISTS(`attrs`, '$.warehouses ? (@.stock > 0)');
-```
-
-### Документы с параметризованным запросом
-
-```yql
-DECLARE $user_id AS Int64;
-
-SELECT `id`, `payload`
-FROM `Documents` VIEW `json_idx`
-WHERE JSON_VALUE(`payload`, '$.owner_id' RETURNING Int64) = $user_id
-  AND JSON_EXISTS(`payload`, '$.archived ? (@ == false)');
-```
-
-### Проверка типа поля
-
-```yql
-SELECT `id`
-FROM `Documents` VIEW `json_idx`
-WHERE JSON_VALUE(`payload`, '$.data.type()' RETURNING Utf8) = "array"u;
-```
-
-Метод `.type()` в этом примере завершает построение токена на пути `$.data`; проверка строки на значение `"array"` выполняется пост-фильтром.
+* [{#T}](../recipes/json-search/json-index-quickstart.md) — быстрый старт.
+* [{#T}](../recipes/json-search/json-index-catalog.md) — каталог товаров со вложенными атрибутами.
+* [{#T}](../recipes/json-search/json-index-parameters.md) — параметризованные запросы и переменные JsonPath.
+* [{#T}](../recipes/json-search/json-index-typecheck.md) — проверка типа поля и наличия пути.
 
 ## Связанные материалы {#see-also}
 
 - [Функции для работы с JSON](../yql/reference/builtins/json.md) — `JSON_EXISTS`, `JSON_VALUE`, `JSON_QUERY`, синтаксис JsonPath.
 - [Вторичные индексы](secondary-indexes.md) — общие сведения о глобальных индексах и `VIEW`.
 - [Полнотекстовые индексы](fulltext-indexes.md) — родственный механизм инвертированного поиска по токенам.
+- [INDEX (CREATE TABLE)](../yql/reference/syntax/create_table/json_index.md) и [VIEW (JSON-индекс)](../yql/reference/syntax/select/json_index.md) — справка по синтаксису.

@@ -294,6 +294,7 @@ private:
     TTopicSessionMetrics Metrics;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
+    bool CreateSessionScheduled = false;
 
 public:
     TTopicSession(
@@ -420,16 +421,15 @@ TTopicSession::TTopicSession(
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId);
-    LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
-        << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
+    LogPrefix = LogPrefix + " " + SelfId().ToString() + " [" + TopicPathPartition + "] ";
+    LOG_ROW_DISPATCHER_DEBUG("Bootstrap, Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
     Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
 }
 
 void TTopicSession::PassAway() {
-    LOG_ROW_DISPATCHER_DEBUG("PassAway");
+    LOG_ROW_DISPATCHER_INFO("PassAway");
     StopReadSession();
     FormatHandlers.clear();
     TBase::PassAway();
@@ -539,6 +539,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
+    CreateSessionScheduled = false;
     CreateTopicSession();
 }
 
@@ -754,6 +755,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 }
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {
+    LOG_ROW_DISPATCHER_TRACE("StartClientSession, read actor id " << info.ReadActorId << ", offset " << info.GetNextMessageOffset());
     if (ReadSession) {
         auto offset = info.GetNextMessageOffset();
         if (offset && offset <= LastMessageOffset) {
@@ -766,6 +768,10 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
     }
 
     if (!ReadSession) {
+        if (CreateSessionScheduled) {
+            return;
+        }
+        CreateSessionScheduled = true;
         Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
     }
 }

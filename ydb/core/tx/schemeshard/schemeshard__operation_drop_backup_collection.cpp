@@ -294,25 +294,25 @@ class TDropBackupCollection : public TSubOperation {
     bool HasActiveBackupOperations(const TPath& bcPath, TOperationContext& context) const {
         // Check if there are any active backup or restore operations for this collection
         const TPathId& bcPathId = bcPath.Base()->PathId;
-        
+
         // Check all active transactions to see if any involve this backup collection
         for (const auto& [txId, txState] : context.SS->TxInFlight) {
             if (txState.TxType == TTxState::TxBackup ||
                 txState.TxType == TTxState::TxRestore ||
                 txState.TxType == TTxState::TxCopyTable ||
                 txState.TxType == TTxState::TxReadOnlyCopyColumnTable) {
-                
+
                 // Check if the transaction target is this backup collection or a child path
                 const TPathId& targetPathId = txState.TargetPathId;
                 if (targetPathId == bcPathId) {
                     return true;
                 }
-                
+
                 // Check if target is a child of this backup collection
                 if (context.SS->PathsById.contains(targetPathId)) {
                     auto targetPath = context.SS->PathsById.at(targetPathId);
                     TPathId currentId = targetPathId;
-                    
+
                     // Walk up the path hierarchy to check if bcPathId is an ancestor
                     while (currentId && context.SS->PathsById.contains(currentId)) {
                         if (currentId == bcPathId) {
@@ -324,7 +324,23 @@ class TDropBackupCollection : public TSubOperation {
                 }
             }
         }
-        
+
+        for (const auto& [opId, longOp] : context.SS->LongIncrementalRestoreOps) {
+            auto longOpPathId = TPathId(longOp.GetBackupCollectionPathId().GetOwnerId(),
+                                        longOp.GetBackupCollectionPathId().GetLocalId());
+            if (longOpPathId != bcPathId) {
+                continue;
+            }
+            auto it = context.SS->IncrementalRestoreStates.find(ui64(opId.GetTxId()));
+            if (it == context.SS->IncrementalRestoreStates.end()) {
+                return true;
+            }
+            if (it->second.State != TIncrementalRestoreState::EState::Completed &&
+                it->second.State != TIncrementalRestoreState::EState::Failed) {
+                return true;
+            }
+        }
+
         return false;
     }
 

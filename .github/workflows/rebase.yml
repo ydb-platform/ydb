@@ -4,7 +4,7 @@
 # Preflight checks require a repository collaborator to trigger rebase and,
 # for fork PRs, maintainer_can_modify (Allow edits from maintainers).
 # Do NOT add steps that execute untrusted code from the PR head.
-name: rebase
+name: Rebase user branch
 
 on:
   pull_request_target:

@@ -25,19 +25,25 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
             auto countSpans = [&] {
                 ui32 dsproxySpans = 0;
                 ui32 backpressureSpans = 0;
-                for (const auto& span : uploader->Spans) {
-                    if (span.name().find("DSProxy") != std::string::npos) {
-                        ++dsproxySpans;
-                    } else if (span.name().find("Backpressure") != std::string::npos) {
-                        ++backpressureSpans;
+                ui32 vdiskSpans = 0;
+                for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+                    NWilson::TFakeWilsonUploader* uploader = Env->FakeWilsonUploaders[nodeId];
+                    for (const auto& span : uploader->Spans) {
+                        if (span.name().find("DSProxy") != std::string::npos) {
+                            ++dsproxySpans;
+                        } else if (span.name().find("Backpressure") != std::string::npos) {
+                            ++backpressureSpans;
+                        } else if (span.name().find("VDisk") != std::string::npos) {
+                            ++vdiskSpans;
+                        }
                     }
                 }
-                return std::pair<ui32, ui32>{dsproxySpans, backpressureSpans};
+                return std::tuple<ui32, ui32, ui32>{dsproxySpans, backpressureSpans, vdiskSpans};
             };
 
             ui8 verbosity = 1;
             ui32 ttl = Max<ui32>();
-            auto [dsproxySpans1, backpressureSpans1] = countSpans();
+            auto [dsproxySpans1, backpressureSpans1, vdiskSpans1] = countSpans();
 
             TString data = MakeData(1_MB);
             TLogoBlobID blobId(1, 1, 1, 1, data.size(), 123);
@@ -54,10 +60,11 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
             });
             Env->Sim(TDuration::Seconds(10));
 
-            auto [dsproxySpans2, backpressureSpans2] = countSpans();
+            auto [dsproxySpans2, backpressureSpans2, vdiskSpans2] = countSpans();
 
             UNIT_ASSERT_VALUES_UNEQUAL_C(dsproxySpans1, dsproxySpans2, uploader->PrintTraces());
             UNIT_ASSERT_VALUES_UNEQUAL_C(backpressureSpans1, backpressureSpans2, uploader->PrintTraces());
+            UNIT_ASSERT_VALUES_UNEQUAL_C(vdiskSpans1, vdiskSpans2, uploader->PrintTraces());
         }
     };
 

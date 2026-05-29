@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 
 namespace NKikimr {
 
@@ -25,7 +26,7 @@ namespace NKikimr {
         TQueryResultSizeTracker ResultSize;
         const TActorId ReplSchedulerId;
 
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
 
         TLevelIndexQueryBase(
                 std::shared_ptr<TQueryCtx> &queryCtx,
@@ -45,7 +46,7 @@ namespace NKikimr {
             , ShowInternals(Record.GetShowInternals())
             , Result(std::move(result))
             , ReplSchedulerId(replSchedulerId)
-            , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name)
+            , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name, NWilson::EFlags::AUTO_END)
         {
             if (Span) {
                 Span.Attribute("event", TEvBlobStorage::TEvVGet::ToString(BatcherCtx->OrigEv->Get()->Record));

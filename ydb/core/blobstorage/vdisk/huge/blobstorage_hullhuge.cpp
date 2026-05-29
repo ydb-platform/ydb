@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/wilson/wilson_with_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -177,7 +178,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         ui64 WriteId;
         TDiskPart DiskAddr;
         static void *Cookie;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
 
         friend class TActorBootstrapped<THullHugeBlobWriter>;
 
@@ -293,7 +294,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         ui64 Lsn;
         std::shared_ptr<THullHugeKeeperPersState> Pers;
         ui32 ChunkId = 0;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
         ui32 SlotSize;
 
         friend class TActorBootstrapped<THullHugeBlobChunkAllocator>;

@@ -107,6 +107,17 @@ TStatus ConstraintDqPhyHashCombine(const TExprNode::TPtr& input, TExprContext& c
     return TStatus::Ok;
 }
 
+TStatus ConstrainDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+        return status;
+    }
+
+    TCopyConstraint<TStreamingConstraintNode>::Do(input->Head(), input);
+    return TStatus::Ok;
+}
+
 class TDqConstraintsTransformer final : public TVisitorTransformerBase {
 public:
     explicit TDqConstraintsTransformer(bool disableChecks)
@@ -145,6 +156,7 @@ public:
         }, Hndl(&ConstraintDqPrecompute));
         AddHandler({TDqPhyLength::CallableName()}, Hndl(&ConstraintDqPhyLength));
         AddHandler({TDqPhyHashCombine::CallableName()}, Hndl(&ConstraintDqPhyHashCombine));
+        AddHandler({TDqPhyWatermarkGenerator::CallableName()}, Hndl(&ConstrainDqWatermarkGenerator));
     }
 
 private:

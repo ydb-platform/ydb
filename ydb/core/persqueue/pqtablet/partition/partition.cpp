@@ -2134,16 +2134,14 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     if (TotalPartitionWriteSpeed) {
         const ui64 avgQuotaBytes = AvgQuotaBytes[1].GetValue();
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE,
-            avgQuotaBytes * 100 / TotalPartitionWriteSpeed / 60);
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE, avgQuotaBytes);
         bytesThrottledMicroseconds = avgQuotaBytes * 1000000 / TotalPartitionWriteSpeed / 60;
         hasWriteQuotaUsage = true;
     }
 
     if (TotalPartitionWriteSpeedInMessages) {
         const ui64 avgQuotaMessages = AvgQuotaMessages.GetValue();
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE,
-            avgQuotaMessages * 100 / TotalPartitionWriteSpeedInMessages / 60);
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, avgQuotaMessages);
         messagesThrottledMicroseconds = avgQuotaMessages * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
         hasWriteQuotaUsage = true;
     }

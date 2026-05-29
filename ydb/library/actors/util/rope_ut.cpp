@@ -103,6 +103,30 @@ Y_UNIT_TEST_SUITE(TRope) {
         UNIT_ASSERT(!emptyFromTrimFront.Begin().Valid());
     }
 
+    Y_UNIT_TEST(SkipsZeroSizeSharedDataAndContiguousChunk) {
+        TRope emptyFromSharedData(NActors::TSharedData{});
+        UNIT_ASSERT(!emptyFromSharedData);
+        UNIT_ASSERT(!emptyFromSharedData.Begin().Valid());
+        UNIT_ASSERT_VALUES_EQUAL(emptyFromSharedData.GetSize(), 0);
+
+        auto emptyChunk = MakeIntrusive<TRopeStringBackend>(TString{});
+        TRope emptyFromChunk(emptyChunk);
+        UNIT_ASSERT(!emptyFromChunk);
+        UNIT_ASSERT(!emptyFromChunk.Begin().Valid());
+        UNIT_ASSERT_VALUES_EQUAL(emptyFromChunk.GetSize(), 0);
+
+        TRope emptyFromRange(emptyFromChunk.Begin(), emptyFromChunk.End());
+        UNIT_ASSERT(!emptyFromRange);
+        UNIT_ASSERT(!emptyFromRange.Begin().Valid());
+        UNIT_ASSERT_VALUES_EQUAL(emptyFromRange.GetSize(), 0);
+
+        TRope rope(TString("payload"));
+        rope.Insert(rope.Begin(), TRope(NActors::TSharedData{}));
+        rope.Insert(rope.End(), TRope(emptyChunk));
+        AssertNoEmptyChunks(rope);
+        UNIT_ASSERT_VALUES_EQUAL(RopeToString(rope), "payload");
+    }
+
     Y_UNIT_TEST(StringCompare) {
         TRope rope = CreateRope(Text, 10);
         UNIT_ASSERT_EQUAL(rope, Text);

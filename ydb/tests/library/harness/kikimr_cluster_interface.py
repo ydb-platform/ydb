@@ -153,52 +153,42 @@ class KiKiMRClusterInterface(object):
             expected_computational_units=1,
             token=token,
         )
-        # Console marks tenant RUNNING right after subdomain confirmation, before
-        # dyn-node finishes bringing up gRPC + publishing endpoint to Discovery.
-        # Compile cache warmup gates both, so callers may otherwise hit
-        # TRANSPORT_UNAVAILABLE. Wait for ListEndpoints to advertise every slot.
-        self._wait_tenant_endpoints(database_name, timeout_seconds=endpoints_timeout_seconds)
+        # CMS marks tenant RUNNING before the dyn node publishes gRPC endpoints
+        # (further delayed by compile-cache warmup gating publication). Also
+        # covers serverless routing via hostel endpoints. Driver wait() is the
+        # only check that captures all of these uniformly.
+        self._wait_tenant_usable(
+            database_name, timeout_seconds=endpoints_timeout_seconds, token=token,
+        )
 
-    def _wait_tenant_endpoints(self, database_name, timeout_seconds=240):
-        expected_ports = {
-            slot.grpc_port for slot in self.slots.values()
-            if getattr(slot, '_tenant_affiliation', None) == database_name
-        }
-        if not expected_ports:
-            return
-
+    def _wait_tenant_usable(self, database_name, timeout_seconds=240, token=None):
         entry_node = self.nodes[1]
         driver_config = ydb.DriverConfig(
             "%s:%d" % (entry_node.host, entry_node.grpc_port),
             database_name,
+            auth_token=token,
         )
-        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
-        last_seen = {"ports": None, "debug": None}
 
-        def predicate():
+        deadline = time.time() + timeout_seconds
+        last_error = None
+        while time.time() < deadline:
+            driver = ydb.Driver(driver_config)
             try:
-                resolved = resolver.resolve()
-                if resolved is None:
-                    return False
-                ports = {ep.port for ep in resolved.endpoints}
-                last_seen["ports"] = sorted(ports)
-                return expected_ports <= ports
+                try:
+                    # fail_fast=True: propagate real error instead of opaque timeout.
+                    driver.wait(timeout=5, fail_fast=True)
+                    return
+                except Exception as exc:
+                    last_error = exc
             finally:
-                debug_getter = getattr(resolver, "debug_details", None)
-                if callable(debug_getter):
-                    try:
-                        last_seen["debug"] = debug_getter()
-                    except Exception:
-                        pass
+                driver.stop()
+            time.sleep(0.5)
 
-        if not wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=0.5):
-            raise AssertionError(
-                "Discovery did not advertise all tenant slots within {}s for {}: "
-                "expected {}, last seen {}, resolver details {!r}".format(
-                    timeout_seconds, database_name,
-                    sorted(expected_ports), last_seen["ports"], last_seen["debug"],
-                )
+        raise AssertionError(
+            "Tenant {} did not become usable within {}s; last error: {!r}".format(
+                database_name, timeout_seconds, last_error,
             )
+        )
 
     def __wait_tenant_up(
             self,

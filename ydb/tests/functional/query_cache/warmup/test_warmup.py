@@ -164,6 +164,16 @@ class CompileCacheView:
             logger.warning("Failed to get counters from node %d: %s", node.node_id, e)
         return {}
 
+    @staticmethod
+    def get_warmup_window_counters(node):
+        """Window-attribution counters, missing keys normalised to 0."""
+        counters = CompileCacheView.get_warmup_counters(node)
+        return {
+            "hits": counters.get("Warmup/HitsInWindow", 0),
+            "misses": counters.get("Warmup/MissesInWindow", 0),
+            "saved_ms": counters.get("Warmup/SavedCompileMs", 0),
+        }
+
     @classmethod
     def wait_for_warmup_finished(cls, node, timeout=60):
         """Poll warmup counters until compilation stabilizes."""
@@ -337,6 +347,24 @@ class TestWarmupBasic:
         logger.info("[%s] Node %d: cache hit %d/%d", label, node.node_id, from_cache, total)
         assert from_cache == total, f"[{label}] Expected all {total} from cache, got {from_cache}/{total}"
 
+    def _trigger_client_hits(self, node, use_query_api):
+        # _assert_cache_hit in the Table API path only reads sysview; we need
+        # actual client execution against `node` for hit counters to move.
+        self.cache.populate_cache_on_nodes(
+            [node.node_id], use_query_api=use_query_api,
+        )
+
+    def _assert_warmup_attribution_hits(self, node, label):
+        # SavedCompileMs is a soft check: trivial SELECTs may round to 0ms.
+        ctrs = CompileCacheView.get_warmup_window_counters(node)
+        logger.info("[%s] Node %d warmup window counters: %s", label, node.node_id, ctrs)
+        assert ctrs["hits"] > 0, (
+            f"[{label}] Warmup/HitsInWindow must be > 0 after client hit warmup entries, got {ctrs}"
+        )
+        assert ctrs["saved_ms"] >= 0, (
+            f"[{label}] Warmup/SavedCompileMs must be present (>= 0), got {ctrs}"
+        )
+
     def test_warmup_basic(self):
         """Combined test: Table API warmup, Query API warmup, simultaneous restart,
         concurrent user queries"""
@@ -358,12 +386,16 @@ class TestWarmupBasic:
         self._restart_node(node3)
         self._assert_warmup(node3, "TableAPI")
         self._assert_cache_hit(table_queries, node3, "TableAPI", use_query_api=False)
+        self._trigger_client_hits(node3, use_query_api=False)
+        self._assert_warmup_attribution_hits(node3, "TableAPI")
 
         # --- Scenario 2: Query API warmup ---
         logger.info("SCENARIO 2/4: Query API warmup (restart node 3)")
         self._restart_node(node3)
         self._assert_warmup(node3, "QueryAPI")
+        # Query API path already executes the queries -> no extra trigger needed.
         self._assert_cache_hit(query_queries, node3, "QueryAPI", use_query_api=True)
+        self._assert_warmup_attribution_hits(node3, "QueryAPI")
 
         # --- Scenario 3: Simultaneous restart of nodes 2 + 3 ---
         logger.info("SCENARIO 3/4: Simultaneous restart (nodes 2, 3)")
@@ -393,11 +425,13 @@ class TestWarmupBasic:
             database="/Root",
         )
         user_driver.wait(timeout=20)
+        # Unique literal -> guaranteed miss for Warmup/MissesInWindow.
+        fresh_query = "SELECT 7919 + 65537 AS unique_warmup_miss_probe"
         try:
             user_pool = ydb.SessionPool(user_driver)
             try:
                 user_ok = 0
-                user_queries = ["SELECT 1 + 1", "SELECT 2 * 3", "SELECT 'hello'"]
+                user_queries = ["SELECT 1 + 1", "SELECT 2 * 3", "SELECT 'hello'", fresh_query]
                 for q in user_queries:
                     try:
                         user_pool.retry_operation_sync(
@@ -416,9 +450,20 @@ class TestWarmupBasic:
         finally:
             user_driver.stop()
 
-        logger.info("[Concurrent] User queries OK: %d/3", user_ok)
-        assert user_ok == 3, f"[Concurrent] Expected 3 user queries OK, got {user_ok}"
+        logger.info("[Concurrent] User queries OK: %d/%d", user_ok, len(user_queries))
+        assert user_ok == len(user_queries), (
+            f"[Concurrent] Expected {len(user_queries)} user queries OK, got {user_ok}"
+        )
         self._assert_warmup(node3, "Concurrent")
+
+        # Only the fresh probe is guaranteed to land on node3; the 3 reused
+        # queries may route elsewhere, so assert misses only.
+        ctrs = CompileCacheView.get_warmup_window_counters(node3)
+        logger.info("[Concurrent] Node %d warmup window counters: %s", node3.node_id, ctrs)
+        assert ctrs["misses"] > 0, (
+            f"[Concurrent] Fresh query inside observation window must bump "
+            f"Warmup/MissesInWindow, got {ctrs}"
+        )
 
         logger.info("ALL 4 BASIC SCENARIOS PASSED")
 
@@ -610,6 +655,14 @@ class TestWarmupSingleNode:
         finally:
             pool.stop()
 
+        # No warmup inserts happened -> observation window must stay closed,
+        # the client query above must not have moved any window counters.
+        window = CompileCacheView.get_warmup_window_counters(node)
+        logger.info("[SingleNode] window counters after client query: %s", window)
+        assert window["hits"] == 0 and window["misses"] == 0, (
+            f"[SingleNode] Observation window must not open without warmup inserts, got {window}"
+        )
+
         logger.info("SingleNode skip scenario PASSED")
 
 
@@ -672,12 +725,21 @@ class TestWarmupMultiNodeColdStart:
         finally:
             pool.stop()
 
+        # No warmup inserts anywhere => window must stay closed on every node.
+        for nid in sorted(self.cluster.nodes.keys()):
+            node = self.cluster.nodes[nid]
+            window = CompileCacheView.get_warmup_window_counters(node)
+            logger.info("[ColdStart] node %d window counters: %s", nid, window)
+            assert window["hits"] == 0 and window["misses"] == 0, (
+                f"[ColdStart] node {nid}: observation window must not open without "
+                f"warmup inserts, got {window}"
+            )
+
         logger.info("MultiNodeColdStart no-queries scenario PASSED")
 
 
 def _is_tcp_port_open(host, port, timeout=0.4):
-    """True iff a TCP connection to host:port can be established within timeout.
-    False on connection refused, timeout or any socket error."""
+    """True iff host:port accepts a TCP connection within timeout."""
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True

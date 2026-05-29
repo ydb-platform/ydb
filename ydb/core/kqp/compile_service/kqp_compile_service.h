@@ -19,6 +19,14 @@ enum class ECompileActorAction {
     SPLIT,
 };
 
+// How a cache lookup participates in warmup observation-window accounting.
+// Default `None` is fail-safe: new call sites don't pollute counters.
+enum class EWarmupAttributionMode {
+    None,    // no side effects, no counters
+    Client,  // consume pending mark on hit (+inc hit/miss counters)
+    Warmup,  // mark uid on hit (validation), nothing else
+};
+
 class TKqpQueryCacheSnapshot {
 public:
     struct TEntry {
@@ -65,11 +73,19 @@ private:
 // performance. Might consider RW lock again in future.
 class TKqpQueryCache: public TThrRefBase {
 public:
+    // Opens lazily on first non-warmup access with non-empty pending set,
+    // closes once after the duration (no timer, checked on access).
+    static constexpr TDuration WarmupObservationWindow = TDuration::Minutes(5);
+
     TKqpQueryCache(size_t size, TDuration ttl)
         : List(size)
         , Ttl(ttl) {}
 
     bool Insert(const TKqpCompileResult::TConstPtr& compileResult, bool isEnableAstCache, bool isPerStatementExecution);
+
+    // Idempotent; no-op once the window is closed.
+    void MarkWarmupInsert(const TString& uid);
+
     void AttachReplayMessage(const TString uid, TString replayMessage);
 
     TString ReplayMessageByUid(const TString uid, TDuration timeout);
@@ -86,7 +102,8 @@ public:
         return FindByQueryImpl(query, promote);
     }
 
-    // find by either uid or query
+    // find by either uid or query.
+    // warmupAttribution defaults to None so new callers don't pollute counters.
     TKqpCompileResult::TConstPtr Find(
         const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>& query,
@@ -96,9 +113,15 @@ public:
         TIntrusivePtr<TKqpCounters> counters,
         TIntrusivePtr<TKqpDbCounters>& dbCounters,
         const TActorId& sender,
-        const TActorContext& ctx);
+        const TActorContext& ctx,
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
-    TKqpCompileResult::TConstPtr FindByAst(const TKqpQueryId& query, const NYql::TAstParseResult& ast, bool promote);
+    TKqpCompileResult::TConstPtr FindByAst(
+        const TKqpQueryId& query,
+        const NYql::TAstParseResult& ast,
+        bool promote,
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None,
+        TIntrusivePtr<TKqpCounters> counters = nullptr);
 
     bool EraseByUid(const TString& uid) {
         TGuard<TAdaptiveLock> guard(Lock);
@@ -177,6 +200,42 @@ private:
 
     TKqpQueryCacheSnapshot Snapshot;
     TAdaptiveLock Lock;
+
+    // Guarded by Lock (except the two atomics below).
+    THashSet<TString> WarmupPendingHitUids;
+    TInstant WarmupWindowStart = TInstant::Zero();
+    bool WarmupWindowOpened = false;
+
+    // Lock-free fast-path: in steady state (window closed) accounting helpers
+    // bail out before touching Lock. Written under Lock, read without it.
+    TAtomic WarmupWindowClosedAtomic = 0;
+    TAtomic WarmupHasPendingAtomic = 0;
+
+    // Must be called under Lock. May transition open -> closed on expiry.
+    bool RefreshWarmupWindowStateImpl();
+
+    bool WarmupAccountingIsNoopFast() const {
+        return AtomicGet(WarmupWindowClosedAtomic) || !AtomicGet(WarmupHasPendingAtomic);
+    }
+
+    bool TryConsumeWarmupHitImpl(const TString& uid) {
+        if (!RefreshWarmupWindowStateImpl()) {
+            return false;
+        }
+        return WarmupPendingHitUids.erase(uid) != 0;
+    }
+    bool ShouldCountWarmupMissImpl() {
+        return RefreshWarmupWindowStateImpl();
+    }
+
+    void AccountWarmupHitImpl(
+        const TKqpCompileResult::TConstPtr& compileResult,
+        EWarmupAttributionMode mode,
+        const TIntrusivePtr<TKqpCounters>& counters);
+
+    void AccountWarmupMissImpl(
+        EWarmupAttributionMode mode,
+        const TIntrusivePtr<TKqpCounters>& counters);
 };
 
 using TKqpQueryCachePtr = TIntrusivePtr<TKqpQueryCache>;

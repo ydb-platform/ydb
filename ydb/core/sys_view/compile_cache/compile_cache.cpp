@@ -235,6 +235,14 @@ private:
     void SkipCurrentNode(const char* reason, ui32 nodeId) {
         LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Skipping compile cache scan for node_id=" << nodeId << ": " << reason);
+
+        if (auto& counters = AppData()->Counters) {
+            counters
+                ->GetSubgroup("counters", "kqp")
+                ->GetCounter("CompileCacheView/PeerScanWarnings", true)
+                ->Inc();
+        }
+
         CancelNodeRequestTimeout();
         PendingRequest = false;
         ContinuationToken.clear();
@@ -359,7 +367,7 @@ private:
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
 
-        // Per-node failure (unavailable peer, tenant mismatch on a node, etc.) — skip and continue.
+        // Per-node failure (peer down / tenant mismatch) — skip.
         if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             SkipCurrentNode("node returned error", record.GetNodeId());
             return;

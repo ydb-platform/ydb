@@ -471,8 +471,8 @@ private:
         ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
             << Ydb::StatusIds::StatusCode_Name(status));
 
-        // Skip sending empty result on success unless there are issues (e.g. partial federated scan warnings).
-        if (status != Ydb::StatusIds::SUCCESS || message.size() > 0) {
+        // Skip sending empty result in case of success status - simplify client logic
+        if (status != Ydb::StatusIds::SUCCESS) {
             TString out;
             Ydb::Table::ExecuteScanQueryPartialResponse response;
             response.set_status(status);

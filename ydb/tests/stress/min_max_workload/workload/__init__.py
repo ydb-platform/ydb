@@ -196,7 +196,6 @@ class MinMaxWorkload:
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN)
         """)
-        
 
         for name, *_ in COLUMNS:
             try:
@@ -217,7 +216,7 @@ class MinMaxWorkload:
             with self._lock:
                 start = self._next_id
                 self._next_id += step
-            sleep(0.1)
+            time.sleep(0.1)
             query = f"""
                 $data = ListMap(ListFromRange({start}L, {start + self.batch_size}L), ($x) -> {{
                     RETURN AsStruct(
@@ -238,7 +237,7 @@ class MinMaxWorkload:
         while not self._stop.is_set():
             with self._lock:
                 max_id = self._next_id
-            sleep(1)
+            time.sleep(1)
             if max_id < self.batch_size * 3:
                 time.sleep(2)
                 continue

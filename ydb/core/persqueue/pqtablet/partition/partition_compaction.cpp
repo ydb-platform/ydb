@@ -1,4 +1,6 @@
 #include "partition.h"
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include <util/string/escape.h>
@@ -668,7 +670,7 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
             if (!CompactionBlobEncoder.NewHead.GetBatches().empty() && CompactionBlobEncoder.NewHead.GetLastBatch().HasOffsetDelta()) {
                 offsetDelta = (offsetDelta.GetOrElse(0)) + CompactionBlobEncoder.NewHead.GetOffsetDelta();
             }
-            if (offsetDelta) {
+            if (offsetDelta && HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()) {
                 key.SetOffsetDelta(*offsetDelta);
             }
         } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead

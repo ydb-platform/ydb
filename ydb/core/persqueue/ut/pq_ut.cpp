@@ -120,6 +120,7 @@ Y_UNIT_TEST(BatchedMessagesWriteRead) {
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -159,6 +160,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -206,6 +208,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
 
     // Make the written data blobs smaller than the low watermark so forced compaction reads
     // and rewrites them instead of just renaming already compacted blobs.
@@ -267,6 +270,7 @@ Y_UNIT_TEST(BatchedMessagesFullDuplicateIsNotPartialOverlap) {
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -285,6 +289,7 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 

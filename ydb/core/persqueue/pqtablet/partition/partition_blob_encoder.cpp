@@ -1,6 +1,8 @@
 #include "partition_blob_encoder.h"
 #include "partition_util.h"
 
+#include <ydb/core/base/appdata.h>
+
 namespace NKikimr::NPQ {
 
 TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite)
@@ -381,7 +383,11 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
 namespace {
 
 TKey WithHeadOffsetDelta(TKey&& key, const THead& head) {
-    if (!head.GetBatches().empty() && head.GetLastBatch().HasOffsetDelta()) {
+    if (HasAppData()
+        && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()
+        && !head.GetBatches().empty()
+        && head.GetLastBatch().HasOffsetDelta())
+    {
         key.SetOffsetDelta(head.GetOffsetDelta());
     }
     return std::move(key);

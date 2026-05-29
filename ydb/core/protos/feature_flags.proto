@@ -308,4 +308,5 @@ message TFeatureFlags {
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
     optional bool EnableTopicMessagesBatching = 271 [default = false];
+    optional bool EnableTopicWriteOffsetDeltaInKeys = 272 [default = false];
 }

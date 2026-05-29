@@ -5,11 +5,29 @@
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
 namespace NPQ {
 
 namespace {
+
+bool CanWriteOffsetDeltaInKeys() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
+}
+
+bool HasOffsetDeltaInBlobs(const std::deque<TClientBlob>& blobs) {
+    for (const auto& blob : blobs) {
+        if ((!blob.PartData || blob.PartData->PartNo == 0) && blob.BatchMessageCount >= 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HasOffsetDeltaInHead(const THead& head) {
+    return !head.GetBatches().empty() && head.GetLastBatch().HasOffsetDelta();
+}
 
 }
 
@@ -594,7 +612,18 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     AFL_ENSURE(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
-    ui64 offsetDelta = GetOffsetDelta();
+    const bool hasOffsetDelta =
+        (GlueHead && HasOffsetDeltaInHead(Head)) ||
+        (GlueNewHead && HasOffsetDeltaInHead(NewHead)) ||
+        HasOffsetDeltaInBlobs(Blobs);
+    const bool writeOffsetDelta = CanWriteOffsetDeltaInKeys() && hasOffsetDelta;
+    const ui64 offsetDelta = writeOffsetDelta ? GetOffsetDelta() : 0;
+    TMaybe<ui32> keyOffsetDelta;
+    if (offsetDelta > 0) {
+        AFL_ENSURE(offsetDelta <= Max<ui32>());
+        keyOffsetDelta = static_cast<ui32>(offsetDelta);
+    }
+
     TKey tmpKey, dataKey;
     if (FastWrite) {
         tmpKey = TKey::ForFastWrite(
@@ -604,7 +633,7 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
             StartPartNo,
             count,
             InternalPartsCount,
-            offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
+            keyOffsetDelta);
         dataKey = TKey::ForFastWrite(
             TKeyPrefix::TypeData,
             Partition,
@@ -612,10 +641,10 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
             StartPartNo,
             count,
             InternalPartsCount,
-            offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
+            keyOffsetDelta);
     } else {
-        tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
-        dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
+        tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, keyOffsetDelta);
+        dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, keyOffsetDelta);
     }
 
     StartOffset = Offset;

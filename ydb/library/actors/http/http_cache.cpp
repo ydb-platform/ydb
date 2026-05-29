@@ -7,13 +7,115 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/http/http.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/json/json_writer.h>
 #include <util/digest/multi.h>
 #include <util/generic/queue.h>
 #include <util/string/cast.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <algorithm>
+
 namespace NHttp {
+
+static i64 InstantToMicros(TInstant instant) {
+    return static_cast<i64>(instant.GetValue());
+}
+
+static TString InstantToString(TInstant instant) {
+    return instant ? instant.ToIsoStringLocal() : TString();
+}
+
+static i64 DurationToMicros(TDuration duration) {
+    return static_cast<i64>(duration.GetValue());
+}
+
+static double DurationToSeconds(TDuration duration) {
+    const i64 micros = duration.GetValue();
+    const i64 roundedMillis = micros >= 0 ? (micros + 500) / 1000 : (micros - 500) / 1000;
+    return static_cast<double>(roundedMillis) / 1000.0;
+}
+
+struct TCacheStats {
+    TString Id;
+    TString Host;
+    TString Url;
+    ui64 Hits = 0;
+    ui64 Misses = 0;
+    bool HasLastFetchDuration = false;
+    TDuration LastFetchDuration;
+};
+
+static void FillCacheStatsJson(NJson::TJsonValue& result, const THashMap<TString, TCacheStats>& stats) {
+    ui64 hits = 0;
+    ui64 misses = 0;
+    NJson::TJsonValue& statsJson = result["CacheStats"];
+    statsJson.SetType(NJson::JSON_ARRAY);
+    for (const auto& itemPair : stats) {
+        const TCacheStats& item = itemPair.second;
+        hits += item.Hits;
+        misses += item.Misses;
+        NJson::TJsonValue& itemJson = statsJson.AppendValue({});
+        if (item.Id) {
+            itemJson["Id"] = item.Id;
+        }
+        if (item.Host) {
+            itemJson["Host"] = item.Host;
+        }
+        itemJson["Url"] = item.Url;
+        itemJson["Hits"] = static_cast<i64>(item.Hits);
+        itemJson["Misses"] = static_cast<i64>(item.Misses);
+        if (item.HasLastFetchDuration) {
+            itemJson["LastFetchDurationSec"] = DurationToSeconds(item.LastFetchDuration);
+        }
+    }
+    result["CacheHits"] = static_cast<i64>(hits);
+    result["CacheMisses"] = static_cast<i64>(misses);
+}
+
+static void FillCachePolicyJson(NJson::TJsonValue& json, const TCachePolicy& policy) {
+    json["TimeToExpireUs"] = DurationToMicros(policy.TimeToExpire);
+    json["TimeToRefreshUs"] = DurationToMicros(policy.TimeToRefresh);
+    json["PaceToRefreshUs"] = DurationToMicros(policy.PaceToRefresh);
+    json["KeepOnError"] = policy.KeepOnError;
+    json["DiscardCache"] = policy.DiscardCache;
+    json["RetriesCount"] = static_cast<i64>(policy.RetriesCount);
+    json["HeadersToCacheKey"].SetType(NJson::JSON_ARRAY);
+    for (const TString& header : policy.HeadersToCacheKey) {
+        json["HeadersToCacheKey"].AppendValue(header);
+    }
+    json["StatusesToRetry"].SetType(NJson::JSON_ARRAY);
+    for (const TString& status : policy.StatusesToRetry) {
+        json["StatusesToRetry"].AppendValue(status);
+    }
+}
+
+template <typename TRequestPtr>
+static void FillRequestJson(NJson::TJsonValue& json, const TRequestPtr& request) {
+    if (!request) {
+        json.SetType(NJson::JSON_NULL);
+        return;
+    }
+    json["Method"] = TString(request->Method);
+    json["Host"] = TString(request->Host);
+    json["Url"] = TString(request->URL);
+    json["Uri"] = request->GetURI();
+    json["ContentLength"] = TString(request->ContentLength);
+    json["BodySize"] = static_cast<i64>(request->Body.size());
+}
+
+template <typename TResponsePtr>
+static void FillResponseJson(NJson::TJsonValue& json, const TResponsePtr& response) {
+    if (!response) {
+        json.SetType(NJson::JSON_NULL);
+        return;
+    }
+    json["Status"] = TString(response->Status);
+    json["Message"] = TString(response->Message);
+    json["ContentLength"] = TString(response->ContentLength);
+    json["BodySize"] = static_cast<i64>(response->Body.size());
+    json["Size"] = static_cast<i64>(response->Size());
+}
 
 static bool StatusSuccess(const TStringBuf& status) {
     return status.StartsWith("1") || status.StartsWith("2");
@@ -51,6 +153,9 @@ public:
         THttpOutgoingRequestPtr Request;
         THttpOutgoingRequestPtr OutgoingRequest;
         TDuration Timeout;
+        TInstant FetchStartedAt;
+        TDuration LastFetchDuration;
+        bool HasLastFetchDuration = false;
         THttpIncomingResponsePtr Response;
         TString Error;
         TVector<TRequest> Waiters;
@@ -91,6 +196,7 @@ public:
     THashMap<TCacheKey, TCacheRecord> Cache;
     TPriorityQueue<TRefreshRecord> RefreshQueue;
     THashMap<THttpOutgoingRequest*, TCacheKey> OutgoingRequests;
+    THashMap<TString, TCacheStats> CacheStats;
 
     THttpOutgoingCacheActor(const NActors::TActorId& httpProxyId, TGetCachePolicy getCachePolicy)
         : HttpProxyId(httpProxyId)
@@ -117,6 +223,34 @@ public:
 
     static TCacheKey GetCacheKey(const THttpOutgoingRequest* request, const TCachePolicy& policy) {
         return { ToString(request->Host), ToString(request->URL), GetCacheHeadersKey(request, policy) };
+    }
+
+    static TString GetCacheStatsKey(const TCacheKey& key) {
+        return key.GetId();
+    }
+
+    TCacheStats& GetCacheStats(const TCacheKey& key) {
+        TCacheStats& stats = CacheStats[GetCacheStatsKey(key)];
+        stats.Id = key.GetId();
+        stats.Host = key.Host;
+        stats.Url = key.URL;
+        return stats;
+    }
+
+    void RecordCacheHit(const TCacheKey& key) {
+        TCacheStats& stats = GetCacheStats(key);
+        ++stats.Hits;
+    }
+
+    void RecordCacheMiss(const TCacheKey& key) {
+        TCacheStats& stats = GetCacheStats(key);
+        ++stats.Misses;
+    }
+
+    void RecordCacheFetchDuration(const TCacheKey& key, TDuration duration) {
+        TCacheStats& stats = GetCacheStats(key);
+        stats.LastFetchDuration = duration;
+        stats.HasLastFetchDuration = true;
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
@@ -152,6 +286,13 @@ public:
         }
         TCacheRecord& cacheRecord = it->second;
         cacheRecord.OutgoingRequest.Reset();
+        const TInstant now = NActors::TActivationContext::Now();
+        if (cacheRecord.FetchStartedAt && now >= cacheRecord.FetchStartedAt) {
+            cacheRecord.LastFetchDuration = now - cacheRecord.FetchStartedAt;
+            cacheRecord.HasLastFetchDuration = true;
+            RecordCacheFetchDuration(key, cacheRecord.LastFetchDuration);
+        }
+        cacheRecord.FetchStartedAt = TInstant();
         for (auto& waiter : cacheRecord.Waiters) {
             THttpIncomingResponsePtr response2;
             TString error2;
@@ -190,7 +331,7 @@ public:
             ALOG_WARN(HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
         }
         ALOG_DEBUG(HttpLog, "OutgoingUpdate " << cacheRecord.GetName());
-        cacheRecord.UpdateResponse(response, event->Get()->Error, NActors::TActivationContext::Now());
+        cacheRecord.UpdateResponse(response, event->Get()->Error, now);
         RefreshQueue.push({it->first, it->second.RefreshTime});
         ALOG_DEBUG(HttpLog, "OutgoingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
     }
@@ -229,6 +370,7 @@ public:
         auto it = Cache.find(key);
         if (it != Cache.end()) {
             if (it->second.IsValid()) {
+                RecordCacheHit(key);
                 ALOG_DEBUG(HttpLog, "OutgoingRespond "
                             << it->second.GetName()
                             << " ("
@@ -257,7 +399,9 @@ public:
                 it->second.DeathTime = NActors::TActivationContext::Now() + it->second.CachePolicy.TimeToExpire; // prolong active cache items
                 return;
             }
+            RecordCacheMiss(key);
         } else {
+            RecordCacheMiss(key);
             it = Cache.emplace(key, policy).first;
             it->second.Request = event->Get()->Request;
             it->second.Timeout = event->Get()->Timeout;
@@ -271,10 +415,66 @@ public:
             it->second.OutgoingRequest = it->second.Request->Duplicate(extraHeaders);
             OutgoingRequests[it->second.OutgoingRequest.Get()] = key;
             ALOG_DEBUG(HttpLog, "OutgoingInitiate " << it->second.GetName());
+            it->second.FetchStartedAt = NActors::TActivationContext::Now();
             Send(HttpProxyId, new TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
         }
         it->second.DeathTime = NActors::TActivationContext::Now() + it->second.CachePolicy.TimeToExpire;
         it->second.Waiters.emplace_back(std::move(event), std::move(span));
+    }
+
+    void Handle(TEvHttpProxy::TEvHttpDumpStateRequest::TPtr& event) {
+        NJson::TJsonValue result;
+        result["Component"] = "outgoing_http_cache";
+        const TInstant now = NActors::TActivationContext::Now();
+        result["Now"] = InstantToString(now);
+        result["NowUs"] = InstantToMicros(now);
+        result["CacheRecordsCount"] = static_cast<i64>(Cache.size());
+        result["RefreshQueueSize"] = static_cast<i64>(RefreshQueue.size());
+        result["OutgoingRequestsCount"] = static_cast<i64>(OutgoingRequests.size());
+        FillCacheStatsJson(result, CacheStats);
+
+        NJson::TJsonValue& records = result["CacheRecords"];
+        records.SetType(NJson::JSON_ARRAY);
+        for (const auto& [key, record] : Cache) {
+            NJson::TJsonValue& recordJson = records.AppendValue({});
+            recordJson["Id"] = key.GetId();
+            recordJson["Host"] = key.Host;
+            recordJson["Url"] = key.URL;
+            const TString statsKey = GetCacheStatsKey(key);
+            auto statsIt = CacheStats.find(statsKey);
+            recordJson["Hits"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Hits) : 0;
+            recordJson["Misses"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Misses) : 0;
+            if (record.HasLastFetchDuration) {
+                recordJson["LastFetchDurationSec"] = DurationToSeconds(record.LastFetchDuration);
+            }
+            recordJson["Name"] = record.Request ? record.GetName() : TString();
+            recordJson["RefreshTime"] = InstantToString(record.RefreshTime);
+            recordJson["RefreshTimeUs"] = InstantToMicros(record.RefreshTime);
+            recordJson["DeathTime"] = InstantToString(record.DeathTime);
+            recordJson["DeathTimeUs"] = InstantToMicros(record.DeathTime);
+            recordJson["TimeoutSec"] = DurationToSeconds(record.Timeout);
+            recordJson["HasResponse"] = static_cast<bool>(record.Response);
+            recordJson["HasError"] = static_cast<bool>(record.Error);
+            recordJson["Error"] = record.Error;
+            recordJson["WaitersCount"] = static_cast<i64>(record.Waiters.size());
+            recordJson["RefreshInFlight"] = static_cast<bool>(record.OutgoingRequest);
+            FillCachePolicyJson(recordJson["CachePolicy"], record.CachePolicy);
+            FillRequestJson(recordJson["Request"], record.Request);
+            FillRequestJson(recordJson["OutgoingRequest"], record.OutgoingRequest);
+            FillResponseJson(recordJson["Response"], record.Response);
+        }
+
+        NJson::TJsonValue& outgoingRequests = result["OutgoingRequests"];
+        outgoingRequests.SetType(NJson::JSON_ARRAY);
+        for (const auto& requestPair : OutgoingRequests) {
+            const auto& key = requestPair.second;
+            NJson::TJsonValue& requestJson = outgoingRequests.AppendValue({});
+            requestJson["Host"] = key.Host;
+            requestJson["Url"] = key.URL;
+            requestJson["CacheRecordId"] = key.GetId();
+        }
+
+        Send(event->Sender, new TEvHttpProxy::TEvHttpDumpStateResponse(NJson::WriteJson(result, false, true)), 0, event->Cookie);
     }
 
     void HandleRefresh() {
@@ -290,12 +490,14 @@ public:
                     extraHeaders.Set("Accept-Encoding", {}); // disable compression for caching
                     it->second.OutgoingRequest = it->second.Request->Duplicate(extraHeaders);
                     OutgoingRequests[it->second.OutgoingRequest.Get()] = it->first;
+                    it->second.FetchStartedAt = NActors::TActivationContext::Now();
                     Send(HttpProxyId, new TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
                 } else {
                     ALOG_DEBUG(HttpLog, "OutgoingForget " << it->second.GetName());
                     if (it->second.OutgoingRequest) {
                         OutgoingRequests.erase(it->second.OutgoingRequest.Get());
                     }
+                    CacheStats.erase(GetCacheStatsKey(it->first));
                     Cache.erase(it);
                 }
             }
@@ -311,6 +513,7 @@ public:
             hFunc(TEvHttpProxy::TEvRegisterHandler, Handle);
             hFunc(TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            hFunc(TEvHttpProxy::TEvHttpDumpStateRequest, Handle);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
         }
     }
@@ -351,6 +554,9 @@ public:
         TString CacheId;
         THttpIncomingRequestPtr Request;
         TDuration Timeout;
+        TInstant FetchStartedAt;
+        TDuration LastFetchDuration;
+        bool HasLastFetchDuration = false;
         THttpOutgoingResponsePtr Response;
         TVector<TRequest> Waiters;
         ui32 Retries = 0;
@@ -417,6 +623,8 @@ public:
     THashMap<TCacheKey, TCacheRecord> Cache;
     TPriorityQueue<TRefreshRecord> RefreshQueue;
     THashMap<THttpIncomingRequest*, TCacheKey> IncomingRequests;
+    THashMap<TString, TCacheStats> CacheStats;
+    THashMap<TString, TCacheStats> HandlerStats;
 
     THttpIncomingCacheActor(const NActors::TActorId& httpProxyId, TGetCachePolicy getCachePolicy)
         : HttpProxyId(httpProxyId)
@@ -445,13 +653,24 @@ public:
         return {ToString(request->URL), GetCacheHeadersKey(request, policy)};
     }
 
-    TActorId GetRequestHandler(THttpIncomingRequestPtr request) {
-        TStringBuf url = request->URL.Before('?');
+    static TString GetCacheStatsKey(const TCacheKey& key) {
+        return key.GetId();
+    }
+
+    TCacheStats& GetCacheStats(const TCacheKey& key) {
+        TCacheStats& stats = CacheStats[GetCacheStatsKey(key)];
+        stats.Id = key.GetId();
+        stats.Url = key.URL;
+        return stats;
+    }
+
+    TString GetRequestHandlerPath(TStringBuf requestUrl) {
+        TStringBuf url = requestUrl.Before('?');
         THashMap<TString, TActorId>::iterator it;
         while (!url.empty()) {
             it = Handlers.find(url);
             if (it != Handlers.end()) {
-                return it->second;
+                return it->first;
             } else {
                 if (url.EndsWith('/')) {
                     url.Trunc(url.size() - 1);
@@ -463,6 +682,52 @@ public:
                     url = url.substr(0, pos + 1);
                 }
             }
+        }
+        return {};
+    }
+
+    void RecordCacheHit(const TCacheKey& key) {
+        TCacheStats& stats = GetCacheStats(key);
+        ++stats.Hits;
+
+        TString handlerPath = GetRequestHandlerPath(key.URL);
+        if (handlerPath) {
+            TCacheStats& handlerStats = HandlerStats[handlerPath];
+            handlerStats.Url = handlerPath;
+            ++handlerStats.Hits;
+        }
+    }
+
+    void RecordCacheMiss(const TCacheKey& key) {
+        TCacheStats& stats = GetCacheStats(key);
+        ++stats.Misses;
+
+        TString handlerPath = GetRequestHandlerPath(key.URL);
+        if (handlerPath) {
+            TCacheStats& handlerStats = HandlerStats[handlerPath];
+            handlerStats.Url = handlerPath;
+            ++handlerStats.Misses;
+        }
+    }
+
+    void RecordCacheFetchDuration(const TCacheKey& key, TDuration duration) {
+        TCacheStats& stats = GetCacheStats(key);
+        stats.LastFetchDuration = duration;
+        stats.HasLastFetchDuration = true;
+
+        TString handlerPath = GetRequestHandlerPath(key.URL);
+        if (handlerPath) {
+            TCacheStats& handlerStats = HandlerStats[handlerPath];
+            handlerStats.Url = handlerPath;
+            handlerStats.LastFetchDuration = duration;
+            handlerStats.HasLastFetchDuration = true;
+        }
+    }
+
+    TActorId GetRequestHandler(THttpIncomingRequestPtr request) {
+        TString path = GetRequestHandlerPath(request->URL);
+        if (path) {
+            return Handlers[path];
         }
         return {};
     }
@@ -481,6 +746,9 @@ public:
                 }
             } else {
                 extraHeaders.Set("traceparent", {});
+            }
+            if (!cacheRecord.FetchStartedAt) {
+                cacheRecord.FetchStartedAt = NActors::TActivationContext::Now();
             }
             cacheRecord.Request = cacheRecord.Request->Duplicate(extraHeaders);
             cacheRecord.Request->AcceptEncoding.Clear(); // disable compression
@@ -503,6 +771,7 @@ public:
             }
             Send(waiter.Request->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(response));
         }
+        CacheStats.erase(GetCacheStatsKey(it->first));
         Cache.erase(it);
     }
 
@@ -541,6 +810,7 @@ public:
 
         IncomingRequests.erase(itRequests);
         TCacheRecord& cacheRecord = it->second;
+        const TInstant now = NActors::TActivationContext::Now();
         TStringBuf status;
         TString error;
 
@@ -578,6 +848,12 @@ public:
             Send(waiter.Request->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(response2));
         }
         cacheRecord.Waiters.clear();
+        if (cacheRecord.FetchStartedAt && now >= cacheRecord.FetchStartedAt) {
+            cacheRecord.LastFetchDuration = now - cacheRecord.FetchStartedAt;
+            cacheRecord.HasLastFetchDuration = true;
+            RecordCacheFetchDuration(key, cacheRecord.LastFetchDuration);
+        }
+        cacheRecord.FetchStartedAt = TInstant();
         if (!error.empty()) {
             ALOG_WARN(HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
             if (!cacheRecord.Response) {
@@ -588,7 +864,7 @@ public:
         }
         if (cacheRecord.CachePolicy.TimeToRefresh) {
             ALOG_DEBUG(HttpLog, "IncomingUpdate " << cacheRecord.GetName());
-            cacheRecord.UpdateResponse(response, error, NActors::TActivationContext::Now());
+            cacheRecord.UpdateResponse(response, error, now);
             if (!cacheRecord.Enqueued) {
                 RefreshQueue.push({it->first, it->second.RefreshTime});
                 cacheRecord.Enqueued = true;
@@ -656,6 +932,7 @@ public:
         if (it != Cache.end() && !policy.DiscardCache) {
             it->second.UpdateExpireTime();
             if (it->second.IsValid()) {
+                RecordCacheHit(key);
                 ALOG_DEBUG(HttpLog, "IncomingRespond "
                             << it->second.GetName()
                             << " ("
@@ -683,8 +960,10 @@ public:
                 Send(event->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(response));
                 return;
             }
+            RecordCacheMiss(key);
             it->second.Waiters.emplace_back(std::move(event), std::move(span));
         } else {
+            RecordCacheMiss(key);
             it = Cache.emplace(key, policy).first;
             it->second.CacheId = key.GetId(); // for debugging
             it->second.InitRequest(event->Get()->Request);
@@ -695,6 +974,77 @@ public:
             ALOG_DEBUG(HttpLog, "IncomingInitiate " << it->second.GetName());
             SendCacheRequest(key, it->second);
         }
+    }
+
+    void Handle(TEvHttpProxy::TEvHttpDumpStateRequest::TPtr& event) {
+        NJson::TJsonValue result;
+        result["Component"] = "incoming_http_cache";
+        const TInstant now = NActors::TActivationContext::Now();
+        result["Now"] = InstantToString(now);
+        result["NowUs"] = InstantToMicros(now);
+        result["HandlersCount"] = static_cast<i64>(Handlers.size());
+        result["CacheRecordsCount"] = static_cast<i64>(Cache.size());
+        result["RefreshQueueSize"] = static_cast<i64>(RefreshQueue.size());
+        result["IncomingRequestsCount"] = static_cast<i64>(IncomingRequests.size());
+        FillCacheStatsJson(result, CacheStats);
+
+        NJson::TJsonValue& handlers = result["Handlers"];
+        handlers.SetType(NJson::JSON_ARRAY);
+        TVector<TString> handlerPaths;
+        handlerPaths.reserve(Handlers.size());
+        for (const auto& handlerPair : Handlers) {
+            handlerPaths.push_back(handlerPair.first);
+        }
+        std::sort(handlerPaths.begin(), handlerPaths.end());
+        for (const TString& path : handlerPaths) {
+            NJson::TJsonValue& handlerJson = handlers.AppendValue({});
+            handlerJson["Path"] = path;
+            auto statsIt = HandlerStats.find(path);
+            handlerJson["Hits"] = statsIt != HandlerStats.end() ? static_cast<i64>(statsIt->second.Hits) : 0;
+            handlerJson["Misses"] = statsIt != HandlerStats.end() ? static_cast<i64>(statsIt->second.Misses) : 0;
+            if (statsIt != HandlerStats.end() && statsIt->second.HasLastFetchDuration) {
+                handlerJson["LastFetchDurationSec"] = DurationToSeconds(statsIt->second.LastFetchDuration);
+            }
+        }
+
+        NJson::TJsonValue& records = result["CacheRecords"];
+        records.SetType(NJson::JSON_ARRAY);
+        for (const auto& [key, record] : Cache) {
+            NJson::TJsonValue& recordJson = records.AppendValue({});
+            recordJson["Id"] = key.GetId();
+            recordJson["CacheId"] = record.CacheId;
+            recordJson["Url"] = key.URL;
+            auto statsIt = CacheStats.find(GetCacheStatsKey(key));
+            recordJson["Hits"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Hits) : 0;
+            recordJson["Misses"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Misses) : 0;
+            if (record.HasLastFetchDuration) {
+                recordJson["LastFetchDurationSec"] = DurationToSeconds(record.LastFetchDuration);
+            }
+            recordJson["Name"] = record.Request ? record.GetName() : TString();
+            recordJson["RefreshTime"] = InstantToString(record.RefreshTime);
+            recordJson["RefreshTimeUs"] = InstantToMicros(record.RefreshTime);
+            recordJson["DeathTime"] = InstantToString(record.DeathTime);
+            recordJson["DeathTimeUs"] = InstantToMicros(record.DeathTime);
+            recordJson["TimeoutSec"] = DurationToSeconds(record.Timeout);
+            recordJson["HasResponse"] = static_cast<bool>(record.Response);
+            recordJson["WaitersCount"] = static_cast<i64>(record.Waiters.size());
+            recordJson["Retries"] = static_cast<i64>(record.Retries);
+            recordJson["Enqueued"] = record.Enqueued;
+            FillCachePolicyJson(recordJson["CachePolicy"], record.CachePolicy);
+            FillRequestJson(recordJson["Request"], record.Request);
+            FillResponseJson(recordJson["Response"], record.Response);
+        }
+
+        NJson::TJsonValue& incomingRequests = result["IncomingRequests"];
+        incomingRequests.SetType(NJson::JSON_ARRAY);
+        for (const auto& requestPair : IncomingRequests) {
+            const auto& key = requestPair.second;
+            NJson::TJsonValue& requestJson = incomingRequests.AppendValue({});
+            requestJson["Url"] = key.URL;
+            requestJson["CacheRecordId"] = key.GetId();
+        }
+
+        Send(event->Sender, new TEvHttpProxy::TEvHttpDumpStateResponse(NJson::WriteJson(result, false, true)), 0, event->Cookie);
     }
 
     void HandleRefresh() {
@@ -724,6 +1074,7 @@ public:
             hFunc(TEvHttpProxy::TEvRegisterHandler, Handle);
             hFunc(TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            hFunc(TEvHttpProxy::TEvHttpDumpStateRequest, Handle);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandleRefresh);
         }
     }

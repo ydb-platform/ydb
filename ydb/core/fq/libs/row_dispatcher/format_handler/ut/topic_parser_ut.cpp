@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(102, result[2][0].Get<i64>());
             UNIT_ASSERT_VALUES_EQUAL(-2, result[3][0].Get<i8>());
             UNIT_ASSERT_VALUES_EQUAL(true, result[4][0].Get<bool>());
-            UNIT_ASSERT_VALUES_EQUAL("146.4", ToString(result[5][0].Get<double>())); 
+            UNIT_ASSERT_VALUES_EQUAL("146.4", ToString(result[5][0].Get<double>()));
             UNIT_ASSERT_VALUES_EQUAL("hi", TString(result[6][0].AsStringRef()));
             UNIT_ASSERT_VALUES_EQUAL(0, result[7][0].GetListLength());
         }));
@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             GetMessage(FIRST_OFFSET + 5, "\x80"),
         });
     }
-    
+
     Y_UNIT_TEST_F(SkipErrors_Optional, TJsonParserFixtureSkipErrors) {
         ExpectedBatches = 1;
         CheckSuccess(MakeParser(

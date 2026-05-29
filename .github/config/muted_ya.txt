@@ -1,5 +1,3 @@
-ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
-ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
@@ -29,4 +27,5 @@ ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
+ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test

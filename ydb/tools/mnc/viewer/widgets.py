@@ -1,6 +1,6 @@
 import glob
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 import yaml
@@ -126,6 +126,39 @@ class OverviewPane(Vertical):
     .status-not-selected {
         color: $text-muted;
     }
+
+    .status-checking {
+        color: $warning;
+    }
+
+    #overview-agents-card {
+        width: 1fr;
+        height: auto;
+        min-height: 5;
+        margin: 0 2;
+        padding: 0 2;
+        background: $surface;
+    }
+
+    #overview-agents-card:dark {
+        background: $panel-darken-1;
+    }
+
+    #overview-agents-title {
+        height: 2;
+        content-align: left middle;
+        text-style: bold;
+    }
+
+    #overview-agents-status {
+        height: 2;
+        content-align: left middle;
+    }
+
+    #overview-agents-hosts {
+        height: auto;
+        color: $text-muted;
+    }
     """
 
     def __init__(self, state: "ViewerState") -> None:
@@ -149,6 +182,16 @@ class OverviewPane(Vertical):
             ),
             id="overview-status-row",
         )
+        yield Vertical(
+            Label("Agents on hosts", id="overview-agents-title"),
+            Label(
+                self._state.agents_status(),
+                id="overview-agents-status",
+                classes=f"overview-status-value {_status_class(self._state.agents_status_kind())}",
+            ),
+            Static(self._state.agents_details(), id="overview-agents-hosts", markup=False),
+            id="overview-agents-card",
+        )
 
     def refresh_state(self) -> None:
         self.query_one("#overview-mnc-config-card", OverviewStatusCard).update_status(
@@ -158,6 +201,10 @@ class OverviewPane(Vertical):
             self._state.cluster_config_status(),
             self._state.cluster_config_status_kind(),
         )
+        agents_status = self.query_one("#overview-agents-status", Label)
+        agents_status.update(self._state.agents_status())
+        agents_status.set_classes(f"overview-status-value {_status_class(self._state.agents_status_kind())}")
+        self.query_one("#overview-agents-hosts", Static).update(self._state.agents_details())
 
     def on_key(self, event: Key) -> None:
         focused = self.screen.focused
@@ -306,6 +353,7 @@ class ConfigCandidate:
 @dataclass
 class ConfigValidation:
     errors: list[str]
+    config: Optional[dict] = None
 
     @property
     def ok(self) -> bool:
@@ -326,7 +374,7 @@ def _validate_multinode_config(path: str) -> ConfigValidation:
 
     if validated is None:
         return ConfigValidation(errors or ["Config does not match multinode scheme"])
-    return ConfigValidation([])
+    return ConfigValidation([], validated)
 
 
 @dataclass
@@ -336,9 +384,29 @@ class SelectedClusterConfig:
 
 
 @dataclass
+class AgentHostStatus:
+    host: str
+    status: str
+    message: str = ""
+
+
+@dataclass
+class AgentsState:
+    status: str = "NOT SELECTED"
+    hosts: list[AgentHostStatus] = field(default_factory=list)
+
+    def ok_count(self) -> int:
+        return sum(1 for host in self.hosts if host.status == "OK")
+
+    def total_count(self) -> int:
+        return len(self.hosts)
+
+
+@dataclass
 class ViewerState:
     mnc_config_ok: bool
     selected_cluster_config: Optional[SelectedClusterConfig] = None
+    agents: AgentsState = field(default_factory=AgentsState)
 
     def mnc_config_status(self) -> str:
         return "OK" if self.mnc_config_ok else "ERROR"
@@ -352,6 +420,28 @@ class ViewerState:
         if self.selected_cluster_config is None:
             return "NOT SELECTED"
         return "OK" if self.selected_cluster_config.validation.ok else "FAIL"
+
+    def agents_status(self) -> str:
+        if self.agents.status in ("NOT SELECTED", "CHECKING"):
+            return self.agents.status
+        if self.agents.total_count() == 0:
+            return self.agents.status
+        return f"{self.agents.status} {self.agents.ok_count()}/{self.agents.total_count()}"
+
+    def agents_status_kind(self) -> str:
+        return self.agents.status
+
+    def agents_details(self) -> str:
+        if self.agents.status == "NOT SELECTED":
+            return "Select cluster config to check agents"
+        if self.agents.status == "CHECKING":
+            return "Checking " + ", ".join(host.host for host in self.agents.hosts)
+        if not self.agents.hosts:
+            return "No hosts in selected cluster config"
+        return "\n".join(
+            f"{host.host}: {host.status}" + (f" ({host.message})" if host.message else "")
+            for host in self.agents.hosts
+        )
 
     def is_selected_cluster_config(self, candidate: ConfigCandidate) -> bool:
         return (

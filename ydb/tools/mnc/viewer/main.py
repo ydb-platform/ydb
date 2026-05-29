@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Optional
 
@@ -11,8 +12,11 @@ from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Input, ListView, TabbedContent, TabPane, Tabs
 
+from ydb.tools.mnc.lib import agent_client
 from ydb.tools.mnc.viewer.commands import TabCommands, ViewerCommands
 from ydb.tools.mnc.viewer.widgets import (
+    AgentHostStatus,
+    AgentsState,
     ClusterConfigPane,
     ConfigCandidate,
     ConfigFieldItem,
@@ -57,6 +61,7 @@ class Viewer(App):
         self._mnc_config = self._load_mnc_config()
         self._state = ViewerState(mnc_config_ok=self._mnc_config_ok())
         self._navigation_generation = 0
+        self._agent_check_generation = 0
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -164,6 +169,64 @@ class Viewer(App):
     def _refresh_mnc_config_status(self) -> None:
         self._state.mnc_config_ok = self._mnc_config_ok()
         self._refresh_overview()
+
+    def _on_viewer_state_changed(self) -> None:
+        self._refresh_overview()
+        self._start_agents_check()
+
+    def _selected_cluster_hosts(self) -> list[str]:
+        selected = self._state.selected_cluster_config
+        if selected is None or selected.validation.config is None:
+            return []
+
+        hosts = selected.validation.config.get("hosts") or []
+        return list(dict.fromkeys(str(host) for host in hosts))
+
+    def _start_agents_check(self) -> None:
+        self._agent_check_generation += 1
+        generation = self._agent_check_generation
+        hosts = self._selected_cluster_hosts()
+
+        if self._state.selected_cluster_config is None:
+            self._state.agents = AgentsState()
+            self._refresh_overview()
+            return
+
+        self._state.agents = AgentsState(
+            status="CHECKING",
+            hosts=[AgentHostStatus(host, "CHECKING") for host in hosts],
+        )
+        self._refresh_overview()
+        self.run_worker(
+            self._check_agents(hosts, generation),
+            name="check-agents",
+            group="check-agents",
+            exclusive=True,
+            exit_on_error=False,
+        )
+
+    async def _check_agents(self, hosts: list[str], generation: int) -> None:
+        host_statuses = await asyncio.gather(*(self._check_agent_host(host) for host in hosts))
+        if generation != self._agent_check_generation:
+            return
+
+        status = "OK" if host_statuses and all(host.status == "OK" for host in host_statuses) else "FAIL"
+        self._state.agents = AgentsState(status=status, hosts=host_statuses)
+        self._refresh_overview()
+
+    async def _check_agent_host(self, host: str) -> AgentHostStatus:
+        try:
+            result = await agent_client.CheckAgentHealthOnHost(host).action()
+        except Exception as error:
+            return AgentHostStatus(host, "FAIL", str(error))
+
+        if result is True:
+            return AgentHostStatus(host, "OK")
+        return AgentHostStatus(
+            host,
+            "FAIL",
+            getattr(result, "message", "") or "Agent is not available",
+        )
 
     def _show_invalid_path(self, path: str) -> None:
         self.push_screen(
@@ -297,7 +360,7 @@ class Viewer(App):
             ClusterConfigPane(
                 self._discover_cluster_config_candidates(),
                 self._state,
-                self._refresh_overview,
+                self._on_viewer_state_changed,
             ),
         )
 

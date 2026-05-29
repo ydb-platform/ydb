@@ -20,7 +20,6 @@ jobs:
       pull-requests: write
     env:
       WF_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      WF_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/rebase.yml
 
     steps:
       # Preconditions:
@@ -60,7 +59,7 @@ jobs:
         with:
           script: |
             const sender = context.payload.sender.login;
-            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -88,7 +87,7 @@ jobs:
         with:
           script: |
             const sender = context.payload.sender.login;
-            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -171,7 +170,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -199,7 +198,7 @@ jobs:
         with:
           script: |
             const isFork = context.payload.pull_request.head.repo.fork;
-            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
             const forkHint = isFork
               ? '\n\nIf this is a fork PR, verify that **Allow edits from maintainers** is still enabled.'
               : '';
@@ -236,7 +235,7 @@ jobs:
         with:
           script: |
             const baseRef = process.env.BASE_REF;
-            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -284,7 +283,7 @@ jobs:
                 'git rebase upstream/' + baseRef
               : 'git fetch origin\n' +
                 'git rebase origin/' + baseRef;
-            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

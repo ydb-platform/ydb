@@ -1,6 +1,7 @@
 import glob
 import os
 import shutil
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -10,7 +11,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import Click, Key
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, ListItem, ListView, Static
+from textual.widgets import Button, DataTable, Input, Label, ListItem, ListView, Static
 
 import ydb.tools.mnc.scheme as mnc_scheme
 
@@ -70,7 +71,7 @@ class OverviewAgentsCard(ListItem):
     def __init__(self, state: "ViewerState") -> None:
         super().__init__(
             Vertical(
-                Label("Agents on hosts", id="overview-agents-title"),
+                Label("Hosts", id="overview-agents-title"),
                 Label(
                     state.agents_status(),
                     id="overview-agents-status",
@@ -193,6 +194,15 @@ class OverviewPane(Vertical):
         color: $warning;
     }
 
+    .status-running {
+        color: $success;
+    }
+
+    .status-stopped,
+    .status-not-installed {
+        color: $error;
+    }
+
     #overview-agents-list {
         width: 1fr;
         height: 1fr;
@@ -253,13 +263,13 @@ class OverviewPane(Vertical):
     def compose(self) -> ComposeResult:
         yield OverviewStatusList(
             OverviewStatusCard(
-                "MNC Config",
+                "Settings",
                 self._state.mnc_config_status(),
                 action="open_mnc_config",
                 id="overview-mnc-config-card",
             ),
             OverviewStatusCard(
-                "Cluster Config",
+                "Cluster",
                 self._state.cluster_config_status(),
                 action="open_cluster_config",
                 id="overview-cluster-config-card",
@@ -371,18 +381,113 @@ class AgentsPane(VerticalScroll, inherit_bindings=False):
         height: auto;
         min-height: 3;
         margin-top: 1;
+        background: transparent;
+    }
+
+    .hosts-empty-message {
+        height: auto;
+        min-height: 3;
         padding: 1 2;
         background: $surface;
         color: $text-muted;
     }
 
-    #agents-hosts:dark {
+    .hosts-empty-message:dark {
         background: $panel-darken-1;
     }
 
-    AgentsPane:focus #agents-summary,
-    AgentsPane:focus #agents-hosts {
+    AgentsPane:focus #agents-summary {
         background: $primary-background;
+    }
+
+    HostCard {
+        height: auto;
+        margin-bottom: 1;
+        padding: 1 2;
+        background: $surface;
+        border: solid $primary;
+    }
+
+    HostCard:dark {
+        background: $panel-darken-1;
+    }
+
+    .host-card-header {
+        height: 2;
+        width: 100%;
+    }
+
+    .host-title {
+        width: 1fr;
+        height: 2;
+        content-align: left middle;
+        text-style: bold;
+    }
+
+    .host-status {
+        width: auto;
+        height: 2;
+        content-align: right middle;
+        text-style: bold;
+    }
+
+    .host-section {
+        height: auto;
+        margin-top: 1;
+    }
+
+    .host-section-title {
+        height: 1;
+        text-style: bold;
+        color: $text;
+    }
+
+    .host-field-row {
+        height: auto;
+        min-height: 1;
+        width: 100%;
+    }
+
+    .host-field-name {
+        width: 18;
+        color: $text-muted;
+    }
+
+    .host-field-value {
+        width: 1fr;
+    }
+
+    .host-message {
+        color: $text-muted;
+    }
+
+    HostTasksTable {
+        height: 7;
+        width: 100%;
+        margin-top: 1;
+    }
+
+    .host-empty-line {
+        height: 1;
+        margin-top: 1;
+        color: $text-muted;
+    }
+
+    .disk-row {
+        height: auto;
+        min-height: 1;
+        width: 100%;
+        margin-top: 1;
+    }
+
+    .disk-name {
+        width: 24;
+        text-style: bold;
+    }
+
+    .disk-detail {
+        width: 1fr;
+        color: $text-muted;
     }
     """
 
@@ -392,7 +497,7 @@ class AgentsPane(VerticalScroll, inherit_bindings=False):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label("Agents on hosts", id="agents-title"),
+            Label("Hosts", id="agents-title"),
             Label(
                 self._state.agents_status(),
                 id="agents-status",
@@ -400,13 +505,13 @@ class AgentsPane(VerticalScroll, inherit_bindings=False):
             ),
             id="agents-summary",
         )
-        yield Static(self._state.agents_details(), id="agents-hosts", markup=False)
+        yield HostsContainer(self._state, id="agents-hosts")
 
     def refresh_state(self) -> None:
         agents_status = self.query_one("#agents-status", Label)
         agents_status.update(self._state.agents_status())
         agents_status.set_classes(f"overview-status-value {_status_class(self._state.agents_status_kind())}")
-        self.query_one("#agents-hosts", Static).update(self._state.agents_details())
+        self.query_one("#agents-hosts", HostsContainer).refresh(recompose=True)
 
     def key_up(self, event: Key) -> None:
         self.scroll_up(animate=False, force=True)
@@ -596,11 +701,150 @@ class SelectedClusterConfig:
     validation: ConfigValidation
 
 
+def _display_value(value: object) -> str:
+    return str(value) if value not in (None, "") else "-"
+
+
+def _format_task_time(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "-"
+    return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M")
+
+
+def _field_row(name: str, value: str, value_classes: str = "") -> Horizontal:
+    return Horizontal(
+        Label(name, classes="host-field-name"),
+        Label(value, classes=("host-field-value " + value_classes).strip()),
+        classes="host-field-row",
+    )
+
+
+class HostTasksTable(DataTable, can_focus=False):
+    def __init__(self, tasks: list[dict]) -> None:
+        super().__init__(
+            show_header=True,
+            show_row_labels=False,
+            zebra_stripes=True,
+            show_cursor=False,
+            cursor_type="none",
+            cell_padding=1,
+        )
+        self.tasks = tasks[:5]
+
+    def on_mount(self) -> None:
+        self.add_columns("ID", "Type", "Status", "Created", "Error")
+        for task in self.tasks:
+            self.add_row(
+                _display_value(task.get("id")),
+                _display_value(task.get("type")),
+                _display_value(task.get("status")),
+                _format_task_time(task.get("created_at")),
+                _display_value(task.get("error")),
+            )
+
+
+def _disk_row(disk: dict) -> Horizontal:
+    label = disk.get("partlabel") or "<unknown>"
+    error = disk.get("error")
+    if error:
+        return Horizontal(
+            Label(label, classes="disk-name"),
+            Label(f"ERROR {error}", classes="disk-detail status-fail"),
+            classes="disk-row",
+        )
+
+    device = disk.get("path") or disk.get("device") or "-"
+    size = disk.get("size") or "-"
+    parts = disk.get("parts") or []
+    return Horizontal(
+        Label(label, classes="disk-name"),
+        Label(f"{device}, size {size}, parts {len(parts)}", classes="disk-detail"),
+        classes="disk-row",
+    )
+
+
+class HostCard(Vertical):
+    def __init__(self, host: "AgentHostStatus") -> None:
+        super().__init__()
+        self.host = host
+
+    def compose(self) -> ComposeResult:
+        yield Horizontal(
+            Label(self.host.host, classes="host-title"),
+            Label(self.host.status, classes=f"host-status {_status_class(self.host.status)}"),
+            classes="host-card-header",
+        )
+        yield self._agent_section()
+        yield self._tasks_section()
+        yield self._disks_section()
+
+    def _agent_section(self) -> Vertical:
+        children = [
+            Label("Agent", classes="host-section-title"),
+            _field_row("Status", self.host.status, _status_class(self.host.status)),
+        ]
+        if self.host.message:
+            children.append(_field_row("Message", self.host.message, "host-message"))
+        if self.host.agent_is_running():
+            features = ", ".join(self.host.enabled_features) if self.host.enabled_features else "none"
+            children.append(_field_row("Enabled features", features))
+        return Vertical(*children, classes="host-section")
+
+    def _tasks_section(self) -> Vertical:
+        children = [Label("Last tasks", classes="host-section-title")]
+        if self.host.tasks_error:
+            children.append(Label(self.host.tasks_error, classes="host-empty-line"))
+        elif not self.host.last_tasks:
+            children.append(Label("No tasks yet", classes="host-empty-line"))
+        else:
+            children.append(HostTasksTable(self.host.last_tasks))
+        return Vertical(*children, classes="host-section")
+
+    def _disks_section(self) -> Vertical:
+        children = [Label("Disks", classes="host-section-title")]
+        if self.host.disks_error:
+            children.append(Label(self.host.disks_error, classes="host-empty-line"))
+        elif not self.host.disks:
+            children.append(Label("No managed disks", classes="host-empty-line"))
+        else:
+            children.extend(_disk_row(disk) for disk in self.host.disks)
+        return Vertical(*children, classes="host-section")
+
+
+class HostsContainer(Vertical):
+    def __init__(self, state: "ViewerState", *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._state = state
+
+    def compose(self) -> ComposeResult:
+        if self._state.agents.status == "NOT SELECTED":
+            yield Static("Select cluster config to inspect hosts", classes="hosts-empty-message", markup=False)
+            return
+        if self._state.agents.status == "CHECKING":
+            hosts = ", ".join(host.host for host in self._state.agents.hosts)
+            yield Static(f"Checking agents on {hosts}", classes="hosts-empty-message", markup=False)
+            return
+        if not self._state.agents.hosts:
+            yield Static("No hosts in selected cluster config", classes="hosts-empty-message", markup=False)
+            return
+
+        for host in self._state.agents.hosts:
+            yield HostCard(host)
+
+
 @dataclass
 class AgentHostStatus:
     host: str
     status: str
     message: str = ""
+    enabled_features: list[str] = field(default_factory=list)
+    last_tasks: list[dict] = field(default_factory=list)
+    tasks_error: str = ""
+    disks: list[dict] = field(default_factory=list)
+    disks_error: str = ""
+
+    def agent_is_running(self) -> bool:
+        return self.status in ("Running", "OK")
 
 
 @dataclass
@@ -609,7 +853,7 @@ class AgentsState:
     hosts: list[AgentHostStatus] = field(default_factory=list)
 
     def ok_count(self) -> int:
-        return sum(1 for host in self.hosts if host.status == "OK")
+        return sum(1 for host in self.hosts if host.agent_is_running())
 
     def total_count(self) -> int:
         return len(self.hosts)
@@ -639,22 +883,25 @@ class ViewerState:
             return self.agents.status
         if self.agents.total_count() == 0:
             return self.agents.status
-        return f"{self.agents.status} {self.agents.ok_count()}/{self.agents.total_count()}"
+        return self.agents.status
 
     def agents_status_kind(self) -> str:
         return self.agents.status
 
     def agents_details(self) -> str:
         if self.agents.status == "NOT SELECTED":
-            return "Select cluster config to check agents"
+            return "Select cluster config to inspect hosts"
         if self.agents.status == "CHECKING":
-            return "Checking " + ", ".join(host.host for host in self.agents.hosts)
+            return "Checking agents on " + ", ".join(host.host for host in self.agents.hosts)
         if not self.agents.hosts:
             return "No hosts in selected cluster config"
-        return "\n".join(
+        details = [f"Agents: {self.agents.ok_count()}/{self.agents.total_count()}"]
+        details.extend(
             f"{host.host}: {host.status}" + (f" ({host.message})" if host.message else "")
             for host in self.agents.hosts
+            if not host.agent_is_running() or host.message
         )
+        return "\n".join(details)
 
     def is_selected_cluster_config(self, candidate: ConfigCandidate) -> bool:
         return (

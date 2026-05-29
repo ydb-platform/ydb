@@ -56,15 +56,15 @@ class Viewer(App):
         self._opened_tab_order = ["general"]
         self._tab_titles = {
             "general": "Overview",
-            "mnc-config": "MNC Config",
-            "cluster-config": "Cluster Config",
-            "agents": "Agents",
+            "mnc-config": "Settings",
+            "cluster-config": "Cluster",
+            "agents": "Hosts",
         }
         self._tab_descriptions = {
             "general": "Overview viewer and cluster state",
-            "mnc-config": "Read and edit MNC Config",
-            "cluster-config": "Select and inspect cluster config",
-            "agents": "Inspect agents on selected cluster hosts",
+            "mnc-config": "Read and edit settings",
+            "cluster-config": "Select and inspect cluster",
+            "agents": "Inspect selected cluster hosts",
         }
         self._editing_config_field: Optional[ConfigFieldItem] = None
         self._mnc_config = self._load_mnc_config()
@@ -76,7 +76,7 @@ class Viewer(App):
         yield Header()
 
         with TabbedContent(initial="general", id="tabs"):
-            with TabPane("General", id="general"):
+            with TabPane("Overview", id="general"):
                 yield OverviewPane(self._state)
 
         yield Footer()
@@ -224,23 +224,77 @@ class Viewer(App):
         if generation != self._agent_check_generation:
             return
 
-        status = "OK" if host_statuses and all(host.status == "OK" for host in host_statuses) else "FAIL"
+        status = "OK" if host_statuses and all(host.agent_is_running() for host in host_statuses) else "FAIL"
         self._state.agents = AgentsState(status=status, hosts=host_statuses)
         self._refresh_overview()
 
     async def _check_agent_host(self, host: str) -> AgentHostStatus:
         try:
-            result = await agent_client.CheckAgentHealthOnHost(host).action()
+            health = await agent_client.get_json(host, "/health")
         except Exception as error:
-            return AgentHostStatus(host, "FAIL", str(error))
+            return AgentHostStatus(
+                host,
+                "Not Installed",
+                str(error),
+                tasks_error="Agent is not available",
+                disks_error="Agent is not available",
+            )
 
-        if result is True:
-            return AgentHostStatus(host, "OK")
+        if health is None:
+            return AgentHostStatus(
+                host,
+                "Not Installed",
+                "Agent is not available",
+                tasks_error="Agent is not available",
+                disks_error="Agent is not available",
+            )
+
+        if health.get("status") != "healthy":
+            return AgentHostStatus(
+                host,
+                "Stopped",
+                str(health.get("status") or "Agent is not healthy"),
+                tasks_error="Agent is not running",
+                disks_error="Agent is not running",
+            )
+
+        tasks_response, disks_response = await asyncio.gather(
+            agent_client.get_json(host, "/tasks"),
+            agent_client.post_json(host, "/disks/info", {}),
+        )
+        last_tasks, tasks_error = self._last_tasks(tasks_response)
+        disks, disks_error = self._agent_disks(disks_response)
         return AgentHostStatus(
             host,
-            "FAIL",
-            getattr(result, "message", "") or "Agent is not available",
+            "Running",
+            enabled_features=list(health.get("enabled_features", []) or []),
+            last_tasks=last_tasks,
+            tasks_error=tasks_error,
+            disks=disks,
+            disks_error=disks_error,
         )
+
+    def _last_tasks(self, response: Optional[dict]) -> tuple[list[dict], str]:
+        if response is None:
+            return [], "Failed to load tasks"
+
+        tasks = response.get("tasks")
+        if not isinstance(tasks, list):
+            return [], "Failed to load tasks"
+
+        def sort_key(task: dict):
+            return task.get("created_at") or 0
+
+        return sorted(tasks, key=sort_key, reverse=True)[:5], ""
+
+    def _agent_disks(self, response: Optional[dict]) -> tuple[list[dict], str]:
+        if response is None:
+            return [], "Failed to load disks"
+
+        disks = response.get("disks")
+        if not isinstance(disks, list):
+            return [], "Failed to load disks"
+        return disks, ""
 
     def _show_invalid_path(self, path: str) -> None:
         self.push_screen(

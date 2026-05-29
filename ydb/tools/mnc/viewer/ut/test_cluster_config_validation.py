@@ -1,14 +1,19 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from textual.widgets import ListView, TabbedContent
 
+from ydb.tools.mnc.lib import agent_client
 from ydb.tools.mnc.viewer.main import Viewer
 from ydb.tools.mnc.viewer.widgets import (
     AgentHostStatus,
+    AgentsState,
     ClusterConfigPane,
     ConfigCandidate,
+    HostCard,
+    HostTasksTable,
     OverviewStatusCard,
     _validate_multinode_config,
 )
@@ -100,7 +105,8 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
                     "cluster",
                 )
                 await self._wait_for_agents_status(app, pilot, "OK")
-                self.assertEqual(app._state.agents_status(), "OK 1/1")
+                self.assertEqual(app._state.agents_status(), "OK")
+                self.assertEqual(app._state.agents_details(), "Agents: 1/1")
 
     async def test_failing_cluster_config_is_not_selected(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -145,8 +151,80 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
                 app.query_one("#cluster-configs", ListView).action_select_cursor()
                 await self._wait_for_agents_status(app, pilot, "FAIL")
 
-                self.assertEqual(app._state.agents_status(), "FAIL 1/2")
+                self.assertEqual(app._state.agents_status(), "FAIL")
+                self.assertIn("Agents: 1/2", app._state.agents_details())
                 self.assertIn("host2: FAIL (boom)", app._state.agents_details())
+
+    async def test_host_details_include_agent_tasks_and_disks(self):
+        async def get_json(host, path, port=8999):
+            self.assertEqual(host, "host1")
+            self.assertEqual(port, 8999)
+            if path == "/health":
+                return {
+                    "status": "healthy",
+                    "service": "MNCAgentServer",
+                    "enabled_features": ["health", "nodes", "disks", "tasks"],
+                }
+            if path == "/tasks":
+                return {
+                    "tasks": [
+                        {
+                            "id": "old-task",
+                            "type": "nodes/start",
+                            "status": "completed",
+                            "created_at": 1,
+                        },
+                        {
+                            "id": "new-task",
+                            "type": "disks/check",
+                            "status": "failed",
+                            "created_at": 2,
+                            "error": "boom",
+                        },
+                    ],
+                }
+            raise AssertionError(f"unexpected GET path: {path}")
+
+        async def post_json(host, path, payload, port=8999, parent_task=None):
+            self.assertEqual(host, "host1")
+            self.assertEqual(path, "/disks/info")
+            self.assertEqual(payload, {})
+            self.assertEqual(port, 8999)
+            self.assertIsNone(parent_task)
+            return {
+                "disks": [
+                    {
+                        "partlabel": "ssd1",
+                        "path": "/dev/sdb",
+                        "size": "100GB",
+                        "parts": [{"id": "1"}],
+                    },
+                ],
+            }
+
+        app = Viewer()
+        with mock.patch.object(agent_client, "get_json", get_json), \
+                mock.patch.object(agent_client, "post_json", post_json):
+            host = await app._check_agent_host("host1")
+
+        self.assertEqual(host.status, "Running")
+        self.assertEqual(host.enabled_features, ["health", "nodes", "disks", "tasks"])
+        self.assertEqual(host.last_tasks[0]["id"], "new-task")
+        self.assertEqual(host.disks[0]["partlabel"], "ssd1")
+
+        app = Viewer()
+        app._state.agents = AgentsState(status="OK", hosts=[host])
+        async with app.run_test() as pilot:
+            await app.run_action("open_agents")
+            await pilot.pause()
+
+            card = app.query_one(HostCard)
+            tasks_table = app.query_one(HostTasksTable)
+
+            self.assertEqual(card.host.host, "host1")
+            self.assertEqual(card.host.status, "Running")
+            self.assertEqual(tasks_table.row_count, 2)
+            self.assertEqual(tasks_table.tasks[0]["id"], "new-task")
 
     async def test_rename_selected_cluster_config_updates_state(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

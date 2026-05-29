@@ -38,9 +38,9 @@ class TabCommands(CommandProviderBase):
 class ViewerCommands(CommandProviderBase):
     def _commands(self) -> list[tuple[str, str, str]]:
         return [
-            ("Open tab: General", "Overview viewer and cluster state", "show_tab('general')"),
-            ("Open tab: MNC Config", "Read and edit MNC Config", "open_mnc_config"),
-            ("Open tab: Cluster Config", "Select and inspect cluster config", "open_cluster_config"),
-            ("Open tab: Agents", "Inspect agents on selected cluster hosts", "open_agents"),
+            ("Open tab: Overview", "Overview viewer and cluster state", "show_tab('general')"),
+            ("Open tab: Settings", "Read and edit settings", "open_mnc_config"),
+            ("Open tab: Cluster", "Select and inspect cluster", "open_cluster_config"),
+            ("Open tab: Hosts", "Inspect selected cluster hosts", "open_agents"),
             ("Close tab", "Close the current tab", "close_tab"),
         ]

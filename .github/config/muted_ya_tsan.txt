@@ -1,3 +1,95 @@
+ydb/core/blobstorage/backpressure/ut_client Backpressure.MonteCarlo
+ydb/core/blobstorage/backpressure/ut_client unittest.sole chunk
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.CheckVChunksArePerTablet_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.DeleteTabletChunks_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.EmptyRestart_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.ManyVChunksPerTablet_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.MultiTabletInterleavedWritesWithDDiskRestart_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.MultiTabletInterleavedWrites_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.OverwriteAfterRestart_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.OverwriteSameOffset_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskRestart_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.RestartAfterCutLog_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.Smoke_2Tablets_2VChunks_1Segment
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.WriteAndRead_1MiB_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.WriteAndRead_4KiB_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.WriteAndRead_8KiB_Uring
+ydb/core/blobstorage/ddisk/ut TDDiskActorSyncWithDDisk.MultiSegment_1Tablet_4VChunks_4Segments
+ydb/core/blobstorage/ddisk/ut TDDiskActorSyncWithDDisk.MultiTablet_4Tablets_16VChunks_8Segments
+ydb/core/blobstorage/ddisk/ut TDDiskActorSyncWithDDisk.MultiTablet_4Tablets_8VChunks_1Segment
+ydb/core/blobstorage/ddisk/ut TDDiskActorSyncWithDDisk.Smoke_1Tablet_2VChunks_1Segment
+ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
+ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirror3dc
+ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnDiscover
+ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
+ydb/core/blobstorage/ut_blobstorage/ut_bridge unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferFastEraseFreeSpace
+ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferWithRestarts
+ydb/core/blobstorage/ut_blobstorage/ut_donor Donor.ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestDisabling
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDead4Plus2BlockMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestart4Plus2BlockMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3dcMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3of4MemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadAllAliveInactiveMirror3dcMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadInactiveMirror3dcMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadMirror3dcMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadSomeAliveInactiveMirror3dcMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnlyOneByOne
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnlySlay
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestGarbageCollect
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestReads
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestStorageLoad
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestSync
+ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOne
+ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
+ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals ChunkKeeper.Random
+ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals ChunkKeeper.Shred
+ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals unittest.[*/*] chunk
+ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
+ydb/core/blobstorage/ut_mirror3of4 unittest.sole chunk
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery01
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery03
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery04
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery06
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery08
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery14
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery15
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery16
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery18
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery19
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery20
+ydb/core/kqp/rm_service/ut KqpRm.ConcurrentChannels
+ydb/core/kqp/rm_service/ut KqpRm.ConcurrentTasks
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
+ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
+ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql+UseQueryService
+ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
+ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
+ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
+ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
+ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
+ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
+ydb/core/kqp/workload_service/ut KqpWorkloadService.TestResourcePoolAfterTenantRecreation
+ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldScheduleCleanup
+ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFlightWhenStopEndpointOrStopServer
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
+ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
+ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.CreateTopicWithNameEqDB
+ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.MessageWriteBurstDefaultsToSpeed
+ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.SharedConsumer
+ydb/services/persqueue_v1/actors/schema/topic/ut CreateTopic_TopicAPI.CreateTopicWithNameEqDB
 ydb/tests/compatibility py3test.[test_compatibility.py */*] chunk
 ydb/tests/compatibility py3test.[test_stress.py */*] chunk
 ydb/tests/compatibility py3test.[test_vector_index.py */*] chunk
@@ -40,3 +132,38 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnothe
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-1-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-2-1]
+ydb/tests/fq/http_api py3test.sole chunk
+ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_resize
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
+ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
+ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
+ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
+ydb/tests/functional/statistics py3test.[test_analyze.py */*] chunk
+ydb/tests/functional/statistics test_analyze.py.test_basic
+ydb/tests/functional/statistics test_restarts.py.test_basic
+ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
+ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_17_compression-algorithm=zstd,level=17-2]
+ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
+ydb/tests/stress/ctas/tests py3test.sole chunk
+ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kv/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/show_create/view/tests py3test.sole chunk
+ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-test_scv]
+ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/system_tablet_backup/tests py3test.sole chunk
+ydb/tests/stress/system_tablet_backup/tests test_workload.py.TestSystemTabletBackup.test_workload
+ydb/tests/stress/system_tablet_backup/tests test_workload.py.TestSystemTabletBackup.test_workload_with_corrupted_backup
+ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
+ydb/tests/stress/topic/tests py3test.[*/*] chunk
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
+ydb/tests/stress/transfer/tests py3test.sole chunk
+ydb/tests/stress/transfer/tests test_workload.py.TestYdbWorkload.test[row-local]
+ydb/tests/stress/transfer/tests test_workload.py.TestYdbWorkload.test[row-remote]

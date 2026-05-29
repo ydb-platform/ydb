@@ -43,12 +43,12 @@ struct TDBGWriteBlocksToManyPBuffersResponse
         NProto::TError Error;
     };
 
-    static TDBGWriteBlocksToManyPBuffersResponse MakeDirectBlockGroupError(
+    static TDBGWriteBlocksToManyPBuffersResponse MakeOverallError(
         EWellKnownResultCodes code,
         TString reason);
 
     TVector<TSinglePersistentBufferResult> Responses;
-    NProto::TError DirectBlockGroupError;
+    NProto::TError OverallError;
 };
 
 struct TDBGFlushResponse

@@ -15,12 +15,12 @@ using namespace NThreading;
 ////////////////////////////////////////////////////////////////////////////////
 
 TDBGWriteBlocksToManyPBuffersResponse
-TDBGWriteBlocksToManyPBuffersResponse::MakeDirectBlockGroupError(
+TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
     EWellKnownResultCodes code,
     TString reason)
 {
     TDBGWriteBlocksToManyPBuffersResponse result;
-    result.DirectBlockGroupError = MakeError(code, std::move(reason));
+    result.OverallError = MakeError(code, std::move(reason));
     return result;
 }
 

@@ -190,10 +190,10 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
-    enum class EEraseType: ui32
+    enum class EEraseType
     {
-        STANDARD,
-        HANGING
+        Standard,
+        Belated
     };
     TBlocksDirtyMap(
         const TVChunkConfig& vChunkConfig,
@@ -213,7 +213,7 @@ public:
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
-    [[nodiscard]] TEraseHints MakeEraseHangingHint(size_t batchSize);
+    [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
     void WriteFinished(
         ui64 lsn,
@@ -229,7 +229,7 @@ public:
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
 
-    void UpdateAdditionalEraseQueue(
+    void UpdateBelatedEraseQueue(
         THostMask completedWrites,
         ui64 lsn,
         TBlockRange64 range);
@@ -249,7 +249,7 @@ public:
     [[nodiscard]] size_t GetInflightCount() const;
     [[nodiscard]] size_t GetFlushPendingCount() const;
     [[nodiscard]] size_t GetErasePendingCount() const;
-    [[nodiscard]] size_t GetEraseHangingCount() const;
+    [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
@@ -325,20 +325,16 @@ private:
     // Using TSet for O(1) min LSN access.
     TSet<ui64> ReadyToErase;
 
-    struct TInfoEraseHanging
+    struct TInfoEraseBelated
     {
         ui64 Lsn{};
         THostMask Hosts;
         TBlockRange64 Range;
 
-        bool operator<(const TInfoEraseHanging& other) const
-        {
-            return std::make_tuple(Lsn, Hosts, Range) <
-                   std::make_tuple(other.Lsn, other.Hosts, other.Range);
-        }
+        bool operator<(const TInfoEraseBelated& other) const;
     };
 
-    TSet<TInfoEraseHanging> ReadyToEraseHanging;
+    TSet<TInfoEraseBelated> ReadyToEraseBelated;
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

@@ -86,14 +86,14 @@ void TICStorageTransport::WriteToManyPBuffers(
         span->Event("ActorSystem_Send");
     }
     request->Callback =
-        [callback = std::move(callback), span = std::move(span)](
-            NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult
-                result)
+        [callback = std::move(callback), span = std::move(span)]   //
+        (NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult
+             result)
     {
         if (span) {
             span->Event("Reply on actor thread");
         }
-        return callback(std::move(result), span);
+        callback(std::move(result), span);
     };
 
     ActorSystem->Send(ICStorageTransportActorId, request.release());

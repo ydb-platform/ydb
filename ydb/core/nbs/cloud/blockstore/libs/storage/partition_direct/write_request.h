@@ -35,7 +35,7 @@ public:
     };
 
     using TReplyCallback = std::function<void(TResponse)>;
-    using TNotifyCallback = std::function<void(THostMask, ui64)>;
+    using TNotifyBelatedCallback = std::function<void(THostMask, ui64)>;
 
     TBaseWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
@@ -51,18 +51,18 @@ public:
     virtual ~TBaseWriteRequestExecutor();
 
     void SetReplyCallback(TReplyCallback callback);
-    void SetNotifyCallback(TNotifyCallback callback);
+    void SetNotifyBelatedCallback(TNotifyBelatedCallback callback);
 
     [[nodiscard]] bool IsAlreadyReplied() const;
 
     virtual void Run() = 0;
 
 protected:
-    void ReplyOrNotify(
+    void ReplyOrNotifyBelated(
         NProto::TError error,
         THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
-    void Notify(THostMask completedOnCurrentResponse);
+    void NotifyBelated(THostMask completedOnCurrentResponse);
 
     void SendWriteRequest(THostIndex host);
 
@@ -97,7 +97,7 @@ protected:
 
 private:
     TReplyCallback ReplyCallback;
-    TNotifyCallback NotifyCallback;
+    TNotifyBelatedCallback NotifyBelatedCallback;
     bool IsReplied = false;
 };
 

@@ -16,8 +16,7 @@ TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
 
 TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
 {
-    // Callback may be called multiple times (for each response), so no check
-    // here unlike other requests that use Promise.
+    Y_ABORT_UNLESS(NumberOfCallbackCalls);
 }
 
 TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()

@@ -691,10 +691,12 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
     }
 
-    Y_UNIT_TEST_F(ShouldFailWriteOnDBGError, TWriteWithPbTestFixture)
+    Y_UNIT_TEST_F(ShouldANotherTryOnOverallError, TWriteWithPbTestFixture)
     {
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
             GetManyPBuffersHandlerHanging();
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
 
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
@@ -702,14 +704,18 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         writeRequest->Run();
 
         ManyPBufferCallback(CreateDBGErrorResponse());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            3,
+            DirectWritePromises.size());   // retry from main
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[2].SetValue(CreateOkDirectResponse());
+
         UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
         const auto& response = *CallbackResult;
-        UNIT_ASSERT_VALUES_EQUAL(E_FAIL, response.Error.GetCode());
-
-        UNIT_ASSERT_EQUAL(
-            VChunkConfig.PBufferHosts.GetPrimary(),
-            response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
     }
 
     Y_UNIT_TEST_F(ShouldWorkWithMultipleResponses, TWriteWithPbTestFixture)
@@ -726,7 +732,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         {
             TDBGWriteBlocksToManyPBuffersResponse partResponse;
-            partResponse.DirectBlockGroupError = MakeError(S_OK);
+            partResponse.OverallError = MakeError(S_OK);
             partResponse.Responses.push_back(
                 {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
             partResponse.Responses.push_back(
@@ -772,7 +778,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         {
             TDBGWriteBlocksToManyPBuffersResponse partResponse;
-            partResponse.DirectBlockGroupError = MakeError(S_OK);
+            partResponse.OverallError = MakeError(S_OK);
             partResponse.Responses.push_back(
                 {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
             partResponse.Responses.push_back(

@@ -339,6 +339,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
 
         Y_ABORT_UNLESS(request.Callback);
         request.Callback(ev->Get()->Record);
+        request.NumberOfCallbackCalls++;
 
         for (const auto& singlePBufferResponse: ev->Get()->Record.GetResult()) {
             waitingReplies.erase(singlePBufferResponse.GetPersistentBufferId());

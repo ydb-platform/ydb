@@ -516,14 +516,61 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     }
 
     if (!Initialized) {
-        callback(
-            TDBGWriteBlocksToManyPBuffersResponse::MakeDirectBlockGroupError(
-                E_REJECTED,
-                "Connections are not established"));
+        callback(TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+            E_REJECTED,
+            "Connections are not established"));
         return;
     }
 
     OnRequest(coordinatorHostIndex, EOperation::WriteToManyPBuffers);
+
+    auto writeToManyPBuffersCB =
+        [startAt,
+         coordinatorHostIndex,
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         callback = std::move(callback),
+         weakSelf = weak_from_this()]   //
+        (NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult
+             result,
+         std::shared_ptr<NWilson::TSpan> span) mutable
+    {
+        // ActorSystem thread
+        auto responseSpan =
+            span ? std::make_shared<NWilson::TSpan>(span->CreateChild(
+                       NKikimr::TWilsonNbs::NbsBasic,
+                       "WriteBlocksToManyPBuffers.Response",
+                       NWilson::EFlags::AUTO_END))
+                 : nullptr;
+        executor->ExecuteSimple(
+            [responseSpan = std::move(responseSpan),
+             startAt,
+             coordinatorHostIndex,
+             threadChecker,
+             result = std::move(result),
+             callback,
+             weakSelf]() mutable -> void
+            {
+                Y_ABORT_UNLESS(threadChecker.Check());
+                if (responseSpan) {
+                    responseSpan->Event("Reply on DBG thread");
+                }
+
+                if (auto self = weakSelf.lock()) {
+                    self->OnWriteBlocksToManyPBuffersResponse(
+                        result,
+                        coordinatorHostIndex,
+                        std::move(callback),
+                        TMonotonic::Now() - startAt);
+                } else {
+                    callback(
+                        TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+                            E_FAIL,
+                            "WriteBlocksToManyPBuffersResponse: DBG is "
+                            "destroyed already."));
+                }
+            });
+    };
 
     StorageTransport->WriteToManyPBuffers(
         PBufferConnections[coordinatorHostIndex].HostConnection,
@@ -537,54 +584,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
         replyTimeout,
         guardedSglist,
         CreateChildSpan(traceId, "NbsPartition.WriteBlocksToManyPBuffers"),
-        [startAt,
-         coordinatorHostIndex,
-         executor = Executor,
-         threadChecker = ExecutorThreadChecker.CreateDelegate(),
-         callback = std::move(callback),
-         weakSelf = weak_from_this()](
-            NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult
-                result,
-            std::shared_ptr<NWilson::TSpan> span) mutable
-        {
-            // ActorSystem thread
-
-            auto responseSpan =
-                span ? std::make_shared<NWilson::TSpan>(span->CreateChild(
-                           NKikimr::TWilsonNbs::NbsBasic,
-                           "WriteBlocksToManyPBuffers.Response",
-                           NWilson::EFlags::AUTO_END))
-                     : nullptr;
-            executor->ExecuteSimple(
-                [responseSpan = std::move(responseSpan),
-                 startAt,
-                 coordinatorHostIndex,
-                 threadChecker,
-                 result = std::move(result),
-                 callback,
-                 weakSelf]() mutable -> void
-                {
-                    Y_ABORT_UNLESS(threadChecker.Check());
-                    if (responseSpan) {
-                        responseSpan->Event("Reply on DBG thread");
-                    }
-
-                    if (auto self = weakSelf.lock()) {
-                        self->OnWriteBlocksToManyPBuffersResponse(
-                            result,
-                            coordinatorHostIndex,
-                            std::move(callback),
-                            TMonotonic::Now() - startAt);
-                        return;
-                    }
-                    callback(
-                        TDBGWriteBlocksToManyPBuffersResponse::
-                            MakeDirectBlockGroupError(
-                                E_FAIL,
-                                "WriteBlocksToManyPBuffersResponse: DBG is "
-                                "destroyed already."));
-                });
-        });
+        std::move(writeToManyPBuffersCB));
 }
 
 void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(

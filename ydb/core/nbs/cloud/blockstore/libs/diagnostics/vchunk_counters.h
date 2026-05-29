@@ -13,7 +13,7 @@ enum class EVChunkOperation
     Write,
     Flush,
     Erase,
-    EraseHanging,
+    EraseBelated,
 
     MAX
 };
@@ -45,7 +45,7 @@ private:
     TVChunkRequestCounters Write;
     TVChunkRequestCounters Flush;
     TVChunkRequestCounters Erase;
-    TVChunkRequestCounters EraseHanging;
+    TVChunkRequestCounters EraseBelated;
 
 public:
     explicit TVChunkCounters(NMonitoring::TDynamicCounterPtr parent);

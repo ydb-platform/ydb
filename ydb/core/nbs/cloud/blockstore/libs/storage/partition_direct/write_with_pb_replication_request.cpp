@@ -132,15 +132,15 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
 void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    if (HasError(response.DirectBlockGroupError)) {
+    if (HasError(response.OverallError)) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "OnWriteToManyPBuffersResponse fatal error %s %s %s",
-            FormatError(response.DirectBlockGroupError).c_str(),
+            FormatError(response.OverallError).c_str(),
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
-        ReplyOrNotify(response.DirectBlockGroupError, {});
+        TryToSendDirectWrites(false);
         return;
     }
 
@@ -175,7 +175,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
     if (ShouldReplyOk()) {
-        ReplyOrNotify(MakeError(S_OK), completedWritesOfCurrentResponse);
+        ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
         return;
     }
 
@@ -184,7 +184,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
 
 void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
 {
-    LOG_INFO(
+    LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "OnWriteToManyPBuffersResponse isHedge: %s considering to send fallback"
@@ -220,7 +220,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
 
-        ReplyOrNotify(resultError, {});
+        ReplyOrNotifyBelated(resultError, {});
         return;
     }
 
@@ -232,7 +232,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
              AvailableHostsForDirectSending,
              neededRequestsNumber))
     {
-        LOG_INFO(
+        LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "OnWriteToManyPBuffersResponse isHedge: %s: trying to send "
@@ -264,7 +264,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
         if (ShouldReplyOk()) {
-            ReplyOrNotify(MakeError(S_OK), THostMask::MakeOne(host));
+            ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
     }
@@ -289,7 +289,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
 
 void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 {
-    LOG_INFO(
+    LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "SendWriteRequestToManyPBuffers: schedule hedge %s %s",
@@ -323,7 +323,7 @@ TString TWriteWithPbReplicationRequestExecutor::ExtendedDebugState() const
     result << TBaseWriteRequestExecutor::ExtendedDebugState();
     result << "AvailableHostsForDirectSending: "
            << AvailableHostsForDirectSending.Print() << ";";
-    result << "ActiveDirectWrites" << ActiveDirectWrites.Print() << ";";
+    result << "ActiveDirectWrites: " << ActiveDirectWrites.Print() << ";";
 
     return result;
 }

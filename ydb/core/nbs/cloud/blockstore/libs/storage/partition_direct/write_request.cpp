@@ -56,9 +56,10 @@ void TBaseWriteRequestExecutor::SetReplyCallback(TReplyCallback callback)
     ReplyCallback = std::move(callback);
 }
 
-void TBaseWriteRequestExecutor::SetNotifyCallback(TNotifyCallback callback)
+void TBaseWriteRequestExecutor::SetNotifyBelatedCallback(
+    TNotifyBelatedCallback callback)
 {
-    NotifyCallback = std::move(callback);
+    NotifyBelatedCallback = std::move(callback);
 }
 
 bool TBaseWriteRequestExecutor::IsAlreadyReplied() const
@@ -75,7 +76,7 @@ TString TBaseWriteRequestExecutor::ExtendedDebugState() const
     return result;
 }
 
-void TBaseWriteRequestExecutor::ReplyOrNotify(
+void TBaseWriteRequestExecutor::ReplyOrNotifyBelated(
     NProto::TError error,
     THostMask completedOnCurrentResponse)
 {
@@ -83,7 +84,7 @@ void TBaseWriteRequestExecutor::ReplyOrNotify(
         Reply(std::move(error));
         return;
     }
-    Notify(completedOnCurrentResponse);
+    NotifyBelated(completedOnCurrentResponse);
 }
 
 void TBaseWriteRequestExecutor::Reply(NProto::TError error)
@@ -118,10 +119,11 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
         .CompletedWrites = CompletedWrites});
 }
 
-void TBaseWriteRequestExecutor::Notify(THostMask completedOnCurrentResponse)
+void TBaseWriteRequestExecutor::NotifyBelated(
+    THostMask completedOnCurrentResponse)
 {
     Y_ABORT_UNLESS(
-        NotifyCallback,
+        NotifyBelatedCallback,
         "TBaseWriteRequestExecutor::Notify called without callback set");
 
     LOG_DEBUG(
@@ -132,7 +134,7 @@ void TBaseWriteRequestExecutor::Notify(THostMask completedOnCurrentResponse)
         Request->Headers.Range.Print().c_str());
 
     if (!completedOnCurrentResponse.Empty()) {
-        NotifyCallback(completedOnCurrentResponse, Lsn);
+        NotifyBelatedCallback(completedOnCurrentResponse, Lsn);
     }
 }
 
@@ -188,7 +190,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
         if (ShouldReplyOk()) {
-            ReplyOrNotify(MakeError(S_OK), THostMask::MakeOne(host));
+            ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
     }
@@ -212,7 +214,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
             LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
-        ReplyOrNotify(response.Error, {});
+        ReplyOrNotifyBelated(response.Error, {});
 
         auto ender = TEndSpanWithError(std::move(span), response.Error);
     }
@@ -248,7 +250,7 @@ void TBaseWriteRequestExecutor::RequestTimeoutCallback()
         "%s Request timeout.",
         LogTitle.GetWithTime().c_str());
 
-    ReplyOrNotify(MakeError(E_TIMEOUT, "Write request timeout"), {});
+    ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
 }
 
 bool TBaseWriteRequestExecutor::ShouldReplyOk() const

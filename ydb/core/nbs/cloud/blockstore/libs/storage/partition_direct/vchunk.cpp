@@ -271,7 +271,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     DirtyMapRestored = true;
 
     DoFlush(false);
-    DoErase(false, TBlocksDirtyMap::EEraseType::STANDARD);
+    DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
 }
 
 void TVChunk::DoStart()
@@ -450,13 +450,16 @@ void TVChunk::DoWriteBlocksLocal(
                 std::move(span));
         });
 
-    writeExecutor->SetNotifyCallback(
+    writeExecutor->SetNotifyBelatedCallback(
         [weakSelf = weak_from_this(),
          vchunkRange](THostMask completedWrites, ui64 lsn) mutable
         {
             auto self = weakSelf.lock();
             if (self) {
-                self->OnWriteBlocksNotify(vchunkRange, completedWrites, lsn);
+                self->OnWriteBlocksNotifyBelated(
+                    vchunkRange,
+                    completedWrites,
+                    lsn);
             }
         });
 
@@ -508,7 +511,7 @@ void TVChunk::OnWriteBlocksResponse(
     ScheduleCleaningUp();
 }
 
-void TVChunk::OnWriteBlocksNotify(
+void TVChunk::OnWriteBlocksNotifyBelated(
     TBlockRange64 range,
     THostMask completedWrites,
     ui64 lsn)
@@ -521,9 +524,9 @@ void TVChunk::OnWriteBlocksNotify(
         "OnWriteBlocksNotify. Range %s",
         range.Print().c_str());
 
-    BlocksDirtyMap.UpdateAdditionalEraseQueue(completedWrites, lsn, range);
+    BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, lsn, range);
 
-    DoErase(false, TBlocksDirtyMap::EEraseType::HANGING);
+    DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
 }
 
 void TVChunk::DoFlush(bool force)
@@ -595,7 +598,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
 
     UpdatePendingCounters();
 
-    DoErase(false, TBlocksDirtyMap::EEraseType::STANDARD);
+    DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
     ScheduleCleaningUp();
 }
 
@@ -609,13 +612,12 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
 
     TEraseHints hints;
     switch (eraseType) {
-        case TBlocksDirtyMap::EEraseType::STANDARD:
+        case TBlocksDirtyMap::EEraseType::Standard:
             hints =
                 BlocksDirtyMap.MakeEraseHint(force ? 1 : SyncRequestsBatchSize);
             break;
-        case TBlocksDirtyMap::EEraseType::HANGING:
-            hints = BlocksDirtyMap.MakeEraseHangingHint(
-                force ? 1 : SyncRequestsBatchSize);
+        case TBlocksDirtyMap::EEraseType::Belated:
+            hints = BlocksDirtyMap.MakeEraseBelatedHint();
             break;
     };
 
@@ -644,11 +646,11 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
                 // Executor thread
                 if (auto self = weakSelf.lock()) {
                     switch (eraseType) {
-                        case TBlocksDirtyMap::EEraseType::STANDARD:
+                        case TBlocksDirtyMap::EEraseType::Standard:
                             self->OnEraseResponse(f.GetValue());
                             break;
-                        case TBlocksDirtyMap::EEraseType::HANGING:
-                            self->OnEraseHangingResponse(f.GetValue());
+                        case TBlocksDirtyMap::EEraseType::Belated:
+                            self->OnEraseBelatedResponse(f.GetValue());
                             break;
                     };
                 }
@@ -683,16 +685,16 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 }
 
-void TVChunk::OnEraseHangingResponse(
+void TVChunk::OnEraseBelatedResponse(
     const TEraseRequestExecutor::TResponse& response)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (size_t i = 0; i < response.EraseOk.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::EraseHanging, true);
+        Counters.RequestFinished(EVChunkOperation::EraseBelated, true);
     }
     for (size_t i = 0; i < response.EraseFailed.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::EraseHanging, false);
+        Counters.RequestFinished(EVChunkOperation::EraseBelated, false);
     }
 
     UpdatePendingCounters();
@@ -748,7 +750,7 @@ void TVChunk::CleaningUp()
         BlocksDirtyMap.NeedErase() ? "NeedErase" : "");
 
     DoFlush(true);
-    DoErase(true, TBlocksDirtyMap::EEraseType::STANDARD);
+    DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
 }
 
 void TVChunk::UpdatePendingCounters()
@@ -762,8 +764,8 @@ void TVChunk::UpdatePendingCounters()
         EVChunkOperation::Erase,
         BlocksDirtyMap.GetErasePendingCount());
     Counters.UpdatePending(
-        EVChunkOperation::EraseHanging,
-        BlocksDirtyMap.GetEraseHangingCount());
+        EVChunkOperation::EraseBelated,
+        BlocksDirtyMap.GetEraseBelatedCount());
     Counters.UpdateMinLsn(
         EVChunkOperation::Flush,
         BlocksDirtyMap.GetMinFlushPendingLsn());

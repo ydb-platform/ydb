@@ -88,7 +88,7 @@ private:
         TBlockRange64 vchunkRange,
         const TBaseWriteRequestExecutor::TResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
-    void OnWriteBlocksNotify(
+    void OnWriteBlocksNotifyBelated(
         TBlockRange64 range,
         THostMask completedWrites,
         ui64 lsn);
@@ -98,7 +98,7 @@ private:
 
     void DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType);
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
-    void OnEraseHangingResponse(
+    void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
     void ScheduleCleaningUp();

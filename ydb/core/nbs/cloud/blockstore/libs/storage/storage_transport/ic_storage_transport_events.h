@@ -278,6 +278,7 @@ struct TEvTransportPrivate
         const TGuardedSgList Data;
         NWilson::TTraceId TraceId;
         TCallback Callback;
+        ui32 NumberOfCallbackCalls = 0;
 
         TWriteToManyPBuffers(
             const NActors::TActorId serviceId,

@@ -158,7 +158,7 @@ TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
                 AllCompletedWrites.Include(response.CompletedWrites);
             CallbackResult = std::move(response);
         });
-    request->SetNotifyCallback(
+    request->SetNotifyBelatedCallback(
         [this](THostMask completedWrites, ui64 lsn)
         {
             Y_UNUSED(lsn);
@@ -172,7 +172,7 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteWithPbTestFixture::CreateOkResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse okResponse;
-    okResponse.DirectBlockGroupError = MakeError(S_OK);
+    okResponse.OverallError = MakeError(S_OK);
     okResponse.Responses.push_back(
         {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
     okResponse.Responses.push_back(
@@ -188,7 +188,7 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteWithPbTestFixture::CreateOneOkResponse(THostIndex hostIndex)
 {
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
-    partiallyOkResponse.DirectBlockGroupError = MakeError(S_OK);
+    partiallyOkResponse.OverallError = MakeError(S_OK);
     partiallyOkResponse.Responses.push_back(
         {.HostIndex = hostIndex, .Error = MakeError(S_OK)});
 
@@ -200,7 +200,7 @@ TDBGWriteBlocksToManyPBuffersResponse
 TWriteWithPbTestFixture::CreateDBGErrorResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgErrorResponse;
-    dbgErrorResponse.DirectBlockGroupError = MakeError(E_FAIL);
+    dbgErrorResponse.OverallError = MakeError(E_FAIL);
 
     return dbgErrorResponse;
 }

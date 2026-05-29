@@ -1,8 +1,7 @@
 #pragma once
 
+#include "ddisk_helpers.h"
 #include "ic_storage_transport_events.h"
-
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
@@ -42,7 +41,6 @@ private:
 
     struct TWriteToManyPBuffersReqInfo
     {
-        // TWriteToManyPBuffersReqInfo();
         std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers> Request;
         TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> WaitingReplies;
     };

@@ -463,17 +463,13 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
     return result;
 }
 
-TEraseHints TBlocksDirtyMap::MakeEraseHangingHint(size_t batchSize)
+TEraseHints TBlocksDirtyMap::MakeEraseBelatedHint()
 {
     TEraseHints result;
 
-    if (ReadyToEraseHanging.size() < batchSize) {
-        return result;
-    }
-
-    TSet<TInfoEraseHanging> readyToEraseHanging;
-    readyToEraseHanging.swap(ReadyToEraseHanging);
-    for (auto& item: readyToEraseHanging) {
+    TSet<TInfoEraseBelated> readyToEraseBelated;
+    readyToEraseBelated.swap(ReadyToEraseBelated);
+    for (const auto& item: readyToEraseBelated) {
         auto hostMask = item.Hosts;
         auto range = item.Range;
         for (auto host: hostMask) {
@@ -553,28 +549,24 @@ void TBlocksDirtyMap::EraseFinished(
     }
 }
 
-void TBlocksDirtyMap::UpdateAdditionalEraseQueue(
+void TBlocksDirtyMap::UpdateBelatedEraseQueue(
     THostMask completedWrites,
     ui64 lsn,
     TBlockRange64 range)
 {
-    bool needToRegister = true;
     auto item = Inflight.GetValue(lsn);
-    if (item) {
-        auto& inflight = item->Value;
-        needToRegister =
-            inflight.GetState() == TInflightInfo::EState::PBufferErasing ||
-            inflight.GetState() == TInflightInfo::EState::PBufferErased;
-    }
+    const bool unknownLsn = item == std::nullopt;
+    const bool erasingInProgress =
+        item &&
+        (item->Value.GetState() == TInflightInfo::EState::PBufferErasing ||
+         item->Value.GetState() == TInflightInfo::EState::PBufferErased);
 
-    if (!needToRegister) {
-        return;
+    if (unknownLsn || erasingInProgress) {
+        ReadyToEraseBelated.emplace(TInfoEraseBelated{
+            .Lsn = lsn,
+            .Hosts = completedWrites,
+            .Range = range});
     }
-
-    ReadyToEraseHanging.emplace(TInfoEraseHanging{
-        .Lsn = lsn,
-        .Hosts = completedWrites,
-        .Range = range});
 }
 
 void TBlocksDirtyMap::MarkFresh(THostIndex host, ui64 bytesOffset)
@@ -616,9 +608,9 @@ size_t TBlocksDirtyMap::GetErasePendingCount() const
     return ReadyToErase.size();
 }
 
-size_t TBlocksDirtyMap::GetEraseHangingCount() const
+size_t TBlocksDirtyMap::GetEraseBelatedCount() const
 {
-    return ReadyToEraseHanging.size();
+    return ReadyToEraseBelated.size();
 }
 
 ui64 TBlocksDirtyMap::GetMinFlushPendingLsn() const
@@ -781,7 +773,7 @@ bool TBlocksDirtyMap::NeedFlush() const
 
 bool TBlocksDirtyMap::NeedErase() const
 {
-    return !ReadyToErase.empty() || !ReadyToEraseHanging.empty();
+    return !ReadyToErase.empty() || !ReadyToEraseBelated.empty();
 }
 
 TString TBlocksDirtyMap::DebugPrintPBuffers()
@@ -884,6 +876,9 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
     mask = mask.Exclude(DisabledHosts);
     if (mask.Empty()) {
         mask = mask.Include(DesiredDDisks);
+        // If we don't have enabled hosts, we can return error or fail on
+        // assert. Or we can try to use disabled hosts because it could return
+        // to life. We choose 2 option and try to read from desired hosts.
     }
     Y_ABORT_UNLESS(!mask.Empty(), "MakeReadRangeHint empty mask");
 
@@ -893,6 +888,18 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
         TBlockRange64::WithLength(offsetBlocks, range.Size()),
         range,
         lsn == 0 ? TRangeLock(this, range, mask) : TRangeLock(this, lsn));
+}
+
+bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
+    const TInfoEraseBelated& other) const
+{
+    if (Lsn != other.Lsn) {
+        return Lsn < other.Lsn;
+    }
+    if (Hosts != other.Hosts) {
+        return Hosts < other.Hosts;
+    }
+    return TBlockRangeComparator{}(Range, other.Range);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

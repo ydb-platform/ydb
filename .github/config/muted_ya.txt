@@ -121,6 +121,7 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[F
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[True-True-kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_restart_query[False-False-no_partition_balancing]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_restart_query[True-True-partition_balancing]
 ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_restart_nodes[kikimr0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario

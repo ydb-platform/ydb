@@ -115,14 +115,6 @@ public:
         return Method;
     }
 
-    enum TRequestState {
-        StateIdle,
-        StateAuthentication,
-        StateAuthorization,
-        StateListEndpoints,
-        StateGrpcRequest,
-        StateFinished
-    };
 protected:
     TString Method;
     TProtoCall ProtoCall;
@@ -155,10 +147,6 @@ public:
 const THttpControllerRegistry& GetHttpControllerRegistry();
 
 class THttpRequestProcessors {
-public:
-    using TService = Ydb::DataStreams::V1::DataStreamsService;
-    using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
-
 public:
     THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config);
 

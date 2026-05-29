@@ -1,17 +1,80 @@
 {
     "Experiments": {
-        "since_langver": "2026.02"
+        "min_langver": "max"
+    },
+    "IfWithoutEvaluate": {
+        "description": "IF without EVALUATE",
+        "min_langver": "max"
+    },
+    "ForWithoutEvaluate": {
+        "description": "FOR without EVALUATE",
+        "min_langver": "max"
+    },
+    "ParallelFor": {
+        "description": "PARALLEL FOR",
+        "min_langver": "max"
+    },
+    "Combine": {
+        "description": "COMBINE",
+        "min_langver": "max"
     },
     "AggPhases": {
-        "since_langver": "2026.02"
+        "description": "GROUP BY MODE",
+        "min_langver": "max"
     },
     "YqlSelect": {
-        "since_langver": "2026.02"
+        "min_langver": "max"
     },
     "YqlRangeWindows": {
-        "since_langver": "2026.01"
+        "min_langver": "2026.01"
+    },
+    "YtCreateView": {
+        "description": "CREATE VIEW",
+        "min_langver": "2025.05"
+    },
+    "YtDropView": {
+        "description": "DROP VIEW",
+        "min_langver": "2025.05"
     },
     "InlineSubquery": {
-        "since_langver": "2025.04"
+        "description": "Inline subquery",
+        "min_langver": "2025.04"
+    },
+    "UdfNamedArgumentLayers": {
+        "description": "Udf: named argument Layers",
+        "min_langver": "2025.04"
+    },
+    "PartitionListTableFunction": {
+        "description": "PARTITION_LIST table function",
+        "min_langver": "2025.04"
+    },
+    "PartitionsTableFunction": {
+        "description": "PARTITIONS table function",
+        "min_langver": "2025.04"
+    },
+    "ReplaceInto": {
+        "description": "REPLACE",
+        "min_langver": "2025.04"
+    },
+    "LegacyNotNull": {
+        "max_langver": "2025.03"
+    },
+    "UnionDistinct": {
+        "description": "UNION DISTINCT",
+        "min_langver": "2025.03"
+    },
+    "ExceptIntersect": {
+        "description": "EXCEPT/INTERSECT",
+        "min_langver": "2025.03"
+    },
+    "UdfNamedArgumentDepends": {
+        "description": "Udf: named argument Depends",
+        "min_langver": "2025.03"
+    },
+    "PersistableFlattenAndAggrExprs": {
+        "min_langver": "2025.03"
+    },
+    "GroupByExprAfterWhere": {
+        "min_langver": "2025.02"
     }
 }

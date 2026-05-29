@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto& wc = *cmd.MutableWorkloadConfig();
             wc.SetTag(tag);
             wc.SetDelayBeforeMeasurementsSeconds(0);
-            wc.SetInFlightWrites(1);
+            wc.SetMaxInFlight(1);
             wc.SetReadWriteSizeKiB(4);
             wc.SetStopOnWritesDoneCount(1000);
             wc.SetDurationSeconds(1);
@@ -194,7 +194,6 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             }
             auto& tcfg = *wc.MutableTabletConfig();
             tcfg.SetMaxInflightLsns(64);
-            tcfg.SetFillRatio(0);
             tcfg.SetPBufferReplyTimeoutMicroseconds(500000); // 500 ms - slack for sim
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -402,7 +401,6 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetEraseBatchSize(32);
             cfg.SetSyncRequestsBatchSize(1);
             cfg.SetPBufferReplyTimeoutMicroseconds(500000);
-            cfg.SetFillRatio(50);
             cfg.SetNumDirectBlockGroupsToUse(1);
             cfg.SetIoSizeBytes(kBlockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());

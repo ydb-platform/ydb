@@ -1,3 +1,14 @@
+/*
+ * perfparameters.h
+ *
+ * This header centralizes a small set of performance-tuning constants and
+ * heuristic defaults used by CRoaring container code. These parameters control
+ * decisions such as initial container sizing and when lazy or eager operations
+ * may convert between container representations.
+ *
+ * In practice, these values encode trade-offs between memory use, allocation
+ * overhead, and execution speed for common workloads.
+ */
 #ifndef PERFPARAMETERS_H_
 #define PERFPARAMETERS_H_
 

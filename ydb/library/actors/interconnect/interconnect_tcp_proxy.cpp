@@ -912,8 +912,8 @@ namespace NActors {
                 return false;
             }
 
-            const ui64 nowMicroSeconds = now.MicroSeconds();
-            for (ui64 lastMicroSeconds = Common->ErrorStateLogLastMicroSeconds.load(std::memory_order_relaxed);;) {
+            const uint64_t nowMicroSeconds = now.MicroSeconds();
+            for (uint64_t lastMicroSeconds = Common->ErrorStateLogLastMicroSeconds.load(std::memory_order_relaxed);;) {
                 if (lastMicroSeconds && nowMicroSeconds - lastMicroSeconds < kErrorStateLogInterval.MicroSeconds()) {
                     return false;
                 }

@@ -33,6 +33,7 @@ struct TNbsDbgLikeFinishStats {
     ui64 ReadsDDiskBytes = 0;
     ui64 RunningMs = 0;
     ui64 MeasuredMs = 0;
+    ui32 MaxInFlight = 0;
 
     // Latency histograms (microseconds), samples only after MeasurementStartTime.
     static constexpr i64 kLatencyHistMaxUs = 134'000'000;

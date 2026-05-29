@@ -22,10 +22,11 @@ class TPurecalcCompileServiceMock : public NActors::TActor<TPurecalcCompileServi
     using TBase = NActors::TActor<TPurecalcCompileServiceMock>;
 
 public:
-    TPurecalcCompileServiceMock(NActors::TActorId owner)
+    TPurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay = {})
         : TBase(&TPurecalcCompileServiceMock::StateFunc)
         , Owner(owner)
         , ProgramFactory(NYql::NPureCalc::MakeProgramFactory())
+        , ResponseDelay(responseDelay)
     {}
 
     STRICT_STFUNC(StateFunc,
@@ -42,13 +43,19 @@ public:
             UNIT_FAIL("Failed to compile purecalc filter: sql: " << e.GetYql() << ", error: " << e.GetIssues());
         }
 
-        Send(ev->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, ev->Cookie);
+        auto event = new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder));
+        if (!ResponseDelay) {
+            Send(ev->Sender, event, 0, ev->Cookie);
+        } else {
+            NActors::TActivationContext::Schedule(ResponseDelay, new NActors::IEventHandle(ev->Sender, ev->Sender, event, 0, ev->Cookie));
+        }
         Send(Owner, new NActors::TEvents::TEvPing());
     }
 
 private:
     const NActors::TActorId Owner;
     const NYql::NPureCalc::IProgramFactoryPtr ProgramFactory;
+    const TDuration ResponseDelay;
 };
 
 //// TBaseFixture::ICell
@@ -216,8 +223,8 @@ NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage TBaseFixture::GetM
 
 //// Functions
 
-NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner) {
-    return new TPurecalcCompileServiceMock(owner);
+NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay) {
+    return new TPurecalcCompileServiceMock(owner, responseDelay);
 }
 
 void CheckSuccess(const TStatus& status) {

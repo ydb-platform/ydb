@@ -269,6 +269,7 @@ message TEvChannelDataV2 {
     optional bool Leading = 13;
     optional bool Finished = 14;
     optional uint64 ConfirmedPopBytes = 15;
+    optional bool ConfirmFinish = 18;
 
     optional TCheckpoint Checkpoint = 16;
     optional TWatermark Watermark = 17;
@@ -323,4 +324,5 @@ message TEvChannelUpdateV2 {
 
     optional bool EarlyFinished = 8;
     optional uint64 PopBytes = 9;
+    optional bool Finishing = 10;
 };

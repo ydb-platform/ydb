@@ -658,7 +658,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = TStringBuilder() << "S3 error: " << error;
+            Error = TStringBuilder() << LogPrefix() << " error: " << error;
             PassAway();
         }
     }
@@ -714,7 +714,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error);
+            Finish(false, TStringBuilder() << LogPrefix() << " error: " << error);
         }
     }
 
@@ -768,14 +768,7 @@ public:
     }
 
     static constexpr TStringBuf LogPrefix() {
-        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
-            return "s3"sv;
-        } else if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>) {
-            return "fs"sv;
-        }
-
-        static_assert(std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>
-            || std::is_same_v<TSettings, NKikimrSchemeOp::TFSSettings>);
+        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(

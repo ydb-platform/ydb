@@ -31,7 +31,7 @@ namespace {
     )
     ```
 
-    Indexes are refered to "group_exprs" entries.
+    Indexes are referred to "group_exprs" entries.
 */
 
 template <class T>
@@ -130,6 +130,195 @@ TMaybe<IGraphTransformer::TStatus> TryFinishYqlTypeSlot(
     return Nothing();
 }
 
+void ForEachConjunct(
+    const TExprNode::TPtr& predicate,
+    std::invocable<const TExprNode::TPtr&> auto f)
+{
+    if (!predicate->IsCallable("And")) {
+        f(predicate);
+        return;
+    }
+
+    for (const auto& child : predicate->Children()) {
+        ForEachConjunct(child, f);
+    }
+}
+
+TMaybe<std::pair<TExprNode::TPtr, TExprNode::TPtr>>
+TryGetImplicitUsingEquality(const TExprNode::TPtr& conjunct) {
+    if (!conjunct->IsCallable("==")) {
+        return Nothing();
+    }
+
+    const auto& lhs = conjunct->ChildPtr(0);
+    const auto& rhs = conjunct->ChildPtr(1);
+    if (!lhs->IsCallable("YqlColumnRef") ||
+        !rhs->IsCallable("YqlColumnRef"))
+    {
+        return Nothing();
+    }
+
+    if (lhs->ChildrenSize() != 2 || rhs->ChildrenSize() != 2) {
+        return Nothing();
+    }
+
+    if (lhs->Tail().Content() != rhs->Tail().Content()) {
+        return Nothing();
+    }
+
+    return std::make_pair(lhs, rhs);
+}
+
+TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>>
+GetImplicitUsingEqualities(const TExprNode::TPtr& predicate) {
+    TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> equalities;
+    ForEachConjunct(predicate, [&](const TExprNode::TPtr& conjunct) {
+        if (const auto eq = TryGetImplicitUsingEquality(conjunct)) {
+            equalities.emplace_back(*eq);
+        }
+    });
+    return equalities;
+}
+
+TMaybe<ui32> FindAliasIndex(
+    const TInputs& inputs,
+    const TVector<ui32>& indexes,
+    TStringBuf alias)
+{
+    for (ui32 idx : indexes) {
+        if (!inputs[idx].Alias.empty() && inputs[idx].Alias == alias) {
+            return idx;
+        }
+    }
+
+    return Nothing();
+}
+
+TString GetCorrelationAlias(const TExprNode::TPtr& ref) {
+    YQL_ENSURE(ref->IsCallable("YqlColumnRef"));
+    YQL_ENSURE(ref->ChildrenSize() == 2);
+    return TString(ref->Head().Content());
+}
+
+IGraphTransformer::TStatus ResolveInputs(
+    const TInputs& inputs,
+    const TVector<ui32>& lhsIndexes,
+    const TVector<ui32>& rhsIndexes,
+    TExprNode::TPtr& lhsRef,
+    ui32& lhsIdx,
+    TExprNode::TPtr& rhsRef,
+    ui32& rhsIdx,
+    TExtContext& ctx)
+{
+    const TString lhsAlias = GetCorrelationAlias(lhsRef);
+    const TString rhsAlias = GetCorrelationAlias(rhsRef);
+
+    auto lhsInLhs = FindAliasIndex(inputs, lhsIndexes, lhsAlias);
+    auto rhsInRhs = FindAliasIndex(inputs, rhsIndexes, rhsAlias);
+    if (lhsInLhs && rhsInRhs) {
+        lhsIdx = *lhsInLhs;
+        rhsIdx = *rhsInRhs;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    auto lhsInRhs = FindAliasIndex(inputs, rhsIndexes, lhsAlias);
+    auto rhsInLhs = FindAliasIndex(inputs, lhsIndexes, rhsAlias);
+    if (lhsInRhs && rhsInLhs) {
+        std::swap(lhsRef, rhsRef);
+        lhsIdx = *rhsInLhs;
+        rhsIdx = *lhsInRhs;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!lhsInLhs) {
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(lhsRef->Pos()),
+            TStringBuilder() << "Unknown correlation: " << lhsAlias));
+    }
+
+    if (!rhsInRhs) {
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(rhsRef->Pos()),
+            TStringBuilder() << "Unknown correlation: " << rhsAlias));
+    }
+
+    return IGraphTransformer::TStatus::Error;
+}
+
+IGraphTransformer::TStatus TryToFindItemI(
+    TPositionHandle position,
+    const TInput& input,
+    TStringBuf name,
+    ui32& index,
+    TExtContext& ctx)
+{
+    auto maybe = input.Type->FindItemI(name, /*isVirtual=*/nullptr);
+    if (!maybe) {
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(position),
+            TStringBuilder()
+                << "Unknown column: " << name
+                << " in correlation name: " << input.Alias));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    index = *maybe;
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus TryToUsingEntry(
+    TExprNode::TPtr lhsRef,
+    TExprNode::TPtr rhsRef,
+    const TInputs& groupInputs,
+    const TVector<ui32>& lhsIndexes,
+    const TVector<ui32>& rhsIndexes,
+    std::pair<TString, TString>& entry,
+    TExtContext& ctx)
+{
+    ui32 lhsIdx = 0;
+    ui32 rhsIdx = 0;
+    if (auto status = ResolveInputs(
+            groupInputs,
+            lhsIndexes,
+            rhsIndexes,
+            lhsRef, lhsIdx,
+            rhsRef, rhsIdx,
+            ctx);
+        status != IGraphTransformer::TStatus::Ok)
+    {
+        return status;
+    }
+
+    const TStringBuf lhsName = lhsRef->Tail().Content();
+    const TStringBuf rhsName = rhsRef->Tail().Content();
+
+    auto lhsInput = groupInputs[lhsIdx];
+    auto rhsInput = groupInputs[rhsIdx];
+
+    ui32 rhsPos;
+    if (auto status = TryToFindItemI(rhsRef->Pos(), rhsInput, rhsName, rhsPos, ctx);
+        status != IGraphTransformer::TStatus::Ok)
+    {
+        return status;
+    }
+
+    ui32 lhsPos;
+    if (auto status = TryToFindItemI(lhsRef->Pos(), lhsInput, lhsName, lhsPos, ctx);
+        status != IGraphTransformer::TStatus::Ok)
+    {
+        return status;
+    }
+
+    const auto& lhsItems = lhsInput.Type->GetItems();
+    const auto& rhsItems = rhsInput.Type->GetItems();
+
+    entry = std::make_pair(
+        MakeAliasedColumn(lhsInput.Alias, lhsItems[lhsPos]->GetName()),
+        MakeAliasedColumn(rhsInput.Alias, rhsItems[rhsPos]->GetName()));
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace
 
 IGraphTransformer::TStatus PromoteYqlAggOptions(
@@ -209,6 +398,36 @@ TVector<TExprNode::TPtr> InferYqlGroupRefTypes(
     }
 
     return types;
+}
+
+IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
+    const TExprNode::TPtr& predicate,
+    const TInputs& groupInputs,
+    const TVector<ui32>& lhsIndexes,
+    const TVector<ui32>& rhsIndexes,
+    TVector<std::pair<TString, TString>>& implicitUsing,
+    TExtContext& ctx)
+{
+    auto equalities = GetImplicitUsingEqualities(predicate);
+
+    implicitUsing.clear();
+    implicitUsing.reserve(equalities.size());
+
+    for (auto [lhsRef, rhsRef] : equalities) {
+        std::pair<TString, TString> entry;
+        if (auto status = TryToUsingEntry(
+                std::move(lhsRef), std::move(rhsRef),
+                groupInputs, lhsIndexes, rhsIndexes,
+                entry, ctx);
+            status != IGraphTransformer::TStatus::Ok)
+        {
+            return status;
+        }
+
+        implicitUsing.emplace_back(std::move(entry));
+    }
+
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(

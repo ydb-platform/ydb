@@ -39,27 +39,25 @@ public:
     TDataChunk() = default;
 
     TDataChunk(TChunkedBuffer&& buffer, ui64 rows, NDqProto::EDataTransportVersion transportVersion,
-        NKikimr::NMiniKQL::EValuePackerVersion packerVersion, bool leading, bool finished)
+        NKikimr::NMiniKQL::EValuePackerVersion packerVersion, bool finished)
         : Buffer(buffer)
         , Rows(rows)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
-        , Leading(leading)
         , Finished(finished) {
         Bytes = Buffer.Size() + 1;
         Timestamp = TInstant::Now();
     }
 
-    TDataChunk(TChunkedBuffer&& buffer, ui64 rows, bool leading, bool finished)
+    TDataChunk(TChunkedBuffer&& buffer, ui64 rows, bool finished)
         : Buffer(buffer)
         , Rows(rows)
-        , Leading(leading)
         , Finished(finished) {
         Bytes = Buffer.Size() + 1;
         Timestamp = TInstant::Now();
     }
 
-    TDataChunk(bool leading, bool finished) : Bytes(1), Leading(leading), Finished(finished) {
+    TDataChunk(bool finished) : Bytes(1), Finished(finished) {
         Timestamp = TInstant::Now();
     }
 
@@ -69,8 +67,8 @@ public:
     ui64 Bytes = 0;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V1;
-    bool Leading = false;
     bool Finished = false;
+    bool ConfirmFinish = false;
     TInstant Timestamp;
 };
 
@@ -95,8 +93,6 @@ public:
     virtual void ExportPopStats(TDqAsyncStats& stats) = 0;
 
     void SendFinish();
-    bool GetLeading();
-    bool Leading = true;
 };
 
 // Channel usually created with unknown peer id which may be local or remote etc.

@@ -155,6 +155,7 @@ ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[1]
 ydb/tests/functional/tpc/medium py3test.[test_clickbench.py */*] chunk
+ydb/tests/functional/tpc/medium py3test.[test_upload.py */*] chunk
 ydb/tests/functional/tpc/medium test_clean.py.TestClean.test
 ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbench.test_clickbench[Query00]
 ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbench.test_clickbench[Query01]
@@ -295,6 +296,7 @@ ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[11]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[3]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[6]
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWM.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWMComputeSchedulerP1T1.test
@@ -302,6 +304,8 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestTpchWMS0_1.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltp50.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
+ydb/tests/functional/tpc/medium/tpch py3test.[test_s1.py */*] chunk
+ydb/tests/functional/tpc/medium/tpch py3test.[test_s_float.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[10]
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[11]
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[12]
@@ -339,10 +343,13 @@ ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLe
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[22]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[2]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[3]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[4]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[5]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[6]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[7]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[8]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[9]
 ydb/tests/functional/tpc/medium/tpch test_parallel.py.TestTpchParallelS0_1T10.test[Query01]
 ydb/tests/functional/tpc/medium/tpch test_parallel.py.TestTpchParallelS0_1T10.test[Query02]
 ydb/tests/functional/tpc/medium/tpch test_parallel.py.TestTpchParallelS0_1T10.test[Query03]
@@ -367,6 +374,8 @@ ydb/tests/functional/tpc/medium/tpch test_parallel.py.TestTpchParallelS0_1T10.te
 ydb/tests/functional/tpc/medium/tpch test_parallel.py.TestTpchParallelS0_1T10.test[Query22]
 ydb/tests/functional/tpc/medium/tpch test_parallel.py.TestTpchParallelS0_1T10.test[Sum]
 ydb/tests/functional/tpc/medium/tpch test_s1.py.TestTpchS1.test_tpch[10]
+ydb/tests/functional/tpc/medium/tpch test_s1.py.TestTpchS1.test_tpch[11]
+ydb/tests/functional/tpc/medium/tpch test_s1.py.TestTpchS1.test_tpch[12]
 ydb/tests/functional/tpc/medium/tpch test_s1.py.TestTpchS1.test_tpch[13]
 ydb/tests/functional/tpc/medium/tpch test_s1.py.TestTpchS1.test_tpch[14]
 ydb/tests/functional/tpc/medium/tpch test_s1.py.TestTpchS1.test_tpch[15]

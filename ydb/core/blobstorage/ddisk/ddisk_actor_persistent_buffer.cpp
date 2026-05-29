@@ -442,12 +442,13 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie) {
+    void TDDiskActor::HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie, bool resultStatus) {
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
         Y_ABORT_UNLESS(eraseCnt == 1);
         inflight.Span.Event("Part erased");
-        ClearPersistentBufferRecords(inflight, partCookie);
-
+        if (resultStatus) {
+            ClearPersistentBufferRecords(inflight, partCookie);
+        }
         if (inflight.OperationCookies.empty()) {
             Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
                 HPMilliSecondsFloat(HPNow() - inflight.StartTs));
@@ -484,8 +485,8 @@ namespace NKikimr::NDDisk {
             return;
         }
         auto& inflight = itInflight->second;
-
-        if (status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+        bool resultStatus = status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        if (!resultStatus) {
             inflight.Status = status;
             inflight.ErrorMessage = ev->Get()->ErrorMessage;
         }
@@ -505,12 +506,16 @@ namespace NKikimr::NDDisk {
                             continue;
                         }
                         auto& inflight2 = itInflight2->second;
-                        HandleErasePart(inflight2, opCookie2, partCookie);
+                        if (!resultStatus) {
+                            inflight2.Status = status;
+                            inflight2.ErrorMessage = ev->Get()->ErrorMessage;
+                        }
+                        HandleErasePart(inflight2, opCookie2, partCookie, resultStatus);
                     }
                 }
                 PersistentBufferEraseInflightsByRecord.erase(it);
             }
-            HandleErasePart(inflight, opCookie, partCookie);
+            HandleErasePart(inflight, opCookie, partCookie, resultStatus);
         } else {
             HandleWritePart(inflight, partCookie);
         }

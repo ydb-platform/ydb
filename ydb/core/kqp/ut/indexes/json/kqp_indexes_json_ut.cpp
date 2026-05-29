@@ -29,8 +29,8 @@ const std::string trueSuffix = std::string("\0\1", 2);
 const std::string falseSuffix = std::string("\0\0", 2);
 const std::string nullSuffix = std::string("\0\2", 2);
 
-// const std::string kFirstLongSqlInValue = "abcdefghijklmnopq";
-// const std::string kSecondLongSqlInValue = "abcdefghijklmnopqrstuvwxyz";
+const std::string kFirstLongSqlInValue = "abcdefghijklmnopq";
+const std::string kSecondLongSqlInValue = "abcdefghijklmnopqrstuvwxyz";
 
 TKikimrRunner Kikimr(bool enableJsonIndex = true, bool enableJsonIndexAutoSelect = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
@@ -2298,10 +2298,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                     .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
                     .Build());
 
-            // TODO: fix
-            // // Elements longer than 16 bytes
-            // ValidatePredicate(db,
-            //     std::format("JSON_VALUE(Text, '$.k1' RETURNING String) IN ['{}', '{}']", kFirstLongSqlInValue, kSecondLongSqlInValue));
+            // Elements longer than 16 bytes
+            ValidatePredicate(db,
+                std::format("JSON_VALUE(Text, '$.k1' RETURNING String) IN ['{}', '{}']", kFirstLongSqlInValue, kSecondLongSqlInValue));
         });
     }
 
@@ -2363,17 +2362,16 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                         .Build()
                     .Build());
 
-            // TODO: fix
-            // // List parameter with elements longer than 16 bytes
-            // ValidatePredicate(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
-            //     TParamsBuilder()
-            //         .AddParam("$p6")
-            //             .BeginList()
-            //                 .AddListItem().String(kFirstLongSqlInValue)
-            //                 .AddListItem().String(kSecondLongSqlInValue)
-            //                 .EndList()
-            //             .Build()
-            //         .Build());
+            // List parameter with elements longer than 16 bytes
+            ValidatePredicate(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
+                TParamsBuilder()
+                    .AddParam("$p6")
+                        .BeginList()
+                            .AddListItem().String(kFirstLongSqlInValue)
+                            .AddListItem().String(kSecondLongSqlInValue)
+                            .EndList()
+                        .Build()
+                    .Build());
         });
     }
 
@@ -2402,10 +2400,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsTuple(1, NULL))");
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsTuple(1, Nothing(Optional<Int32>)))");
 
-            // TODO: fix
-            // // Elements longer than 16 bytes
-            // ValidatePredicate(db,
-            //     std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN ('{}', '{}'))", kFirstLongSqlInValue, kSecondLongSqlInValue));
+            // Elements longer than 16 bytes
+            ValidatePredicate(db,
+                std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN ('{}', '{}'))", kFirstLongSqlInValue, kSecondLongSqlInValue));
         });
     }
 
@@ -2483,17 +2480,16 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                         .Build()
                     .Build());
 
-            // TODO: fix
-            // // Tuple parameter with elements longer than 16 bytes
-            // ValidatePredicate(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
-            //     TParamsBuilder()
-            //         .AddParam("$p6")
-            //             .BeginTuple()
-            //                 .AddElement().String(kFirstLongSqlInValue)
-            //                 .AddElement().String(kSecondLongSqlInValue)
-            //             .EndTuple()
-            //             .Build()
-            //         .Build());
+            // Tuple parameter with elements longer than 16 bytes
+            ValidatePredicate(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
+                TParamsBuilder()
+                    .AddParam("$p6")
+                        .BeginTuple()
+                            .AddElement().String(kFirstLongSqlInValue)
+                            .AddElement().String(kSecondLongSqlInValue)
+                        .EndTuple()
+                        .Build()
+                    .Build());
         });
     }
 
@@ -2549,10 +2545,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                     .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
                     .Build());
 
-            // TODO: fix
-            // // Keys longer than 16 bytes
-            // ValidatePredicate(db,
-            //     std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {{'{}': 1, '{}': 2}})", kFirstLongSqlInValue, kSecondLongSqlInValue));
+            // Keys longer than 16 bytes
+            ValidatePredicate(db,
+                std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {{'{}': 1, '{}': 2}})", kFirstLongSqlInValue, kSecondLongSqlInValue));
         });
     }
 
@@ -2627,17 +2622,16 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                         .Build()
                     .Build());
 
-            // TODO: fix
-            // // Dict parameter with keys longer than 16 bytes
-            // ValidatePredicate(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
-            //     TParamsBuilder()
-            //         .AddParam("$p6")
-            //             .BeginDict()
-            //                 .AddDictItem().DictKey().String(kFirstLongSqlInValue).DictPayload().Int32(10)
-            //                 .AddDictItem().DictKey().String(kSecondLongSqlInValue).DictPayload().Int32(20)
-            //             .EndDict()
-            //             .Build()
-            //         .Build());
+            // Dict parameter with keys longer than 16 bytes
+            ValidatePredicate(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
+                TParamsBuilder()
+                    .AddParam("$p6")
+                        .BeginDict()
+                            .AddDictItem().DictKey().String(kFirstLongSqlInValue).DictPayload().Int32(10)
+                            .AddDictItem().DictKey().String(kSecondLongSqlInValue).DictPayload().Int32(20)
+                        .EndDict()
+                        .Build()
+                    .Build());
         });
     }
 
@@ -2687,10 +2681,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                     .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
                     .Build());
 
-            // TODO: fix
-            // // Elements longer than 16 bytes
-            // ValidatePredicate(db,
-            //     std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {{'{}', '{}'}})", kFirstLongSqlInValue, kSecondLongSqlInValue));
+            // Elements longer than 16 bytes
+            ValidatePredicate(db,
+                std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {{'{}', '{}'}})", kFirstLongSqlInValue, kSecondLongSqlInValue));
         });
     }
 
@@ -5733,11 +5726,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                     .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
                     .Build());
 
-            // TODO: fix
-            // // Elements longer than 16 bytes
-            // ValidateTokens(db,
-            //     std::format("JSON_VALUE(Text, '$.k1' RETURNING String) IN ['{}', '{}']", kFirstLongSqlInValue, kSecondLongSqlInValue),
-            //     {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
+            // Elements longer than 16 bytes
+            ValidateTokens(db,
+                std::format("JSON_VALUE(Text, '$.k1' RETURNING String) IN ['{}', '{}']", kFirstLongSqlInValue, kSecondLongSqlInValue),
+                {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
         });
     }
 
@@ -5801,18 +5793,17 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                         .Build()
                     .Build(), "or");
 
-            // TODO: fix
-            // // List parameter with elements longer than 16 bytes
-            // ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
-            //     {NJsonIndex::TToken{"\3k1", "$p6"}},
-            //     TParamsBuilder()
-            //         .AddParam("$p6")
-            //             .BeginList()
-            //                 .AddListItem().String(kFirstLongSqlInValue)
-            //                 .AddListItem().String(kSecondLongSqlInValue)
-            //                 .EndList()
-            //             .Build()
-            //         .Build(), "or");
+            // List parameter with elements longer than 16 bytes
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
+                {NJsonIndex::TToken{"\3k1", "$p6"}},
+                TParamsBuilder()
+                    .AddParam("$p6")
+                        .BeginList()
+                            .AddListItem().String(kFirstLongSqlInValue)
+                            .AddListItem().String(kSecondLongSqlInValue)
+                            .EndList()
+                        .Build()
+                    .Build(), "or");
         });
     }
 
@@ -5855,11 +5846,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsTuple(1, NULL))");
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsTuple(1, Nothing(Optional<Int32>)))");
 
-            // TODO: fix
-            // // Elements longer than 16 bytes
-            // ValidateTokens(db,
-            //     std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN ('{}', '{}'))", kFirstLongSqlInValue, kSecondLongSqlInValue),
-            //     {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
+            // Elements longer than 16 bytes
+            ValidateTokens(db,
+                std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN ('{}', '{}'))", kFirstLongSqlInValue, kSecondLongSqlInValue),
+                {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
         });
     }
 
@@ -5940,18 +5930,17 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                         .Build()
                     .Build());
 
-            // TODO: fix
-            // // Tuple parameter with elements longer than 16 bytes
-            // ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
-            //     {NJsonIndex::TToken{"\3k1", "$p6"}},
-            //     TParamsBuilder()
-            //         .AddParam("$p6")
-            //             .BeginTuple()
-            //                 .AddElement().String(kFirstLongSqlInValue)
-            //                 .AddElement().String(kSecondLongSqlInValue)
-            //             .EndTuple()
-            //             .Build()
-            //         .Build(), "or");
+            // Tuple parameter with elements longer than 16 bytes
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
+                {NJsonIndex::TToken{"\3k1", "$p6"}},
+                TParamsBuilder()
+                    .AddParam("$p6")
+                        .BeginTuple()
+                            .AddElement().String(kFirstLongSqlInValue)
+                            .AddElement().String(kSecondLongSqlInValue)
+                        .EndTuple()
+                        .Build()
+                    .Build(), "or");
         });
     }
 
@@ -6026,11 +6015,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                     .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
                     .Build());
 
-            // TODO: fix
-            // // Keys longer than 16 bytes
-            // ValidateTokens(db,
-            //     std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {{'{}': 1, '{}': 2}})", kFirstLongSqlInValue, kSecondLongSqlInValue),
-            //     {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
+            // Keys longer than 16 bytes
+            ValidateTokens(db,
+                std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {{'{}': 1, '{}': 2}})", kFirstLongSqlInValue, kSecondLongSqlInValue),
+                {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
         });
     }
 
@@ -6108,18 +6096,17 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                         .Build()
                     .Build(), "or");
 
-            // TODO: fix
-            // // Dict parameter with keys longer than 16 bytes
-            // ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
-            //     {NJsonIndex::TToken{"\3k1", "$p6"}},
-            //     TParamsBuilder()
-            //         .AddParam("$p6")
-            //             .BeginDict()
-            //                 .AddDictItem().DictKey().String(kFirstLongSqlInValue).DictPayload().Int32(10)
-            //                 .AddDictItem().DictKey().String(kSecondLongSqlInValue).DictPayload().Int32(20)
-            //             .EndDict()
-            //             .Build()
-            //         .Build(), "or");
+            // Dict parameter with keys longer than 16 bytes
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p6",
+                {NJsonIndex::TToken{"\3k1", "$p6"}},
+                TParamsBuilder()
+                    .AddParam("$p6")
+                        .BeginDict()
+                            .AddDictItem().DictKey().String(kFirstLongSqlInValue).DictPayload().Int32(10)
+                            .AddDictItem().DictKey().String(kSecondLongSqlInValue).DictPayload().Int32(20)
+                        .EndDict()
+                        .Build()
+                    .Build(), "or");
         });
     }
 
@@ -6194,11 +6181,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                     .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
                     .Build());
 
-            // TODO: fix
-            // // Elements longer than 16 bytes
-            // ValidateTokens(db,
-            //     std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN AsSet('{}', '{}'))", kFirstLongSqlInValue, kSecondLongSqlInValue),
-            //     {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
+            // Elements longer than 16 bytes
+            ValidateTokens(db,
+                std::format(R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN AsSet('{}', '{}'))", kFirstLongSqlInValue, kSecondLongSqlInValue),
+                {"\3k1" + strSuffix(kFirstLongSqlInValue), "\3k1" + strSuffix(kSecondLongSqlInValue)}, "or");
         });
     }
 

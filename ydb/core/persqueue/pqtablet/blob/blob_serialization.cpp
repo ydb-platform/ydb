@@ -82,13 +82,15 @@ ui32 BlobSize(const TClientBlob& blob) {
 
 template<NKikimrPQ::TBatchHeader::EPayloadFormat Type>
 struct TBatchSerializer {
-    TBatchSerializer(TBatch& batch)
-        : Batch(batch) {
+    TBatchSerializer(TBatch& batch, TBuffer& output)
+        : Batch(batch)
+        , Output(output) {
     }
 
     void Pack();
 
     TBatch& Batch;
+    TBuffer& Output;
 };
 
 
@@ -105,7 +107,6 @@ struct TBatchDeserializer {
 
 template<>
 void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
-    Batch.PackedData.Clear();
     bool hasUncompressed = false;
     bool hasKinesis = false;
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
@@ -146,8 +147,8 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
 
     //output order
     {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Output);
         for (const auto& p : pos) {
             chunk->AddData((const char*)&p, sizeof(p));
         }
@@ -157,46 +158,46 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
             chunk->AddData((const char*)&p, sizeof(p));
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
     //output SourceId
     {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Output);
         for (auto it = reorderMap.begin(); it != reorderMap.end(); ++it) {
             chunk->AddData(it->first.data(), it->first.size());
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
     //output SeqNo
     {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(Output);
         for (const auto& p : pos) {
             chunk->AddData((const char*)&Batch.Blobs[p].SeqNo, sizeof(ui64));
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
     //output Data
     {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Output);
         for (const auto& p : pos) {
             chunk->AddData(Batch.Blobs[p].Data.data(), Batch.Blobs[p].Data.size());
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
     //output PartData::Pos + payload
     {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Output);
         ui32 cnt = 0;
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
             if (Batch.Blobs[i].PartData) {
@@ -215,67 +216,67 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
             }
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
     //output Wtime
     {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(Output);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
             ui64 writeTimestampMs = Batch.Blobs[i].WriteTimestamp.MilliSeconds();
             chunk->AddData((const char*)&writeTimestampMs, sizeof(ui64));
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
     if (hasKinesis) {
         {
-            ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Batch.PackedData);
+            ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Output);
             for (const auto &p : pos) {
                 chunk->AddData(Batch.Blobs[p].PartitionKey.data(), Batch.Blobs[p].PartitionKey.size());
             }
             chunk->Seal();
-            WriteActualChunkSize(Batch.PackedData, sizeOffset);
+            WriteActualChunkSize(Output, sizeOffset);
         }
 
         {
-            ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Batch.PackedData);
+            ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+            auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(Output);
             for (const auto &p : pos) {
                 chunk->AddData(Batch.Blobs[p].ExplicitHashKey.data(), Batch.Blobs[p].ExplicitHashKey.size());
             }
             chunk->Seal();
-            WriteActualChunkSize(Batch.PackedData, sizeOffset);
+            WriteActualChunkSize(Output, sizeOffset);
         }
     }
 
     //output Ctime
     {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(Output);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
             ui64 createTimestampMs = Batch.Blobs[i].CreateTimestamp.MilliSeconds();
             chunk->AddData((const char*)&createTimestampMs, sizeof(ui64));
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
     //output Uncompressed
     if (hasUncompressed) {
-        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
+        ui32 sizeOffset = WriteTemporaryChunkSize(Output);
+        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Output);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
             chunk->AddData((const char*)&Batch.Blobs[i].UncompressedSize, sizeof(ui32));
         }
         chunk->Seal();
-        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+        WriteActualChunkSize(Output, sizeOffset);
     }
 
-    Batch.Header.SetPayloadSize(Batch.PackedData.size());
+    Batch.Header.SetPayloadSize(Output.size());
 }
 
 template<>
@@ -461,11 +462,10 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
 template<>
 void TBatchSerializer<NKikimrPQ::TBatchHeader::EUncompressed>::Pack() {
     Batch.Header.SetFormat(NKikimrPQ::TBatchHeader::EUncompressed);
-    Batch.PackedData.Clear();
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
-        Serialize(Batch.Blobs[i], Batch.PackedData);
+        Serialize(Batch.Blobs[i], Output);
     }
-    Batch.Header.SetPayloadSize(Batch.PackedData.size());
+    Batch.Header.SetPayloadSize(Output.size());
 }
 
 template<>
@@ -515,11 +515,16 @@ void TBatch::Pack() {
     }
     Packed = true;
 
-    PackedData.Reserve(GetUnpackedSize() + GetMaxHeaderSize());
-    TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>(*this).Pack();
+    TBuffer packedData;
+    packedData.Reserve(GetUnpackedSize() + GetMaxHeaderSize());
+    TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>(*this, packedData).Pack();
+    PackedData = TPackedBatchData(std::move(packedData));
 
     if (GetPackedSize() > GetUnpackedSize() + GetMaxHeaderSize()) { //packing is not effective, write as-is
-        TBatchSerializer<NKikimrPQ::TBatchHeader::EUncompressed>(*this).Pack();
+        TBuffer unpackedData;
+        unpackedData.Reserve(GetUnpackedSize() + GetMaxHeaderSize());
+        TBatchSerializer<NKikimrPQ::TBatchHeader::EUncompressed>(*this, unpackedData).Pack();
+        PackedData = TPackedBatchData(std::move(unpackedData));
     }
 
     for (auto& b : Blobs) {

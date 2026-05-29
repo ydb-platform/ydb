@@ -6,8 +6,6 @@
 #include <util/system/unaligned_mem.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <cstring>
-
 namespace NKikimr {
 namespace NPQ {
 
@@ -29,6 +27,11 @@ TPackedBatchData::TPackedBatchData(const char* data, size_t size)
 {
 }
 
+TPackedBatchData::TPackedBatchData(TBuffer&& data)
+    : Buffer(std::move(data))
+{
+}
+
 TPackedBatchData::TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 offset, ui32 size)
     : Owner(std::move(owner))
     , Offset(offset)
@@ -44,11 +47,6 @@ TPackedBatchData::TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, u
 const char* TPackedBatchData::data() const noexcept
 {
     return Owner ? Owner->Data.data() + Offset : Buffer.data();
-}
-
-char* TPackedBatchData::data()
-{
-    return MutableBuffer().data();
 }
 
 size_t TPackedBatchData::size() const noexcept
@@ -76,78 +74,12 @@ bool TPackedBatchData::IsShared() const noexcept
     return static_cast<bool>(Owner);
 }
 
-void TPackedBatchData::Clear()
-{
-    if (Owner) {
-        Reset();
-    } else {
-        Buffer.Clear();
-    }
-}
-
 void TPackedBatchData::Reset()
 {
     Owner.Reset();
     Offset = 0;
     Size_ = 0;
     TBuffer().Swap(Buffer);
-}
-
-void TPackedBatchData::Reserve(size_t len)
-{
-    MutableBuffer().Reserve(len);
-}
-
-void TPackedBatchData::Append(const char* data, size_t len)
-{
-    MutableBuffer().Append(data, len);
-}
-
-TBuffer& TPackedBatchData::MutableBuffer()
-{
-    if (Owner) {
-        TBuffer copy(data(), size());
-        Owner.Reset();
-        Offset = 0;
-        Size_ = 0;
-        Buffer = std::move(copy);
-    }
-
-    return Buffer;
-}
-
-TPackedBatchData::operator TBuffer&()
-{
-    return MutableBuffer();
-}
-
-TPackedBatchData::operator TBuffer() const
-{
-    return TBuffer(data(), size());
-}
-
-bool operator==(const TPackedBatchData& lhs, const TBuffer& rhs) noexcept
-{
-    if (lhs.Size() != rhs.Size()) {
-        return false;
-    }
-
-    return lhs.Empty() || std::memcmp(lhs.data(), rhs.Data(), lhs.Size()) == 0;
-}
-
-bool operator==(const TBuffer& lhs, const TPackedBatchData& rhs) noexcept
-{
-    return rhs == lhs;
-}
-
-bool operator!=(const TPackedBatchData& lhs, const TBuffer& rhs) noexcept
-{
-    return !(lhs == rhs);
-}
-
-bool operator!=(const TBuffer& lhs, const TPackedBatchData& rhs) noexcept
-{
-    return !(lhs == rhs);
 }
 
 //

@@ -72,10 +72,10 @@ class TPackedBatchData {
 public:
     TPackedBatchData() = default;
     TPackedBatchData(const char* data, size_t size);
+    explicit TPackedBatchData(TBuffer&& data);
     TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 offset, ui32 size);
 
     const char* data() const noexcept;
-    char* data();
 
     size_t size() const noexcept;
     size_t Size() const noexcept;
@@ -83,15 +83,7 @@ public:
     bool Empty() const noexcept;
     bool IsShared() const noexcept;
 
-    void Clear();
     void Reset();
-    void Reserve(size_t len);
-    void Append(const char* data, size_t len);
-
-    TBuffer& MutableBuffer();
-
-    operator TBuffer&();
-    operator TBuffer() const;
 
 private:
     TBuffer Buffer;
@@ -99,11 +91,6 @@ private:
     ui32 Offset = 0;
     ui32 Size_ = 0;
 };
-
-bool operator==(const TPackedBatchData& lhs, const TBuffer& rhs) noexcept;
-bool operator==(const TBuffer& lhs, const TPackedBatchData& rhs) noexcept;
-bool operator!=(const TPackedBatchData& lhs, const TBuffer& rhs) noexcept;
-bool operator!=(const TBuffer& lhs, const TPackedBatchData& rhs) noexcept;
 
 //TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs)
 //or packed(PackedData)

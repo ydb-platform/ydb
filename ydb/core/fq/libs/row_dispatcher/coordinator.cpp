@@ -207,6 +207,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     bool RebalancingScheduled = false;
     ENodeState State = ENodeState::Initializing;
     TDuration RebalancingTimeout;
+    bool PrintStateEnabled = false;         // Logs (InternalState) is too big
 
 public:
     TActorCoordinator(
@@ -290,7 +291,9 @@ void TActorCoordinator::Bootstrap() {
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     ScheduleNodeInfoRequest();
     Schedule(RebalancingTimeout, new TEvPrivate::TEvStartingTimeout());
-    // Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());  // Logs (InternalState) is too big
+    if (PrintStateEnabled) {
+        Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    }
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId() 
         << ", NodesManagerId " << NodesManagerId
         << ", rebalancing timeout " << RebalancingTimeout);
@@ -368,7 +371,7 @@ TString TActorCoordinator::GetInternalState() {
     str << "Known row dispatchers:\n";
 
     for (const auto& [actorId, info] : RowDispatchers) {
-        str << "    " << actorId << ", state " << static_cast<int>(info.State) << "\n";
+        str << "node " << actorId.NodeId() << "[" << actorId << "], state " << (info.State == ENodeState::Initializing ? "Initializing" : "Started")  << " connected " << info.Connected << " partitions count " << info.Locations.size()<< "\n";
     }
 
     str << "\nLocations:\n";
@@ -384,6 +387,9 @@ TString TActorCoordinator::GetInternalState() {
 }
 
 void TActorCoordinator::PrintInternalState() {
+    if (!PrintStateEnabled) {
+        return;
+    }
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
@@ -667,6 +673,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvStartingTimeout::TPtr&) {
     if (State != ENodeState::Started) {
         LOG_ROW_DISPATCHER_TRACE("Change global state to Started (by timeout)");
         State = ENodeState::Started;
+        PrintInternalState();
     }
 }
 
@@ -699,9 +706,10 @@ void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& 
 }
 
 void TActorCoordinator::UpdateGlobalState() {
-     if (State != ENodeState::Started && NodesCount && RowDispatchers.size() >= NodesCount) {
+    if (State != ENodeState::Started && NodesCount && RowDispatchers.size() >= NodesCount) {
         LOG_ROW_DISPATCHER_TRACE("Change global state to Started (by nodes count)");
         State = ENodeState::Started;
+        PrintInternalState();
     }
 }
 

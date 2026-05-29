@@ -430,19 +430,14 @@ public:
 
         while (begin.Iter != end.Iter) {
             const size_t size = begin.ContiguousSize();
-            if (size) {
-                Chain.PutToEnd(TRcBuf::Piece, begin.ContiguousData(), size, begin.GetChunk());
-                Size += size;
-            }
+            Chain.PutToEnd(TRcBuf::Piece, begin.ContiguousData(), size, begin.GetChunk());
             begin.AdvanceToNextContiguousBlock();
+            Size += size;
         }
 
         if (begin != end && end.PointsToChunkMiddle()) {
-            const size_t size = end.Ptr - begin.Ptr;
-            if (size) {
-                Chain.PutToEnd(TRcBuf::Piece, begin.Ptr, end.Ptr, begin.GetChunk());
-                Size += size;
-            }
+            Chain.PutToEnd(TRcBuf::Piece, begin.Ptr, end.Ptr, begin.GetChunk());
+            Size += end.Ptr - begin.Ptr;
         }
     }
 
@@ -1143,9 +1138,6 @@ public:
 inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena) {
     TRope res;
     for (TRcBuf& chunk : origin.Chain) {
-        if (!chunk.GetSize()) {
-            continue;
-        }
         size_t ratio = chunk.GetSize() * 1024 / chunk.GetOccupiedMemorySize();
         if (ratio < 1024 - worstRatioPer1k) {
             res.Insert(res.End(), arena.CreateRope(chunk.Begin, chunk.GetSize()));

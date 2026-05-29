@@ -1850,7 +1850,7 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/PartitionWriteBytesMax"
+        "sensor": "PQ/PartitionMaxWriteBytesMax"
       },
       "value": 0
     },
@@ -1859,7 +1859,7 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/PartitionWriteMessagesMax"
+        "sensor": "PQ/PartitionMaxWriteMessagesMax"
       },
       "value": 0
     },
@@ -2183,7 +2183,7 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "total",
-        "sensor": "PQ/PartitionWriteBytesMax"
+        "sensor": "PQ/PartitionMaxWriteBytesMax"
       },
       "value": 0
     },
@@ -2192,7 +2192,7 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "total",
-        "sensor": "PQ/PartitionWriteMessagesMax"
+        "sensor": "PQ/PartitionMaxWriteMessagesMax"
       },
       "value": 0
     },

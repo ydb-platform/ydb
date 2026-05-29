@@ -1473,12 +1473,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select sum(t1.c) as sum0, sum(t1.a + 3) as sum1 from `/Root/t1` as t1 group by t1.b + 1 order by sum0;
             )",
-            /*
-            R"(
-                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
-                select sum(t1.c) as sum0, t1.b + 1, t1.c + 2 from `/Root/t1` as t1 group by t1.b + 1, t1.c + 2 order by sum0;
-            )",
-            */
             R"(
                 PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select sum(t1.c + 2) as sum0 from `/Root/t1` as t1 group by t1.b + t1.a order by sum0;
@@ -1493,21 +1487,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                             then 1
                             else 0 end) + 1, sum(t1.a) as r, t1.b + 2 as group_key from `/Root/t1` as t1 group by t1.b + 2 order by r;
             )",
+            R"(
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+                select sum(t1.c) as sum0, t1.b + 1, t1.c + 2 from `/Root/t1` as t1 group by t1.b + 1, t1.c + 2 order by sum0;
+            )",
+            R"(
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+                select sum(t1.c) as sum0, t1.b, t1.c from `/Root/t1` as t1 group by t1.b, t1.c order by sum0;
+            )",
+            R"(
+                pragma YqlSelect = "force";
+                select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b, t1.b from `/Root/t1` as t1 group by t1.b order by sum_c;
+            )",
+            R"(
+                pragma YqlSelect = "force";
+                select distinct min(t1.a) as min_a, max(t1.a) as max_a, t1.b from `/Root/t1` as t1 group by t1.b order by min_a;
+            )",
             /*
             R"(
-                select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b from `/Root/t1` as t1 group by t1.b order by sum_c;
-            )",
-            R"(
-                select distinct min(t1.a) as min_a, max(t1.a) as max_a from `/Root/t1` as t1 group by t1.b order by min_a;
-            )",
-
-            R"(
                 PRAGMA YqlSelect = 'force';
-                select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a;
+                select distinct t1.a, t1.b from `/Root/t1` as t1;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                select distinct t1.b from `/Root/t1` as t1 order by t1.b;
+                select distinct t1.b from `/Root/t1` as t1 group by t1.a order by t1.b;
             )",
             */
         };
@@ -1544,9 +1547,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[0];[1];[2];[3];[4]])",
                                             R"([[2u];[3u]])",
                                             R"([[[4];10];[[6];15]])",
-                                            //R"([[[4];[2];[4]];[[6];[3];[4]]])"
                                             R"([[[4]];[[8]];[[8]]])",
-                                            R"([[3;4;[3]];[3;6;[4]]])"
+                                            R"([[3;4;[3]];[3;6;[4]]])",
+                                            R"([[[4];[2];[4]];[[6];[3];[4]]])",
+                                            R"([[[4];[1];[2]];[[6];[2];[2]]])",
+                                            R"([[[4];4;[1]];[[6];6;[2]]])",
+                                            R"([[0;4;[2]];[1;3;[1]]])"
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

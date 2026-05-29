@@ -48,7 +48,7 @@ ALL_COLUMNS = STRING_COLUMNS + DATETIME_COLUMNS + UINT64_COLUMNS
 def sanitize_str(s):
     # YDB SDK expects bytes for 'String' columns
     if s is None:
-        s = "N\A"
+        s = "N/A"
     return s.encode("utf-8")
 
 
@@ -130,8 +130,14 @@ VALUES
                 "$id": sanitize_str(str(uuid.uuid4())),
                 "$build_preset": sanitize_str(build_preset),
                 "$binary_path": sanitize_str(ydbd_path),
-                "$size_stripped_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
-                "$size_bytes": int(binary_size_bytes.decode("utf-8")),
+                "$size_stripped_bytes": ydb.TypedValue(
+                    int(binary_size_stripped_bytes.decode("utf-8")),
+                    ydb.PrimitiveType.Uint64,
+                ),
+                "$size_bytes": ydb.TypedValue(
+                    int(binary_size_bytes.decode("utf-8")),
+                    ydb.PrimitiveType.Uint64,
+                ),
                 "$git_commit_time": ydb.TypedValue(
                     git_commit_time_unix, ydb.PrimitiveType.Datetime
                 ),

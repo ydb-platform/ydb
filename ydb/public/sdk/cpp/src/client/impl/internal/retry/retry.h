@@ -102,10 +102,10 @@ protected:
                 } else {
                     return NextStep::Finish;
                 }
-            
+
             case EStatus::CLIENT_DEADLINE_EXCEEDED:
                 Reset();
-
+                [[fallthrough]];
             default:
                 return Settings_.RetryUndefined_ ? NextStep::RetrySlowBackoff : NextStep::Finish;
         }

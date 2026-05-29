@@ -37,6 +37,7 @@ SRCS(
     progress_indication.cpp
     query_stats.cpp
     query_utils.cpp
+    tx_mode_utils.cpp
     recursive_list.cpp
     recursive_remove.cpp
     retry_func.cpp

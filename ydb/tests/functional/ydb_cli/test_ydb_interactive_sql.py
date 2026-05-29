@@ -12,6 +12,7 @@ import yaml
 from pathlib import Path
 from typing import List, Optional
 from ydb.tests.functional.ydb_cli.ydb_cli_interactive_helpers import BaseInteractiveTest
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
 
 logger = logging.getLogger(__name__)
 
@@ -918,3 +919,121 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
         finally:
             self._discard_and_exit(child)
             child.close()
+
+
+# =============================================================================
+# Interactive transactions (BEGIN / COMMIT / ROLLBACK)
+# =============================================================================
+
+
+class TestInteractiveTransactions(BaseSqlInteractiveTest):
+    """Verify interactive transaction control via Query service session (ydb_int only)."""
+
+    CLI_BINARY_ENV = "YDB_CLI_INT_BINARY"
+
+    @classmethod
+    def run_interactive_session(cls, queries: List[str], tmp_path: Path, extra_args: List[str] = None, endpoint: Optional[str] = None) -> BaseInteractiveTest.ExecutionResult:
+        import yatest.common
+
+        extra_args = cls._with_profile_isolation(extra_args)
+
+        stdin_content = "\n".join(queries) + "\n"
+        stdin_path = str(tmp_path / f"interactive_stdin_{uuid.uuid4().hex}.txt")
+        with open(stdin_path, "w") as f:
+            f.write(stdin_content)
+
+        with open(stdin_path, "r") as stdin_file:
+            execution = yatest.common.execute(
+                [
+                    ydb_bin(cls.CLI_BINARY_ENV),
+                    "--endpoint", endpoint or cls.grpc_endpoint(),
+                    "--database", cls.root_dir,
+                ] + (extra_args or []),
+                stdin=stdin_file,
+                check_exit_code=False,
+            )
+
+        logger.debug("stdin:\n%s", stdin_content)
+        return cls.ExecutionResult(
+            stdout=execution.std_out.decode("utf-8") if execution.std_out else "",
+            stderr=execution.std_err.decode("utf-8") if execution.std_err else "",
+            exit_code=execution.exit_code,
+        )
+
+    def test_begin_commit_select(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "COMMIT", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+        assert "1" in result.stdout
+
+    def test_begin_read_committed_commit(self):
+        result = self.run_interactive_session(
+            [
+                "BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED",
+                "SELECT 2;",
+                "COMMIT",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" in result.stdout
+        assert "COMMIT" in result.stdout
+        assert "2" in result.stdout
+
+    def test_begin_ydb_tx_mode_commit(self):
+        result = self.run_interactive_session(
+            ["BEGIN read-committed-rw", "SELECT 3;", "COMMIT", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "COMMIT" in result.stdout
+        assert "3" in result.stdout
+
+    def test_rollback(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 4;", "ROLLBACK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "ROLLBACK" in result.stdout
+        assert "4" in result.stdout
+
+    def test_commit_without_transaction_fails(self):
+        result = self.run_interactive_session(["COMMIT", "exit"], self.tmp_path)
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "no active transaction" in combined.lower()
+
+    def test_nested_begin_fails(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "BEGIN", "ROLLBACK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "already a transaction" in combined.lower()
+
+    def test_exit_with_open_transaction_warns(self):
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "open transaction" in combined.lower()
+
+
+class TestInteractiveTransactionsNotInPublicYdb(BaseSqlInteractiveTest):
+    """Public ydb CLI must not expose interactive transaction commands."""
+
+    def test_begin_not_available_in_public_ydb(self):
+        result = self.run_interactive_session(["BEGIN", "exit"], self.tmp_path)
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "ydb_int" in combined.lower()
+        assert "BEGIN" not in result.stdout.split("\n")[-5:]

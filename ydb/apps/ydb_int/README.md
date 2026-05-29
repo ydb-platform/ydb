@@ -41,6 +41,18 @@ extra `experimental` command tree:
 ./ydb/apps/ydb_int/ydb_int experimental --help
 ```
 
+### Interactive transactions (draft)
+
+In interactive mode (run `ydb_int` with no subcommand), `ydb_int` supports
+multi-statement transactions over the Query service session:
+
+- `BEGIN` / `START TRANSACTION` — optionally with isolation level
+  (`BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED`, `BEGIN read-committed-rw`, …)
+- `COMMIT` / `END` — commit the current transaction
+- `ROLLBACK` — rollback the current transaction
+
+This feature is **not** available in the official `ydb` client.
+
 ## Adding a new experimental command
 
 The recipe below describes the minimum set of steps required to introduce a

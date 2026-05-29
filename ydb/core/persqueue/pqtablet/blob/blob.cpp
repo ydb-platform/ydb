@@ -546,8 +546,11 @@ TPartitionedBlob::TCompactHeadResult TPartitionedBlob::CompactHead(bool glueHead
 }
 
 ui64 TPartitionedBlob::GetOffsetDelta() const {
+    bool newHeadIncluded = GlueNewHead && NewHead.Batches.size() > 0;
+    bool headIncluded = GlueHead && Head.Batches.size() > 0;
+
     // check the invariant that there is not holes in the glued content
-    if (GlueHead && GlueNewHead) {
+    if (headIncluded && newHeadIncluded) {
         AFL_ENSURE(NewHead.Offset == Head.GetNextOffset())
             ("Head.Offset", Head.Offset)
             ("Head.GetNextOffset()", Head.GetNextOffset())
@@ -555,8 +558,8 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
     }
 
     // check the invariant that the offset is the end of the glued content
-    if (!Blobs.empty() && (GlueHead || GlueNewHead)) {
-        const ui64 gluedContentEnd = GlueNewHead ? NewHead.GetNextOffset() : Head.GetNextOffset();
+    if (!Blobs.empty() && (headIncluded || newHeadIncluded)) {
+        const ui64 gluedContentEnd = newHeadIncluded ? NewHead.GetNextOffset() : Head.GetNextOffset();
         AFL_ENSURE(Offset == gluedContentEnd)
             ("Offset", Offset)
             ("gluedContentEnd", gluedContentEnd)
@@ -565,10 +568,10 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
     }
 
     ui64 offsetDelta = 0;
-    if (GlueHead) {
+    if (headIncluded) {
         offsetDelta += Head.GetOffsetDelta();
     }
-    if (GlueNewHead) {
+    if (newHeadIncluded) {
         offsetDelta += NewHead.GetOffsetDelta();
     }
 

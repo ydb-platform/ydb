@@ -281,7 +281,8 @@ public:
 
     TMaybe<char> GetSuffix() const
     {
-        if (Size() == 0) {
+        const bool canHaveSuffix = Size() == KeySize() + 1 || Size() == KeySizeWithOffsetDelta() + 1;
+        if (!canHaveSuffix) {
             return Nothing();
         }
         const char last = Data()[Size() - 1];
@@ -332,7 +333,11 @@ public:
 
 private:
     ui32 GetBodySize() const {
-        return HasSuffix() ? Size() - 1 : Size();
+        return HasSuffix() || HasLegacyEmptySuffix() ? Size() - 1 : Size();
+    }
+
+    bool HasLegacyEmptySuffix() const {
+        return Size() == KeySize() + 1 && Data()[Size() - 1] == '\0';
     }
 
     void EnsureValidBodySize() const {

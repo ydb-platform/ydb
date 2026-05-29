@@ -199,6 +199,15 @@ bool aws_byte_cursor_next_split(
     char split_on,
     struct aws_byte_cursor *AWS_RESTRICT substr) {
 
+    struct aws_byte_cursor cur = {.ptr = (uint8_t *)&split_on, .len = 1};
+    return aws_byte_cursor_next_split_on_cursor(input_str, cur, substr);
+}
+
+bool aws_byte_cursor_next_split_on_cursor(
+    const struct aws_byte_cursor *AWS_RESTRICT input_str,
+    struct aws_byte_cursor split_on,
+    struct aws_byte_cursor *AWS_RESTRICT substr) {
+
     AWS_PRECONDITION(aws_byte_cursor_is_valid(input_str));
 
     /* If substr is zeroed-out, then this is the first run. */
@@ -227,7 +236,7 @@ bool aws_byte_cursor_next_split(
         /* This is not the first run.
          * Advance substr past the previous split. */
         const uint8_t *input_end = input_str->ptr + input_str->len;
-        substr->ptr += substr->len + 1;
+        substr->ptr += substr->len + split_on.len;
 
         /* Note that it's ok if substr->ptr == input_end, this happens in the
          * final valid split of an input_str that ends with the split_on character:
@@ -243,11 +252,11 @@ bool aws_byte_cursor_next_split(
     }
 
     /* substr is now remainder of string, search for next split */
-    uint8_t *new_location = memchr(substr->ptr, split_on, substr->len);
-    if (new_location) {
+    struct aws_byte_cursor found_cur = {0};
+    if (!aws_byte_cursor_find_exact(substr, &split_on, &found_cur)) {
 
         /* Character found, update string length. */
-        substr->len = new_location - substr->ptr;
+        substr->len = found_cur.ptr - substr->ptr;
     }
 
     AWS_POSTCONDITION(aws_byte_cursor_is_valid(substr));
@@ -1256,6 +1265,27 @@ bool aws_byte_cursor_read_be16(struct aws_byte_cursor *cur, uint16_t *var) {
 }
 
 /**
+ * Reads a 16-bit value in little endian byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+bool aws_byte_cursor_read_le16(struct aws_byte_cursor *cur, uint16_t *var) {
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(cur));
+    AWS_PRECONDITION(AWS_OBJECT_PTR_IS_WRITABLE(var));
+    bool rv = aws_byte_cursor_read(cur, var, 2);
+
+    if (AWS_LIKELY(rv)) {
+        *var = aws_letoh16(*var);
+    }
+
+    AWS_POSTCONDITION(aws_byte_cursor_is_valid(cur));
+    return rv;
+}
+
+/**
  * Reads an unsigned 24-bit value (3 bytes) in network byte order from cur,
  * and places it in host byte order into 32-bit var.
  * Ex: if cur's next 3 bytes are {0xAA, 0xBB, 0xCC}, then var becomes 0x00AABBCC.
@@ -1302,6 +1332,45 @@ bool aws_byte_cursor_read_be32(struct aws_byte_cursor *cur, uint32_t *var) {
     }
 
     AWS_POSTCONDITION(aws_byte_cursor_is_valid(cur));
+    return rv;
+}
+
+/**
+ * Reads a 32-bit value in little endian byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+bool aws_byte_cursor_read_le32(struct aws_byte_cursor *cur, uint32_t *var) {
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(cur));
+    AWS_PRECONDITION(AWS_OBJECT_PTR_IS_WRITABLE(var));
+    bool rv = aws_byte_cursor_read(cur, var, 4);
+
+    if (AWS_LIKELY(rv)) {
+        *var = aws_letoh32(*var);
+    }
+
+    AWS_POSTCONDITION(aws_byte_cursor_is_valid(cur));
+    return rv;
+}
+
+bool aws_byte_cursor_read_be_i32(struct aws_byte_cursor *cur, int32_t *var) {
+    uint32_t uval;
+    bool rv = aws_byte_cursor_read_be32(cur, &uval);
+    if (AWS_LIKELY(rv)) {
+        memcpy(var, &uval, sizeof(uval));
+    }
+    return rv;
+}
+
+bool aws_byte_cursor_read_le_i32(struct aws_byte_cursor *cur, int32_t *var) {
+    uint32_t uval;
+    bool rv = aws_byte_cursor_read_le32(cur, &uval);
+    if (AWS_LIKELY(rv)) {
+        memcpy(var, &uval, sizeof(uval));
+    }
     return rv;
 }
 
@@ -1723,6 +1792,27 @@ static int s_read_unsigned(struct aws_byte_cursor cursor, uint64_t *dst, uint8_t
 
 int aws_byte_cursor_utf8_parse_u64(struct aws_byte_cursor cursor, uint64_t *dst) {
     return s_read_unsigned(cursor, dst, 10 /*base*/);
+}
+
+int aws_byte_cursor_utf8_parse_i64(struct aws_byte_cursor cursor, int64_t *dst) {
+    bool is_neg = cursor.len > 0 && cursor.ptr[0] == '-';
+    if (is_neg) {
+        aws_byte_cursor_advance(&cursor, 1);
+    }
+
+    uint64_t u64 = 0;
+    if (aws_byte_cursor_utf8_parse_u64(cursor, &u64)) {
+        return AWS_OP_ERR;
+    }
+
+    /* Note: corner cases for negative value is one higher then positive */
+    uint64_t max_allowed = is_neg ? (uint64_t)INT64_MAX + 1 : (uint64_t)INT64_MAX;
+    if (u64 > max_allowed) {
+        return aws_raise_error(AWS_ERROR_OVERFLOW_DETECTED);
+    }
+
+    *dst = is_neg ? -(int64_t)u64 : (int64_t)u64;
+    return AWS_OP_SUCCESS;
 }
 
 int aws_byte_cursor_utf8_parse_u64_hex(struct aws_byte_cursor cursor, uint64_t *dst) {

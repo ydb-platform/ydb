@@ -316,8 +316,8 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
-    def test_nested_structure_types(self, kikimr, client):
-        self.init(client, "test_nested_types")
+    def test_nested_structured_types(self, kikimr, client):
+        self.init(client, "test_nested_structured_types")
 
         large_string = "abcdefghjkl1234567890+abcdefghjkl1234567890"
         sql = Rf'''

@@ -61,9 +61,72 @@ TString RopeToString(const TRope& rope) {
     return res;
 }
 
+void AssertNoEmptyChunks(const TRope& rope) {
+    for (auto iter = rope.Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+        UNIT_ASSERT(iter.ContiguousSize());
+    }
+}
+
 TString Text = "No elements are copied or moved, only the internal pointers of the list nodes are re-pointed.";
 
 Y_UNIT_TEST_SUITE(TRope) {
+    Y_UNIT_TEST(SkipsZeroSizeRcBufChunks) {
+        TRcBuf backing = TRcBuf::Uninitialized(1);
+        TRcBuf emptyPiece(TRcBuf::Piece, backing.data(), size_t{0}, backing);
+        UNIT_ASSERT(emptyPiece.HasBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(emptyPiece.GetSize(), 0);
+
+        TRope emptyFromPiece(emptyPiece);
+        UNIT_ASSERT(!emptyFromPiece);
+        UNIT_ASSERT(!emptyFromPiece.Begin().Valid());
+        UNIT_ASSERT_VALUES_EQUAL(emptyFromPiece.GetSize(), 0);
+
+        TRope rope(TString("payload"));
+        rope.Insert(rope.Begin(), TRope(emptyPiece));
+        AssertNoEmptyChunks(rope);
+        UNIT_ASSERT_VALUES_EQUAL(RopeToString(rope), "payload");
+
+        TRcBuf trimmedBack = TRcBuf::Uninitialized(4);
+        trimmedBack.TrimBack(0);
+        UNIT_ASSERT(trimmedBack.HasBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(trimmedBack.GetSize(), 0);
+        TRope emptyFromTrimBack(std::move(trimmedBack));
+        UNIT_ASSERT(!emptyFromTrimBack);
+        UNIT_ASSERT(!emptyFromTrimBack.Begin().Valid());
+
+        TRcBuf trimmedFront = TRcBuf::Uninitialized(4);
+        trimmedFront.TrimFront(0);
+        UNIT_ASSERT(trimmedFront.HasBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(trimmedFront.GetSize(), 0);
+        TRope emptyFromTrimFront(std::move(trimmedFront));
+        UNIT_ASSERT(!emptyFromTrimFront);
+        UNIT_ASSERT(!emptyFromTrimFront.Begin().Valid());
+    }
+
+    Y_UNIT_TEST(SkipsZeroSizeSharedDataAndContiguousChunk) {
+        TRope emptyFromSharedData(NActors::TSharedData{});
+        UNIT_ASSERT(!emptyFromSharedData);
+        UNIT_ASSERT(!emptyFromSharedData.Begin().Valid());
+        UNIT_ASSERT_VALUES_EQUAL(emptyFromSharedData.GetSize(), 0);
+
+        auto emptyChunk = MakeIntrusive<TRopeStringBackend>(TString{});
+        TRope emptyFromChunk(emptyChunk);
+        UNIT_ASSERT(!emptyFromChunk);
+        UNIT_ASSERT(!emptyFromChunk.Begin().Valid());
+        UNIT_ASSERT_VALUES_EQUAL(emptyFromChunk.GetSize(), 0);
+
+        TRope emptyFromRange(emptyFromChunk.Begin(), emptyFromChunk.End());
+        UNIT_ASSERT(!emptyFromRange);
+        UNIT_ASSERT(!emptyFromRange.Begin().Valid());
+        UNIT_ASSERT_VALUES_EQUAL(emptyFromRange.GetSize(), 0);
+
+        TRope rope(TString("payload"));
+        rope.Insert(rope.Begin(), TRope(NActors::TSharedData{}));
+        rope.Insert(rope.End(), TRope(emptyChunk));
+        AssertNoEmptyChunks(rope);
+        UNIT_ASSERT_VALUES_EQUAL(RopeToString(rope), "payload");
+    }
+
     Y_UNIT_TEST(StringCompare) {
         TRope rope = CreateRope(Text, 10);
         UNIT_ASSERT_EQUAL(rope, Text);

@@ -495,6 +495,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                     if (setting->Child(1)->Content() == "Left") {
                         settings.BuildSide = NMiniKQL::EBuildSide::Left;
                     }
+                } else if (setting->Child(0)->Content() == "SpillResults") {
+                    settings.SpillJoinResults = true;
                 }
             }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,

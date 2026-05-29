@@ -40,10 +40,11 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleElimination = false,
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
-    bool blockHashJoinBuildSideLeft = false
+    bool blockHashJoinBuildSideLeft = false,
+    bool blockHashJoinSpillResults = false
 );
 
-NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
+NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false, bool blockHashJoinSpillResults = false);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 

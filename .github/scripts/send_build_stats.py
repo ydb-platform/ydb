@@ -11,6 +11,7 @@ import uuid
 dir_path = os.path.dirname(__file__)
 sys.path.insert(0, f"{dir_path}/analytics")
 
+import ydb
 from ydb_wrapper import YDBWrapper
 
 FROM_ENV_COLUMNS = [
@@ -131,7 +132,9 @@ VALUES
                 "$binary_path": sanitize_str(ydbd_path),
                 "$size_stripped_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
                 "$size_bytes": int(binary_size_bytes.decode("utf-8")),
-                "$git_commit_time": git_commit_time_unix,
+                "$git_commit_time": ydb.TypedValue(
+                    git_commit_time_unix, ydb.PrimitiveType.Datetime
+                ),
                 "$git_commit_message": sanitize_str(git_commit_message),
             }
 

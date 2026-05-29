@@ -23,13 +23,17 @@ jobs:
       WF_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/rebase.yml
 
     steps:
-      - name: Check if sender is a collaborator
-        id: check-permission
+      # Preconditions:
+      # 1. Label was added by a repository contributor (not PR author check).
+      # 2. For fork PRs, "Allow edits from maintainers" must be enabled.
+      - name: Verify rebase preconditions
+        id: preflight
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             const sender = context.payload.sender.login;
+            let senderIsContributor = false;
 
             try {
               await github.rest.repos.checkCollaborator({
@@ -37,16 +41,21 @@ jobs:
                 repo: context.repo.repo,
                 username: sender,
               });
-              return true;
+              senderIsContributor = true;
             } catch (error) {
-              if (error.status && error.status == 404) {
-                return false;
+              if (!error.status || error.status != 404) {
+                throw error;
               }
-              throw error;
             }
 
-      - name: Decline rebase for non-contributors
-        if: steps.check-permission.outputs.result != 'true'
+            const pr = context.payload.pull_request;
+            const forkPushAllowed = !pr.head.repo.fork || pr.maintainer_can_modify;
+
+            core.setOutput('sender_is_contributor', senderIsContributor ? 'true' : 'false');
+            core.setOutput('fork_push_allowed', forkPushAllowed ? 'true' : 'false');
+
+      - name: Decline rebase — label sender is not a contributor
+        if: steps.preflight.outputs.sender_is_contributor != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -73,24 +82,8 @@ jobs:
               }
             }
 
-      - name: Fail if sender is not a collaborator
-        if: steps.check-permission.outputs.result != 'true'
-        run: exit 1
-
-      - name: Check if fork allows maintainer push
-        id: check-fork-push
-        if: steps.check-permission.outputs.result == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = context.payload.pull_request;
-            if (!pr.head.repo.fork) {
-              return true;
-            }
-            return pr.maintainer_can_modify;
-
-      - name: Decline rebase for fork without maintainer edits
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result != 'true'
+      - name: Decline rebase — fork does not allow maintainer push
+        if: steps.preflight.outputs.sender_is_contributor == 'true' && steps.preflight.outputs.fork_push_allowed != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -117,12 +110,11 @@ jobs:
               }
             }
 
-      - name: Fail if fork does not allow maintainer push
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result != 'true'
+      - name: Fail if preconditions are not met
+        if: steps.preflight.outputs.sender_is_contributor != 'true' || steps.preflight.outputs.fork_push_allowed != 'true'
         run: exit 1
 
       - name: Remove previous failure label
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -140,7 +132,6 @@ jobs:
             }
 
       - name: Checkout PR branch
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -150,13 +141,11 @@ jobs:
           filter: blob:none
 
       - name: Configure git
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch base branch
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           BASE_REPO: ${{ github.event.pull_request.base.repo.clone_url }}
@@ -166,7 +155,6 @@ jobs:
 
       - name: Attempt rebase
         id: rebase
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true'
         continue-on-error: true
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -179,7 +167,7 @@ jobs:
           fi
 
       - name: Handle unexpected rebase failure
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.rebase.outputs.rebase_status == ''
+        if: steps.rebase.outputs.rebase_status == ''
         uses: actions/github-script@v7
         with:
           script: |
@@ -193,12 +181,12 @@ jobs:
             });
 
       - name: Fail on unexpected error
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.rebase.outputs.rebase_status == ''
+        if: steps.rebase.outputs.rebase_status == ''
         run: exit 1
 
       - name: Push rebased branch
         id: push
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'success'
+        if: steps.rebase.outputs.rebase_status == 'success'
         continue-on-error: true
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -206,7 +194,7 @@ jobs:
           git push --force-with-lease origin "$HEAD_REF"
 
       - name: Add push failure comment
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'success' && steps.push.outcome == 'failure'
+        if: steps.rebase.outputs.rebase_status == 'success' && steps.push.outcome == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
@@ -223,7 +211,7 @@ jobs:
             });
 
       - name: Remove label after successful rebase
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.push.outcome == 'success'
+        if: steps.push.outcome == 'success'
         uses: actions/github-script@v7
         with:
           script: |
@@ -241,7 +229,7 @@ jobs:
             }
 
       - name: Add success comment
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.push.outcome == 'success'
+        if: steps.push.outcome == 'success'
         uses: actions/github-script@v7
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -257,7 +245,7 @@ jobs:
             });
 
       - name: Replace label on failure
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'failed'
+        if: steps.rebase.outputs.rebase_status == 'failed'
         uses: actions/github-script@v7
         with:
           script: |
@@ -282,7 +270,7 @@ jobs:
             });
 
       - name: Add failure comment for conflicts
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'failed'
+        if: steps.rebase.outputs.rebase_status == 'failed'
         uses: actions/github-script@v7
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -305,5 +293,5 @@ jobs:
             });
 
       - name: Fail the job if conflicts
-        if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'failed'
+        if: steps.rebase.outputs.rebase_status == 'failed'
         run: exit 1

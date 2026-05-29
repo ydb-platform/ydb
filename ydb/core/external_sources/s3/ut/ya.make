@@ -43,7 +43,7 @@ IF (OPENSOURCE)
     # This requirement forces tests to be launched consequently,
     # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
     # See DEVTOOLSSUPPORT-44103, YA-1759 for details.
-    # TAG(ya:not_autocheck)  # temporarily enabled for pr-check (docker_compose recipe)
+    # TAG(ya:not_autocheck)  # temporarily disabled for pr-check (docker_compose recipe)
     REQUIREMENTS(cpu:4)
 ENDIF()
 

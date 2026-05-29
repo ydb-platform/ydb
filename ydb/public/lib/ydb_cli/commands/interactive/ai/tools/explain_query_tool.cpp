@@ -21,20 +21,17 @@ class TExplainQueryTool final : public TToolBase, public TInterruptableCommand {
     using TBase = TToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
-Explain a YQL (SQL dialect) query in Yandex Data Base (YDB) WITHOUT executing it. Primary use cases:
-- PREFLIGHT VALIDATION before `exec_query`: validate syntax, column / table names and semantics whenever you are not 100% sure the query is valid YQL (unfamiliar built-in, unusual cast/JOIN/window, first use of an idiom in this session). `explain_query` does NOT execute the query, does NOT modify data, and does NOT require user confirmation — so you can iterate on errors silently until the query is correct, without bothering the user. Always prefer this over running a potentially broken query through `exec_query`.
-- Get query plan and AST for a query already known to be valid (e.g. for performance analysis or to inspect the optimizer's choices).
+Validate / explain a YQL (SQL dialect) query in Yandex Data Base (YDB) WITHOUT executing it. Safe to call freely — does not execute, does not modify data, does not prompt the user — so it is the standard way to validate a query before passing it to `exec_query`.
+
+Returns query plan and AST when the query is valid; returns the parser / semantic error otherwise. Use the error to iterate on the query until it is valid.
 
 IMPORTANT:
-- Tool CAN NOT be used for any DDL queries.
 - NEVER guess column names, types or keys. If you do not know the exact schema of a table, use the `describe` tool FIRST.
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
 - For any unfamiliar YQL syntax or YDB-specific feature, consult `docs_search` BEFORE composing the query — the docs are authoritative.
 - If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks.
-
-Returns query plan and AST.
 )";
 
     static constexpr char QUERY_PROPERTY[] = "query";

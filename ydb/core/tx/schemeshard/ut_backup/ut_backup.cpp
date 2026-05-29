@@ -173,6 +173,82 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         UNIT_ASSERT_VALUES_EQUAL(found, expected);
     }
 
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnStandaloneColumnTableWithLocalMinMaxIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapMinMaxTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_minmax"
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tableDesc = DescribePrivatePath(runtime, "/MyRoot/OlapMinMaxTable", true, true);
+        TString pathSchema;
+        UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(tableDesc.GetPathDescription(), &pathSchema));
+
+        TestBackup(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "OlapMinMaxTable"
+            Table {
+                %s
+            }
+            S3Settings {
+                Endpoint: "localhost:%d"
+                Scheme: HTTP
+                Limits {
+                    MinWriteBatchSize: 0
+                }
+            }
+            ScanSettings {
+                RowsBatchSize: 128
+            }
+            Compression {
+                Codec: "%s"
+            }
+        )", pathSchema.c_str(), port, ToString(Codec).c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto d = DescribePrivatePath(runtime, "/MyRoot/OlapMinMaxTable", true, true);
+        UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(),
+            "expected column table after backup");
+        const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+        THashSet<TString> found;
+        for (const auto& ix : schema.GetIndexes()) {
+            found.insert(ix.GetName());
+        }
+
+        const THashSet<TString> expected{"idx_minmax"};
+        UNIT_ASSERT_VALUES_EQUAL(found, expected);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnSingleShardTable) {
         TTestBasicRuntime runtime;
 

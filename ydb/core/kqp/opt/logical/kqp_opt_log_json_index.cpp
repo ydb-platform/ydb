@@ -633,15 +633,6 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
                         "Tuple parameter item type is not supported for JSON index");
                 }
             }
-            if (!items.empty()) {
-                const auto* firstItemType = items.front();
-                for (const auto* itemType : items) {
-                    if (!itemType->Equals(*firstItemType)) {
-                        return MakeCollectError(ctx, param.Pos(),
-                            "Tuple parameter must have all items of the same type for JSON index");
-                    }
-                }
-            }
         } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Dict) {
             const auto* keyType = paramTypeAnn->Cast<TDictExprType>()->GetKeyType();
             if (!IsSupportedJsonParamType(keyType)) {

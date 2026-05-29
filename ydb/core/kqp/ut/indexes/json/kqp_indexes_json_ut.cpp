@@ -29,8 +29,8 @@ const std::string trueSuffix = std::string("\0\1", 2);
 const std::string falseSuffix = std::string("\0\0", 2);
 const std::string nullSuffix = std::string("\0\2", 2);
 
-const std::string kFirstLongSqlInValue = "abcdefghijklmnopq";
-const std::string kSecondLongSqlInValue = "abcdefghijklmnopqrstuvwxyz";
+// const std::string kFirstLongSqlInValue = "abcdefghijklmnopq";
+// const std::string kSecondLongSqlInValue = "abcdefghijklmnopqrstuvwxyz";
 
 TKikimrRunner Kikimr(bool enableJsonIndex = true, bool enableJsonIndexAutoSelect = false) {
     NKikimrConfig::TFeatureFlags featureFlags;

@@ -11976,7 +11976,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
                 QUEUE_SIZE=1000,
-                QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
+                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=80
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -11991,7 +11991,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "1000");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "80");
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePool) {
@@ -12020,7 +12020,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 CREATE RESOURCE POOL MyResourcePool WITH (
-                    QUERY_MEMORY_LIMIT_PERCENT_PER_NODE="0.5"
+                    TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=50
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -12042,7 +12042,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 CREATE RESOURCE POOL MyResourcePool WITH (
                     CONCURRENT_QUERY_LIMIT=20,
-                    QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
+                    TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=70
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -12052,14 +12052,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "70");
         }
 
         {
             auto query = R"(
                 ALTER RESOURCE POOL MyResourcePool
                     SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
-                    RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
+                    RESET (TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE);
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -12070,7 +12070,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "30");
             UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "100");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "-1");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "-1");
         }
     }
 

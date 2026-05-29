@@ -211,7 +211,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
 
 double WeightedRowSize(const double rows, const double bytes, const double factor
 ) {
-    double avgRowSize = rows ? (bytes / std::max(rows, 1e-4)) : 0.0;
+    double avgRowSize = rows ? (bytes / std::max(rows, 1.0)) : 0.0;
     double rowSize = 1.0 + avgRowSize * factor;
     return rowSize;
 }
@@ -348,7 +348,7 @@ TMaybe<double> ComputeSelectivityCorrection(
                 YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
             } else {
                 // correction = total PK / overlapping PK
-                auto selectivityCorrection = leftStats.Nrows / std::max(static_cast<double>(overlapCard.GetRef()), 1e-4);
+                auto selectivityCorrection = overlapCard.GetRef() / std::max(leftStats.Nrows, 1.0);
                 return std::min(selectivityCorrection, 1.0);
             }
         }
@@ -392,11 +392,11 @@ double TKqpProviderContext::ComputeBothSidesByteSize(
     const TOptimizerStatistics& rightStats,
     ui32 commonRightJoinKeys
 ) const {
-    double lhsRowBytes = leftStats.Nrows ? (leftStats.ByteSize / std::max(leftStats.Nrows, 1e-4)) : 0.0;
-    double rhsRowBytes = rightStats.Nrows ? (rightStats.ByteSize / std::max(rightStats.Nrows, 1e-4)) : 0.0;
+    double lhsRowBytes = leftStats.Nrows ? (leftStats.ByteSize / std::max(leftStats.Nrows, 1.0)) : 0.0;
+    double rhsRowBytes = rightStats.Nrows ? (rightStats.ByteSize / std::max(rightStats.Nrows, 1.0)) : 0.0;
 
     /* columns with duplicate names are removed */
-    double rhsColBytes = rightStats.Ncols ? (rhsRowBytes / std::max<double>(rightStats.Ncols, 1e-4)) : 0.0;
+    double rhsColBytes = rightStats.Ncols ? (rhsRowBytes / std::max<double>(rightStats.Ncols, 1.0)) : 0.0;
     double duplicateWidth = commonRightJoinKeys * rhsColBytes;
 
     double rowWidth = CONSTS_BYTESIZE_MULT * std::max(0.0, lhsRowBytes + rhsRowBytes - duplicateWidth);
@@ -407,7 +407,7 @@ double TKqpProviderContext::ComputeOneSideByteSize(
     double newCardinality,
     const TOptimizerStatistics& stats
 ) const {
-    double rowWidth = stats.Nrows ? CONSTS_BYTESIZE_MULT * (stats.ByteSize / std::max(stats.Nrows, 1e-4)) : 0.0;
+    double rowWidth = stats.Nrows ? CONSTS_BYTESIZE_MULT * (stats.ByteSize / std::max(stats.Nrows, 1.0)) : 0.0;
     return rowWidth * newCardinality;
 }
 
@@ -538,17 +538,17 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
         double effectiveRight = rightStats.Nrows * rightStats.Selectivity;
 
         if (lhsUniqueVals.Defined() && rhsUniqueVals.Defined()) {
-            newCard = effectiveLeft * effectiveRight / std::max(std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef()), 1e-4);
+            newCard = effectiveLeft * effectiveRight / std::max(std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef()), 1.0);
         } else if (lhsUniqueVals.Defined()) {
-            newCard = effectiveRight * (effectiveLeft / std::max(lhsUniqueVals.GetRef(), 1e-4));
+            newCard = effectiveRight * (effectiveLeft / std::max(lhsUniqueVals.GetRef(), 1.0));
         } else if (rhsUniqueVals.Defined()) {
-            newCard = effectiveLeft * (effectiveRight / std::max(rhsUniqueVals.GetRef(), 1e-4));
+            newCard = effectiveLeft * (effectiveRight / std::max(rhsUniqueVals.GetRef(), 1.0));
         } else {
             /* for example, join predicate between a column and a scalar aggregate */
             newCard = 0.2 * effectiveLeft * effectiveRight;
         }
 
-        selectivity = std::min(1.0, newCard / std::max((leftStats.Nrows * rightStats.Nrows), 1e-4));
+        selectivity = std::min(1.0, newCard / std::max((leftStats.Nrows * rightStats.Nrows), 1.0));
 
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;

@@ -131,7 +131,9 @@ namespace {
             case EInequalityPredicateType::Equal:
                 return estimator->EstimateEqual<T>(val);
             case EInequalityPredicateType::NotEqual:
-                return std::max<ui64>(estimator->GetNumElements() - estimator->EstimateEqual<T>(val), 0);
+                auto equal = estimator->EstimateEqual<T>(val);
+                auto total = estimator->GetNumElements();
+                return (equal <= total) ? (total - equal) : 0;
         }
         return Nothing();
     }

@@ -415,6 +415,15 @@ runs:
 
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
+          # systemd-run --uid/--gid does not inherit supplementary groups (e.g. docker).
+          YA_MAKE_SUPP_GROUPS=$(id -Gn | grep -vx "$(id -gn)" | tr '\n' ' ')
+          YA_MAKE_SUPP_GROUPS="${YA_MAKE_SUPP_GROUPS%" "}"
+          SYSTEMD_SUPP_GROUPS_ARG=()
+          if [ -n "$YA_MAKE_SUPP_GROUPS" ]; then
+            SYSTEMD_SUPP_GROUPS_ARG=(-p "SupplementaryGroups=${YA_MAKE_SUPP_GROUPS}")
+            echo "systemd-run SupplementaryGroups: ${YA_MAKE_SUPP_GROUPS}"
+          fi
+
           YA_MAKE_CMD=(
             ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
@@ -430,6 +439,7 @@ runs:
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
+             "${SYSTEMD_SUPP_GROUPS_ARG[@]}" \
              --uid=$(id -u) --gid=$(id -g) \
              -- \
              "${YA_MAKE_CMD[@]}"

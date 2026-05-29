@@ -4,7 +4,6 @@ GTEST()
 SRCS(
     consumer_offset_tracker_ut.cpp
     message_id_deduplicator_ut.cpp
-    partition_blob_encoder_ut.cpp
 )
 
 PEERDIR(

@@ -1,7 +1,6 @@
 #include "blob.h"
 #include "header.h"
 
-#include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
@@ -10,33 +9,6 @@
 namespace NKikimr {
 namespace NPQ {
 
-namespace {
-
-struct TSharedPackedDataStats {
-    ui32 LiveBatchCount = 0;
-    ui64 LivePayloadSize = 0;
-    bool ShouldMaterialize = false;
-};
-
-bool ShouldMaterializeSharedData(const TPackedBatchDataOwner& owner, const TSharedPackedDataStats& stats)
-{
-    if (!owner.InitialBatchCount || !stats.LiveBatchCount) {
-        return false;
-    }
-
-    // A materialized batch gets its own small heap allocation. The estimate is
-    // deliberately conservative: it accounts for allocator rounding plus local
-    // buffer metadata without depending on a particular allocator size class.
-    static constexpr ui64 PerOwnedBatchOverheadEstimate = 256;
-    static constexpr ui32 MinDroppedBatchRatio = 2;
-    const ui64 materializedBytesEstimate = stats.LivePayloadSize + stats.LiveBatchCount * PerOwnedBatchOverheadEstimate;
-
-    return stats.LiveBatchCount * MinDroppedBatchRatio <= owner.InitialBatchCount
-        && owner.Data.size() > materializedBytesEstimate;
-}
-
-}
-
 //
 // TPackedBatchData
 //
@@ -44,12 +16,6 @@ bool ShouldMaterializeSharedData(const TPackedBatchDataOwner& owner, const TShar
 TPackedBatchDataOwner::TPackedBatchDataOwner(TString&& data)
     : Data(std::move(data))
 {
-}
-
-void TPackedBatchDataOwner::RegisterBatch(ui32 payloadSize)
-{
-    ++InitialBatchCount;
-    InitialPayloadSize += payloadSize;
 }
 
 TPackedBatchData::TPackedBatchData(const char* data, size_t size)
@@ -72,7 +38,6 @@ TPackedBatchData::TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, u
         ("offset", Offset)
         ("size", Size_)
         ("ownerSize", Owner->Data.size());
-    Owner->RegisterBatch(Size_);
 }
 
 const char* TPackedBatchData::data() const noexcept
@@ -108,19 +73,6 @@ bool TPackedBatchData::IsShared() const noexcept
 const TPackedBatchDataOwner* TPackedBatchData::SharedOwner() const noexcept
 {
     return Owner.Get();
-}
-
-void TPackedBatchData::Materialize()
-{
-    if (!Owner) {
-        return;
-    }
-
-    TBuffer buffer(Owner->Data.data() + Offset, Size_);
-    Owner.Reset();
-    Offset = 0;
-    Size_ = 0;
-    Buffer = std::move(buffer);
 }
 
 void TPackedBatchData::Reset()
@@ -391,48 +343,12 @@ const TBatch& THead::GetLastBatch() const {
     return Batches.back();
 }
 
-TBatch THead::ExtractFirstBatch(bool materializeSharedData) {
+TBatch THead::ExtractFirstBatch() {
     AFL_ENSURE(!Batches.empty());
     auto batch = std::move(Batches.front());
     InternalPartsCount -= batch.GetInternalPartsCount();
     Batches.pop_front();
-    if (materializeSharedData) {
-        MaterializeRetainedSharedData();
-    }
     return batch;
-}
-
-void THead::MaterializeRetainedSharedData() {
-    THashMap<const TPackedBatchDataOwner*, TSharedPackedDataStats> owners;
-
-    for (const auto& batch : Batches) {
-        if (!batch.Packed) {
-            continue;
-        }
-
-        if (const auto* owner = batch.PackedData.SharedOwner()) {
-            auto& stats = owners[owner];
-            ++stats.LiveBatchCount;
-            stats.LivePayloadSize += batch.PackedData.Size();
-        }
-    }
-
-    for (auto& [owner, stats] : owners) {
-        stats.ShouldMaterialize = ShouldMaterializeSharedData(*owner, stats);
-    }
-
-    for (auto& batch : Batches) {
-        if (!batch.Packed) {
-            continue;
-        }
-
-        if (const auto* owner = batch.PackedData.SharedOwner()) {
-            const auto it = owners.find(owner);
-            if (it != owners.end() && it->second.ShouldMaterialize) {
-                batch.PackedData.Materialize();
-            }
-        }
-    }
 }
 
 void THead::AddBlob(const TClientBlob& blob) {

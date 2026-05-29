@@ -167,7 +167,7 @@ namespace NKikimr {
 
                     struct TResetGuard {
                         ~TResetGuard() {
-                            Self->ResetMapper(false);
+                            Self->RecreateMapper(false);
                         }
 
                         TGroupFitter* Self;
@@ -176,7 +176,7 @@ namespace NKikimr {
                     STLOG(PRI_WARN, BS_CONTROLLER, BSCFG02,
                         "Falling back to allocation allowing INACTIVE PDisks",
                         (GroupId, groupId), (StoragePoolId, StoragePoolId));
-                    ResetMapper(true);
+                    RecreateMapper(true);
                     try {
                         AllocateOrSanitizeGroup(groupId, group, {}, {}, groupSizeInUnits, requiredSpace, false, bridgePileId,
                             &TGroupGeometryInfo::AllocateGroup);
@@ -602,8 +602,7 @@ namespace NKikimr {
                     TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.PreferLessOccupiedRack, State.Fit.WithAttentionToReplication);
-                    PopulateGroupMapper();
+                    RecreateMapper(false);
                 }
                 TPDiskSlotTracker& pdiskSlotTracker= Mapper->GetPDiskSlotTracker();
                 TStackVec<TPDiskId, 32> removeQ;
@@ -689,9 +688,10 @@ namespace NKikimr {
                 Mapper->SetPDiskSlotTracker(std::move(pdiskSlotTracker));
             }
 
-            void ResetMapper(bool allowSlotCreationOnInactive) {
+            void RecreateMapper(bool allowSlotCreationOnInactive) {
                 AllowSlotCreationOnInactive = allowSlotCreationOnInactive;
-                Mapper.reset();
+                Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.PreferLessOccupiedRack, State.Fit.WithAttentionToReplication);
+                PopulateGroupMapper();
             }
 
             bool HasInactivePDiskInPool() const {

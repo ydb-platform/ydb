@@ -32,7 +32,7 @@ SRCS(
     gc_quorum_3dc.cpp
     get.cpp
     get_block.cpp
-    group_creation_inactive.cpp
+    group_creation.cpp
     group_reconfiguration.cpp
     incorrect_queries.cpp
     index_restore_get.cpp

@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(GroupCreationInactive) {
         ui32 DisksPerNode = 2;
         ui32 NumNodes = NumDCs * NumNodesInDC + 1; // last node hosts BSC
 
-        TTestCtxs() {
+        TTestCtx() {
             Env = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
                 .NodeCount = NumNodes,
                 .Erasure = TBlobStorageGroupType::ErasureMirror3dc,

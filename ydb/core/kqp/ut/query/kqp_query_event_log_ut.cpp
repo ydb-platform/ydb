@@ -1,16 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
-
 #include <library/cpp/json/json_reader.h>
 
 #include <util/stream/str.h>
 
 namespace NKikimr::NKqp {
 namespace {
-
-using namespace NYdb;
-using namespace NYdb::NScripting;
 
 constexpr TStringBuf REQ_JSON_MARKER = "[REQ_JSON]";
 
@@ -154,7 +149,7 @@ TStringBuf LogSince(const TStringStream& logStream, size_t offset) {
     return offset < blob.size() ? blob.SubStr(offset) : TStringBuf{};
 }
 
-Y_UNIT_TEST_SUITE(KqpQueryEventLogScratch) {
+Y_UNIT_TEST_SUITE(KqpQueryEventLog) {
 
 // At KQP_REQUEST=DEBUG a successful query emits one completed envelope at
 // DEBUG with the full per-query field set.

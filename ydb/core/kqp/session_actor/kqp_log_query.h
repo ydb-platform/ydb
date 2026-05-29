@@ -34,9 +34,10 @@ private:
 
 // KQP_REQUEST [REQ_JSON] log contract:
 //   WARN  — only failed completed envelopes.
-//   DEBUG — successful completed too; SQL truncated to 10 KB.
-//   TRACE — same as DEBUG, full SQL (no truncation).
+//   DEBUG — successful completed too.
+//   TRACE — same events as DEBUG.
 //
+// SQL is truncated to 10 KB at WARN and DEBUG; TRACE emits the full text.
 // req_id is the ProxyRequestId, correlates with STLOG proxy_request_id.
 // Queries prefixed with /*UI-QUERY-EXCLUDE*/ skip success-path logs;
 // failures still emit at WARN.

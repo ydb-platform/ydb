@@ -1178,12 +1178,13 @@ void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
 }
 
 void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
-    // if ChoosePartitionKey is provided, this cycle will be skipped (because PartitionKeys is empty)
-    for (const auto& [partitionKey, size] : p.Msg.PartitionKeys) {
-        AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
+    if (!p.Msg.PartitionKeys.empty()) {
+        for (const auto& [partitionKey, size] : p.Msg.PartitionKeys) {
+            AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
+        }
+    } else {
+        AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
     }
-
-    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
@@ -1219,6 +1220,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (p.Msg.BatchMessageCount >= 1 && !AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) {
         CancelOneWriteOnWrite(ctx,
                                 TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
+                                p,
+                                NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
+    if (p.Msg.BatchMessageCount >= 1 && !p.Msg.MaxSeqNo.has_value()) {
+        CancelOneWriteOnWrite(ctx,
+                                TStringBuilder() << "MaxSeqNo is required for batch messages, partitionId: " << Partition,
                                 p,
                                 NPersQueue::NErrorCode::BAD_REQUEST);
         return false;

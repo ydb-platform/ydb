@@ -114,6 +114,21 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    CmdWriteBatched(0, "sourceid_batch_without_max_seqno", 1, TString(16, 'a'), 5, tc,
+        -1, false, std::nullopt, NPersQueue::NErrorCode::BAD_REQUEST);
+
+    PQGetPartInfo(0, 0, tc);
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteRead) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -131,8 +146,8 @@ Y_UNIT_TEST(BatchedMessagesWriteRead) {
 
     const TVector<TBatchedMessageSpec> writes = {
         {.SeqNo = 1, .BatchMessageCount = 5, .Offset = 0, .Fill = 'a'},
-        {.SeqNo = 2, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
-        {.SeqNo = 3, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
+        {.SeqNo = 6, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 9, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
     };
 
     for (const auto& w : writes) {
@@ -173,7 +188,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
     constexpr ui64 secondBatchCount = 3;
 
     CmdWriteBatched(0, sourceId, 1, TString(dataSize, 'a'), batchCount, tc);
-    CmdWriteBatched(0, sourceId, 2, TString(dataSize, 'b'), secondBatchCount, tc);
+    CmdWriteBatched(0, sourceId, batchCount + 1, TString(dataSize, 'b'), secondBatchCount, tc);
 
     PQGetPartInfo(0, batchCount + secondBatchCount, tc);
 
@@ -198,7 +213,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
     const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult2,
-        {{.SeqNo = 2, .BatchMessageCount = secondBatchCount, .Offset = batchCount, .Fill = 'b'}},
+        {{.SeqNo = batchCount + 1, .BatchMessageCount = secondBatchCount, .Offset = batchCount, .Fill = 'b'}},
         dataSize);
 }
 
@@ -222,8 +237,8 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     constexpr i64 readFromOffset = 2;
 
     CmdWriteBatched(0, sourceId, 1, TString(dataSize, 'a'), batchCount, tc, static_cast<i64>(0));
-    CmdWriteBatched(0, sourceId, 2, TString(dataSize, 'b'), 3, tc, static_cast<i64>(batchCount));
-    CmdWriteBatched(0, sourceId, 3, TString(dataSize, 'c'), 0, tc, static_cast<i64>(batchCount + 3));
+    CmdWriteBatched(0, sourceId, batchCount + 1, TString(dataSize, 'b'), 3, tc, static_cast<i64>(batchCount));
+    CmdWriteBatched(0, sourceId, batchCount + 4, TString(dataSize, 'c'), 0, tc, static_cast<i64>(batchCount + 3));
 
     PQGetPartInfo(0, 9, tc);
 
@@ -252,7 +267,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult2,
-        {{.SeqNo = 2, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
+        {{.SeqNo = batchCount + 1, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
         dataSize);
 
     readSettings.Offset = batchCount + 3;
@@ -260,7 +275,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     const auto readResult3 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult3,
-        {{.SeqNo = 3, .BatchMessageCount = 0, .Offset = batchCount + 3, .Fill = 'c'}},
+        {{.SeqNo = batchCount + 4, .BatchMessageCount = 0, .Offset = batchCount + 3, .Fill = 'c'}},
         dataSize);
 }
 
@@ -300,8 +315,8 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
 
     const TVector<TBatchedMessageSpec> writes = {
         {.SeqNo = 1, .BatchMessageCount = 5, .Offset = 0, .Fill = 'a'},
-        {.SeqNo = 2, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
-        {.SeqNo = 3, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
+        {.SeqNo = 6, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 9, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
     };
 
     for (const auto& w : writes) {

@@ -827,6 +827,9 @@ void CmdWriteBatched(
             }
             if (maxSeqNo) {
                 write->SetMaxSeqNo(static_cast<i64>(*maxSeqNo));
+            } else if (expectedError == NPersQueue::NErrorCode::OK && totalBatchMessages >= 1) {
+                UNIT_ASSERT(totalBatchMessages >= 1);
+                write->SetMaxSeqNo(static_cast<i64>(seqNo + totalBatchMessages - 1));
             }
             write->SetDisableDeduplication(disableDeduplication);
 

@@ -80,6 +80,7 @@ RESOURCE(
     ui/config_forms.js cms/ui/config_forms.js
     ui/datashard.css cms/ui/datashard.css
     ui/datashard.js cms/ui/datashard.js
+    ui/hive.js cms/ui/hive.js
     ui/datashard_hist.js cms/ui/datashard_hist.js
     ui/datashard_info.js cms/ui/datashard_info.js
     ui/datashard_op.js cms/ui/datashard_op.js

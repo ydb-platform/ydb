@@ -381,6 +381,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
 
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdisk), "incorrect VDiskId# %s", vdisk.ToString().data());
 
         Y_ABORT_UNLESS(status == NKikimrProto::OK || status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE);
         if (IsIterativeDone) {

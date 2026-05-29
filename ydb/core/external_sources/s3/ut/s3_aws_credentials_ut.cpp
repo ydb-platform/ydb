@@ -21,6 +21,8 @@
 
 namespace NKikimr::NKqp {
 
+// Touch to run ydb/core/external_sources/s3/ut in pr-check (docker_compose recipe).
+
 using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NKikimr::NKqp::NFederatedQueryTest;

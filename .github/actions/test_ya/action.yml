@@ -414,7 +414,6 @@ runs:
           YA_MAKE_SCOPE_NAME="ya-make-${GITHUB_RUN_ID:-local}-${RETRY}-$$.scope"
 
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
-          echo "runner groups: $(id -Gn)"
 
           YA_MAKE_CMD=(
             ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS

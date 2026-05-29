@@ -560,6 +560,10 @@
       {
         "name": "WmExitTime",
         "type": "Timestamp?"
+      },
+      {
+        "name": "TraceId",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [

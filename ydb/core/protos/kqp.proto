@@ -383,6 +383,7 @@ message TSessionInfo {
     optional string WmState = 18;
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
+    optional string TraceId = 21;
 }
 
 message TEvListSessionsRequest {

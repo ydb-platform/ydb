@@ -556,13 +556,16 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
     const TVector<TIndexDescription>& indexes, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     THashMap<TString, ui32> columnIdsByName;
-    for (auto&& column : tableDesc.GetSchema().GetColumns()) {
-        if (column.HasId()) {
-            columnIdsByName.emplace(column.GetName(), column.GetId());
+    ui32 nextIndexId = 1;
+    for (const auto& column : tableDesc.GetSchema().GetColumns()) {
+        if (!column.HasId()) {
+            continue;
         }
+        const ui32 columnId = column.GetId();
+        columnIdsByName.emplace(column.GetName(), columnId);
+        nextIndexId = Max(nextIndexId, columnId + 1);
     }
 
-    ui32 nextIndexId = 1;
     for (auto&& index : indexes) {
         switch (index.Type) {
             case TIndexDescription::EType::LocalBloomFilter: {
@@ -651,7 +654,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
-                
+
                 break;
             }
             default:

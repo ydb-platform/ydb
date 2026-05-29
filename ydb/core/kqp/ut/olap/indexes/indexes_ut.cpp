@@ -48,6 +48,42 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
     }
 }
 
+static void AssertColumnAndIndexEntityIdsDisjoint(
+    const NKikimrSchemeOp::TColumnTableSchema& schema, const TString& contextLabel)
+{
+    THashSet<ui32> columnIds;
+    ui32 maxColumnId = 0;
+    for (const auto& column : schema.GetColumns()) {
+        UNIT_ASSERT_C(column.HasId(), contextLabel << ": column '" << column.GetName() << "' has no id");
+        const ui32 columnId = column.GetId();
+        UNIT_ASSERT_C(columnIds.emplace(columnId).second,
+            contextLabel << ": duplicate column id " << columnId);
+        maxColumnId = Max(maxColumnId, columnId);
+    }
+
+    THashSet<ui32> indexIds;
+    for (const auto& index : schema.GetIndexes()) {
+        UNIT_ASSERT_C(index.HasId(), contextLabel << ": index '" << index.GetName() << "' has no id");
+        const ui32 indexId = index.GetId();
+        UNIT_ASSERT_C(indexIds.emplace(indexId).second,
+            contextLabel << ": duplicate index id " << indexId);
+        UNIT_ASSERT_C(!columnIds.contains(indexId),
+            contextLabel << ": index '" << index.GetName() << "' id " << indexId
+                         << " overlaps with a column id (max column id is " << maxColumnId << ")");
+        UNIT_ASSERT_C(indexId > maxColumnId,
+            contextLabel << ": index '" << index.GetName() << "' id " << indexId
+                         << " must be greater than max column id " << maxColumnId);
+    }
+}
+
+static void AssertTableEntityIdsDisjoint(TKikimrRunner& kikimr, const TString& tablePath, const TString& contextLabel)
+{
+    auto desc = kikimr.GetTestClient().Ls(tablePath);
+    UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), contextLabel);
+    AssertColumnAndIndexEntityIdsDisjoint(
+        desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema(), contextLabel);
+}
+
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
@@ -470,6 +506,104 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnCreate, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointCreate`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                payload Utf8,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
+                INDEX idx_minmax LOCAL USING min_max ON (payload)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertTableEntityIdsDisjoint(kikimr, "/Root/olapTableEntityIdDisjointCreate", "after CREATE TABLE with indexes");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnAlter, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString tablePath = "/Root/olapTableEntityIdDisjointAlter";
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointAlter`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableEntityIdDisjointAlter` ADD INDEX idx_bloom LOCAL USING bloom_filter
+                ON (resource_id) WITH (false_positive_probability = 0.01);
+        )");
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after first ALTER TABLE ADD INDEX");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableEntityIdDisjointAlter` ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (uid) WITH (ngram_size = 3, false_positive_probability = 0.01);
+        )");
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after second ALTER TABLE ADD INDEX");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnAlterAfterCreateWithIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString tablePath = "/Root/olapTableEntityIdDisjointAlterAfterCreate";
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointAlterAfterCreate`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                payload Utf8,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
+                INDEX idx_minmax LOCAL USING min_max ON (payload)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after CREATE TABLE with indexes");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableEntityIdDisjointAlterAfterCreate` ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (uid) WITH (ngram_size = 3, false_positive_probability = 0.01);
+        )");
+
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after ALTER TABLE ADD INDEX on table created with indexes");
     }
 
     Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService) {

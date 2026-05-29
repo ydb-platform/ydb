@@ -54,6 +54,9 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 
 void TOlapSchema::ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     Indexes.Parse(tableSchema);
+    for (const auto& indexProto : tableSchema.GetIndexes()) {
+        NextColumnId = Max(NextColumnId, indexProto.GetId() + 1);
+    }
 }
 
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {

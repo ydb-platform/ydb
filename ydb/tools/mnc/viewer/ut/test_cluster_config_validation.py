@@ -3,17 +3,22 @@ import tempfile
 import unittest
 from unittest import mock
 
-from textual.widgets import ListView, TabbedContent
+import rich.console
+from textual.command import CommandPalette
+from textual.widgets import Button, Checkbox, Input, ListView, TabbedContent
 
-from ydb.tools.mnc.lib import agent_client
+from ydb.tools.mnc.lib import agent_client, deploy_ctx, progress
 from ydb.tools.mnc.viewer.main import Viewer
 from ydb.tools.mnc.viewer.widgets import (
     AgentHostStatus,
     AgentsState,
     ClusterConfigPane,
+    ConfigValidation,
     ConfigCandidate,
     HostCard,
     HostTasksTable,
+    OperationsPane,
+    SelectedClusterConfig,
     OverviewStatusCard,
     _validate_multinode_config,
 )
@@ -226,6 +231,256 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(tasks_table.row_count, 2)
             self.assertEqual(tasks_table.tasks[0]["id"], "new-task")
 
+    async def test_operations_tab_collects_install_arguments(self):
+        app = Viewer()
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+        app._start_agents_check = lambda: None
+        calls = []
+
+        async def execute_operation(request):
+            calls.append(request)
+            return True
+
+        app._execute_operation = execute_operation
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('install')")
+            await pilot.pause()
+
+            pane = app.query_one(OperationsPane)
+            pane.query_one("#operations-waiting", Input).value = "21"
+            pane.query_one("#operations-bin-path", Input).value = "/tmp/ydb"
+            pane.query_one("#operations-do-not-init", Checkbox).value = True
+            pane.query_one("#operations-ignore-failed-stop", Checkbox).value = True
+            pane.query_one("#operations-run", Button).press()
+
+            await self._wait_for_operation_calls(pilot, calls)
+
+        request = calls[0]
+        self.assertEqual(request.operation_id, "install")
+        self.assertEqual(request.waiting, 21)
+        self.assertEqual(request.bin_path, "/tmp/ydb")
+        self.assertTrue(request.do_not_init)
+        self.assertTrue(request.ignore_failed_stop)
+
+    async def test_operations_action_opens_operation_picker(self):
+        app = Viewer()
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_operations")
+            await pilot.pause()
+
+            self.assertTrue(CommandPalette.is_open(app))
+
+    async def test_operations_tab_shows_running_steps_and_final_output(self):
+        app = Viewer()
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+        app._start_agents_check = lambda: None
+        running_rows = []
+
+        async def act(
+            hosts,
+            config,
+            waiting=None,
+            bin_path=None,
+            do_not_init=None,
+            ignore_failed_stop=None,
+            console=None,
+        ):
+            with progress.MyProgress(console=console) as pbar:
+                root = await pbar.get_hidden_task().add_subtask("[bold blue]Deploy[/]", total=2)
+                child = await root.add_subtask("Copy binary", total=1)
+                await child.update(advance=1)
+                backend = app._state.operation.progress_backend
+                running_rows.append([(level, state.title) for level, state in backend.visible_rows()])
+            console.print("final output")
+            return True
+
+        with mock.patch("ydb.tools.mnc.viewer.main.install_command.act", act):
+            async with app.run_test() as pilot:
+                await app.run_action("open_operation('install')")
+                await pilot.pause()
+
+                pane = app.query_one(OperationsPane)
+                pane.query_one("#operations-run", Button).press()
+                await pilot.pause()
+
+                self.assertFalse(pane.query_one("#operations-form").display)
+                self.assertTrue(pane.query_one("#operations-result").display)
+                await self._wait_for_operation_status(pilot, app, "OK")
+
+                self.assertFalse(pane.query_one("#operations-live").display)
+                self.assertEqual(len(app._state.operation.progress_backend.visible_rows()), 2)
+                output = app._state.operation.message
+
+        self.assertTrue(
+            any(
+                any(level == 0 and "Deploy" in title for level, title in rows)
+                and any(level == 1 and "Copy binary" in title for level, title in rows)
+                for rows in running_rows
+            )
+        )
+        self.assertIn("final output", output)
+
+    async def test_operations_tab_renders_task_result_panel_after_completion(self):
+        app = Viewer()
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+
+        async def act(
+            hosts,
+            config,
+            waiting=None,
+            bin_path=None,
+            do_not_init=None,
+            ignore_failed_stop=None,
+            console=None,
+        ):
+            with progress.MyProgress(console=console) as pbar:
+                task = await pbar.get_hidden_task().add_subtask("Install", total=1)
+                await task.update(advance=1)
+            return progress.TaskResult(
+                level=progress.TaskResultLevel.ERROR,
+                step_title="Install",
+                message="failed step",
+            )
+
+        with mock.patch("ydb.tools.mnc.viewer.main.install_command.act", act):
+            async with app.run_test() as pilot:
+                await app.run_action("open_operation('install')")
+                await pilot.pause()
+
+                pane = app.query_one(OperationsPane)
+                pane.query_one("#operations-run", Button).press()
+                await self._wait_for_operation_status(pilot, app, "FAIL")
+
+                self.assertFalse(pane.query_one("#operations-live").display)
+                self.assertIsNotNone(app._state.operation.result_renderable)
+                console = rich.console.Console(record=True)
+                console.print(pane._operation_output())
+
+        output = console.export_text()
+        self.assertIn("ERROR:", output)
+        self.assertIn("Install", output)
+        self.assertIn("failed step", output)
+
+    async def test_settings_save_deploy_flags_from_checkboxes(self):
+        app = Viewer()
+        app._save_mnc_config = lambda: None
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_mnc_config")
+            await pilot.pause()
+
+            app.query_one("#mnc-deploy-flag-do_not_strip", Checkbox).value = True
+            await pilot.pause()
+            self.assertIn("do_not_strip", app._mnc_config["deploy_flags"])
+
+            app.query_one("#mnc-deploy-flag-do_strip", Checkbox).value = True
+            await pilot.pause()
+            self.assertIn("do_strip", app._mnc_config["deploy_flags"])
+            self.assertNotIn("do_not_strip", app._mnc_config["deploy_flags"])
+
+    async def test_operations_prepare_deploy_context_before_install(self):
+        app = Viewer()
+        app._mnc_config = {"git_ydb_root": "/repo", "deploy_flags": ["do_not_strip", "secure"]}
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none", "deploy_flags": None}),
+        )
+        app._start_agents_check = lambda: None
+        contexts = []
+
+        async def act(
+            hosts,
+            config,
+            waiting=None,
+            bin_path=None,
+            do_not_init=None,
+            ignore_failed_stop=None,
+            console=None,
+        ):
+            contexts.append(
+                {
+                    "path_to_bin": deploy_ctx.path_to_bin,
+                    "work_directory_exists": os.path.isdir(deploy_ctx.work_directory),
+                    "do_rebuild": deploy_ctx.do_rebuild,
+                    "do_strip": deploy_ctx.do_strip,
+                    "secure": deploy_ctx.secure,
+                    "is_manual_path_to_bin": deploy_ctx.is_manual_path_to_bin,
+                }
+            )
+            return True
+
+        with mock.patch("ydb.tools.mnc.viewer.main.install_command.act", act):
+            async with app.run_test() as pilot:
+                await app.run_action("open_operation('install')")
+                await pilot.pause()
+
+                pane = app.query_one(OperationsPane)
+                pane.query_one("#operations-run", Button).press()
+                await self._wait_for_operation_status(pilot, app, "OK")
+
+        self.assertEqual(contexts[0]["path_to_bin"], "/repo/ydb/apps/ydbd/ydbd")
+        self.assertTrue(contexts[0]["work_directory_exists"])
+        self.assertTrue(contexts[0]["do_rebuild"])
+        self.assertFalse(contexts[0]["do_strip"])
+        self.assertTrue(contexts[0]["secure"])
+        self.assertFalse(contexts[0]["is_manual_path_to_bin"])
+
+    async def test_operations_tab_shows_exception_traceback(self):
+        app = Viewer()
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+
+        async def execute_operation(request):
+            raise AttributeError("'NoneType' object has no attribute 'endswith'")
+
+        app._execute_operation = execute_operation
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('install')")
+            await pilot.pause()
+
+            pane = app.query_one(OperationsPane)
+            pane.query_one("#operations-run", Button).press()
+            await self._wait_for_operation_status(pilot, app, "FAIL")
+
+        output = app._state.operation.message
+        self.assertIn("Backtrace:", output)
+        self.assertIn("AttributeError", output)
+        self.assertIn("'NoneType' object has no attribute 'endswith'", output)
+        self.assertEqual(app._state.operation.error_type, "AttributeError")
+        self.assertEqual(app._state.operation.error_message, "'NoneType' object has no attribute 'endswith'")
+        self.assertTrue(app._state.operation.backtrace)
+
+    async def test_operations_tab_disables_run_for_invalid_waiting(self):
+        app = Viewer()
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('install')")
+            await pilot.pause()
+
+            pane = app.query_one(OperationsPane)
+            pane.query_one("#operations-waiting", Input).value = "0"
+            await pilot.pause()
+
+            self.assertTrue(pane.query_one("#operations-run", Button).disabled)
+
     async def test_rename_selected_cluster_config_updates_state(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = os.path.join(tmp_dir, "cluster.yaml")
@@ -321,3 +576,17 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
                 return
             await pilot.pause()
         self.fail(f"active tab did not become {tab_id}")
+
+    async def _wait_for_operation_calls(self, pilot, calls):
+        for _ in range(10):
+            if calls:
+                return
+            await pilot.pause()
+        self.fail("operation was not executed")
+
+    async def _wait_for_operation_status(self, pilot, app, status):
+        for _ in range(10):
+            if app._state.operation.status == status:
+                return
+            await pilot.pause()
+        self.fail(f"operation status did not become {status}")

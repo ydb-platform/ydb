@@ -6,7 +6,7 @@ from textual.widgets import TabPane, TabbedContent
 from ydb.tools.mnc.viewer.main import Viewer
 
 
-TAB_IDS = ["general", "mnc-config", "cluster-config", "agents"]
+TAB_IDS = ["general", "mnc-config", "cluster-config", "agents", "operation"]
 EXHAUSTIVE_TAB_IDS = ["general", "mnc-config", "cluster-config"]
 CORE_COMMAND_SEQUENCES = [
     ("previous_tab",),
@@ -30,6 +30,12 @@ AGENTS_COMMAND_SEQUENCES = [
     ("open_mnc_config", "open_agents"),
     ("open_cluster_config", "open_agents"),
 ]
+OPERATION_COMMAND_SEQUENCES = [
+    ("open_operation_install",),
+    ("open_operation_install", "next_tab"),
+    ("open_operation_install", "close_tab"),
+    ("open_mnc_config", "open_operation_install"),
+]
 
 
 @dataclass
@@ -50,6 +56,8 @@ class TabState:
             self._open("cluster-config")
         elif command == "open_agents":
             self._open("agents")
+        elif command == "open_operation_install":
+            self._open("operation")
         elif command == "close_tab":
             self._close()
         else:
@@ -89,12 +97,34 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
                         )
 
     async def test_agents_tab_navigation_matches_state_machine(self):
-        for start_tab in TAB_IDS:
+        for start_tab in ["general", "mnc-config", "cluster-config", "agents"]:
             app = Viewer()
             async with app.run_test() as pilot:
                 with self.subTest(start_tab=start_tab):
                     for commands in AGENTS_COMMAND_SEQUENCES:
-                        await self._assert_command_sequence(app, pilot, start_tab, commands)
+                        await self._assert_command_sequence(
+                            app,
+                            pilot,
+                            start_tab,
+                            commands,
+                            include_agents=True,
+                            include_operation=False,
+                        )
+
+    async def test_operation_tab_navigation_matches_state_machine(self):
+        for start_tab in ["general", "operation"]:
+            app = Viewer()
+            async with app.run_test() as pilot:
+                with self.subTest(start_tab=start_tab):
+                    for commands in OPERATION_COMMAND_SEQUENCES:
+                        await self._assert_command_sequence(
+                            app,
+                            pilot,
+                            start_tab,
+                            commands,
+                            include_agents=True,
+                            include_operation=True,
+                        )
 
     async def _assert_command_sequence(
         self,
@@ -103,8 +133,9 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
         start_tab: str,
         commands: tuple[str, ...],
         include_agents: bool = True,
+        include_operation: bool = False,
     ) -> None:
-        await self._reset_tabs(app, start_tab, include_agents)
+        await self._reset_tabs(app, start_tab, include_agents, include_operation)
         expected = TabState(self._actual_tabs(app), start_tab)
         self._assert_tabs(app, expected, commands, "initial")
 
@@ -116,11 +147,19 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
                 await self._wait_for_tab_panes(app, pilot, expected.tabs)
             self._assert_tabs(app, expected, commands, command)
 
-    async def _reset_tabs(self, app: Viewer, start_tab: str, include_agents: bool = True) -> None:
+    async def _reset_tabs(
+        self,
+        app: Viewer,
+        start_tab: str,
+        include_agents: bool = True,
+        include_operation: bool = False,
+    ) -> None:
         await self._run_command(app, "open_mnc_config")
         await self._run_command(app, "open_cluster_config")
         if include_agents:
             await self._run_command(app, "open_agents")
+        if include_operation:
+            await self._run_command(app, "open_operation_install")
         await self._run_open_tab(app, start_tab)
         await self._run_open_tab(app, start_tab)
 
@@ -137,6 +176,8 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
             await app.run_action("open_cluster_config")
         elif command == "open_agents":
             await app.run_action("open_agents")
+        elif command == "open_operation_install":
+            await app.run_action("open_operation('install')")
         elif command == "close_tab":
             await app.run_action("close_tab")
         else:
@@ -151,6 +192,8 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
             await app.run_action("open_cluster_config")
         elif tab_id == "agents":
             await app.run_action("open_agents")
+        elif tab_id == "operation":
+            await app.run_action("open_operation('install')")
         else:
             raise AssertionError(f"unknown tab: {tab_id}")
 

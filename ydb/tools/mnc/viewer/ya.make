@@ -14,6 +14,7 @@ PY3_PROGRAM(mnc_viewer)
         contrib/python/PyYAML
         contrib/python/rich
         contrib/python/textual
+        ydb/tools/mnc/cli
         ydb/tools/mnc/lib
         ydb/tools/mnc/scheme
     )

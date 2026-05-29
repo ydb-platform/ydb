@@ -5,13 +5,16 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from rich.console import Group
+from rich.panel import Panel
+from rich.text import Text
 import yaml
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import Click, Key
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Input, Label, ListItem, ListView, Static
+from textual.widgets import Button, Checkbox, DataTable, Input, Label, ListItem, ListView, Static
 
 import ydb.tools.mnc.scheme as mnc_scheme
 
@@ -19,6 +22,17 @@ import ydb.tools.mnc.scheme as mnc_scheme
 CONFIG_FIELD_TITLES = {
     "git_ydb_root": "YDB source root",
 }
+MNC_DEPLOY_FLAG_CHECKBOX_PREFIX = "mnc-deploy-flag-"
+
+
+def mnc_deploy_flag_checkbox_id(flag: str) -> str:
+    return MNC_DEPLOY_FLAG_CHECKBOX_PREFIX + flag
+
+
+def mnc_deploy_flag_from_checkbox_id(checkbox_id: Optional[str]) -> Optional[str]:
+    if checkbox_id is None or not checkbox_id.startswith(MNC_DEPLOY_FLAG_CHECKBOX_PREFIX):
+        return None
+    return checkbox_id[len(MNC_DEPLOY_FLAG_CHECKBOX_PREFIX):]
 
 
 def _status_class(status: str) -> str:
@@ -564,7 +578,7 @@ class MncConfigForm(Vertical):
     }
 
     #mnc-config-fields {
-        height: 1fr;
+        height: auto;
         background: $surface;
     }
 
@@ -627,9 +641,32 @@ class MncConfigForm(Vertical):
         border: none;
         background-tint: 0%;
     }
+
+    #mnc-deploy-flags {
+        height: auto;
+        margin-top: 1;
+        padding: 1 2;
+        background: $surface;
+    }
+
+    #mnc-deploy-flags:dark {
+        background: $panel-darken-1;
+    }
+
+    .config-group-title {
+        height: 2;
+        content-align: left middle;
+        text-style: bold;
+    }
+
+    .config-checkbox {
+        height: auto;
+        margin-bottom: 1;
+        background: transparent;
+    }
     """
 
-    def __init__(self, config: dict[str, str], default_git_ydb_root: str) -> None:
+    def __init__(self, config: dict[str, object], default_git_ydb_root: str) -> None:
         super().__init__()
         self._config = config
         self._default_git_ydb_root = default_git_ydb_root
@@ -643,6 +680,20 @@ class MncConfigForm(Vertical):
                 path_picker=True,
             ),
             id="mnc-config-fields",
+        )
+        deploy_flags = set(self._config.get("deploy_flags") or [])
+        yield Vertical(
+            Label("Deploy flags", classes="config-group-title"),
+            *(
+                Checkbox(
+                    flag,
+                    value=flag in deploy_flags,
+                    id=mnc_deploy_flag_checkbox_id(flag),
+                    classes="config-checkbox",
+                )
+                for flag in mnc_scheme.common.deploy_flags
+            ),
+            id="mnc-deploy-flags",
         )
 
 
@@ -699,6 +750,35 @@ def _validate_multinode_config(path: str) -> ConfigValidation:
 class SelectedClusterConfig:
     candidate: ConfigCandidate
     validation: ConfigValidation
+
+
+@dataclass
+class OperationRequest:
+    operation_id: str
+    waiting: int = 15
+    bin_path: Optional[str] = None
+    do_not_init: bool = False
+    ignore_failed_stop: bool = False
+
+
+@dataclass
+class OperationBacktraceFrame:
+    path: str
+    line: int
+    function: str
+    source: str = ""
+
+
+@dataclass
+class OperationState:
+    status: str = "IDLE"
+    operation_id: str = ""
+    message: str = "No operation has been started."
+    result_renderable: object = None
+    error_type: str = ""
+    error_message: str = ""
+    backtrace: list[OperationBacktraceFrame] = field(default_factory=list)
+    progress_backend: object = None
 
 
 def _display_value(value: object) -> str:
@@ -864,6 +944,7 @@ class ViewerState:
     mnc_config_ok: bool
     selected_cluster_config: Optional[SelectedClusterConfig] = None
     agents: AgentsState = field(default_factory=AgentsState)
+    operation: OperationState = field(default_factory=OperationState)
 
     def mnc_config_status(self) -> str:
         return "OK" if self.mnc_config_ok else "ERROR"
@@ -908,6 +989,397 @@ class ViewerState:
             self.selected_cluster_config is not None
             and self.selected_cluster_config.candidate.path == candidate.path
         )
+
+
+class OperationsPane(VerticalScroll, inherit_bindings=False):
+    DEFAULT_CSS = """
+    OperationsPane {
+        height: 1fr;
+        padding: 0 1 1 1;
+    }
+
+    #operations-form,
+    #operations-result {
+        height: auto;
+        padding: 1 2;
+        background: $surface;
+    }
+
+    #operations-form:dark,
+    #operations-result:dark {
+        background: $panel-darken-1;
+    }
+
+    #operations-result {
+        margin-top: 1;
+    }
+
+    .operations-title {
+        height: 2;
+        content-align: left middle;
+        text-style: bold;
+    }
+
+    .operations-row {
+        height: auto;
+        min-height: 1;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    .operations-label {
+        width: 20;
+        color: $text-muted;
+    }
+
+    .operations-value {
+        width: 1fr;
+    }
+
+    #operations-install-arguments {
+        height: auto;
+    }
+
+    .operations-input {
+        height: auto;
+        width: 1fr;
+        margin-bottom: 1;
+    }
+
+    .operations-checkbox {
+        height: auto;
+        margin-bottom: 1;
+        background: transparent;
+    }
+
+    #operations-error {
+        height: auto;
+        color: $text-error;
+        margin-bottom: 1;
+    }
+
+    #operations-actions {
+        height: auto;
+        align-horizontal: right;
+    }
+
+    #operations-output {
+        height: auto;
+        min-height: 3;
+        color: $text-muted;
+    }
+
+    #operations-live {
+        height: auto;
+        margin-top: 1;
+    }
+
+    #operations-steps-pane {
+        width: 2fr;
+        height: auto;
+        padding-right: 1;
+    }
+
+    #operations-details-pane {
+        width: 3fr;
+        height: auto;
+        padding-left: 1;
+    }
+
+    .operations-live-title {
+        height: 2;
+        content-align: left middle;
+        color: $text-muted;
+        text-style: bold;
+    }
+
+    #operations-steps,
+    #operations-details {
+        height: auto;
+        min-height: 3;
+    }
+    """
+
+    def __init__(
+        self,
+        state: ViewerState,
+        on_run: Callable[[OperationRequest], None],
+        operation_id: str,
+        operation_title: str,
+    ) -> None:
+        super().__init__()
+        self._state = state
+        self._on_run = on_run
+        self._operation_id = operation_id
+        self._operation_title = operation_title
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(self._operation_title, classes="operations-title"),
+            self._summary_row("Cluster", "", id="operations-cluster"),
+            self._summary_row("Config path", "", id="operations-config-path"),
+            self._summary_row("Hosts", "", id="operations-hosts"),
+            Label("Arguments", classes="operations-title"),
+            Vertical(
+                Label("waiting", classes="operations-label"),
+                Input(value="15", placeholder="15", id="operations-waiting", classes="operations-input"),
+                Label("bin_path", classes="operations-label"),
+                Input(value="", placeholder="optional path to ydb binary", id="operations-bin-path", classes="operations-input"),
+                Checkbox("do_not_init", value=False, id="operations-do-not-init", classes="operations-checkbox"),
+                id="operations-install-arguments",
+            ),
+            Checkbox(
+                "ignore_failed_stop",
+                value=False,
+                id="operations-ignore-failed-stop",
+                classes="operations-checkbox",
+            ),
+            Static("", id="operations-error", markup=False),
+            Horizontal(
+                Button("Run", id="operations-run", variant="error"),
+                id="operations-actions",
+            ),
+            id="operations-form",
+        )
+        yield Vertical(
+            Label("Execution", classes="operations-title"),
+            Static("", id="operations-output", markup=False),
+            Horizontal(
+                Vertical(
+                    Label("Steps", classes="operations-live-title"),
+                    Static("", id="operations-steps"),
+                    id="operations-steps-pane",
+                ),
+                Vertical(
+                    Label("Details", classes="operations-live-title"),
+                    Static("", id="operations-details"),
+                    id="operations-details-pane",
+                ),
+                id="operations-live",
+            ),
+            id="operations-result",
+        )
+
+    def on_mount(self) -> None:
+        self.refresh_state()
+        if self._operation_id == "install":
+            self.query_one("#operations-waiting", Input).focus()
+        else:
+            self.query_one("#operations-run", Button).focus()
+
+    def refresh_state(self) -> None:
+        selected = self._selected_cluster()
+        self.query_one("#operations-cluster .operations-value", Label).update(
+            selected.candidate.name if selected is not None else "Select a valid cluster first"
+        )
+        self.query_one("#operations-config-path .operations-value", Label).update(
+            selected.candidate.path if selected is not None else "-"
+        )
+        self.query_one("#operations-hosts .operations-value", Label).update(self._hosts_text())
+
+        started = self._operation_started()
+        self.query_one("#operations-form", Vertical).display = not started
+        self.query_one("#operations-result", Vertical).display = started
+        self.query_one("#operations-install-arguments", Vertical).display = self._operation_id == "install"
+        self.query_one("#operations-error", Static).update(self._validation_error())
+        self.query_one("#operations-run", Button).disabled = bool(self._validation_error())
+        self._refresh_operation_output()
+
+    def _summary_row(self, label: str, value: str, id: str) -> Horizontal:
+        return Horizontal(
+            Label(label, classes="operations-label"),
+            Label(value, classes="operations-value"),
+            id=id,
+            classes="operations-row",
+        )
+
+    def _selected_cluster(self) -> Optional[SelectedClusterConfig]:
+        selected = self._state.selected_cluster_config
+        if selected is None or selected.validation.config is None or not selected.validation.ok:
+            return None
+        return selected
+
+    def _hosts(self) -> list[str]:
+        selected = self._selected_cluster()
+        if selected is None:
+            return []
+        hosts = selected.validation.config.get("hosts") or []
+        return list(dict.fromkeys(str(host) for host in hosts))
+
+    def _hosts_text(self) -> str:
+        hosts = self._hosts()
+        return f"{len(hosts)}: {', '.join(hosts)}" if hosts else "0"
+
+    def _validation_error(self) -> str:
+        if self._operation_started():
+            return ""
+        if self._state.operation.status == "RUNNING":
+            return "Operation is running."
+        if self._selected_cluster() is None:
+            return "Select a valid cluster first."
+        if not self._hosts():
+            return "No hosts in selected cluster."
+        if self._operation_id == "install":
+            waiting = self.query_one("#operations-waiting", Input).value.strip()
+            try:
+                value = int(waiting)
+            except ValueError:
+                return "waiting must be a positive integer."
+            if value <= 0:
+                return "waiting must be a positive integer."
+        return ""
+
+    def _operation_started(self) -> bool:
+        operation = self._state.operation
+        return operation.operation_id == self._operation_id and operation.status != "IDLE"
+
+    def _request(self) -> Optional[OperationRequest]:
+        error = self._validation_error()
+        if error:
+            self.query_one("#operations-error", Static).update(error)
+            return None
+
+        ignore_failed_stop = bool(self.query_one("#operations-ignore-failed-stop", Checkbox).value)
+        if self._operation_id == "uninstall":
+            return OperationRequest(
+                operation_id="uninstall",
+                ignore_failed_stop=ignore_failed_stop,
+            )
+
+        bin_path = self.query_one("#operations-bin-path", Input).value.strip() or None
+        return OperationRequest(
+            operation_id="install",
+            waiting=int(self.query_one("#operations-waiting", Input).value.strip()),
+            bin_path=bin_path,
+            do_not_init=bool(self.query_one("#operations-do-not-init", Checkbox).value),
+            ignore_failed_stop=ignore_failed_stop,
+        )
+
+    def _operation_output(self):
+        operation = self._state.operation
+        title = self._operation_title if operation.operation_id == self._operation_id else "Operation"
+        status_style = {
+            "OK": "bold green",
+            "FAIL": "bold red",
+            "RUNNING": "bold yellow",
+            "IDLE": "dim",
+        }.get(operation.status, "bold")
+        header = Text.assemble((operation.status, status_style), ": ", (title, "bold"))
+        if operation.error_type:
+            return Panel(
+                Group(
+                    Text.assemble(
+                        (operation.error_type, "bold red"),
+                        (": ", "red"),
+                        (operation.error_message, "red"),
+                    ),
+                    "",
+                    self._backtrace_text(operation.backtrace),
+                ),
+                title=f"[bold red]{operation.status}:[/] {title}",
+                border_style="red",
+                expand=False,
+                title_align="left",
+            )
+        if operation.result_renderable is not None:
+            return self._result_renderable(operation.result_renderable)
+        if operation.message:
+            return Group(header, "", Text(operation.message))
+        return header
+
+    def _refresh_operation_output(self) -> None:
+        operation = self._state.operation
+        backend = operation.progress_backend if operation.operation_id == self._operation_id else None
+        show_live = backend is not None and operation.status == "RUNNING" and not operation.error_type
+
+        self.query_one("#operations-live", Horizontal).display = show_live
+        if show_live:
+            self.query_one("#operations-steps", Static).update(backend.render_tree_body())
+            self.query_one("#operations-details", Static).update(backend.render_details_body())
+
+        self.query_one("#operations-output", Static).update(self._operation_output())
+
+    def _result_renderable(self, renderable):
+        if isinstance(renderable, str):
+            try:
+                return Text.from_markup(renderable)
+            except Exception:
+                return Text(renderable)
+        return renderable
+
+    def _backtrace_text(self, frames: list[OperationBacktraceFrame]) -> Text:
+        text = Text("Backtrace", style="bold")
+        if not frames:
+            text.append("\n  -")
+            return text
+        for index, frame in enumerate(frames, 1):
+            text.append(f"\n  {index}. ", style="dim")
+            text.append(f"{frame.path}:{frame.line}", style="cyan")
+            text.append(" in ", style="dim")
+            text.append(frame.function, style="magenta")
+            if frame.source:
+                text.append("\n     ")
+                text.append(frame.source)
+        return text
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "operations-run":
+            event.stop()
+            request = self._request()
+            if request is not None:
+                self._on_run(request)
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "operations-waiting":
+            self.refresh_state()
+
+    def _live_backend(self):
+        operation = self._state.operation
+        if (
+            operation.operation_id != self._operation_id
+            or operation.status != "RUNNING"
+            or operation.error_type
+        ):
+            return None
+        return operation.progress_backend
+
+    def _move_live_selection(self, delta: int) -> bool:
+        backend = self._live_backend()
+        if backend is None:
+            return False
+        backend.move_selection(delta)
+        self._refresh_operation_output()
+        return True
+
+    def _toggle_live_selection(self) -> bool:
+        backend = self._live_backend()
+        if backend is None:
+            return False
+        backend.toggle_selected()
+        self._refresh_operation_output()
+        return True
+
+    def key_up(self, event: Key) -> None:
+        if self._move_live_selection(-1):
+            event.stop()
+            return
+        self.scroll_up(animate=False, force=True)
+        event.stop()
+
+    def key_down(self, event: Key) -> None:
+        if self._move_live_selection(1):
+            event.stop()
+            return
+        self.scroll_down(animate=False, force=True)
+        event.stop()
+
+    def key_enter(self, event: Key) -> None:
+        if self._toggle_live_selection():
+            event.stop()
+
+    def key_space(self, event: Key) -> None:
+        if self._toggle_live_selection():
+            event.stop()
 
 
 class ConfigCandidateItem(ListItem):

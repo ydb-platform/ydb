@@ -1,10 +1,16 @@
 import asyncio
+import io
 import os
 import shlex
 import shutil
 import subprocess
-from typing import Optional
+import tempfile
+import textwrap
+import traceback
+from dataclasses import dataclass
+from typing import Callable, Optional
 
+import rich.console
 import yaml
 
 from textual.app import App, ComposeResult, ScreenStackError, SuspendNotSupported
@@ -13,10 +19,14 @@ from textual.command import CommandPalette
 from textual.css.query import NoMatches
 from textual.events import Key
 from textual.widget import Widget
-from textual.widgets import Footer, Header, Input, ListView, TabbedContent, TabPane, Tabs
+from textual.widgets import Checkbox, Footer, Header, Input, ListView, TabbedContent, TabPane, Tabs
 
-from ydb.tools.mnc.lib import agent_client
-from ydb.tools.mnc.viewer.commands import TabCommands, ViewerCommands
+from ydb.tools.mnc.cli.commands import install as install_command
+from ydb.tools.mnc.cli.commands import uninstall as uninstall_command
+from ydb.tools.mnc.lib import agent_client, deploy_ctx, output as mnc_output
+from ydb.tools.mnc.lib.progress_live import LiveBackend
+from ydb.tools.mnc.scheme import common as scheme_common
+from ydb.tools.mnc.viewer.commands import OperationsCommands, TabCommands, ViewerCommands
 from ydb.tools.mnc.viewer.widgets import (
     AgentHostStatus,
     AgentsPane,
@@ -26,17 +36,89 @@ from ydb.tools.mnc.viewer.widgets import (
     ConfigFieldItem,
     InvalidPathModal,
     MncConfigForm,
+    OperationBacktraceFrame,
+    OperationRequest,
+    OperationState,
+    OperationsPane,
     OverviewPane,
     OverviewAgentsCard,
     OverviewStatusCard,
     PathPickerScreen,
     ViewerState,
+    mnc_deploy_flag_checkbox_id,
+    mnc_deploy_flag_from_checkbox_id,
 )
 
 
 MNC_CONFIG_PATH = os.path.join(os.environ.get("HOME", "/"), ".mnc", "mnc.yaml")
 DEFAULT_GIT_YDB_ROOT = os.path.join(os.environ.get("HOME", "/"), "ydbwork", "ydb")
 DEFAULT_EDITOR = "vi"
+OPERATION_OUTPUT_LIMIT = 12000
+DEPLOY_CONTEXT_DEFAULTS = {
+    "deploy_path": "/Berkanavt",
+    "binary_project": "ydb/apps/ydbd",
+    "relative_binary_path": "ydb/apps/ydbd/ydbd",
+    "transit_bin_through_first_node": False,
+    "do_rebuild": True,
+    "do_strip": True,
+    "do_redeploy_bin": True,
+    "affinity": None,
+    "git_ydb_root": None,
+    "source_root": None,
+    "source_ya_path": None,
+    "bin_filename": "ydbd",
+    "path_to_bin": None,
+    "is_manual_path_to_bin": False,
+    "secure": False,
+    "certs_local_dir": None,
+}
+
+
+@dataclass
+class _OperationExecution:
+    result: object
+    output: str
+    progress_backend: Optional[object] = None
+
+
+class _ViewerOperationBackend(LiveBackend):
+    def __init__(self, console: rich.console.Console, on_update: Callable[["_ViewerOperationBackend"], None]) -> None:
+        super().__init__(console=console)
+        self._on_update = on_update
+
+    def add_task(self, description: str, total: Optional[float] = None, **kwargs):
+        if kwargs.get("parent") is not None:
+            description = str(description).lstrip()
+        task_id = super().add_task(description, total=total, **kwargs)
+        self._emit()
+        return task_id
+
+    def update(
+        self,
+        task_id,
+        *,
+        advance: Optional[float] = None,
+        completed: Optional[float] = None,
+        total: Optional[float] = None,
+        visible: Optional[bool] = None,
+        **kwargs,
+    ) -> None:
+        super().update(
+            task_id,
+            advance=advance,
+            completed=completed,
+            total=total,
+            visible=visible,
+            **kwargs,
+        )
+        self._emit()
+
+    def append_log(self, line: str, step_id: Optional[str] = None) -> None:
+        super().append_log(line, step_id=step_id)
+        self._emit()
+
+    def _emit(self) -> None:
+        self._on_update(self)
 
 
 class Viewer(App):
@@ -46,6 +128,7 @@ class Viewer(App):
         Binding("left_square_bracket,[", "previous_tab", "Previous tab", priority=True),
         Binding("right_square_bracket,]", "next_tab", "Next tab", priority=True),
         Binding("t", "open_tab_picker", "Tabs", priority=True),
+        Binding("o", "open_operation_picker", "Operations", priority=True),
         Binding("ctrl+w", "close_tab", "Close tab", priority=True),
     ]
 
@@ -71,6 +154,7 @@ class Viewer(App):
         self._state = ViewerState(mnc_config_ok=self._mnc_config_ok())
         self._navigation_generation = 0
         self._agent_check_generation = 0
+        self._operation_running = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -144,15 +228,20 @@ class Viewer(App):
                 widget.focus()
                 return
 
-    def _load_mnc_config(self) -> dict[str, str]:
+    def _load_mnc_config(self) -> dict[str, object]:
         try:
             with open(MNC_CONFIG_PATH) as file:
                 config = yaml.safe_load(file) or {}
         except FileNotFoundError:
             config = {}
 
+        deploy_flags = config.get("deploy_flags") or []
+        if not isinstance(deploy_flags, list):
+            deploy_flags = []
+        deploy_flags = [flag for flag in deploy_flags if flag in scheme_common.deploy_flags]
         return {
             "git_ydb_root": str(config.get("git_ydb_root", DEFAULT_GIT_YDB_ROOT)),
+            "deploy_flags": deploy_flags,
         }
 
     def _save_mnc_config(self) -> None:
@@ -177,6 +266,11 @@ class Viewer(App):
 
         try:
             self.query_one(AgentsPane).refresh_state()
+        except NoMatches:
+            pass
+
+        try:
+            self.query_one(OperationsPane).refresh_state()
         except NoMatches:
             pass
 
@@ -350,6 +444,12 @@ class Viewer(App):
     def tab_choices(self, opened_only: bool = False) -> list[tuple[str, str, str]]:
         return self._tab_choices(opened_only=opened_only)
 
+    def operation_choices(self) -> list[tuple[str, str, str]]:
+        return [
+            ("install", "Install", "Install multinode cluster using selected config"),
+            ("uninstall", "Uninstall", "Uninstall multinode cluster from selected hosts"),
+        ]
+
     def _move_tab(self, step: int) -> None:
         tabs = self.query_one("#tabs", TabbedContent)
         if not self._opened_tab_order:
@@ -390,6 +490,251 @@ class Viewer(App):
                     id="--tab-palette",
                 )
             )
+
+    def action_open_operation_picker(self) -> None:
+        if not CommandPalette.is_open(self):
+            self.push_screen(
+                CommandPalette(
+                    providers={OperationsCommands},
+                    placeholder="Select operation...",
+                    id="--operation-palette",
+                )
+            )
+
+    def action_open_operations(self) -> None:
+        self.action_open_operation_picker()
+
+    def _handle_operation_request(self, request: Optional[OperationRequest]) -> None:
+        if request is None:
+            return
+        if self._operation_running:
+            self._set_operation_state(
+                OperationState(
+                    status="RUNNING",
+                    operation_id=self._state.operation.operation_id or request.operation_id,
+                    message="Wait for the current operation to finish.",
+                )
+            )
+            return
+        self._operation_running = True
+        title = self._operation_title(request.operation_id)
+        self._set_operation_state(
+            OperationState(
+                status="RUNNING",
+                operation_id=request.operation_id,
+                message=f"{title} is running.",
+            )
+        )
+        self.notify(f"{title} started", title="Operation")
+        self.run_worker(
+            self._run_operation(request),
+            name=f"operation-{request.operation_id}",
+            group="operations",
+            exclusive=True,
+            exit_on_error=False,
+        )
+
+    def _operation_title(self, operation_id: str) -> str:
+        operation = next((choice for choice in self.operation_choices() if choice[0] == operation_id), None)
+        return operation[1] if operation is not None else operation_id
+
+    def _set_operation_state(self, state: OperationState) -> None:
+        self._state.operation = state
+        try:
+            self.query_one(OperationsPane).refresh_state()
+        except NoMatches:
+            pass
+
+    async def _run_operation(self, request: OperationRequest) -> None:
+        title = self._operation_title(request.operation_id)
+        try:
+            execution = await self._execute_operation(request)
+        except Exception as error:
+            progress_backend = None
+            if self._state.operation.operation_id == request.operation_id:
+                progress_backend = self._state.operation.progress_backend
+            self._set_operation_state(self._operation_exception_state(request.operation_id, error, progress_backend))
+            self.notify(f"{title} failed", title="Operation", severity="error")
+            return
+        finally:
+            self._operation_running = False
+
+        result, output, progress_backend = self._operation_result(execution)
+        ok = bool(result)
+        result_renderable = self._operation_result_renderable(result)
+        self._set_operation_state(
+            OperationState(
+                status="OK" if ok else "FAIL",
+                operation_id=request.operation_id,
+                message=self._operation_result_message(result, output, ok, result_renderable is not None),
+                result_renderable=result_renderable,
+                progress_backend=progress_backend,
+            )
+        )
+        self.notify(
+            f"{title} completed" if ok else f"{title} failed",
+            title="Operation",
+            severity="information" if ok else "error",
+        )
+        if not ok:
+            return
+        self._start_agents_check()
+
+    async def _execute_operation(self, request: OperationRequest):
+        selected = self._state.selected_cluster_config
+        if selected is None or selected.validation.config is None:
+            raise RuntimeError("Select a valid cluster first.")
+
+        hosts = self._selected_cluster_hosts()
+        config = selected.validation.config
+        deploy_context_snapshot = self._deploy_context_snapshot()
+        previous_backend = mnc_output.get_progress_backend_override()
+        try:
+            with tempfile.TemporaryDirectory() as work_directory:
+                self._prepare_deploy_context(config, work_directory)
+                output = io.StringIO()
+                console = rich.console.Console(file=output, force_terminal=False, width=120)
+                backend = _ViewerOperationBackend(
+                    console,
+                    lambda progress_backend: self._set_operation_state(
+                        OperationState(
+                            status="RUNNING",
+                            operation_id=request.operation_id,
+                            message=f"{self._operation_title(request.operation_id)} is running.",
+                            progress_backend=progress_backend,
+                        )
+                    ),
+                )
+                mnc_output.set_progress_backend_override(backend)
+                try:
+                    if request.operation_id == "install":
+                        result = await install_command.act(
+                            hosts,
+                            config,
+                            waiting=request.waiting,
+                            bin_path=request.bin_path,
+                            do_not_init=request.do_not_init,
+                            ignore_failed_stop=request.ignore_failed_stop,
+                            console=console,
+                        )
+                    elif request.operation_id == "uninstall":
+                        result = await uninstall_command.act(
+                            hosts,
+                            config,
+                            ignore_failed_stop=request.ignore_failed_stop,
+                            console=console,
+                        )
+                    else:
+                        raise RuntimeError(f"Unknown operation: {request.operation_id}")
+                finally:
+                    mnc_output.set_progress_backend_override(previous_backend)
+                return _OperationExecution(result=result, output=output.getvalue().strip(), progress_backend=backend)
+        finally:
+            self._restore_deploy_context(deploy_context_snapshot)
+            mnc_output.set_progress_backend_override(previous_backend)
+
+    def _prepare_deploy_context(self, config: dict, work_directory: str) -> None:
+        for name, value in DEPLOY_CONTEXT_DEFAULTS.items():
+            setattr(deploy_ctx, name, value)
+        deploy_ctx.work_directory = work_directory
+        deploy_ctx.apply_cfg_mnc(self._mnc_config)
+        deploy_ctx.apply_cfg(self._operation_config(config), install_command.expected_config)
+        if deploy_ctx.path_to_bin is None:
+            raise RuntimeError("Failed to prepare binary path from MNC config.")
+
+    def _operation_config(self, config: dict) -> dict:
+        operation_config = dict(config)
+        operation_config["deploy_flags"] = scheme_common.merge_deploy_flags(
+            config.get("deploy_flags") or [],
+            self._mnc_config.get("deploy_flags") or [],
+        )
+        return operation_config
+
+    @staticmethod
+    def _deploy_context_snapshot() -> dict[str, object]:
+        names = set(DEPLOY_CONTEXT_DEFAULTS) | {"work_directory"}
+        return {name: getattr(deploy_ctx, name) for name in names}
+
+    @staticmethod
+    def _restore_deploy_context(snapshot: dict[str, object]) -> None:
+        for name, value in snapshot.items():
+            setattr(deploy_ctx, name, value)
+
+    def _operation_result(self, execution) -> tuple[object, str, Optional[object]]:
+        if isinstance(execution, _OperationExecution):
+            return execution.result, execution.output, execution.progress_backend
+        return execution, "", None
+
+    def _operation_result_renderable(self, result: object) -> Optional[object]:
+        to_rich_panel = getattr(result, "to_rich_panel", None)
+        if not callable(to_rich_panel):
+            return None
+        return to_rich_panel()
+
+    def _operation_result_message(self, result: object, output: str, ok: bool, has_result_renderable: bool) -> str:
+        if has_result_renderable:
+            return ""
+        parts = []
+        result_text = "" if isinstance(result, bool) else str(result).strip()
+        if result_text:
+            parts.append(result_text)
+        if output:
+            parts.append(self._trim_operation_output(output))
+        if parts:
+            return "\n\n".join(parts)
+        return "Operation completed." if ok else "Operation failed."
+
+    def _operation_exception_state(
+        self,
+        operation_id: str,
+        error: Exception,
+        progress_backend: Optional[object] = None,
+    ) -> OperationState:
+        frames = []
+        for frame in traceback.extract_tb(error.__traceback__):
+            path = self._traceback_path(frame.filename)
+            source = ""
+            if frame.line:
+                source = textwrap.shorten(frame.line.strip(), width=120, placeholder=" ...")
+            frames.append(OperationBacktraceFrame(path, frame.lineno, frame.name, source))
+        message = self._plain_operation_exception(error, frames)
+        return OperationState(
+            status="FAIL",
+            operation_id=operation_id,
+            message=message,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            backtrace=frames,
+            progress_backend=progress_backend,
+        )
+
+    def _plain_operation_exception(self, error: Exception, frames: list[OperationBacktraceFrame]) -> str:
+        lines = [
+            f"{error.__class__.__name__}: {error}",
+            "",
+            "Backtrace:",
+        ]
+        for frame in frames:
+            lines.append(f"  {frame.path}:{frame.line} in {frame.function}")
+            if frame.source:
+                lines.append(f"    {frame.source}")
+        return self._trim_operation_output("\n".join(lines))
+
+    @staticmethod
+    def _traceback_path(filename: str) -> str:
+        try:
+            path = os.path.relpath(filename, os.getcwd())
+        except ValueError:
+            return filename
+        if path.startswith(".." + os.sep):
+            return filename
+        return path
+
+    @staticmethod
+    def _trim_operation_output(output: str) -> str:
+        if len(output) <= OPERATION_OUTPUT_LIMIT:
+            return output
+        return "... output truncated ...\n" + output[-OPERATION_OUTPUT_LIMIT:]
 
     def action_previous_tab(self) -> None:
         self._move_tab(-1)
@@ -447,6 +792,38 @@ class Viewer(App):
             "agents",
             self._tab_titles["agents"],
             AgentsPane(self._state),
+        )
+
+    async def action_open_operation(self, operation_id: str) -> None:
+        choices = {choice_id: (title, description) for choice_id, title, description in self.operation_choices()}
+        if operation_id not in choices:
+            self.notify(f"Unknown operation: {operation_id}", title="Operation", severity="error")
+            return
+
+        if self._operation_running and self._state.operation.operation_id:
+            operation_id = self._state.operation.operation_id
+        else:
+            self._state.operation = OperationState(
+                status="IDLE",
+                operation_id=operation_id,
+                message="No operation has been started.",
+            )
+
+        title, description = choices[operation_id]
+        tab_id = "operation"
+        self._tab_titles[tab_id] = title
+        self._tab_descriptions[tab_id] = description
+
+        if tab_id in self._opened_tab_order:
+            tabs = self.query_one("#tabs", TabbedContent)
+            self._created_tabs.discard(tab_id)
+            self._opened_tab_order.remove(tab_id)
+            await tabs.remove_pane(tab_id)
+
+        await self._open_tab(
+            tab_id,
+            title,
+            OperationsPane(self._state, self._handle_operation_request, operation_id, title),
         )
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -522,6 +899,31 @@ class Viewer(App):
 
     def _focus_mnc_config_fields(self) -> None:
         self.query_one("#mnc-config-fields", ListView).focus()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        deploy_flag = mnc_deploy_flag_from_checkbox_id(event.checkbox.id)
+        if deploy_flag is None:
+            return
+        if event.value:
+            opposite_flag = scheme_common.opposite_deploy_flags.get(deploy_flag)
+            if opposite_flag is not None:
+                try:
+                    self.query_one("#" + mnc_deploy_flag_checkbox_id(opposite_flag), Checkbox).value = False
+                except NoMatches:
+                    pass
+        self._save_mnc_deploy_flags()
+
+    def _save_mnc_deploy_flags(self) -> None:
+        deploy_flags = []
+        for flag in scheme_common.deploy_flags:
+            try:
+                checkbox = self.query_one("#" + mnc_deploy_flag_checkbox_id(flag), Checkbox)
+            except NoMatches:
+                continue
+            if checkbox.value:
+                deploy_flags.append(flag)
+        self._mnc_config["deploy_flags"] = deploy_flags
+        self._save_mnc_config()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if self._editing_config_field is not None and event.input is self._editing_config_field.input:

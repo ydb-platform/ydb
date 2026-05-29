@@ -35,6 +35,14 @@ class TabCommands(CommandProviderBase):
         ]
 
 
+class OperationsCommands(CommandProviderBase):
+    def _commands(self) -> list[tuple[str, str, str]]:
+        return [
+            (title, description, f"open_operation('{operation_id}')")
+            for operation_id, title, description in self.app.operation_choices()
+        ]
+
+
 class ViewerCommands(CommandProviderBase):
     def _commands(self) -> list[tuple[str, str, str]]:
         return [
@@ -42,5 +50,6 @@ class ViewerCommands(CommandProviderBase):
             ("Open tab: Settings", "Read and edit settings", "open_mnc_config"),
             ("Open tab: Cluster", "Select and inspect cluster", "open_cluster_config"),
             ("Open tab: Hosts", "Inspect selected cluster hosts", "open_agents"),
+            ("Operations", "Select install or uninstall operation", "open_operations"),
             ("Close tab", "Close the current tab", "close_tab"),
         ]

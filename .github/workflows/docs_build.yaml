@@ -9,7 +9,7 @@ on:
       pull_number:
         description: 'Pull Request number to build documentation'
         required: true
-        type: string  
+        type: string
 
 jobs:
   add-label:

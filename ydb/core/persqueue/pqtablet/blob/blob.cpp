@@ -380,7 +380,7 @@ ui64 THead::GetOffsetDelta() const
     ui64 lastBatchOffsetDelta = 0;
     if (!Batches.back().Blobs.empty()) {
         const auto& lastBlob = Batches.back().Blobs.back();
-        lastBatchOffsetDelta = Batches.back().GetCount() + !lastBlob.IsLastPart() ? 1 : 0;
+        lastBatchOffsetDelta = Batches.back().GetCount() + (!lastBlob.IsLastPart() ? 1 : 0);
     }
 
     return Batches.back().GetOffset() - Offset + lastBatchOffsetDelta;

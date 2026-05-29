@@ -102,10 +102,7 @@ message MaintenanceTaskOptions {
     // for this task. CMS will not issue new locks beyond this limit; remaining
     // actions stay in PENDING until clients call CompleteAction on already
     // performed ones. 0 means unlimited (default behavior).
-    //
-    // Intended to keep the number of in-flight permissions bounded so that
-    // they cannot expire before the client manages to use them.
-    uint32 max_concurrent_actions = 6;
+    uint32 max_inflight_actions = 6;
 }
 
 // Used to describe the scope of a single action.

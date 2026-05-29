@@ -25,7 +25,7 @@ void RunRollingRestartSimulation(ui32 totalNodes, ui32 cap) {
     req->mutable_task_options()->set_task_uid("task-1");
     req->mutable_task_options()->set_availability_mode(
         Ydb::Maintenance::AVAILABILITY_MODE_FORCE);
-    req->mutable_task_options()->set_max_concurrent_actions(cap);
+    req->mutable_task_options()->set_max_inflight_actions(cap);
     for (ui32 i = 0; i < totalNodes; ++i) {
         auto group = MakeActionGroup(
             MakeLockAction(env.GetNodeId(i), TDuration::Minutes(10)));
@@ -474,12 +474,12 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(MaxConcurrentActionsCapsInitialBatch) {
+    Y_UNIT_TEST(MaxInflightActionsCapsInitialBatch) {
         TCmsTestEnv env(8);
 
         auto response = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
-            /* maxConcurrentActions = */ 3u,
+            /* maxInflightActions = */ 3u,
             MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
@@ -507,12 +507,12 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT_VALUES_EQUAL(pending, 5);
     }
 
-    Y_UNIT_TEST(MaxConcurrentActionsBlocksRefresh) {
+    Y_UNIT_TEST(MaxInflightActionsBlocksRefresh) {
         TCmsTestEnv env(8);
 
         auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
-            /* maxConcurrentActions = */ 3u,
+            /* maxInflightActions = */ 3u,
             MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
@@ -545,12 +545,12 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT_VALUES_EQUAL(refreshPending, 3);
     }
 
-    Y_UNIT_TEST(MaxConcurrentActionsReleasesQuotaOnCompleteAction) {
+    Y_UNIT_TEST(MaxInflightActionsReleasesQuotaOnCompleteAction) {
         TCmsTestEnv env(8);
 
         auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
-            /* maxConcurrentActions = */ 3u,
+            /* maxInflightActions = */ 3u,
             MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
@@ -589,24 +589,24 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT_VALUES_EQUAL(refreshPending, 5 - 2);
     }
 
-    Y_UNIT_TEST(MaxConcurrentActionsRollingRestartBatchNormal) {
+    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchNormal) {
         RunRollingRestartSimulation(100, 5);
     }
 
-    Y_UNIT_TEST(MaxConcurrentActionsRollingRestartBatchMin) {
+    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchMin) {
         RunRollingRestartSimulation(100, 1);
     }
 
-    Y_UNIT_TEST(MaxConcurrentActionsRollingRestartBatchFull) {
+    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchFull) {
         RunRollingRestartSimulation(100, 100);
     }
 
-    Y_UNIT_TEST(MaxConcurrentActionsZeroMeansUnlimited) {
+    Y_UNIT_TEST(MaxInflightActionsZeroMeansUnlimited) {
         TCmsTestEnv env(8);
 
         auto response = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
-            /* maxConcurrentActions = */ 0u,
+            /* maxInflightActions = */ 0u,
             MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
             MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),

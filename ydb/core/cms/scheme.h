@@ -141,7 +141,7 @@ struct Schema : NIceDb::Schema {
         struct HasSingleCompositeActionGroup : Column<4, NScheme::NTypeIds::Bool> {};
         struct CreateTime : Column<5, NScheme::NTypeIds::Uint64> {};
         struct LastRefreshTime : Column<6, NScheme::NTypeIds::Uint64> {};
-        struct MaxConcurrentActions : Column<7, NScheme::NTypeIds::Uint32> {};
+        struct MaxInflightActions : Column<7, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<TaskID>;
         using TColumns = TableColumns<
@@ -151,7 +151,7 @@ struct Schema : NIceDb::Schema {
             HasSingleCompositeActionGroup,
             CreateTime,
             LastRefreshTime,
-            MaxConcurrentActions
+            MaxInflightActions
         >;
     };
 

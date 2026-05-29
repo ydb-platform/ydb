@@ -635,8 +635,8 @@ class TCreateMaintenanceTask
                                         && request.action_groups(0).actions().size() > 1;
         cmsRequest.SetPartialPermissionAllowed(!HasSingleCompositeActionGroup);
 
-        if (opts.max_concurrent_actions() > 0) {
-            cmsRequest.SetMaxPermissions(opts.max_concurrent_actions());
+        if (opts.max_inflight_actions() > 0) {
+            cmsRequest.SetMaxPermissions(opts.max_inflight_actions());
         }
 
         for (const auto& group : request.action_groups()) {
@@ -813,10 +813,10 @@ public:
         cmsRequest->Record.SetRequestId(task.RequestId);
         cmsRequest->Record.SetAvailabilityMode(request.Request.GetAvailabilityMode());
 
-        if (task.MaxConcurrentActions > 0) {
+        if (task.MaxInflightActions > 0) {
             const ui32 aliveCount = task.Permissions.size();
-            const ui32 quota = task.MaxConcurrentActions > aliveCount
-                ? task.MaxConcurrentActions - aliveCount
+            const ui32 quota = task.MaxInflightActions > aliveCount
+                ? task.MaxInflightActions - aliveCount
                 : 0;
             cmsRequest->Record.SetMaxPermissions(quota);
         }

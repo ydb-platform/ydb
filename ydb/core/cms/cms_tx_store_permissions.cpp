@@ -39,7 +39,7 @@ public:
         if (MaintenanceTaskId) {
             Y_ABORT_UNLESS(Scheduled);
 
-            const ui32 maxConcurrentActions = Scheduled->Request.GetMaxPermissions();
+            const ui32 maxInflightActions = Scheduled->Request.GetMaxPermissions();
 
             Self->State->MaintenanceRequests.emplace(Scheduled->RequestId, *MaintenanceTaskId);
             Self->State->MaintenanceTasks.emplace(*MaintenanceTaskId, TTaskInfo{
@@ -49,7 +49,7 @@ public:
                 .HasSingleCompositeActionGroup = !Scheduled->Request.GetPartialPermissionAllowed(),
                 .CreateTime = now,
                 .LastRefreshTime = now,
-                .MaxConcurrentActions = maxConcurrentActions
+                .MaxInflightActions = maxInflightActions
             });
 
             db.Table<Schema::MaintenanceTasks>().Key(*MaintenanceTaskId).Update(
@@ -58,7 +58,7 @@ public:
                 NIceDb::TUpdate<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>(!Scheduled->Request.GetPartialPermissionAllowed()),
                 NIceDb::TUpdate<Schema::MaintenanceTasks::CreateTime>(now.MicroSeconds()),
                 NIceDb::TUpdate<Schema::MaintenanceTasks::LastRefreshTime>(now.MicroSeconds()),
-                NIceDb::TUpdate<Schema::MaintenanceTasks::MaxConcurrentActions>(maxConcurrentActions)
+                NIceDb::TUpdate<Schema::MaintenanceTasks::MaxInflightActions>(maxInflightActions)
             );
         } else if (Scheduled != nullptr && Self->State->MaintenanceRequests.contains(Scheduled->RequestId)) {
             const auto& taskId = Self->State->MaintenanceRequests[Scheduled->RequestId];

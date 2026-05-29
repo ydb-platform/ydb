@@ -2273,9 +2273,6 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     ClusterInfo->SetPriorityToCheck(request.Priority);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
-    // Per-call override of the scheduled request's MaxPermissions cap. Used
-    // by the maintenance API to dynamically enforce max_concurrent_actions
-    // taking into account already issued permissions.
     if (rec.HasMaxPermissions()) {
         request.Request.SetMaxPermissions(rec.GetMaxPermissions());
     }

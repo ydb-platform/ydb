@@ -509,7 +509,7 @@ public:
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
             Ydb::Maintenance::AvailabilityMode availabilityMode,
-            ui32 maxConcurrentActions,
+            ui32 maxInflightActions,
             const Ts&... actionGroups)
     {
         auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
@@ -518,8 +518,8 @@ public:
         auto *req = ev->Record.MutableRequest();
         req->mutable_task_options()->set_task_uid(taskUid);
         req->mutable_task_options()->set_availability_mode(availabilityMode);
-        if (maxConcurrentActions > 0) {
-            req->mutable_task_options()->set_max_concurrent_actions(maxConcurrentActions);
+        if (maxInflightActions > 0) {
+            req->mutable_task_options()->set_max_inflight_actions(maxInflightActions);
         }
         AddActionGroups(*req, actionGroups...);
 

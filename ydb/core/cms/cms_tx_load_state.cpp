@@ -143,8 +143,8 @@ public:
             bool hasSingleCompositeActionGroup = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>();
             ui64 createTime = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::CreateTime>();
             ui64 lastRefreshTime = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::LastRefreshTime>();
-            ui32 maxConcurrentActions =
-                maintenanceTasksRowset.GetValueOrDefault<Schema::MaintenanceTasks::MaxConcurrentActions>(0);
+            ui32 maxInflightActions =
+                maintenanceTasksRowset.GetValueOrDefault<Schema::MaintenanceTasks::MaxInflightActions>(0);
 
             state->MaintenanceRequests.emplace(requestId, taskId);
             state->MaintenanceTasks.emplace(taskId, TTaskInfo{
@@ -154,7 +154,7 @@ public:
                 .HasSingleCompositeActionGroup = hasSingleCompositeActionGroup,
                 .CreateTime = TInstant::MicroSeconds(createTime),
                 .LastRefreshTime = TInstant::MicroSeconds(lastRefreshTime),
-                .MaxConcurrentActions = maxConcurrentActions
+                .MaxInflightActions = maxInflightActions
             });
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded maintenance task %s mapped to request %s",

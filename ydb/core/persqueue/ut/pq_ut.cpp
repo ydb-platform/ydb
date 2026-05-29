@@ -378,6 +378,36 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
     CmdReadAndAssertBatched(readSettings, tc, writes, dataSize);
 }
 
+Y_UNIT_TEST(OffsetDeltaInKeysCanBeDisabledAfterWrites) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_offset_delta_key_flag_rollback";
+    constexpr size_t dataSize = 7000_KB;
+
+    CmdWrite(0, sourceId, {{1, TString(dataSize, 'a')}}, tc, false, {}, false, "", -1, 0);
+    CmdWrite(0, sourceId, {{2, TString(dataSize, 'b')}}, tc, false, {}, false, "", -1, 1);
+    PQGetPartInfo(0, 2, tc);
+
+    CmdRunCompaction(0, tc);
+    PQTabletRestart(tc);
+    PQGetPartInfo(0, 2, tc);
+
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(false);
+    PQTabletRestart(tc);
+
+    CmdWrite(0, sourceId, {{3, TString(dataSize, 'c')}}, tc, false, {}, false, "", -1, 2);
+    PQGetPartInfo(0, 3, tc);
+    CmdRunCompaction(0, tc);
+
+    CmdRead(0, 0, 10, 64_MB, 3, false, tc, {0, 1, 2}, 0, 0, "user1");
+}
+
 Y_UNIT_TEST(TestCmdReadWithLastOffset) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

@@ -2409,6 +2409,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    // Tuple<Int32, Int64, Float, Double>
     Y_UNIT_TEST(SqlIn_Tuple_Parameter) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Tuple<String, String>
@@ -5234,7 +5235,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Float) IN (CAST(7 AS Float), 8.0f))",
                 {"\3k1" + numSuffix(7), "\3k1" + numSuffix(8)}, "or");
             // Unsupported CAST
-            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST("7" AS Int32), 8))");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST("7" AS Int32), 8))",
+                {"\3k1"}, "or");
 
             // IN with mixed types
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2u, 3l))",
@@ -5485,10 +5487,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) == CAST($p AS String))",
                 {NJsonIndex::TToken("\3k1", "")},
                 TParamsBuilder().AddParam("$p").Int64(10).Build().Build());
-            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST($p AS Int32), 2))",
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST($p AS Int32), 2))",
+                {NJsonIndex::TToken("\3k1", "")},
                 TParamsBuilder().AddParam("$p").Double(2.5).Build().Build(), "or");
-            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN (CAST($p AS Utf8), "x"))",
-                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN (CAST($p AS Utf8), "x"))",
+                {NJsonIndex::TToken("\3k1", "")},
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build(), "or");
 
             // PASSING: supported parameter casts
             ValidateTokens(db,

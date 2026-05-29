@@ -510,7 +510,7 @@ TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params,
     return AppendComparisonValue(params.ColumnName, std::move(collectResult), comparisonValue);
 }
 
-std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const TExprBase& value, bool strict = false) {
+std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const TExprBase& value) {
     // Negation (NULL ON ...) -> error
     if (value.Maybe<TCoNull>() || value.Maybe<TCoNothing>()) {
         return std::unexpected("NULL is not supported for literal comparison values");
@@ -528,10 +528,6 @@ std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const
             return std::unexpected(TString("Parameter with unsupported type"));
         }
         return value;
-    }
-
-    if (strict) {
-        return std::unexpected("Unsupported expression in comparison value");
     }
 
     // Ignore
@@ -578,7 +574,7 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
 
     std::optional<TExprBase> comparisonValue;
     if (node.Maybe<TCoCmpEqual>() && !rightParams.has_value()) {
-        auto extracted = TryExtractComparisonValue(otherSide, /* strict */ false);
+        auto extracted = TryExtractComparisonValue(otherSide);
         if (!extracted.has_value()) {
             return MakeCollectError(ctx, otherSide.Pos(), extracted.error());
         }
@@ -715,7 +711,7 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
     std::optional<TPredicateCollectResult> acc;
     for (const auto& item : items) {
         const auto literal = UnwrapValue(item);
-        auto extracted = TryExtractComparisonValue(literal, /* strict */ true);
+        auto extracted = TryExtractComparisonValue(literal);
         if (!extracted.has_value()) {
             return MakeCollectError(ctx, literal.Pos(), extracted.error());
         }

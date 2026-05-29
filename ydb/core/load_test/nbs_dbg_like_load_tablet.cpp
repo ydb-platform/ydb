@@ -453,6 +453,7 @@ public:
     TNbsDbgLikeLoadTablet(const TActorId& tablet, TTabletStorageInfo* info)
         : NKeyValue::TKeyValueFlat(tablet, info)
     {
+        SetActivityType(ActorActivityType());
     }
 
     // KV's DefaultSignalTabletActive is final and empty - the tablet is
@@ -1108,8 +1109,7 @@ void TNbsDbgLikeLoadTablet::EnsureCounters(const TActorContext& ctx) {
     if (Counters) {
         return;
     }
-    Counters = GetServiceCounters(AppData(ctx)->Counters, "load_actor")
-        ->GetSubgroup("tablet", Sprintf("%" PRIu64, TabletID()));
+    Counters = GetServiceCounters(AppData(ctx)->Counters, "load_actor")->GetSubgroup("load", "tablet");
     PhaseGauge = Counters->GetCounter("Phase", false);
     auto life = Counters->GetSubgroup("subsystem", "lifecycle");
     BscAllocOk    = life->GetCounter("BscAllocOk", true);

@@ -256,8 +256,7 @@ private:
         if (!Counters) {
             Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }
-        Root = Counters->GetSubgroup("tag", Sprintf("%" PRIu64, Tag))
-                       ->GetSubgroup("load", "actor");
+        Root = Counters->GetSubgroup("load", "actor");
         Writes.Init(Root->GetSubgroup("op", "Writes"));
         Reads.Init(Root->GetSubgroup("op", "Reads"));
     }

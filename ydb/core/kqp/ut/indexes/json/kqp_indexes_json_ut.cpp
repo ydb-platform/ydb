@@ -2714,7 +2714,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // Unsupported parameter casts
             ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST($p AS Int32))",
                 TParamsBuilder().AddParam("$p").Double(2.5).Build().Build());
-            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN (CAST($p AS Utf8), "x"))",
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN (CAST($p AS Utf8), "x"))",
                 TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
         });
     }

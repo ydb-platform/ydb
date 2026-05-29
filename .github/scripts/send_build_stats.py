@@ -138,9 +138,7 @@ VALUES
                     int(binary_size_bytes.decode("utf-8")),
                     ydb.PrimitiveType.Uint64,
                 ),
-                "$git_commit_time": ydb.TypedValue(
-                    git_commit_time_unix, ydb.PrimitiveType.Datetime
-                ),
+                "$git_commit_time": datetime.datetime.utcfromtimestamp(git_commit_time_unix),
                 "$git_commit_message": sanitize_str(git_commit_message),
             }
 

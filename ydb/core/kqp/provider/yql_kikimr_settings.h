@@ -136,9 +136,6 @@ public:
     NCommon::TConfSetting<double, Static> OptCBOConstsRightSideByteSizeFactor;
     NCommon::TConfSetting<double, Static> OptCBOConstsOutputSideByteSizeFactor;
 
-    NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsMult;
-    NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsPow;
-
     NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSideMult;
     NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSidePow;
     NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinRightSideMult;

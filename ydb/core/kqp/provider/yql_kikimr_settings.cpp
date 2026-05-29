@@ -183,9 +183,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptCBOConstsRightSideByteSizeFactor);
     REGISTER_SETTING(*this, OptCBOConstsOutputSideByteSizeFactor);
 
-    REGISTER_SETTING(*this, OptCBOConstsInteractionsMult);
-    REGISTER_SETTING(*this, OptCBOConstsInteractionsPow);
-
     REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSideMult);
     REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSidePow);
     REGISTER_SETTING(*this, OptCBOConstsMapJoinRightSideMult);

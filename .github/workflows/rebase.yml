@@ -67,7 +67,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `@${sender} Rebase declined: rebase can only be run on open pull requests.` + footer
+              body: `⚠️ @${sender} Rebase declined: rebase can only be run on open pull requests.` + footer
             });
 
       - name: Decline rebase — label sender is not a collaborator
@@ -82,7 +82,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `@${sender} Rebase declined, only collaborator can rebase user branch` + footer
+              body: `⚠️ @${sender} Rebase declined, only collaborator can rebase user branch` + footer
             });
 
       - name: Decline rebase — fork does not allow maintainer push
@@ -97,7 +97,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `@${sender} Rebase declined: this PR is from a fork and **Allow edits from maintainers** is not enabled.\n\nThe PR author must enable it in the PR sidebar so maintainers can push the rebased branch. Alternatively, rebase locally and push to the fork.` + footer
+              body: `⚠️ @${sender} Rebase declined: this PR is from a fork and **Allow edits from maintainers** is not enabled.\n\nThe PR author must enable it in the PR sidebar so maintainers can push the rebased branch. Alternatively, rebase locally and push to the fork.` + footer
             });
 
       - name: Fail if preconditions are not met

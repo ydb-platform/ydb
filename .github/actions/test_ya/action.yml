@@ -414,7 +414,7 @@ runs:
           YA_MAKE_SCOPE_NAME="ya-make-${GITHUB_RUN_ID:-local}-${RETRY}-$$.scope"
 
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
-          echo "runuser groups: $(id -Gn)"
+          echo "runner groups: $(id -Gn)"
 
           YA_MAKE_CMD=(
             ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
@@ -427,12 +427,13 @@ runs:
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
 
           set +e
-          # runuser restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
+          # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
+          # runuser -m conflicts with systemd-run (--whitelist-environment).
           (sudo -n -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
-             -- runuser -u "$(id -un)" -m -w "$(pwd)" -- \
+             -- sudo -n -E -u "$(id -un)" -- \
              "${YA_MAKE_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e

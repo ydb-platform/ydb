@@ -55,13 +55,13 @@ bool ConvertGetConfigToFetchConfigResult(
     if (identityCount < configCount) {
         TStringBuilder descr;
         descr << (configCount - identityCount)
-              << " extra 'config' with no corresponding 'identity'";
+              << " extra 'config' field with no corresponding 'identity' field";
         error = descr;
         return false;
     }
     if (identityCount > configCount) {
         TStringBuilder descr;
-        descr << "no 'config' for 'identity'es [";
+        descr << "no 'config' fields for 'identity' fields [";
         for (int i = configCount; i < identityCount; i++) {
             if (i > configCount) {
                 descr << ", ";
@@ -78,7 +78,7 @@ bool ConvertGetConfigToFetchConfigResult(
         TStringBuilder descr;
         int unsetCount = 0;
 
-        descr << "'identity' with no type set at indices [";
+        descr << "'identity' fields with no type set at indices [";
         for (int i = 0; i < identityCount; i++) {
             if (from.identity(i).type_case()
                 == Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET)

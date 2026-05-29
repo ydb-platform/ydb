@@ -452,10 +452,20 @@ void TPartitionBlobEncoder::SyncNewHeadKey()
         return false;
     };
 
+    bool replacedHeadKeys = false;
     while (!HeadKeys.empty() && !isLess(HeadKeys.back().Key, NewHeadKey.Key)) {
         // HeadKeys.back >= NewHeadKey
         ScheduleDelete(HeadKeys.back());
         HeadKeys.pop_back();
+        replacedHeadKeys = true;
+    }
+
+    if (replacedHeadKeys && CompactedKeys.empty()) {
+        // The new head key replaces a suffix of the old head key layout, but
+        // the old in-memory batches remain live and are now covered by the new
+        // key. This is the production path where init-loaded shared owners can
+        // become sparse without Head being cleared wholesale.
+        Head.MaterializeRetainedSharedData();
     }
 
     HeadKeys.push_back(std::move(NewHeadKey));

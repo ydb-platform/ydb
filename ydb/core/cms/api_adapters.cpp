@@ -814,12 +814,7 @@ public:
         cmsRequest->Record.SetAvailabilityMode(request.Request.GetAvailabilityMode());
 
         if (task.MaxConcurrentActions > 0) {
-            ui32 aliveCount = 0;
-            for (const auto& id : task.Permissions) {
-                if (cmsState->Permissions.contains(id)) {
-                    ++aliveCount;
-                }
-            }
+            const ui32 aliveCount = task.Permissions.size();
             const ui32 quota = task.MaxConcurrentActions > aliveCount
                 ? task.MaxConcurrentActions - aliveCount
                 : 0;

@@ -4,9 +4,92 @@
 
 #include <ydb/core/base/hive.h>
 
+#include <util/generic/algorithm.h>
+#include <util/random/fast.h>
+
 namespace NKikimr::NCmsTest {
 
 using namespace Ydb::Maintenance;
+
+namespace {
+
+void RunRollingRestartSimulation(ui32 totalNodes, ui32 cap) {
+    Y_ABORT_UNLESS(totalNodes > 0);
+    Y_ABORT_UNLESS(cap > 0);
+
+    TCmsTestEnv env(totalNodes);
+
+    auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
+    ev->Record.SetUserSID("test-user");
+    auto* req = ev->Record.MutableRequest();
+    req->mutable_task_options()->set_task_uid("task-1");
+    req->mutable_task_options()->set_availability_mode(
+        Ydb::Maintenance::AVAILABILITY_MODE_FORCE);
+    req->mutable_task_options()->set_max_concurrent_actions(cap);
+    for (ui32 i = 0; i < totalNodes; ++i) {
+        auto group = MakeActionGroup(
+            MakeLockAction(env.GetNodeId(i), TDuration::Minutes(10)));
+        req->add_action_groups()->CopyFrom(group);
+    }
+    env.SendToCms(ev.release());
+    auto createReply = env.GrabEdgeEvent<NCms::TEvCms::TEvMaintenanceTaskResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(createReply->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+    auto split = [](const Ydb::Maintenance::MaintenanceTaskResult& r) {
+        TVector<Ydb::Maintenance::ActionUid> performed;
+        ui32 pending = 0;
+        for (const auto& group : r.action_group_states()) {
+            UNIT_ASSERT_VALUES_EQUAL(group.action_states().size(), 1);
+            const auto& s = group.action_states(0);
+            switch (s.status()) {
+                case ActionState::ACTION_STATUS_PERFORMED:
+                    performed.push_back(s.action_uid());
+                    break;
+                case ActionState::ACTION_STATUS_PENDING:
+                    ++pending;
+                    break;
+                default:
+                    UNIT_FAIL("Unexpected action status: " << static_cast<int>(s.status()));
+            }
+        }
+        return std::make_pair(std::move(performed), pending);
+    };
+
+    Ydb::Maintenance::MaintenanceTaskResult current = createReply->Record.GetResult();
+    TReallyFastRng32 rng(42);
+    ui32 totalCompleted = 0;
+    ui32 iterations = 0;
+
+    while (totalCompleted < totalNodes) {
+        auto [performed, pending] = split(current);
+        const ui32 total = performed.size() + pending;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(total, totalNodes - totalCompleted,
+            "iter=" << iterations);
+        UNIT_ASSERT_VALUES_EQUAL_C(performed.size(), Min<ui32>(cap, total),
+            "iter=" << iterations);
+        UNIT_ASSERT_C(!performed.empty(),
+            "no progress: nothing PERFORMED at iter=" << iterations);
+
+        const ui32 toComplete = 1 + rng.Uniform(performed.size());
+        for (ui32 i = 0; i < toComplete; ++i) {
+            env.CheckCompleteAction(performed[i], Ydb::StatusIds::SUCCESS);
+        }
+        totalCompleted += toComplete;
+
+        if (totalCompleted < totalNodes) {
+            current = env.CheckMaintenanceTaskRefresh("task-1", Ydb::StatusIds::SUCCESS);
+        }
+
+        ++iterations;
+        UNIT_ASSERT_C(iterations <= totalNodes,
+            "too many iterations: " << iterations);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(totalCompleted, totalNodes);
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     Y_UNIT_TEST(ManyActionGroupsWithSingleAction) {
@@ -392,9 +475,6 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     }
 
     Y_UNIT_TEST(MaxConcurrentActionsCapsInitialBatch) {
-        // Cap = 3, request 8 actions. Cluster checks are bypassed via FORCE mode
-        // so the cap is the only thing that decides how many permissions are
-        // issued in the initial create call.
         TCmsTestEnv env(8);
 
         auto response = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
@@ -428,8 +508,6 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     }
 
     Y_UNIT_TEST(MaxConcurrentActionsBlocksRefresh) {
-        // Without completing any of the issued permissions, refresh must not
-        // issue new ones. The cap stays at "alive = 3, quota = 0".
         TCmsTestEnv env(8);
 
         auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
@@ -468,8 +546,6 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     }
 
     Y_UNIT_TEST(MaxConcurrentActionsReleasesQuotaOnCompleteAction) {
-        // Complete 2 of the initial 3 permissions, then refresh: CMS should
-        // top up so we again have 3 alive permissions (the cap).
         TCmsTestEnv env(8);
 
         auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
@@ -494,7 +570,6 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(performed.size(), 3);
 
-        // Complete two of them; one should still be alive.
         env.CheckCompleteAction(performed[0], Ydb::StatusIds::SUCCESS);
         env.CheckCompleteAction(performed[1], Ydb::StatusIds::SUCCESS);
 
@@ -510,14 +585,23 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
                 ++refreshPending;
             }
         }
-        // 1 carryover + 2 freshly issued
         UNIT_ASSERT_VALUES_EQUAL(refreshPerformed, 3);
         UNIT_ASSERT_VALUES_EQUAL(refreshPending, 5 - 2);
     }
 
+    Y_UNIT_TEST(MaxConcurrentActionsRollingRestartBatchNormal) {
+        RunRollingRestartSimulation(100, 5);
+    }
+
+    Y_UNIT_TEST(MaxConcurrentActionsRollingRestartBatchMin) {
+        RunRollingRestartSimulation(100, 1);
+    }
+
+    Y_UNIT_TEST(MaxConcurrentActionsRollingRestartBatchFull) {
+        RunRollingRestartSimulation(100, 100);
+    }
+
     Y_UNIT_TEST(MaxConcurrentActionsZeroMeansUnlimited) {
-        // Cap = 0 is the legacy behavior: CMS issues as many permissions as
-        // cluster constraints allow (here: all of them, thanks to FORCE mode).
         TCmsTestEnv env(8);
 
         auto response = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,

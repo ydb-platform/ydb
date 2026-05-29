@@ -2,14 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(0.15.1)
+VERSION(1.0.0)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/certifi
     contrib/python/lz4
-    contrib/python/pytz
     contrib/python/urllib3
     contrib/python/zstandard
 )
@@ -24,12 +23,13 @@ NO_LINT()
 
 NO_CHECK_IMPORTS(
     clickhouse_connect.cc_sqlalchemy.*
+    clickhouse_connect.driver.asyncclient
 )
 
 PY_SRCS(
     TOP_LEVEL
     clickhouse_connect/__init__.py
-    clickhouse_connect/__version__.py
+    clickhouse_connect/_version.py
     clickhouse_connect/cc_sqlalchemy/__init__.py
     clickhouse_connect/cc_sqlalchemy/datatypes/__init__.py
     clickhouse_connect/cc_sqlalchemy/datatypes/base.py
@@ -64,6 +64,7 @@ PY_SRCS(
     clickhouse_connect/dbapi/cursor.py
     clickhouse_connect/driver/__init__.py
     clickhouse_connect/driver/asyncclient.py
+    clickhouse_connect/driver/asyncqueue.py
     clickhouse_connect/driver/binding.py
     clickhouse_connect/driver/buffer.py
     clickhouse_connect/driver/bytesource.py
@@ -87,6 +88,7 @@ PY_SRCS(
     clickhouse_connect/driver/options.py
     clickhouse_connect/driver/parser.py
     clickhouse_connect/driver/query.py
+    clickhouse_connect/driver/streaming.py
     clickhouse_connect/driver/summary.py
     clickhouse_connect/driver/tools.py
     clickhouse_connect/driver/transform.py

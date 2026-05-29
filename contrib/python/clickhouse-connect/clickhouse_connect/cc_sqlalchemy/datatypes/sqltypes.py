@@ -1,14 +1,32 @@
-import pytz
+from collections.abc import Sequence
 from enum import Enum as PyEnum
-from typing import Type, Union, Sequence
 
-from sqlalchemy.types import Integer, Float, Numeric, Boolean as SqlaBoolean, \
-    UserDefinedType, String as SqlaString, DateTime as SqlaDateTime, Date as SqlaDate, Interval
 from sqlalchemy.exc import ArgumentError
+from sqlalchemy.types import (
+    Boolean as SqlaBoolean,
+)
+from sqlalchemy.types import (
+    Date as SqlaDate,
+)
+from sqlalchemy.types import (
+    DateTime as SqlaDateTime,
+)
+from sqlalchemy.types import (
+    Float,
+    Integer,
+    Interval,
+    Numeric,
+    UserDefinedType,
+)
+from sqlalchemy.types import (
+    String as SqlaString,
+)
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
-from clickhouse_connect.datatypes.base import TypeDef, NULLABLE_TYPE_DEF, LC_TYPE_DEF, EMPTY_TYPE_DEF
-from clickhouse_connect.datatypes.numeric import Enum8 as ChEnum8, Enum16 as ChEnum16
+from clickhouse_connect.datatypes.base import EMPTY_TYPE_DEF, LC_TYPE_DEF, NULLABLE_TYPE_DEF, TypeDef
+from clickhouse_connect.datatypes.numeric import Enum8 as ChEnum8
+from clickhouse_connect.datatypes.numeric import Enum16 as ChEnum16
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import decimal_prec
 
 
@@ -73,12 +91,11 @@ class Float64(ChSqlaType, Float):
 
 
 class Bool(ChSqlaType, SqlaBoolean):
-    def __init__(self, type_def: TypeDef = EMPTY_TYPE_DEF):
+    def __init__(self, type_def: TypeDef = EMPTY_TYPE_DEF, **kwargs):
         ChSqlaType.__init__(self, type_def)
-        SqlaBoolean.__init__(self)
+        SqlaBoolean.__init__(self, **kwargs)
 
 
-# pylint: disable=too-many-ancestors
 class Boolean(Bool):
     pass
 
@@ -100,14 +117,13 @@ class Decimal(ChSqlaType, Numeric):
             else:
                 precision, scale = type_def.values
         elif not precision or scale < 0 or scale > precision:
-            raise ArgumentError('Invalid precision or scale for ClickHouse Decimal type')
+            raise ArgumentError("Invalid precision or scale for ClickHouse Decimal type")
         else:
             type_def = TypeDef(values=(precision, scale))
         ChSqlaType.__init__(self, type_def)
         Numeric.__init__(self, precision, scale)
 
 
-# pylint: disable=duplicate-code
 class Decimal32(Decimal):
     dec_size = 32
 
@@ -128,8 +144,13 @@ class Enum(ChSqlaType, UserDefinedType):
     _size = 16
     python_type = str
 
-    def __init__(self, enum: Type[PyEnum] = None, keys: Sequence[str] = None, values: Sequence[int] = None,
-                 type_def: TypeDef = None):
+    def __init__(
+        self,
+        enum: type[PyEnum] = None,
+        keys: Sequence[str] = None,
+        values: Sequence[int] = None,
+        type_def: TypeDef = None,
+    ):
         """
         Construct a ClickHouse enum either from a Python Enum or parallel lists of keys and value.  Note that
         Python enums do not support empty strings as keys, so the alternate keys/values must be used in that case
@@ -143,7 +164,7 @@ class Enum(ChSqlaType, UserDefinedType):
                 keys = [e.name for e in enum]
                 values = [e.value for e in enum]
             self._validate(keys, values)
-            if self.__class__.__name__ == 'Enum':
+            if self.__class__.__name__ == "Enum":
                 if max(values) <= 127 and min(values) >= -128:
                     self._ch_type_cls = ChEnum8
                 else:
@@ -155,15 +176,15 @@ class Enum(ChSqlaType, UserDefinedType):
     def _validate(cls, keys: Sequence, values: Sequence):
         bad_key = next((x for x in keys if not isinstance(x, str)), None)
         if bad_key:
-            raise ArgumentError(f'ClickHouse enum key {bad_key} is not a string')
+            raise ArgumentError(f"ClickHouse enum key {bad_key} is not a string")
         bad_value = next((x for x in values if not isinstance(x, int)), None)
         if bad_value:
-            raise ArgumentError(f'ClickHouse enum value {bad_value} is not an integer')
+            raise ArgumentError(f"ClickHouse enum value {bad_value} is not an integer")
         value_min = -(2 ** (cls._size - 1))
         value_max = 2 ** (cls._size - 1) - 1
         bad_value = next((x for x in values if x < value_min or x > value_max), None)
         if bad_value:
-            raise ArgumentError(f'Clickhouse enum value {bad_value} is out of range')
+            raise ArgumentError(f"Clickhouse enum value {bad_value} is out of range")
 
 
 class Enum8(Enum):
@@ -239,12 +260,14 @@ class DateTime(ChSqlaType, SqlaDateTime):
     def __init__(self, tz: str = None, type_def: TypeDef = None):
         """
         Date time constructor with optional ClickHouse timezone parameter if not constructed with TypeDef
-        :param tz: Timezone string as defined in pytz
+        :param tz: IANA timezone key (e.g. "UTC", "America/New_York"). Resolved via the standard
+            library zoneinfo module. On platforms without system zoneinfo data (notably
+            Windows), install the tzdata package.
         :param type_def: TypeDef from parse_name function
         """
         if not type_def:
             if tz:
-                pytz.timezone(tz)
+                tzutil.resolve_zone(tz)
                 type_def = TypeDef(values=(f"'{tz}'",))
             else:
                 type_def = EMPTY_TYPE_DEF
@@ -257,23 +280,24 @@ class DateTime64(ChSqlaType, SqlaDateTime):
         """
         Date time constructor with precision and timezone parameters if not constructed with TypeDef
         :param precision:   Usually 3/6/9 for mill/micro/nanosecond precision on ClickHouse side
-        :param tz: Timezone string as defined in pytz
+        :param tz: IANA timezone key (e.g. "UTC", "America/New_York"). Resolved via the standard
+            library zoneinfo module. On platforms without system zoneinfo data (notably
+            Windows), install the tzdata package.
         :param type_def: TypeDef from parse_name function
         """
         if not type_def:
             if tz:
-                pytz.timezone(tz)
+                tzutil.resolve_zone(tz)
                 type_def = TypeDef(values=(precision, f"'{tz}'"))
             else:
                 type_def = TypeDef(values=(precision,))
         prec = type_def.values[0] if len(type_def.values) else None
         if not isinstance(prec, int) or prec < 0 or prec > 9:
-            raise ArgumentError(f'Invalid precision value {prec} for ClickHouse DateTime64')
+            raise ArgumentError(f"Invalid precision value {prec} for ClickHouse DateTime64")
         ChSqlaType.__init__(self, type_def)
         SqlaDateTime.__init__(self)
 
 
-# pylint: disable=too-many-ancestors
 class Time(ChSqlaType, Interval):
     """
     Represents the ClickHouse Time type, which corresponds to a timedelta.
@@ -296,7 +320,6 @@ class Time(ChSqlaType, Interval):
         return None
 
 
-# pylint: disable=too-many-ancestors
 class Time64(ChSqlaType, Interval):
     """
     Represents the ClickHouse Time64 type with configurable precision.
@@ -317,9 +340,7 @@ class Time64(ChSqlaType, Interval):
                 precision = 3
 
             if precision not in (3, 6, 9):
-                raise ArgumentError(
-                    f"Invalid precision value {precision} for ClickHouse Time64. Must be 3, 6, or 9."
-                )
+                raise ArgumentError(f"Invalid precision value {precision} for ClickHouse Time64. Must be 3, 6, or 9.")
             type_def = TypeDef(values=(precision,))
         else:
             precision = type_def.values[0] if len(type_def.values) > 0 else 3
@@ -344,7 +365,7 @@ class Nullable:
     type with a Nullable wrapper
     """
 
-    def __new__(cls, element: Union[ChSqlaType, Type[ChSqlaType]]):
+    def __new__(cls, element: ChSqlaType | type[ChSqlaType]):
         """
         Actually returns an instance of the enclosed type with a Nullable wrapper.  If element is an instance,
         constructs a new instance with a copied TypeDef plus the Nullable wrapper.  If element is just a type,
@@ -354,9 +375,9 @@ class Nullable:
         if callable(element):
             return element(type_def=NULLABLE_TYPE_DEF)
         if element.low_card:
-            raise ArgumentError('Low Cardinality type cannot be Nullable')
+            raise ArgumentError("Low Cardinality type cannot be Nullable")
         orig = element.type_def
-        wrappers = orig if 'Nullable' in orig.wrappers else orig.wrappers + ('Nullable',)
+        wrappers = orig if "Nullable" in orig.wrappers else orig.wrappers + ("Nullable",)
         return element.__class__(type_def=TypeDef(wrappers, orig.keys, orig.values))
 
 
@@ -366,24 +387,24 @@ class LowCardinality:
     type with a LowCardinality wrapper
     """
 
-    def __new__(cls, element: Union[ChSqlaType, Type[ChSqlaType]]):
+    def __new__(cls, element: ChSqlaType | type[ChSqlaType]):
         """
-       Actually returns an instance of the enclosed type with a LowCardinality wrapper.  If element is an instance,
-       constructs a new instance with a copied TypeDef plus the LowCardinality wrapper.  If element is just a type,
-       constructs a new element of that type with only the LowCardinality wrapper.
-       :param element: ChSqlaType instance or class to wrap
-       """
+        Actually returns an instance of the enclosed type with a LowCardinality wrapper.  If element is an instance,
+        constructs a new instance with a copied TypeDef plus the LowCardinality wrapper.  If element is just a type,
+        constructs a new element of that type with only the LowCardinality wrapper.
+        :param element: ChSqlaType instance or class to wrap
+        """
         if callable(element):
             return element(type_def=LC_TYPE_DEF)
         orig = element.type_def
-        wrappers = orig if 'LowCardinality' in orig.wrappers else ('LowCardinality',) + orig.wrappers
+        wrappers = orig if "LowCardinality" in orig.wrappers else ("LowCardinality",) + orig.wrappers
         return element.__class__(type_def=TypeDef(wrappers, orig.keys, orig.values))
 
 
 class Array(ChSqlaType, UserDefinedType):
     python_type = list
 
-    def __init__(self, element: Union[ChSqlaType, Type[ChSqlaType]] = None, type_def: TypeDef = None):
+    def __init__(self, element: ChSqlaType | type[ChSqlaType] = None, type_def: TypeDef = None):
         """
         Array constructor that can take a wrapped Array type if not constructed from a TypeDef
         :param element: ChSqlaType instance or class to wrap
@@ -399,8 +420,12 @@ class Array(ChSqlaType, UserDefinedType):
 class Map(ChSqlaType, UserDefinedType):
     python_type = dict
 
-    def __init__(self, key_type: Union[ChSqlaType, Type[ChSqlaType]] = None,
-                 value_type: Union[ChSqlaType, Type[ChSqlaType]] = None, type_def: TypeDef = None):
+    def __init__(
+        self,
+        key_type: ChSqlaType | type[ChSqlaType] = None,
+        value_type: ChSqlaType | type[ChSqlaType] = None,
+        type_def: TypeDef = None,
+    ):
         """
         Map constructor that can take a wrapped key/values types if not constructed from a TypeDef
         :param key_type: ChSqlaType instance or class to use as keys for the Map
@@ -419,12 +444,16 @@ class Map(ChSqlaType, UserDefinedType):
 class Tuple(ChSqlaType, UserDefinedType):
     python_type = tuple
 
-    def __init__(self, elements: Sequence[Union[ChSqlaType, Type[ChSqlaType]]] = None, type_def: TypeDef = None):
+    def __init__(
+        self,
+        elements: Sequence[ChSqlaType | type[ChSqlaType]] = None,
+        type_def: TypeDef = None,
+    ):
         """
-       Tuple constructor that can take a list of element types if not constructed from a TypeDef
-       :param elements: sequence of ChSqlaType instance or class to use as tuple element types
-       :param type_def: TypeDef from parse_name function
-       """
+        Tuple constructor that can take a list of element types if not constructed from a TypeDef
+        :param elements: sequence of ChSqlaType instance or class to use as tuple element types
+        :param type_def: TypeDef from parse_name function
+        """
         if not type_def:
             values = [et() if callable(et) else et for et in elements]
             type_def = TypeDef(values=tuple(v.name for v in values))
@@ -435,6 +464,7 @@ class JSON(ChSqlaType, UserDefinedType):
     """
     Note this isn't currently supported for insert/select, only table definitions
     """
+
     python_type = None
 
 
@@ -442,14 +472,19 @@ class Nested(ChSqlaType, UserDefinedType):
     """
     Note this isn't currently supported for insert/select, only table definitions
     """
-    python_type = None
 
+    python_type = None
 
 
 class SimpleAggregateFunction(ChSqlaType, UserDefinedType):
     python_type = None
 
-    def __init__(self, name: str = None, element: Union[ChSqlaType, Type[ChSqlaType]] = None, type_def: TypeDef = None):
+    def __init__(
+        self,
+        name: str = None,
+        element: ChSqlaType | type[ChSqlaType] = None,
+        type_def: TypeDef = None,
+    ):
         """
         Constructor that can take the SimpleAggregateFunction name and wrapped type if not constructed from a TypeDef
         :param name: Aggregate function name
@@ -459,7 +494,12 @@ class SimpleAggregateFunction(ChSqlaType, UserDefinedType):
         if not type_def:
             if callable(element):
                 element = element()
-            type_def = TypeDef(values=(name, element.name,))
+            type_def = TypeDef(
+                values=(
+                    name,
+                    element.name,
+                )
+            )
         super().__init__(type_def)
 
 
@@ -467,6 +507,7 @@ class AggregateFunction(ChSqlaType, UserDefinedType):
     """
     Note this isn't currently supported for insert/select, only table definitions
     """
+
     python_type = None
 
     def __init__(self, *params, type_def: TypeDef = None):

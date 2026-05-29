@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 from sqlalchemy import Table
 from sqlalchemy.sql.selectable import FromClause, Select
 
@@ -10,17 +8,17 @@ from clickhouse_connect.driver.binding import quote_identifier
 _CH_MODIFIER_DIALECT = "_ch_modifier"
 
 
-def full_table(table_name: str, schema: Optional[str] = None) -> str:
-    if table_name.startswith('(') or '.' in table_name or not schema:
+def full_table(table_name: str, schema: str | None = None) -> str:
+    if table_name.startswith("(") or "." in table_name or not schema:
         return quote_identifier(table_name)
-    return f'{quote_identifier(schema)}.{quote_identifier(table_name)}'
+    return f"{quote_identifier(schema)}.{quote_identifier(table_name)}"
 
 
 def format_table(table: Table):
     return full_table(table.name, table.schema)
 
 
-def _resolve_target(select_stmt: Select, table: Optional[FromClause], method_name: str) -> FromClause:
+def _resolve_target(select_stmt: Select, table: FromClause | None, method_name: str) -> FromClause:
     """Resolve the target FROM clause for ClickHouse modifiers (FINAL/SAMPLE)."""
     if not isinstance(select_stmt, Select):
         raise TypeError(f"{method_name}() expects a SQLAlchemy Select instance")
@@ -31,10 +29,7 @@ def _resolve_target(select_stmt: Select, table: Optional[FromClause], method_nam
         if not froms:
             raise ValueError(f"{method_name}() requires a table to apply the {method_name.upper()} modifier.")
         if len(froms) > 1:
-            raise ValueError(
-                f"{method_name}() is ambiguous for statements with multiple FROM clauses. "
-                "Specify the table explicitly."
-            )
+            raise ValueError(f"{method_name}() is ambiguous for statements with multiple FROM clauses. Specify the table explicitly.")
         target = froms[0]
 
     if not isinstance(target, FromClause):
@@ -50,8 +45,7 @@ def _target_cache_key(target: FromClause) -> str:
     return target.name
 
 
-# pylint: disable=protected-access
-def final(select_stmt: Select, table: Optional[FromClause] = None) -> Select:
+def final(select_stmt: Select, table: FromClause | None = None) -> Select:
     """Apply the ClickHouse FINAL modifier to a select statement.
 
     FINAL forces ClickHouse to merge data parts before returning results,
@@ -77,14 +71,14 @@ def final(select_stmt: Select, table: Optional[FromClause] = None) -> Select:
     return new_stmt
 
 
-def _select_final(self: Select, table: Optional[FromClause] = None) -> Select:
+def _select_final(self: Select, table: FromClause | None = None) -> Select:
     """
     Select.final() convenience wrapper around the module-level final() helper.
     """
     return final(self, table=table)
 
 
-def sample(select_stmt: Select, sample_value: Union[str, int, float], table: Optional[FromClause] = None) -> Select:
+def sample(select_stmt: Select, sample_value: str | int | float, table: FromClause | None = None) -> Select:
     """Apply the ClickHouse SAMPLE modifier to a select statement.
 
     Args:
@@ -99,16 +93,14 @@ def sample(select_stmt: Select, sample_value: Union[str, int, float], table: Opt
     target = _resolve_target(select_stmt, table, "sample")
 
     hint_key = _target_cache_key(target)
-    new_stmt = select_stmt.with_statement_hint(
-        f"SAMPLE:{hint_key}:{sample_value}", dialect_name=_CH_MODIFIER_DIALECT
-    )
+    new_stmt = select_stmt.with_statement_hint(f"SAMPLE:{hint_key}:{sample_value}", dialect_name=_CH_MODIFIER_DIALECT)
     ch_sample = dict(getattr(select_stmt, "_ch_sample", {}))
     ch_sample[target] = sample_value
     new_stmt._ch_sample = ch_sample
     return new_stmt
 
 
-def _select_sample(self: Select, sample_value: Union[str, int, float], table: Optional[FromClause] = None) -> Select:
+def _select_sample(self: Select, sample_value: str | int | float, table: FromClause | None = None) -> Select:
     """
     Select.sample() convenience wrapper around the module-level sample() helper.
     """

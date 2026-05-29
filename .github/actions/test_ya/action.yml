@@ -427,7 +427,7 @@ runs:
 
           set +e
           # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
-          # runuser -m conflicts with systemd-run (--whitelist-environment).
+          # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
           (sudo -n -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \

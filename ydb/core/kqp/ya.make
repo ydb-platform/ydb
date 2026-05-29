@@ -80,6 +80,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     common/result_set_format/ut
+    session_actor/ut
 )
 
 IF (NOT OS_WINDOWS)

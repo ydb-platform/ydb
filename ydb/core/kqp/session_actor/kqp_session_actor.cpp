@@ -356,6 +356,14 @@ public:
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        // Snapshot fields needed for the "completed" log entry before RequestEv is released
+        // below — after forwarding, QueryState->RequestEv is null and these accessors would crash.
+        if (KQP_REQ_LOG_ENABLED() && QueryState) {
+            ForwardedQueryText = QueryState->ExtractQueryText();
+            ForwardedDatabase = QueryState->GetDatabase();
+            ForwardedQueryType = QueryState->GetType();
+            ForwardedQueryAction = QueryState->GetAction();
+        }
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
                 FederatedQuerySetup, ModuleResolverState, Counters, Settings.QueryService, GUCSettings));
@@ -368,6 +376,11 @@ public:
 
     void ForwardResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
         QueryResponse = std::unique_ptr<TEvKqp::TEvQueryResponse>(ev->Release().Release());
+        if (KQP_REQ_LOG_ENABLED() && QueryState) {
+            TLogQuery::LogForwardedCompleted(
+                ForwardedQueryText, ForwardedDatabase, ForwardedQueryType, ForwardedQueryAction,
+                QueryState->StartTime, QueryResponse->Record, CurrentReqLogId);
+        }
         Cleanup();
     }
 
@@ -520,7 +533,12 @@ public:
             (pool_id, QueryState->UserRequestContext->PoolId),
             (trace_id, TraceId()));
 
-        KQP_REQ_LOG(TLogQuery::Started(*QueryState));
+        if (KQP_REQ_LOG_ENABLED() && QueryState) {
+            auto reqId = TLogQuery::LogStarted(*QueryState);
+            if (!reqId.empty()) {
+                CurrentReqLogId = reqId;
+            }
+        }
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
@@ -3131,7 +3149,12 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
-        KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record));
+        // Skip when RequestEv is null: the request was forwarded to KqpWorkerActor and
+        // already logged by ForwardResponse via LogForwardedCompleted. Logging here would
+        // both duplicate the entry and crash accessing fields owned by the released RequestEv.
+        if (KQP_REQ_LOG_ENABLED() && QueryState && QueryState->RequestEv) {
+            TLogQuery::LogCompleted(*QueryState, record, CurrentReqLogId);
+        }
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         STLOG_D("Sent query response back to proxy",
@@ -3836,6 +3859,12 @@ private:
 
     std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
+    TString CurrentReqLogId;
+    // Saved before ForwardRequest releases RequestEv, used in ForwardResponse for logging
+    TString ForwardedQueryText;
+    TString ForwardedDatabase;
+    NKikimrKqp::EQueryType ForwardedQueryType = NKikimrKqp::QUERY_TYPE_UNDEFINED;
+    NKikimrKqp::EQueryAction ForwardedQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
     ui32 QueryId = 0;
     TIntrusiveConstPtr<TKikimrConfiguration> Config;
     IDataProvider::TFillSettings FillSettings;

@@ -7,6 +7,7 @@ SRCS(
     kqp_event_impl.cpp
     kqp_lwtrace_probes.cpp
     kqp_lwtrace_probes.h
+    kqp_mask_literals.cpp
     kqp_resolve.cpp
     kqp_resolve.h
     kqp_row_builder.cpp
@@ -30,6 +31,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/protobuf/json
+    library/cpp/protobuf/util
     ydb/core/base
     ydb/core/engine
     ydb/core/grpc_services/cancelation
@@ -54,7 +56,14 @@ PEERDIR(
     yql/essentials/core/issue
     yql/essentials/core/services
     yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
     yql/essentials/public/issue
+    yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
 )
 
 YQL_LAST_ABI_VERSION()

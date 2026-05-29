@@ -65,7 +65,11 @@ static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
 struct TPackedBatchDataOwner final: public TAtomicRefCount<TPackedBatchDataOwner> {
     explicit TPackedBatchDataOwner(TString&& data);
 
+    void RegisterBatch(ui32 payloadSize);
+
     TString Data;
+    ui32 InitialBatchCount = 0;
+    ui64 InitialPayloadSize = 0;
 };
 
 class TPackedBatchData {
@@ -82,7 +86,9 @@ public:
     size_t Capacity() const noexcept;
     bool Empty() const noexcept;
     bool IsShared() const noexcept;
+    const TPackedBatchDataOwner* SharedOwner() const noexcept;
 
+    void Materialize();
     void Reset();
 
 private:
@@ -230,8 +236,10 @@ public:
     const TBatch& GetLastBatch() const;
     TBatchAccessor MutableBatch(ui32 idx);
     TBatchAccessor MutableLastBatch();
-    TBatch ExtractFirstBatch();
+    TBatch ExtractFirstBatch(bool materializeSharedData = true);
     void AddBlob(const TClientBlob& blob);
+
+    void MaterializeRetainedSharedData();
 
     friend IOutputStream& operator <<(IOutputStream& out, const THead& value);
 };

@@ -522,7 +522,7 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
     AFL_ENSURE(!ForFastWrite);
     //append Head with newHead
     while (!NewHead.GetBatches().empty()) {
-        Head.AddBatch(NewHead.ExtractFirstBatch());
+        Head.AddBatch(NewHead.ExtractFirstBatch(false));
     }
     Head.PackedSize += NewHead.PackedSize;
 

@@ -204,7 +204,8 @@ class MinMaxWorkload:
                 """)
                 logger.info(f"Added min_max index for {name}")
             except Exception as e:
-                logger.warning(f"Could not add min_max index for {name}: {e}")
+                logger.error(f"Could not add min_max index for {name}: {e}")
+                raise
 
     def _insert_loop(self):
         col_exprs = ",\n                    ".join(
@@ -216,7 +217,6 @@ class MinMaxWorkload:
             with self._lock:
                 start = self._next_id
                 self._next_id += step
-            time.sleep(0.1)
             query = f"""
                 $data = ListMap(ListFromRange({start}L, {start + self.batch_size}L), ($x) -> {{
                     RETURN AsStruct(
@@ -232,6 +232,7 @@ class MinMaxWorkload:
                     self._rows_inserted += self.batch_size
             except Exception as e:
                 logger.error(f"Insert error (start={start}): {e}")
+                raise
 
     def _query_loop(self):
         while not self._stop.is_set():
@@ -264,6 +265,7 @@ class MinMaxWorkload:
                 logger.info(f"query({query})\n target_id={target_id} max_id={max_id} count={cnt}")
             except Exception as e:
                 logger.error(f"Query({query})\n error (target_id={target_id}): {e}")
+                raise
 
     def run(self):
         threads = []

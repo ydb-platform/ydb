@@ -13,14 +13,86 @@ on:
 jobs:
   rebase:
     if: github.event.label.name == 'rebase-user-branch' && (!github.event.pull_request.head.repo.fork || github.event.pull_request.maintainer_can_modify)
-     
+
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
 
     steps:
+      - name: Check if sender is a collaborator
+        id: check-permission
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const sender = context.payload.sender.login;
+
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: sender,
+              });
+              return true;
+            } catch (error) {
+              if (error.status && error.status == 404) {
+                return false;
+              }
+              throw error;
+            }
+
+      - name: Decline rebase for non-contributors
+        if: steps.check-permission.outputs.result != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sender = context.payload.sender.login;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `@${sender} Rebase declined, only contributor can rebase user branch`
+            });
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'rebase-user-branch'
+              });
+            } catch (error) {
+              if (!error.status || error.status != 404) {
+                throw error;
+              }
+            }
+
+      - name: Fail if sender is not a collaborator
+        if: steps.check-permission.outputs.result != 'true'
+        run: exit 1
+
+      - name: Remove previous failure label
+        if: steps.check-permission.outputs.result == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'rebase-user-branch-failed'
+              });
+            } catch (error) {
+              if (!error.status || error.status != 404) {
+                throw error;
+              }
+            }
+
       - name: Checkout PR branch
+        if: steps.check-permission.outputs.result == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -28,13 +100,15 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
           filter: blob:none
-        
+
       - name: Configure git
+        if: steps.check-permission.outputs.result == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch base branch
+        if: steps.check-permission.outputs.result == 'true'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           BASE_REPO: ${{ github.event.pull_request.base.repo.clone_url }}
@@ -44,6 +118,7 @@ jobs:
 
       - name: Attempt rebase
         id: rebase
+        if: steps.check-permission.outputs.result == 'true'
         continue-on-error: true
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -56,7 +131,7 @@ jobs:
           fi
 
       - name: Handle unexpected rebase failure
-        if: steps.rebase.outputs.rebase_status == ''
+        if: steps.check-permission.outputs.result == 'true' && steps.rebase.outputs.rebase_status == ''
         uses: actions/github-script@v7
         with:
           script: |
@@ -66,14 +141,14 @@ jobs:
               issue_number: context.issue.number,
               body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-user-branch` label.'
             });
-            
+
       - name: Fail on unexpected error
-        if: steps.rebase.outputs.rebase_status == ''
-        run: exit 1    
+        if: steps.check-permission.outputs.result == 'true' && steps.rebase.outputs.rebase_status == ''
+        run: exit 1
 
       - name: Push rebased branch
         id: push
-        if: steps.rebase.outputs.rebase_status == 'success'
+        if: steps.check-permission.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'success'
         continue-on-error: true
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -81,7 +156,7 @@ jobs:
           git push --force-with-lease origin "$HEAD_REF"
 
       - name: Add push failure comment
-        if: steps.rebase.outputs.rebase_status == 'success' && steps.push.outcome == 'failure'
+        if: steps.check-permission.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'success' && steps.push.outcome == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
@@ -91,21 +166,29 @@ jobs:
               issue_number: context.issue.number,
               body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated. Please re-apply the `rebase-user-branch` label to retry.'
             });
-      
-      - name: Remove label after rebase
-        if: steps.push.outcome == 'success'
+
+      - name: Remove labels after successful rebase
+        if: steps.check-permission.outputs.result == 'true' && steps.push.outcome == 'success'
         uses: actions/github-script@v7
         with:
           script: |
-            await github.rest.issues.removeLabel({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              name: 'rebase-user-branch'
-            });
+            for (const label of ['rebase-user-branch', 'rebase-user-branch-failed']) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  name: label
+                });
+              } catch (error) {
+                if (!error.status || error.status != 404) {
+                  throw error;
+                }
+              }
+            }
 
       - name: Add success comment
-        if: steps.push.outcome == 'success'
+        if: steps.check-permission.outputs.result == 'true' && steps.push.outcome == 'success'
         uses: actions/github-script@v7
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -120,7 +203,7 @@ jobs:
             });
 
       - name: Replace label on failure
-        if: steps.rebase.outputs.rebase_status == 'failed'
+        if: steps.check-permission.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'failed'
         uses: actions/github-script@v7
         with:
           script: |
@@ -129,19 +212,27 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                name: 'rebase-user-branch'
+                name: 'rebase-user-branch-failed'
               });
-            } catch(e) {}
-            
+            } catch (error) {
+              if (!error.status || error.status != 404) {
+                throw error;
+              }
+            }
+
             try {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                name: 'rebase-user-branch-failed'
+                name: 'rebase-user-branch'
               });
-            } catch(e) {}
-            
+            } catch (error) {
+              if (!error.status || error.status != 404) {
+                throw error;
+              }
+            }
+
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -150,7 +241,7 @@ jobs:
             });
 
       - name: Add failure comment for conflicts
-        if: steps.rebase.outputs.rebase_status == 'failed'
+        if: steps.check-permission.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'failed'
         uses: actions/github-script@v7
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -161,10 +252,9 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '❌ **Rebase failed!**\n\nConflicts detected. Please resolve them manually:\n```\ngit fetch origin\ngit rebase origin/' + baseRef + '\n```\nAfter resolving conflicts and pushing your branch, the CI will run automatically.'
+              body: '❌ **Rebase failed!**\n\nConflicts detected. Please resolve them manually:\n```\ngit fetch origin\ngit rebase origin/' + baseRef + '\n```\nAfter resolving conflicts and pushing your branch, PR checks will restart automatically.'
             });
 
       - name: Fail the job if conflicts
-        if: steps.rebase.outputs.rebase_status == 'failed'
-        run: |
-          exit 1
+        if: steps.check-permission.outputs.result == 'true' && steps.rebase.outputs.rebase_status == 'failed'
+        run: exit 1

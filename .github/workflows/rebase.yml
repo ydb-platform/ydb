@@ -81,12 +81,13 @@ jobs:
         id: check-fork-push
         if: steps.check-permission.outputs.result == 'true'
         uses: actions/github-script@v7
-        script: |
-          const pr = context.payload.pull_request;
-          if (!pr.head.repo.fork) {
-            return true;
-          }
-          return pr.maintainer_can_modify;
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr.head.repo.fork) {
+              return true;
+            }
+            return pr.maintainer_can_modify;
 
       - name: Decline rebase for fork without maintainer edits
         if: steps.check-permission.outputs.result == 'true' && steps.check-fork-push.outputs.result != 'true'

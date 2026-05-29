@@ -12,7 +12,7 @@ on:
 
 jobs:
   rebase:
-    if: github.event.label.name == 'rebase-user-branch'
+    if: github.event.label.name == 'rebase-user-branch' && github.event.pull_request.state == 'open'
 
     runs-on: ubuntu-latest
     permissions:

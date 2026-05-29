@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/util/intrusive_heap.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/services/services.pb.h>
@@ -473,6 +474,7 @@ namespace NLongTxService {
                 hFunc(TEvPrivate::TEvReconnect, Handle);
                 hFunc(TEvPrivate::TEvSnapshotMaintenance, Handle);
                 hFunc(TEvents::TEvUndelivered, Handle);
+                hFunc(NMon::TEvHttpInfo, Handle);
             }
         }
 
@@ -553,6 +555,10 @@ namespace NLongTxService {
         void UnlinkWaitNode(TWaitNode&);
 
         void ScheduleDeadlockDetection(TLockIsland&, TDuration delay);
+
+    private:
+        void Handle(NMon::TEvHttpInfo::TPtr& ev);
+        TString RenderLocksMonPage();
 
     private:
         const TLongTxServiceSettings Settings;

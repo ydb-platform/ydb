@@ -307,6 +307,12 @@ message TFeatureFlags {
     optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
-    optional bool EnableTopicMessagesBatching = 271 [default = false];
-    optional bool EnableTopicWriteOffsetDeltaInKeys = 272 [default = false];
+    // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
+    // (keyed by positional index) for local tables.  When ON, split/merge writes only
+    // O(k) rows (src+dst shards) instead of O(N) rows (all partitions after srcFirstIdx).
+    optional bool EnableTablePartitionsFormatShardIdx = 271 [default = true];
+    optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = true];
+    optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
+    optional bool EnableTopicMessagesBatching = 274 [default = false];
+    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
 }

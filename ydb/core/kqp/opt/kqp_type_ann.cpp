@@ -3007,6 +3007,8 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opAggregate = TKqpOpAggregate(input);
+    const bool scalarAggregation = opAggregate.KeyColumns().Empty();
+    auto pos = input->Pos();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
@@ -3027,17 +3029,20 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
         const auto resultColName = TString(traits.ResultColName());
         auto it = aggTraitsMap.find(originalColName);
         Y_ENSURE(it != aggTraitsMap.end());
-        const auto *aggFieldType = it->second;
-        TPositionHandle dummyPos;
+        auto aggFieldType = it->second;
 
         if (aggFunction == "count") {
             aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         } else if (aggFunction == "sum") {
-            Y_ENSURE(GetSumResultType(dummyPos, *it->second, aggFieldType, ctx),
-                        "Unsupported type for sum aggregation function");
+            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for sum aggregation function");
         } else if (aggFunction == "avg") {
-            Y_ENSURE(GetAvgResultType(dummyPos, *it->second, aggFieldType, ctx),
-                        "Unsupported type for avg aggregation function");
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for avg aggregation function");
+        }
+
+        // Special case for scalar aggregation (aka aggregation with empty keys).
+        if (scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg")) {
+            aggFieldType = ctx.MakeType<TOptionalExprType>(aggFieldType);
         }
 
         newItemTypes.push_back(ctx.MakeType<TItemExprType>(resultColName, aggFieldType));

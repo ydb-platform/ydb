@@ -641,10 +641,6 @@ TExprNode::TPtr BuildJoinFilter(TExprNode::TPtr leftInput, TExprNode::TPtr right
     // clang-format on
 }
 
-bool IsForceOptionalNeeded(TExprNode::TPtr typeNode, const TString& aggFunc) {
-    return typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get()) && (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg");
-}
-
 bool IsSuitableToEliminateColumn(const TString& colName, const THashMap<TString, std::pair<TString, TString>>& candidateForElimation,
                                  const THashMap<TString, std::pair<TString, TString>>& candidateForHolders) {
     const auto itElimination = candidateForElimation.find(colName);
@@ -787,7 +783,6 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
     if (distinctAggregationTraitsPreAggregate.AggTraitsList.empty() && distinctAggregationTraitsPostAggregate.AggTraitsList.empty()) {
         EliminateDuplicateAggregations(expressionsMapPreAgg, aggTraits, expressionsMapPostAgg, havingFilterLambda, ctx, pos);
     }
-
     // In case we have an expression for aggregation - f(a + b ...) or group by.
     if (!expressionsMapPreAgg.empty() || !groupByKeysExpressionsMap.empty()) {
         resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPreAgg, groupByKeysExpressionsMap, ctx, pos);
@@ -828,7 +823,7 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultC
                          TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap, TAggregationTraits& distinctAggregationTraitsPreAggregate,
                          TAggregationTraits& aggTraits, TAggregationTraits& distinctAggregationTraitsPostAggregate,
                          TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPostAgg, ui64& uniqueAggColumnId, bool& distinctPreAggregate,
-                         const bool distinctAll, const bool isEmptyGroupByKeys, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
+                         const bool distinctAll, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
     // Here we want to process given lambda to find all aggregations and expressions.
     auto lambda = TCoLambda(ctx.DeepCopyLambda(*lambdaToProcess));
     THashMap<TExprNode::TPtr, TString> aggregationsForReplacement;
@@ -848,7 +843,6 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultC
             TExprNode::TPtr exprBody;
             const ui32 aggInputIndex = aggregation->ChildrenSize() == 3 ? 2 : 3;
             const bool aggHasInput = aggregation->ChildrenSize() > 2;
-            const bool aggHasType = aggHasInput;
             const bool isExpression = aggHasInput && IsExpression(aggregation->ChildPtr(aggInputIndex));
 
             // Aggregation with column specified.
@@ -896,18 +890,11 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultC
             .Done().Ptr();
             // clang-format on
 
-            // This is a special case to force optional type for non optional column. f(a) => map(b : Just(a)) -> f(b)
-            const bool forceOptional = aggHasType ? (isEmptyGroupByKeys && IsForceOptionalNeeded(aggregation->ChildPtr(2), aggFuncName)) : false;
-            if (forceOptional) {
-                aggColName = TInfoUnit(GenerateUniqueColumnName(uniqueAggColumnId, "agg_input", "agg_col"));
-            }
-
             // Adds a column into pre aggregation map in following cases:
             // 1) It's an expression: f(a + 1) => map(b : a + 1) -> f(b);
-            // 2) We need to force optional for column: f(a) => map(b: Just(a)) -> f(b);
-            // 3) It's a unique column name: (f(a), g(a)) => map(a) -> (f(a), g(a));
-            if (isExpression || forceOptional || !aggregationUniqueColNames.contains(aggColName.GetFullName())) {
-                expressionsMapPreAgg.push_back({aggColName, exprLambda, forceOptional});
+            // 2) It's a unique column name: (f(a), g(a)) => map(a) -> (f(a), g(a));
+            if (isExpression || !aggregationUniqueColNames.contains(aggColName.GetFullName())) {
+                expressionsMapPreAgg.push_back({aggColName, exprLambda, false});
             }
             aggregationUniqueColNames.insert(aggColName.GetFullName());
 
@@ -994,7 +981,7 @@ void ProcessAggregationsInHaving(TExprNode::TPtr having, const TStructExprType* 
                                  TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
                                  TAggregationTraits& distinctAggregationTraitsPreAggregate, TAggregationTraits& aggTraits,
                                  TAggregationTraits& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda, ui64& uniqueAggColumnId,
-                                 const bool distinctAll, const bool isEmptyGroupByKeys, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
+                                 const bool distinctAll, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
     Y_ENSURE(!pgSyntax, "Having is not supported for PG syntax.");
     Y_ENSURE(!distinctAll, "Distinct all is not supported for HAVING.");
     bool distinctPreAggregate = false;
@@ -1007,7 +994,7 @@ void ProcessAggregationsInHaving(TExprNode::TPtr having, const TStructExprType* 
 
     ProcessAggregations(yqlWhere->ChildPtr(1), resultColName, finalType, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap,
                         distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate, havingFilterHolder, uniqueAggColumnId,
-                        distinctPreAggregate, distinctAll, isEmptyGroupByKeys, pgSyntax, ctx, pos);
+                        distinctPreAggregate, distinctAll, pgSyntax, ctx, pos);
 
     Y_ENSURE(!distinctPreAggregate, "Distinct is not supported for HAVING.");
     Y_ENSURE(havingFilterHolder.size() == 1, "Invalid number of filters for HAVING.");
@@ -1021,14 +1008,14 @@ void ProcessAggregationsInResultItems(TExprNode::TPtr result, const TStructExprT
                                       TAggregationTraits& distinctAggregationTraitsPreAggregate, TAggregationTraits& aggTraits,
                                       TAggregationTraits& distinctAggregationTraitsPostAggregate,
                                       TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPostAgg, ui64& uniqueAggColumnId,
-                                      const bool distinctAll, const bool isEmptyGroupByKeys, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
+                                      const bool distinctAll, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
     bool distinctPreAggregate = false;
     // For each result item, we want to process result lambda to extract aggregations and pre/post expressions.
     for (ui32 i = 0, e = result->Child(1)->ChildrenSize(); i < e; ++i) {
         auto resultItem = result->Child(1)->ChildPtr(i);
         ProcessAggregations(resultItem->ChildPtr(2), TString(resultItem->Child(0)->Content()), finalType, aggregationUniqueColNames, expressionsMapPreAgg,
                             groupByKeysExpressionsMap, distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate,
-                            expressionsMapPostAgg, uniqueAggColumnId, distinctPreAggregate, distinctAll, isEmptyGroupByKeys, pgSyntax, ctx, pos);
+                            expressionsMapPostAgg, uniqueAggColumnId, distinctPreAggregate, distinctAll, pgSyntax, ctx, pos);
     }
 
     // Distinct pre aggregate fro group by keys.
@@ -1102,6 +1089,18 @@ TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprNo
     }
 
     return limitBuilder.Done().Ptr();
+}
+
+bool HasRollup(const TVector<TVector<TVector<TString>>>& groupBySets) {
+    bool hasRollup = false;
+    for (const auto& groupBySet : groupBySets) {
+        if (!hasRollup) {
+            hasRollup = groupBySet.size() > 1;
+        }
+    }
+
+    Y_ENSURE(!hasRollup || (hasRollup && groupBySets.size() == 1), "Unsupported group sets.");
+    return hasRollup;
 }
 
 } // anonymous namespace
@@ -1405,7 +1404,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         TExprNode::TPtr havingFilterLambda{nullptr};
 
         // Main aggregation traits.
-        TAggregationTraits aggTraits;
+        TAggregationTraits aggregationTraits;
         // Pre/Post distinct aggregations.
         TAggregationTraits distinctAggregationTraitsPreAggregate;
         TAggregationTraits distinctAggregationTraitsPostAggregate;
@@ -1413,15 +1412,45 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         THashSet<TString> aggregationUniqueColNames;
         // Group by fields for renames or expressions.
         TVector<std::pair<TInfoUnit, TExprNode::TPtr>> groupByKeysExpressionsMap;
+        // Specifies a group sets.
+        TVector<TVector<TVector<TString>>> groupBySets;
 
         // Some additional information needed to build an aggregation pipeline.
         const bool distinctAll = !!GetSetting(setItem->Tail(), "distinct_all");
         auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        const bool isEmptyGroupByKeys = groupByKeysExpressionsMap.empty();
 
-        auto groupOps = GetSetting(setItem->Tail(), "group_exprs");
-        if (groupOps) {
-            const auto groupByList = groupOps->TailPtr();
+        // Group sets layoout:
+        //            group_sets
+        //            /    |
+        //         set0   set1  ...
+        //       /   |
+        // (group index) ...
+        const auto groupSetsExpr = GetSetting(setItem->Tail(), "group_sets");
+        if (groupSetsExpr) {
+            const auto groupSetsList = groupSetsExpr->TailPtr();
+            for (ui32 i = 0; i < groupSetsList->ChildrenSize(); ++i) {
+                const auto setList = groupSetsList->ChildPtr(i);
+                TVector<TVector<TString>> groupBySet;
+                for (ui32 j = 0; j < setList->ChildrenSize(); ++j) {
+                    const auto setIndexes = setList->ChildPtr(j);
+                    TVector<TString> groupByIndexes;
+                    if (setIndexes->ChildrenSize() == 0) {
+                        groupByIndexes.emplace_back("empty");
+                    } else {
+                        for (ui32 k = 0; k < setIndexes->ChildrenSize(); ++k) {
+                            groupByIndexes.emplace_back(TString(setIndexes->ChildPtr(k)->Content()));
+                        }
+                    }
+                    groupBySet.emplace_back(std::move(groupByIndexes));
+                }
+                groupBySets.emplace_back(std::move(groupBySet));
+            }
+        }
+        const bool hasRollup = HasRollup(groupBySets);
+
+        const auto groupExprsExpr = GetSetting(setItem->Tail(), "group_exprs");
+        if (groupExprsExpr) {
+            const auto groupByList = groupExprsExpr->TailPtr();
             for (ui32 i = 0; i < groupByList->ChildrenSize(); ++i) {
                 auto pgGroup = groupByList->ChildPtr(i);
                 auto lambda = TCoLambda(ctx.DeepCopyLambda(*(pgGroup->Child(1))));
@@ -1454,31 +1483,105 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                 .Done().Ptr();
                 // clang-format on
 
+                groupExprLambda->SetTypeAnn(pgGroup->GetTypeAnn());
                 groupByKeysExpressionsMap.push_back(std::make_pair(groupByKeyName, groupExprLambda));
-                aggTraits.KeyColumns.push_back(groupByKeyName);
+                aggregationTraits.KeyColumns.emplace_back(groupByKeyName);
             }
         }
 
         auto having = GetSetting(setItem->Tail(), "having");
         if (having) {
             ProcessAggregationsInHaving(having, finalType, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap,
-                                        distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate, havingFilterLambda,
-                                        uniqueAggColumnId, distinctAll, isEmptyGroupByKeys, pgSyntax, ctx, node->Pos());
+                                        distinctAggregationTraitsPreAggregate, aggregationTraits, distinctAggregationTraitsPostAggregate, havingFilterLambda,
+                                        uniqueAggColumnId, distinctAll, pgSyntax, ctx, node->Pos());
         }
 
         auto result = GetSetting(setItem->Tail(), "result");
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, finalType, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap,
-                                         distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate, expressionsMapPostAgg,
-                                         uniqueAggColumnId, distinctAll, isEmptyGroupByKeys, pgSyntax, ctx, node->Pos());
-        // Build an aggregation pipeline.
-        resultExpr = BuildAggregationPipeline(
-            resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMap), std::move(distinctAggregationTraitsPreAggregate),
-            std::move(aggTraits), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda, std::move(expressionsMapPostAgg), ctx, node->Pos());
+                                         distinctAggregationTraitsPreAggregate, aggregationTraits, distinctAggregationTraitsPostAggregate,
+                                         expressionsMapPostAgg, uniqueAggColumnId, distinctAll, pgSyntax, ctx, node->Pos());
+
+        if (hasRollup) {
+            Y_ENSURE(groupBySets.size() == 1, "Invalid group sets size for rollup.");
+            Y_ENSURE(distinctAggregationTraitsPostAggregate.AggTraitsList.empty(), "Unsupported rollup with distinct all.");
+            const auto groupBySet = groupBySets.front();
+            TExprNode::TPtr rollupResultExpr;
+
+            for (const auto& groupByIndexes : groupBySet) {
+                auto aggregationTraitsForSet = aggregationTraits;
+                // We have to use keys based on group set.
+                aggregationTraitsForSet.KeyColumns.clear();
+                TVector<std::pair<TInfoUnit, TExprNode::TPtr>> groupByKeysExpressionsMapForSet;
+                TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPostAggForSet = expressionsMapPostAgg;
+                THashSet<ui32> indexInGroupBySet;
+
+                for (const TString& groupByIndex : groupByIndexes) {
+                    // For empty set - no keys.
+                    if (groupByIndex != "empty") {
+                        ui32 groupIndex = 0;
+                        Y_ENSURE(TryFromString<ui32>(groupByIndex, groupIndex));
+                        Y_ENSURE(groupIndex < groupByKeysExpressionsMap.size());
+                        indexInGroupBySet.insert(groupIndex);
+                    }
+                }
+
+                for (ui32 i = 0; i < groupByKeysExpressionsMap.size(); ++i) {
+                    const auto groupByKeyPair = groupByKeysExpressionsMap[i];
+                    const auto keyColumn = groupByKeyPair.first;
+                    if (indexInGroupBySet.contains(i)) {
+                        aggregationTraitsForSet.KeyColumns.emplace_back(keyColumn);
+                        groupByKeysExpressionsMapForSet.emplace_back(std::move(groupByKeyPair));
+                    } else {
+                        const TTypeAnnotationNode* groupByKeyType = groupByKeyPair.second->GetTypeAnn();
+                        Y_ENSURE(groupByKeyType, "No type for group by key with rollup");
+
+                        if (groupByKeyType->IsOptionalOrNull()) {
+                            groupByKeyType = groupByKeyType->Cast<TOptionalExprType>()->GetItemType();
+                        }
+
+                        // clang-format off
+                        auto nullColumn = Build<TCoLambda>(ctx, node->Pos())
+                            .Args({"arg"})
+                            .Body<TCoNothing>()
+                                .OptionalType<TCoOptionalType>()
+                                    .ItemType(ExpandType(node->Pos(), *groupByKeyType, ctx))
+                                .Build()
+                            .Build()
+                        .Done().Ptr();
+                        // clang-format on
+                        expressionsMapPostAggForSet.emplace_back(keyColumn, nullColumn, false);
+                    }
+                }
+
+                auto aggregationForGroupSetResultExpr = BuildAggregationPipeline(
+                    resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMapForSet), std::move(distinctAggregationTraitsPreAggregate),
+                    std::move(aggregationTraitsForSet), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda,
+                    std::move(expressionsMapPostAggForSet), ctx, node->Pos());
+
+                if (rollupResultExpr) {
+                    // clang-format off
+                    rollupResultExpr = Build<TKqpOpUnionAll>(ctx, node->Pos())
+                        .LeftInput(rollupResultExpr)
+                        .RightInput(aggregationForGroupSetResultExpr)
+                    .Done().Ptr();
+                    // clang-format on
+                } else {
+                    rollupResultExpr = aggregationForGroupSetResultExpr;
+                }
+            }
+            resultExpr = rollupResultExpr;
+        } else {
+            // Build an aggregation pipeline.
+            resultExpr = BuildAggregationPipeline(resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMap),
+                                                  std::move(distinctAggregationTraitsPreAggregate), std::move(aggregationTraits),
+                                                  std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda, std::move(expressionsMapPostAgg), ctx,
+                                                  node->Pos());
+        }
 
         finalColumnOrder.clear();
         TVector<TString> finalProjection;
-        auto processResultColumn = [&] (TExprNode::TPtr column, const TTypeAnnotationNode* actualColumnType, TExprNode::TPtr itemLambda) {
+        auto processResultColumn = [&](TExprNode::TPtr column, const TTypeAnnotationNode* actualColumnType, TExprNode::TPtr itemLambda) {
             TString columnName = TString(column->Content());
 
             const auto expectedTypeNode = finalType->FindItemType(columnName);

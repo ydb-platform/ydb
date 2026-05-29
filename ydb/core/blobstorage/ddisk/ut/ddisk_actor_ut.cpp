@@ -1078,6 +1078,92 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(syncResult, TReplyStatus::ERROR);
     }
 
+    Y_UNIT_TEST(LateOutdatedSyncReadResultDoesNotLogUnknownSync) {
+        TStringStream log;
+        TTestContext ctx;
+        ctx.Runtime.LogStream = &log;
+        ctx.Runtime.SetLogPriority(NKikimrServices::BS_DDISK, NLog::PRI_ERROR);
+
+        const TDiskHandle disk = ctx.CreateDDisk(11, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 50, 1);
+
+        const ui32 srcPDiskId = 99;
+        const ui32 srcSlotId = 1;
+        TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        TActorId fakeSourceServiceId = MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId);
+        ctx.Runtime.RegisterService(fakeSourceServiceId, fakeSourceEdge);
+
+        auto sendSync = [&] {
+            auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
+                creds,
+                std::make_tuple(NodeId, srcPDiskId, srcSlotId),
+                std::optional<ui64>(42));
+            syncEv->AddSegment(NDDisk::TBlockSelector(7, 0, BlockSize));
+            SendToDDisk(ctx, disk.ServiceId, syncEv.release());
+        };
+
+        sendSync();
+        auto staleReadReq = ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge});
+        UNIT_ASSERT_VALUES_EQUAL(staleReadReq->GetTypeRewrite(), static_cast<ui32>(NDDisk::TEv::EvRead));
+
+        sendSync();
+
+        std::unique_ptr<IEventHandle> freshReadReq;
+        std::unique_ptr<IEventHandle> staleSyncResultRaw;
+        for (ui32 i = 0; i < 2; ++i) {
+            auto ev = ctx.Runtime.WaitForEdgeActorEvent({ctx.Edge, fakeSourceEdge});
+            if (ev->GetTypeRewrite() == static_cast<ui32>(NDDisk::TEv::EvRead)) {
+                freshReadReq = std::move(ev);
+            } else if (ev->GetTypeRewrite() == NDDisk::TEvSyncWithDDiskResult::EventType) {
+                staleSyncResultRaw = std::move(ev);
+            } else {
+                UNIT_FAIL("unexpected event: " << ev->ToString());
+            }
+        }
+
+        UNIT_ASSERT(freshReadReq);
+        UNIT_ASSERT(staleSyncResultRaw);
+
+        auto staleSyncResult = std::unique_ptr<TEventHandle<NDDisk::TEvSyncWithDDiskResult>>(
+            reinterpret_cast<TEventHandle<NDDisk::TEvSyncWithDDiskResult>*>(staleSyncResultRaw.release()));
+        AssertStatus(staleSyncResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(staleSyncResult->Get()->Record.SegmentResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(staleSyncResult->Get()->Record.GetSegmentResults(0).GetStatus()),
+            static_cast<int>(TReplyStatus::OUTDATED));
+
+        const TString stalePayload = MakeData('O', BlockSize);
+        ctx.Runtime.Send(new IEventHandle(staleReadReq->Sender, fakeSourceEdge,
+            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(stalePayload)),
+            0, staleReadReq->Cookie), NodeId);
+
+        auto connectResult = SendToDDiskAndWait<NDDisk::TEvConnectResult>(ctx, disk.ServiceId, new NDDisk::TEvConnect(creds));
+        AssertStatus(connectResult, TReplyStatus::OK);
+
+        UNIT_ASSERT_C(!log.Str().Contains("unknown sync for cookie"), log.Str());
+    }
+
+    Y_UNIT_TEST(UnknownSyncReadResultLogsUnknownSync) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(13, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 50, 1);
+
+        TStringStream log;
+        ctx.Runtime.LogStream = &log;
+        ctx.Runtime.SetLogPriority(NKikimrServices::BS_DDISK, NLog::PRI_ERROR);
+
+        const ui64 unknownCookie = 424242;
+        const TString payload = MakeData('U', BlockSize);
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload)),
+            unknownCookie);
+
+        auto connectResult = SendToDDiskAndWait<NDDisk::TEvConnectResult>(ctx, disk.ServiceId, new NDDisk::TEvConnect(creds));
+        AssertStatus(connectResult, TReplyStatus::OK);
+
+        UNIT_ASSERT_C(log.Str().Contains("unknown sync for cookie"), log.Str());
+    }
+
     Y_UNIT_TEST(SyncWithDDiskViaFakeSource) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(11, 1);

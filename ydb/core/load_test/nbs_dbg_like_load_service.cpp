@@ -936,6 +936,15 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     .replace(/"/g, "\\\"");
             }
 
+            function nbsRunDisableReplicationChanged(cb) {
+                const readRatio = $("#nbs-run-read-ratio");
+                if (cb.checked) {
+                    readRatio.val("0").prop("disabled", true);
+                } else {
+                    readRatio.prop("disabled", false);
+                }
+            }
+
             function nbsTabletFieldInt(fieldId, fieldLabel, minValue) {
                 const raw = nbsTabletTrim($("#" + fieldId).val());
                 if (raw === "") {
@@ -1144,10 +1153,11 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         duration_seconds:        nbsTabletTrim($("#nbs-run-duration").val()) || "0",
                         delay_before_seconds:    nbsTabletTrim($("#nbs-run-delay-before").val()) || "15",
                         max_in_flight:           String(maxInFlight),
-                        read_ratio_pct:          nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0",
+                        read_ratio_pct:          $("#nbs-run-disable-replication").is(":checked") ? "0" : (nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0"),
                         read_write_size_kib:     nbsTabletTrim($("#nbs-run-size-kib").val()) || "4",
                         sequential:              $("#nbs-run-sequential").is(":checked") ? "1" : "0",
-                        num_dbg_to_use:          nbsTabletTrim($("#nbs-run-num-dbg").val()) || "0"
+                        num_dbg_to_use:          nbsTabletTrim($("#nbs-run-num-dbg").val()) || "0",
+                        disable_replication:     $("#nbs-run-disable-replication").is(":checked") ? "1" : "0"
                     };
                     $.ajax({
                         url: "",
@@ -1173,6 +1183,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 return new Promise(function(resolve, reject) {
                     const startTime = Date.now();
                     let progressTimer = null;
+                    let pollTimer = null;
+                    let timeoutId = null;
 
                     if (progressEl) {
                         const bar = progressEl.querySelector(".progress-bar");
@@ -1193,10 +1205,24 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                             clearInterval(progressTimer);
                             progressTimer = null;
                         }
+                        if (pollTimer !== null) {
+                            clearTimeout(pollTimer);
+                            pollTimer = null;
+                        }
+                        if (timeoutId !== null) {
+                            clearTimeout(timeoutId);
+                            timeoutId = null;
+                        }
                         if (progressEl) {
                             progressEl.style.display = "none";
                         }
                     }
+
+                    const pollTimeoutMs = durationSec * 1000 + 30_000;
+                    timeoutId = setTimeout(function() {
+                        cleanup();
+                        reject(new Error("poll timeout after " + Math.round(pollTimeoutMs / 1000) + "s"));
+                    }, pollTimeoutMs);
 
                     let pollCount = 0;
                     function poll() {
@@ -1225,7 +1251,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     }
 
                     function scheduleNext() {
-                        setTimeout(poll, 2000);
+                        pollTimer = setTimeout(poll, 2000);
                     }
 
                     // First poll after a short delay to let the run register.
@@ -1240,7 +1266,6 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     const vals = [];
                     for (let v = fromVal; v <= toVal; v = v * 2) {
                         vals.push(v);
-                        if (v === 0) break;
                     }
                     return vals;
                 }
@@ -1489,7 +1514,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                         <div class='form-group'>
                                             <label for='nbs-run-inflight-to'>InFlightTo (sweep end):</label>
                                             <input id='nbs-run-inflight-to' class='form-control' type='number' min='1' step='1' placeholder='e.g. 128' />
-                                            <p class='help-block'>If both From/To set, sweeps MaxInFlight ×2 per step.</p>
+                                            <p class='help-block'>If both From/To set, sweeps MaxInFlight ×2 per step (From should be a power of 2; otherwise the last value may be below To).</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1518,6 +1543,14 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                         <label>
                                             <input id='nbs-run-sequential' type='checkbox' />
                                             Sequential (round-robin address space instead of random)
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class='form-group'>
+                                    <div class='checkbox'>
+                                        <label>
+                                            <input id='nbs-run-disable-replication' type='checkbox' onchange='nbsRunDisableReplicationChanged(this)' />
+                                            Disable replication (single-PB write, skip DDisk flush)
                                         </label>
                                     </div>
                                 </div>

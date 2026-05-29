@@ -3631,6 +3631,89 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         assertBloomIndexes("/MyRoot/OlapBloomImported");
     }
 
+    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalMinMaxIndexes) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapMinMaxTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_minmax"
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto assertMinMaxIndexes = [&](const TString& path) {
+            const auto d = DescribePrivatePath(runtime, path, true, true);
+            UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
+            const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+            THashSet<TString> found;
+            for (const auto& ix : schema.GetIndexes()) {
+                found.insert(ix.GetName());
+            }
+            UNIT_ASSERT_C(found.contains("idx_minmax"), "missing idx_minmax on " << path);
+        };
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxTable");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OlapMinMaxTable"
+                destination_prefix: "OlapMinMaxImportPrefix"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, exportTxId);
+        TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "OlapMinMaxImportPrefix"
+                destination_path: "/MyRoot/OlapMinMaxImported"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxImported");
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnManyTables) {
         TTestBasicRuntime runtime;
 

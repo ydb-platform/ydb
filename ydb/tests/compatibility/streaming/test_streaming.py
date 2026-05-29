@@ -80,7 +80,7 @@ class StreamingTestBase:
                     SELECT host, COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts
                     FROM $filtered
                     GROUP BY
-                        HoppingWindow(CAST(time AS Timestamp), 'PT600S', 'PT600S'),
+                        HOP(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'),
                         host
                 );
 

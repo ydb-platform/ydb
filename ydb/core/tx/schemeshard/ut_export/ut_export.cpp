@@ -2164,6 +2164,81 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), exportTxId);
     }
 
+    Y_UNIT_TEST(ExportImportStandaloneColumnTableWithLocalMinMaxIndexes) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "OlapMinMaxTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_minmax"
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto assertMinMaxIndexes = [this](const TString& path) {
+            const auto d = DescribePrivatePath(Runtime(), path, true, true);
+            UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
+            const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+            THashSet<TString> found;
+            for (const auto& ix : schema.GetIndexes()) {
+                found.insert(ix.GetName());
+            }
+            UNIT_ASSERT_C(found.contains("idx_minmax"), "missing idx_minmax on " << path);
+        };
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxTable");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OlapMinMaxTable"
+                destination_prefix: "OlapMinMaxExport"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportTxId);
+        TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "OlapMinMaxExport"
+                destination_path: "/MyRoot/OlapMinMaxImported"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxImported");
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportTxId);
+        Env().TestWaitNotification(Runtime(), exportTxId);
+    }
+
     Y_UNIT_TEST(ShouldCheckQuotasExportsLimited) {
         ShouldCheckQuotas(TSchemeLimits{.MaxExports = 0}, Ydb::StatusIds::PRECONDITION_FAILED);
     }

@@ -30,6 +30,8 @@
 #include <atomic>
 #include <queue>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;
     class TPersistentBufferChunkMapLogRecord;
@@ -338,13 +340,6 @@ namespace NKikimr::NDDisk {
         const bool IsPersistentBufferActor = false;
 
     public:
-        NKikimrServices::TActivity::EType ActorActivityType() const {
-            if (IsPersistentBufferActor) {
-                return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
-            }
-            return NKikimrServices::TActivity::BS_DDISK;
-        }
-
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor = false);
@@ -660,6 +655,7 @@ namespace NKikimr::NDDisk {
 
         ui64 NextSyncId = 1;
         THashMap<ui64, TSyncInFlight> SyncsInFlight; // syncId -> TSyncInFlight
+        THashSet<ui64> SyncReadCookiesInFlight;
         TSegmentManager SegmentManager;
 
         void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
@@ -713,7 +709,7 @@ namespace NKikimr::NDDisk {
             TActorId Session;
 
             NWilson::TSpan Span;
-            std::set<ui64> OperationCookies;
+            std::unordered_set<ui64> OperationCookies;
 
             ui64 TabletId;
             ui32 Generation;
@@ -722,10 +718,13 @@ namespace NKikimr::NDDisk {
             ui32 OffsetInBytes;
             ui32 Size;
             std::vector<TPersistentBufferSectorInfo> Sectors;
-            std::vector<std::tuple<ui64, ui32>> Erases;
+
+            // map operationCookie to <lsn, generation> pairs that were erased by this operation
+            std::unordered_map<ui64, std::vector<std::tuple<ui64, ui32>>> Erases;
+
             std::map<ui64, TRope> DataParts;
             ui32 PartsCount;
-
+            std::vector<TPersistentBufferSectorInfo> OccupiedSectors;
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
             std::optional<TString> ErrorMessage = std::nullopt;
 
@@ -734,8 +733,14 @@ namespace NKikimr::NDDisk {
             TRope JoinData(ui32 sectorSize);
         };
 
+        struct TPersistentBufferEraseInflight {
+            ui64 EraseCookie;
+            std::vector<ui64> OperationsCookie;
+        };
+
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
         std::unordered_map<TPersistentBufferRecordId, std::vector<ui64>> PersistentBufferWriteInflightsByRecord;
+        std::unordered_map<TPersistentBufferRecordId, TPersistentBufferEraseInflight> PersistentBufferEraseInflightsByRecord;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
         std::vector<ui32> PersistentBufferChunks;
@@ -772,7 +777,9 @@ namespace NKikimr::NDDisk {
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);
         void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn);
         void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, const TFastErase& fastErase);
-        void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight);
+        void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
+        void HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
+        void HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie);
 
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);

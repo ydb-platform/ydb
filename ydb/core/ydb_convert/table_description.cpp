@@ -216,6 +216,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                     return fail("Local bloom filter index support is disabled");
                 }
                 olapIndex->SetClassName("BLOOM_FILTER");
+                olapIndex->SetInheritPortionStorage(true);
                 auto* bloom = olapIndex->MutableBloomFilter();
                 const auto& bloomSettings = index.local_bloom_filter_index();
                 if (bloomSettings.has_false_positive_probability()) {
@@ -229,6 +230,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                     return fail("Local bloom ngram filter index support is disabled");
                 }
                 olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
+                olapIndex->SetInheritPortionStorage(true);
                 auto* ngram = olapIndex->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
                 FillLocalBloomNgramProto(ngram, ngramSettings);
@@ -988,6 +990,20 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 }
                 break;
             }
+            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+                const auto& min_max = olapIndex.GetMinMaxIndex();
+                auto* ydbIndex = out.add_indexes();
+                ydbIndex->set_name(olapIndex.GetName());
+                if (min_max.HasColumnId()) {
+                    const auto it = idToName.find(min_max.GetColumnId());
+                    if (it != idToName.end()) {
+                        ydbIndex->add_index_columns(it->second);
+                    }
+                }
+
+                ydbIndex->mutable_local_min_max_index();
+                break;
+            }
             default:
                 break;
         }
@@ -1460,6 +1476,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 }
 
                 upsert->SetClassName("BLOOM_FILTER");
+                upsert->SetInheritPortionStorage(true);
                 auto* bloom = upsert->MutableBloomFilter();
                 const auto& bloomSettings = index.local_bloom_filter_index();
                 if (bloomSettings.has_false_positive_probability()) {
@@ -1482,6 +1499,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 }
 
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
+                upsert->SetInheritPortionStorage(true);
                 auto* ngram = upsert->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
                 if (ngramSettings.ngram_size()) {

@@ -57,6 +57,7 @@
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
 
 namespace NKikimr::NNbsDbgLike {
 
@@ -452,6 +453,7 @@ public:
     TNbsDbgLikeLoadTablet(const TActorId& tablet, TTabletStorageInfo* info)
         : NKeyValue::TKeyValueFlat(tablet, info)
     {
+        SetActivityType(ActorActivityType());
     }
 
     // KV's DefaultSignalTabletActive is final and empty - the tablet is
@@ -1107,8 +1109,7 @@ void TNbsDbgLikeLoadTablet::EnsureCounters(const TActorContext& ctx) {
     if (Counters) {
         return;
     }
-    Counters = GetServiceCounters(AppData(ctx)->Counters, "load_actor")
-        ->GetSubgroup("tablet", Sprintf("%" PRIu64, TabletID()));
+    Counters = GetServiceCounters(AppData(ctx)->Counters, "load_actor")->GetSubgroup("load", "tablet");
     PhaseGauge = Counters->GetCounter("Phase", false);
     auto life = Counters->GetSubgroup("subsystem", "lifecycle");
     BscAllocOk    = life->GetCounter("BscAllocOk", true);
@@ -1370,9 +1371,21 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletGetSummary::TPtr& ev
     r->Record.SetStatus(NBSLT_OK);
     r->Record.SetDDiskPoolName(AllocConfig.GetDDiskPoolName());
     r->Record.SetPersistentBufferDDiskPoolName(AllocConfig.GetPersistentBufferDDiskPoolName());
-    r->Record.SetNumDirectBlockGroups(AllocConfig.GetNumDirectBlockGroups());
+    // Use actual allocated count, not just what was requested in AllocConfig.
+    r->Record.SetNumDirectBlockGroups(static_cast<ui32>(Dbgs.size()));
     r->Record.SetVChunkSizeBytes(AllocConfig.GetVChunkSizeBytes());
     r->Record.SetTargetNumVChunks(AllocConfig.GetTargetNumVChunks());
+    // Count the longest contiguous prefix [0, N) of DBGs that have at least
+    // kPrimaryHostsPerDbg PB peers connected. The load actor uses this to
+    // limit its address space to DBGs that can actually accept writes.
+    ui32 readyDbgs = 0;
+    for (ui32 i = 0; i < static_cast<ui32>(DbgStates.size()); ++i) {
+        if (DbgStates[i].PBConnected.count() < kPrimaryHostsPerDbg) {
+            break;
+        }
+        ++readyDbgs;
+    }
+    r->Record.SetNumReadyDirectBlockGroups(readyDbgs);
     ctx.Send(ev->Sender, r.release(), 0, ev->Cookie);
 }
 
@@ -1870,7 +1883,7 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    LOG_D("HandleNbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
+    LOG_T("HandleNbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
     if (Phase != ETabletPhase::Ready) {
         ReplyWriteErr(origin, cookie, /*status=*/1);
@@ -1947,8 +1960,12 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const
     info.CoordinatorIndex = static_cast<ui8>(coord);
     info.OriginActor = origin;
     info.OriginCookie = cookie;
-    for (ui32 k = 0; k < kPrimaryHostsPerDbg; ++k) {
-        info.WriteRequested.set(k);
+    if (TabletConfig.GetDisableReplication()) {
+        info.WriteRequested.set(coord);
+    } else {
+        for (ui32 k = 0; k < kPrimaryHostsPerDbg; ++k) {
+            info.WriteRequested.set(k);
+        }
     }
     EnterState(dbg, EPBufferState::PBufferIncompleteWrite);
     auto [it, inserted] = dbg.Lsns.emplace(lsn, std::move(info));
@@ -1964,9 +1981,13 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const
     NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[coord]);
     NDDisk::TBlockSelector selector(vChunkIndex, offset, IoSizeBytes);
     std::vector<NKikimrBlobStorage::NDDisk::TDDiskId> pbIds;
-    pbIds.reserve(kPrimaryHostsPerDbg);
-    for (ui32 k = 0; k < kPrimaryHostsPerDbg; ++k) {
-        pbIds.push_back(dbg.PBIdsPb[k]);
+    if (TabletConfig.GetDisableReplication()) {
+        pbIds.push_back(dbg.PBIdsPb[coord]);
+    } else {
+        pbIds.reserve(kPrimaryHostsPerDbg);
+        for (ui32 k = 0; k < kPrimaryHostsPerDbg; ++k) {
+            pbIds.push_back(dbg.PBIdsPb[k]);
+        }
     }
     auto wireEv = std::make_unique<NDDisk::TEvWritePersistentBuffers>(
         creds, selector, lsn, NDDisk::TWriteInstruction(0), pbIds,
@@ -2080,7 +2101,7 @@ void TNbsDbgLikeLoadTablet::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    LOG_D("HandleNbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
+    LOG_T("HandleNbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
     if (Phase != ETabletPhase::Ready) {
         ReplyReadErr(origin, cookie, /*status=*/1);
@@ -2089,6 +2110,11 @@ void TNbsDbgLikeLoadTablet::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
 
     if (IoSizeBytes == 0) {
         ReplyReadErr(origin, cookie, /*status=*/1);
+        return;
+    }
+
+    if (TabletConfig.GetDisableReplication()) {
+        ReplyReadErr(origin, cookie, /*status=*/6);
         return;
     }
 
@@ -2249,11 +2275,20 @@ void TNbsDbgLikeLoadTablet::HandleWritePbsResult(
         }
     }
 
-    if (info.WriteConfirmed.count() >= kPrimaryHostsPerDbg) {
+    const ui32 writeQuorum = TabletConfig.GetDisableReplication() ? 1u : kPrimaryHostsPerDbg;
+    if (info.WriteConfirmed.count() >= writeQuorum) {
         EnterState(dbg, EPBufferState::PBufferIncompleteWrite, /*delta=*/-1);
-        info.State = EPBufferState::PBufferWritten;
         info.WrittenAt = now;
-        EnterState(dbg, EPBufferState::PBufferWritten, /*delta=*/+1);
+        if (TabletConfig.GetDisableReplication()) {
+            // Skip flush: jump directly to PBufferFlushed so DoErase can
+            // reclaim PB space without sending TEvSyncWithPersistentBuffer.
+            info.State = EPBufferState::PBufferFlushed;
+            EnterState(dbg, EPBufferState::PBufferFlushed, /*delta=*/+1);
+            dbg.ReadyToErase.insert(lsn);
+        } else {
+            info.State = EPBufferState::PBufferWritten;
+            EnterState(dbg, EPBufferState::PBufferWritten, /*delta=*/+1);
+        }
         const ui64 quorumMs = (now - info.WriteStart).MilliSeconds();
         if (RootCnt.Request.WriteQuorumMs) {
             RootCnt.Request.WriteQuorumMs->Collect(quorumMs);
@@ -2272,8 +2307,8 @@ void TNbsDbgLikeLoadTablet::HandleWritePbsResult(
         std::bitset<kHostsPerDbgMax> stillPending = info.WriteRequested
             & ~info.WriteConfirmed
             & ~failedThisReply;
-        const ui32 needed = kPrimaryHostsPerDbg > info.WriteConfirmed.count()
-            ? kPrimaryHostsPerDbg - info.WriteConfirmed.count() : 0;
+        const ui32 needed = writeQuorum > static_cast<ui32>(info.WriteConfirmed.count())
+            ? writeQuorum - static_cast<ui32>(info.WriteConfirmed.count()) : 0;
         if (needed > stillPending.count()) {
             EnterState(dbg, info.State, /*delta=*/-1);
             if (!info.ReplySent && info.OriginActor) {

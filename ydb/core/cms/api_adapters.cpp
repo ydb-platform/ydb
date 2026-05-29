@@ -635,6 +635,10 @@ class TCreateMaintenanceTask
                                         && request.action_groups(0).actions().size() > 1;
         cmsRequest.SetPartialPermissionAllowed(!HasSingleCompositeActionGroup);
 
+        if (opts.max_concurrent_actions() > 0) {
+            cmsRequest.SetMaxPermissions(opts.max_concurrent_actions());
+        }
+
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(HasSingleCompositeActionGroup || group.actions().size() == 1);
             for (const auto& action : group.actions()) {
@@ -808,6 +812,19 @@ public:
         cmsRequest->Record.SetUser(task.Owner);
         cmsRequest->Record.SetRequestId(task.RequestId);
         cmsRequest->Record.SetAvailabilityMode(request.Request.GetAvailabilityMode());
+
+        if (task.MaxConcurrentActions > 0) {
+            ui32 aliveCount = 0;
+            for (const auto& id : task.Permissions) {
+                if (cmsState->Permissions.contains(id)) {
+                    ++aliveCount;
+                }
+            }
+            const ui32 quota = task.MaxConcurrentActions > aliveCount
+                ? task.MaxConcurrentActions - aliveCount
+                : 0;
+            cmsRequest->Record.SetMaxPermissions(quota);
+        }
 
         Send(CmsActorId, std::move(cmsRequest));
         Become(&TThis::StateWork);

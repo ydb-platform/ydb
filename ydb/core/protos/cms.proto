@@ -185,6 +185,14 @@ message TPermissionRequest {
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
+  // Maximum number of permissions that may be issued by a single check of
+  // this request. Excess actions that would have been allowed are instead
+  // pushed back into the scheduled request and reported as DISALLOW_TEMP.
+  // 0 means unlimited. Used to implement Ydb.Maintenance.MaintenanceTaskOptions
+  // .max_concurrent_actions: the maintenance adapter recomputes the effective
+  // cap as (max_concurrent_actions - currently_active_permissions) on every
+  // RefreshMaintenanceTask call.
+  optional uint32 MaxPermissions = 13 [default = 0];
 }
 
 enum EExtensionType {
@@ -246,6 +254,10 @@ message TCheckRequest {
   optional string   RequestId = 2;
   optional bool     DryRun = 3;
   optional EAvailabilityMode AvailabilityMode = 4 [default = MODE_MAX_AVAILABILITY];
+  // Per-call override of TPermissionRequest.MaxPermissions for the underlying
+  // scheduled request. Used by the maintenance API adapter to enforce the
+  // task-level max_concurrent_actions limit on every refresh.
+  optional uint32 MaxPermissions = 5 [default = 0];
 }
 
 message TManagePermissionRequest {

@@ -359,6 +359,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         if (request.HasPriority()) {
             scheduled.SetPriority(request.GetPriority());
         }
+        if (request.HasMaxPermissions()) {
+            scheduled.SetMaxPermissions(request.GetMaxPermissions());
+        }
     }
 
     LOG_INFO_S(ctx, NKikimrServices::CMS,
@@ -388,7 +391,28 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     auto point = ClusterInfo->PushRollbackPoint();
     size_t storedIssues = 0;
     size_t processedActions = 0;
+    const bool capEnabled = allowPartial && request.HasMaxPermissions();
+    const ui32 maxPermissions = capEnabled ? request.GetMaxPermissions() : 0;
+    bool capHit = capEnabled && maxPermissions == 0;
+
+    if (capHit) {
+        response.MutableStatus()->SetCode(TStatus::DISALLOW_TEMP);
+        response.MutableStatus()->SetReason(
+            "MaxPermissions cap exhausted: complete in-flight actions before requesting new ones");
+        response.SetDeadline((TActivationContext::Now() + State->Config.DefaultRetryTime).GetValue());
+    }
+
     for (const auto &action : request.GetActions()) {
+        if (capHit) {
+            if (schedule) {
+                auto *scheduledAction = scheduled.AddActions();
+                scheduledAction->CopyFrom(action);
+                scheduledAction->ClearIssue();
+            }
+            ++processedActions;
+            continue;
+        }
+
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -421,6 +445,13 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             AddPermissionExtensions(action, *permission);
 
             ClusterInfo->AddTempLocks(action, request.GetPriority(), requestId, &ctx);
+
+            if (capEnabled && response.PermissionsSize() >= maxPermissions) {
+                LOG_DEBUG(ctx, NKikimrServices::CMS,
+                          "MaxPermissions cap (%u) reached, deferring remaining actions",
+                          maxPermissions);
+                capHit = true;
+            }
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
                       ToString(error.Code).data(), error.Reason.GetMessage().data());
@@ -2242,6 +2273,12 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     ClusterInfo->SetPriorityToCheck(request.Priority);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
+    // Per-call override of the scheduled request's MaxPermissions cap. Used
+    // by the maintenance API to dynamically enforce max_concurrent_actions
+    // taking into account already issued permissions.
+    if (rec.HasMaxPermissions()) {
+        request.Request.SetMaxPermissions(rec.GetMaxPermissions());
+    }
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, rec.GetRequestId(), ctx);
     ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();

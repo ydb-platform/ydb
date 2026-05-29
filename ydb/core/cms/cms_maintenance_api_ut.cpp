@@ -391,6 +391,156 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::SUCCESS);
     }
 
+    Y_UNIT_TEST(MaxConcurrentActionsCapsInitialBatch) {
+        // Cap = 3, request 8 actions. Cluster checks are bypassed via FORCE mode
+        // so the cap is the only thing that decides how many permissions are
+        // issued in the initial create call.
+        TCmsTestEnv env(8);
+
+        auto response = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
+            /* maxConcurrentActions = */ 3u,
+            MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(3), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(4), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(5), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(6), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(7), TDuration::Minutes(10)))
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(response.action_group_states().size(), 8);
+
+        ui32 performed = 0;
+        ui32 pending = 0;
+        for (const auto& group : response.action_group_states()) {
+            UNIT_ASSERT_VALUES_EQUAL(group.action_states().size(), 1);
+            const auto& state = group.action_states(0);
+            if (state.status() == ActionState::ACTION_STATUS_PERFORMED) {
+                ++performed;
+            } else if (state.status() == ActionState::ACTION_STATUS_PENDING) {
+                ++pending;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(performed, 3);
+        UNIT_ASSERT_VALUES_EQUAL(pending, 5);
+    }
+
+    Y_UNIT_TEST(MaxConcurrentActionsBlocksRefresh) {
+        // Without completing any of the issued permissions, refresh must not
+        // issue new ones. The cap stays at "alive = 3, quota = 0".
+        TCmsTestEnv env(8);
+
+        auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
+            /* maxConcurrentActions = */ 3u,
+            MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(3), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(4), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(5), TDuration::Minutes(10)))
+        );
+
+        ui32 createPerformed = 0;
+        for (const auto& group : createResult.action_group_states()) {
+            if (group.action_states(0).status() == ActionState::ACTION_STATUS_PERFORMED) {
+                ++createPerformed;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(createPerformed, 3);
+
+        auto refreshResult = env.CheckMaintenanceTaskRefresh("task-1", Ydb::StatusIds::SUCCESS);
+
+        ui32 refreshPerformed = 0;
+        ui32 refreshPending = 0;
+        for (const auto& group : refreshResult.action_group_states()) {
+            const auto& state = group.action_states(0);
+            if (state.status() == ActionState::ACTION_STATUS_PERFORMED) {
+                ++refreshPerformed;
+            } else if (state.status() == ActionState::ACTION_STATUS_PENDING) {
+                ++refreshPending;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(refreshPerformed, 3);
+        UNIT_ASSERT_VALUES_EQUAL(refreshPending, 3);
+    }
+
+    Y_UNIT_TEST(MaxConcurrentActionsReleasesQuotaOnCompleteAction) {
+        // Complete 2 of the initial 3 permissions, then refresh: CMS should
+        // top up so we again have 3 alive permissions (the cap).
+        TCmsTestEnv env(8);
+
+        auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
+            /* maxConcurrentActions = */ 3u,
+            MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(3), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(4), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(5), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(6), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(7), TDuration::Minutes(10)))
+        );
+
+        TVector<Ydb::Maintenance::ActionUid> performed;
+        for (const auto& group : createResult.action_group_states()) {
+            const auto& state = group.action_states(0);
+            if (state.status() == ActionState::ACTION_STATUS_PERFORMED) {
+                performed.push_back(state.action_uid());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(performed.size(), 3);
+
+        // Complete two of them; one should still be alive.
+        env.CheckCompleteAction(performed[0], Ydb::StatusIds::SUCCESS);
+        env.CheckCompleteAction(performed[1], Ydb::StatusIds::SUCCESS);
+
+        auto refreshResult = env.CheckMaintenanceTaskRefresh("task-1", Ydb::StatusIds::SUCCESS);
+
+        ui32 refreshPerformed = 0;
+        ui32 refreshPending = 0;
+        for (const auto& group : refreshResult.action_group_states()) {
+            const auto& state = group.action_states(0);
+            if (state.status() == ActionState::ACTION_STATUS_PERFORMED) {
+                ++refreshPerformed;
+            } else if (state.status() == ActionState::ACTION_STATUS_PENDING) {
+                ++refreshPending;
+            }
+        }
+        // 1 carryover + 2 freshly issued
+        UNIT_ASSERT_VALUES_EQUAL(refreshPerformed, 3);
+        UNIT_ASSERT_VALUES_EQUAL(refreshPending, 5 - 2);
+    }
+
+    Y_UNIT_TEST(MaxConcurrentActionsZeroMeansUnlimited) {
+        // Cap = 0 is the legacy behavior: CMS issues as many permissions as
+        // cluster constraints allow (here: all of them, thanks to FORCE mode).
+        TCmsTestEnv env(8);
+
+        auto response = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
+            /* maxConcurrentActions = */ 0u,
+            MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(3), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(4), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(5), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(6), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(7), TDuration::Minutes(10)))
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(response.action_group_states().size(), 8);
+        for (size_t i = 0; i < 8; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(response.action_group_states(i).action_states().size(), 1);
+            const auto& state = response.action_group_states(i).action_states(0);
+            UNIT_ASSERT_VALUES_EQUAL(state.status(), ActionState::ACTION_STATUS_PERFORMED);
+        }
+    }
+
     Y_UNIT_TEST(DisableMaintenance) {
         TCmsTestEnv env(16);
 

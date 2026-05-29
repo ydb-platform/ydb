@@ -165,6 +165,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -204,17 +205,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CREATE TABLE `/Root/minmax_test_applied_applied` (
                 `key` Int32 NOT NULL,
                 `value` String NOT NULL,
+                INDEX `value_mm` LOCAL USING min_max ON(`value`),
                 PRIMARY KEY (`key`)
             )
             PARTITION BY HASH (`key`)
             WITH (
                 STORE = COLUMN
             );
-        )");
-
-        assertDDLQueryOk(R"(
-            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "value"}`);
-
         )");
 
         runDMLQuery(R"(

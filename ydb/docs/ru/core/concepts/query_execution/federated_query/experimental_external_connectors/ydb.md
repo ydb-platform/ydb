@@ -1,16 +1,22 @@
 # Работа с базами данных {{ ydb-short-name }}
 
+{% note warning %}
+
+Данный источник данных является экспериментальным и требует развёртывания сервиса-коннектора [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go). Функциональность может измениться и не рекомендуется к использованию в производственной среде без явного включения в конфигурации кластера.
+
+{% endnote %}
+
 {{ ydb-full-name }} может выступать в качестве внешнего источника данных для другой базы {{ ydb-full-name }}. В данном разделе рассматривается организация совместной работы двух независимых баз данных {{ ydb-short-name }} в режиме обработки федеративных запросов.
 
 Для подключения к внешней базе {{ ydb-short-name }} со стороны другой базы {{ ydb-short-name }}, выступающей в роли движка обработки федеративных запросов, на последней требуется выполнить следующие шаги:
 
-1. Подготовить аутентификационные данные для доступа к удалённой базе {{ ydb-short-name }}. В настоящее время в федеративных запросах к {{ ydb-short-name }} доступен метод аутентификации по [логину и паролю](../../../security/authentication.md#static-credentials) (остальные методы не поддерживаются). Пароль к внешней базе сохраняется в виде [секрета](../../datamodel/secrets.md):
+1. Подготовить аутентификационные данные для доступа к удалённой базе {{ ydb-short-name }}. В настоящее время в федеративных запросах к {{ ydb-short-name }} доступен метод аутентификации по [логину и паролю](../../../../security/authentication.md#static-credentials) (остальные методы не поддерживаются). Пароль к внешней базе сохраняется в виде [секрета](../../../datamodel/secrets.md):
 
    ```yql
     CREATE SECRET ydb_datasource_user_password WITH (value = "<password>");
     ```
 
-1. Создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Параметр `LOCATION` содержит сетевой адрес экземпляра {{ ydb-short-name }}, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `local`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. Если шифрование включено, то в поле `<port>` параметра `LOCATION` необходимо указать порт gRPCs внешней {{ ydb-short-name }}, в противном случае - порт gRPC.
+1. Создать [внешний источник данных](../../../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Параметр `LOCATION` содержит сетевой адрес экземпляра {{ ydb-short-name }}, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `local`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. Если шифрование включено, то в поле `<port>` параметра `LOCATION` необходимо указать порт gRPCs внешней {{ ydb-short-name }}, в противном случае - порт gRPC.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ydb_datasource WITH (
@@ -24,7 +30,7 @@
     );
     ```
 
-1. {% include [!](_includes/connector_deployment.md) %}
+1. {% include [!](../_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к внешнему источнику данных.
 
 ## Синтаксис запросов {#query}
@@ -50,14 +56,14 @@ SELECT * FROM ydb_datasource.<table_name>
 
 При работе с внешними источниками данных {{ ydb-short-name }} существует ряд ограничений:
 
-1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+1. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
     |Описание|Пример|Ограничение|
     |---|---|---|
     |Фильтров вида `IS NULL`/`IS NOT NULL`|`WHERE column1 IS NULL` или `WHERE column1 IS NOT NULL`||
     |Логических условий `OR`, `NOT`, `AND` и круглых скобок для управление приоритетом вычислений. |`WHERE column1 IS NULL OR (column2 IS NOT NULL AND column3 > 10)`.||
-    |[Операторов сравнения](../../../yql/reference/syntax/expressions.md#comparison-operators) c другими колонками или константами. |`WHERE column1 > column2 OR column3 <= 10`.||
+    |[Операторов сравнения](../../../../yql/reference/syntax/expressions.md#comparison-operators) c другими колонками или константами. |`WHERE column1 > column2 OR column3 <= 10`.||
     |Оператора сопоставления строк с образцом `LIKE`.|`WHERE column1 LIKE '_abc%'`|В настоящее время поддерживается пушдаун только простых паттернов, основанных на префиксах (`'abc_'`, `'abc%'`), суффиксах (`'_abc'`, `'%abc'`) или поиске подстроки в строке (`'_abc_'`, `'%abc%'`, `'_abc%'`, `'%abc_'`). При необходимости пушдауна более сложных паттернов рекомендуется воспользуется `REGEXP`.|
     |Оператора сопоставления строк с образцом `REGEXP`.|`WHERE column1 REGEXP '.*abc.*'`||
 

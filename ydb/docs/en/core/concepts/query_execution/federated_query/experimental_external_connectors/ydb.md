@@ -1,16 +1,22 @@
 # Working with {{ ydb-short-name }} Databases
 
+{% note warning %}
+
+This data source is experimental and requires deploying the [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) connector service. The feature is subject to change and is not recommended for production use without explicit enablement in the cluster configuration.
+
+{% endnote %}
+
 {{ ydb-full-name }} can act as an external data source for another {{ ydb-full-name }} database. This section discusses the organization of collaboration between two independent {{ ydb-short-name }} databases in federated query processing mode.
 
 To connect to an external {{ ydb-short-name }} database from another {{ ydb-short-name }} database acting as the federated query engine, the following steps need to be performed on the latter:
 
-1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method is [login and password](../../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../../datamodel/secrets.md):
+1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method is [login and password](../../../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../../../datamodel/secrets.md):
 
     ```yql
     CREATE SECRET ydb_datasource_user_password WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../../datamodel/external_data_source.md) describing the external {{ ydb-short-name }} database. The `LOCATION` parameter contains the network address of the {{ ydb-short-name }} instance to which the network connection is made. The `DATABASE_NAME` specifies the name of the database (e.g., `local`). For authentication to the external database, the `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used. Encryption of connections to the external database can be enabled using the `USE_TLS="TRUE"` parameter. If encryption is enabled, the `<port>` field in the `LOCATION` parameter should specify the gRPCs port of the external {{ ydb-short-name }}; otherwise, the gRPC port should be specified.
+2. Create an [external data source](../../../datamodel/external_data_source.md) describing the external {{ ydb-short-name }} database. The `LOCATION` parameter contains the network address of the {{ ydb-short-name }} instance to which the network connection is made. The `DATABASE_NAME` specifies the name of the database (e.g., `local`). For authentication to the external database, the `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used. Encryption of connections to the external database can be enabled using the `USE_TLS="TRUE"` parameter. If encryption is enabled, the `<port>` field in the `LOCATION` parameter should specify the gRPCs port of the external {{ ydb-short-name }}; otherwise, the gRPC port should be specified.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ydb_datasource WITH (
@@ -24,7 +30,7 @@ To connect to an external {{ ydb-short-name }} database from another {{ ydb-shor
     );
     ```
 
-3. {% include [!](_includes/connector_deployment.md) %}
+3. {% include [!](../_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the external data source.
 
 ## Query Syntax {#query}
@@ -50,14 +56,14 @@ SELECT * FROM ydb_datasource.<table_name>
 
 There are several limitations when working with external {{ ydb-short-name }} data sources:
 
-1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+1. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
     |Description|Example|Limitation|
     |---|---|---|
     |`NULL` checks|`WHERE column1 IS NULL` or `WHERE column1 IS NOT NULL`||
     |Logical conditions `OR`, `NOT`, `AND` and parentheses for controlling calculation priority. |`WHERE column1 IS NULL OR (column2 IS NOT NULL AND column3 > 10)`.||
-    |[Comparison operators](../../../yql/reference/syntax/expressions.md#comparison-operators) with other columns or constants. |`WHERE column1 > column2 OR column3 <= 10`.||
+    |[Comparison operators](../../../../yql/reference/syntax/expressions.md#comparison-operators) with other columns or constants. |`WHERE column1 > column2 OR column3 <= 10`.||
     |String pattern matching operator `LIKE`.|`WHERE column1 LIKE '_abc%'`|Currently only supports pushdown of simple patterns based on prefixes (`'abc_'`, `'abc%'`), suffixes (`'_abc'`, `'%abc'`) or substring search (`'_abc_'`, `'%abc%'`, `'_abc%'`, `'%abc_'`). For more complex pattern pushdown, it is recommended to use `REGEXP`.|
     |String pattern matching operator `REGEXP`.|`WHERE column1 REGEXP '.*abc.*'`||
 

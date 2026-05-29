@@ -1,16 +1,22 @@
 # Working with PostgreSQL Databases
 
+{% note warning %}
+
+This data source is experimental and requires deploying the [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) connector service. The feature is subject to change and is not recommended for production use without explicit enablement in the cluster configuration.
+
+{% endnote %}
+
 This section provides basic information on working with external [PostgreSQL](http://postgresql.org) databases.
 
 To work with an external PostgreSQL database, you need to follow these steps:
 
-1. Create a [secret](../../datamodel/secrets.md) containing the password for connecting to the database.
+1. Create a [secret](../../../datamodel/secrets.md) containing the password for connecting to the database.
 
     ```yql
     CREATE SECRET postgresql_datasource_user_password WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../../datamodel/external_data_source.md) that describes a specific database within the PostgreSQL cluster. By default, the [namespace](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../../../datamodel/external_data_source.md) that describes a specific database within the PostgreSQL cluster. By default, the [namespace](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public` is used for reading, but this value can be changed using the optional `SCHEMA` parameter. The network connection is made using the standard ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) over TCP transport (`PROTOCOL="NATIVE"`). You can enable encryption of connections to the external database using the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE postgresql_datasource WITH (
@@ -26,7 +32,7 @@ To work with an external PostgreSQL database, you need to follow these steps:
     );
     ```
 
-3. {% include [!](_includes/connector_deployment.md) %}
+3. {% include [!](../_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the database.
 
 ## Query Syntax {#query}
@@ -46,11 +52,11 @@ where:
 
 When working with PostgreSQL clusters, there are a number of limitations:
 
-1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+1. {% include [!](../_includes/datetime_limits.md) %}
+1. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
+   {% include [!](../_includes/predicate_pushdown_examples.md) %}
 
     Supported data types for filter pushdown:
 
@@ -67,7 +73,7 @@ When working with PostgreSQL clusters, there are a number of limitations:
 
 ## Supported Data Types
 
-In the PostgreSQL database, the optionality of column values (whether a column can contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for each column is implemented as the `attnotnull` attribute in the system catalog [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), i.e., at the metadata level of the table. Therefore, all basic PostgreSQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../../yql/reference/types/optional.md) types.
+In the PostgreSQL database, the optionality of column values (whether a column can contain `NULL` values) is not part of the data type system. The `NOT NULL` constraint for each column is implemented as the `attnotnull` attribute in the system catalog [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), i.e., at the metadata level of the table. Therefore, all basic PostgreSQL types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../../../yql/reference/types/optional.md) types.
 
 Below is a correspondence table between PostgreSQL and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

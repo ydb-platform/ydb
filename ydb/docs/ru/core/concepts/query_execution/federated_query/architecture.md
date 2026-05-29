@@ -29,12 +29,16 @@
 
 ## Перечень поддерживаемых внешних источников данных {#supported-datasources}
 
-| Источник | Поддержка |
-| -------- | --------- |
-| [ClickHouse](https://clickhouse.com/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Greenplum](https://greenplum.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [MySQL](https://www.mysql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [PostgreSQL](https://www.postgresql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [S3](https://aws.amazon.com/ru/s3/) | Встроенная в `ydbd` |
-| [{{ydb-short-name}}](https://ydb.tech/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| Источник | Поддержка | Статус |
+| -------- | --------- | ------ |
+| [S3](https://aws.amazon.com/ru/s3/) | Встроенная в `ydbd` | Стабильный |
+| {{ monitoring-full-name }} | Встроенная в `ydbd` | Стабильный |
+| YDB Topics | Встроенная в `ydbd` (нативная потоковая обработка) | Стабильный |
+| [ClickHouse](https://clickhouse.com/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Экспериментальный** |
+| [Greenplum](https://greenplum.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Экспериментальный** |
+| [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Экспериментальный** |
+| [MySQL](https://www.mysql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Экспериментальный** |
+| [PostgreSQL](https://www.postgresql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Экспериментальный** |
+| [{{ydb-short-name}}](https://ydb.tech/) (YDB-to-YDB) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Экспериментальный** |
+
+Экспериментальные источники данных требуют явного включения в конфигурации кластера {{ ydb-short-name }} и развёртывания коннектора [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go). Подробнее см. в разделе [экспериментальные источники данных](experimental_external_connectors/index.md).

@@ -1,16 +1,22 @@
 # Working with Microsoft SQL Server Databases
 
+{% note warning %}
+
+This data source is experimental and requires deploying the [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) connector service. The feature is subject to change and is not recommended for production use without explicit enablement in the cluster configuration.
+
+{% endnote %}
+
 This section provides basic information about working with external [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) databases.
 
 To work with an external Microsoft SQL Server database, you need to follow these steps:
 
-1. Create a [secret](../../datamodel/secrets.md) containing the password for connecting to the database.
+1. Create a [secret](../../../datamodel/secrets.md) containing the password for connecting to the database.
 
     ```yql
     CREATE SECRET ms_sql_server_datasource_user_password WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../../datamodel/external_data_source.md) that describes a specific Microsoft SQL Server database. The `LOCATION` parameter contains the network address of the Microsoft SQL Server instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `master`). The `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../../../datamodel/external_data_source.md) that describes a specific Microsoft SQL Server database. The `LOCATION` parameter contains the network address of the Microsoft SQL Server instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `master`). The `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ms_sql_server_datasource WITH (
@@ -24,7 +30,7 @@ To work with an external Microsoft SQL Server database, you need to follow these
     );
     ```
 
-3. {% include [!](_includes/connector_deployment.md) %}
+3. {% include [!](../_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the database.
 
 ## Query Syntax {#query}
@@ -44,11 +50,11 @@ where:
 
 When working with Microsoft SQL Server clusters, there are a number of limitations:
 
-1. {% include [!](_includes/supported_requests.md) %}
-2. {% include [!](_includes/datetime_limits.md) %}
-3. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+2. {% include [!](../_includes/datetime_limits.md) %}
+3. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
+   {% include [!](../_includes/predicate_pushdown_examples.md) %}
 
     |{{ ydb-short-name }} Data Type|
     |----|
@@ -62,7 +68,7 @@ When working with Microsoft SQL Server clusters, there are a number of limitatio
 
 ## Supported Data Types
 
-In the Microsoft SQL Server database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column in the [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/en-us/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16) system table, i.e., at the table metadata level. Therefore, all basic Microsoft SQL Server types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../../yql/reference/types/optional.md).
+In the Microsoft SQL Server database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column in the [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/en-us/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16) system table, i.e., at the table metadata level. Therefore, all basic Microsoft SQL Server types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../../../yql/reference/types/optional.md).
 
 Below is a correspondence table between Microsoft SQL Server types and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

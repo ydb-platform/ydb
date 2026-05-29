@@ -1,16 +1,22 @@
 # Работа с базами данных Microsoft SQL Server
 
+{% note warning %}
+
+Данный источник данных является экспериментальным и требует развёртывания сервиса-коннектора [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go). Функциональность может измениться и не рекомендуется к использованию в производственной среде без явного включения в конфигурации кластера.
+
+{% endnote %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16).
 
 Для работы с внешней базой данных Microsoft SQL Server необходимо выполнить следующие шаги:
 
-1. Создать [секрет](../../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
+1. Создать [секрет](../../../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
 
     ```yql
     CREATE SECRET ms_sql_server_datasource_user_password WITH (value = "<password>");
     ```
 
-1. Создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий определённую базу данных Microsoft SQL Server. Параметр `LOCATION` содержит сетевой адрес экземпляра Microsoft SQL Server, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `master`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
+1. Создать [внешний источник данных](../../../datamodel/external_data_source.md), описывающий определённую базу данных Microsoft SQL Server. Параметр `LOCATION` содержит сетевой адрес экземпляра Microsoft SQL Server, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `master`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ms_sql_server_datasource WITH (
@@ -24,7 +30,7 @@
     );
     ```
 
-1. {% include [!](_includes/connector_deployment.md) %}
+1. {% include [!](../_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
 ## Синтаксис запросов {#query}
@@ -44,11 +50,11 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 
 При работе с кластерами Microsoft SQL Server существует ряд ограничений:
 
-1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+1. {% include [!](../_includes/datetime_limits.md) %}
+1. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
+   {% include [!](../_includes/predicate_pushdown_examples.md) %}
 
     |Тип данных {{ ydb-short-name }}|
     |----|
@@ -62,7 +68,7 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 
 ## Поддерживаемые типы данных
 
-В базе данных Microsoft SQL Server признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для любой колонки любой таблицы хранится в виде значения столбца `IS_NULLABLE` системной таблицы [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/ru-ru/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16), то есть на уровне метаданных таблицы. Следовательно, все базовые типы Microsoft SQL Server по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../../yql/reference/types/optional.md) типы.
+В базе данных Microsoft SQL Server признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для любой колонки любой таблицы хранится в виде значения столбца `IS_NULLABLE` системной таблицы [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/ru-ru/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16), то есть на уровне метаданных таблицы. Следовательно, все базовые типы Microsoft SQL Server по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../../../yql/reference/types/optional.md) типы.
 
 Ниже приведена таблица соответствия типов Microsoft SQL Server и {{ ydb-short-name }}. Все остальные типы данных, за исключением перечисленных, не поддерживаются.
 

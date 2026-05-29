@@ -1,16 +1,22 @@
 # Работа с базами данных PostgreSQL
 
+{% note warning %}
+
+Данный источник данных является экспериментальным и требует развёртывания сервиса-коннектора [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go). Функциональность может измениться и не рекомендуется к использованию в производственной среде без явного включения в конфигурации кластера.
+
+{% endnote %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [PostgreSQL](http://postgresql.org).
 
 Для работы с внешней базой данных PostgreSQL необходимо выполнить следующие шаги:
 
-1. Создать [секрет](../../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
+1. Создать [секрет](../../../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
 
     ```yql
     CREATE SECRET postgresql_datasource_user_password WITH (value = "<password>");
     ```
 
-1. Создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
+1. Создать [внешний источник данных](../../../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE postgresql_datasource WITH (
@@ -26,7 +32,7 @@
     );
     ```
 
-1. {% include [!](_includes/connector_deployment.md) %}
+1. {% include [!](../_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
 ## Синтаксис запросов {#query}
@@ -46,11 +52,11 @@ SELECT * FROM postgresql_datasource.<table_name>
 
 При работе с кластерами PostgreSQL существует ряд ограничений:
 
-1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+1. {% include [!](../_includes/datetime_limits.md) %}
+1. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
+   {% include [!](../_includes/predicate_pushdown_examples.md) %}
 
     Поддерживаемые типы данных для пушдауна фильтров:
 
@@ -67,7 +73,7 @@ SELECT * FROM postgresql_datasource.<table_name>
 
 ## Поддерживаемые типы данных
 
-В базе данных PostgreSQL признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для каждой колонки реализуется в виде атрибута `attnotnull` в системном каталоге [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы PostgreSQL по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../../yql/reference/types/optional.md) типы.
+В базе данных PostgreSQL признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для каждой колонки реализуется в виде атрибута `attnotnull` в системном каталоге [pg_attribute](https://www.postgresql.org/docs/current/catalog-pg-attribute.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы PostgreSQL по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../../../yql/reference/types/optional.md) типы.
 
 Ниже приведена таблица соответствия типов PostgreSQL и {{ ydb-short-name }}. Все остальные типы данных, за исключением перечисленных, не поддерживаются.
 

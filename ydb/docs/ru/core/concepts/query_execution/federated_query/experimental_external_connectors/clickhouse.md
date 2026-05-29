@@ -1,16 +1,22 @@
 # Работа с базами данных ClickHouse
 
+{% note warning %}
+
+Данный источник данных является экспериментальным и требует развёртывания сервиса-коннектора [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go). Функциональность может измениться и не рекомендуется к использованию в производственной среде без явного включения в конфигурации кластера.
+
+{% endnote %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [ClickHouse](https://clickhouse.com).
 
 Для работы с внешней базой данных ClickHouse необходимо выполнить следующие шаги:
 
-1. Создать [секрет](../../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
+1. Создать [секрет](../../../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
 
     ```yql
     CREATE SECRET clickhouse_datasource_user_password WITH (value = "<password>");
     ```
 
-1. Создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse. Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
+1. Создать [внешний источник данных](../../../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse. Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
@@ -25,7 +31,7 @@
     );
     ```
 
-1. {% include [!](_includes/connector_deployment.md) %}
+1. {% include [!](../_includes/connector_deployment.md) %}
 2. [Выполнить запрос](#query) к базе данных.
 
 ## Синтаксис запросов {#query}
@@ -45,11 +51,11 @@ SELECT * FROM clickhouse_datasource.<table_name>
 
 При работе с кластерами ClickHouse существует ряд ограничений:
 
-1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+1. {% include [!](../_includes/datetime_limits.md) %}
+1. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
+   {% include [!](../_includes/predicate_pushdown_examples.md) %}
 
     Поддерживаемые типы данных для пушдауна фильтров:
 
@@ -70,7 +76,7 @@ SELECT * FROM clickhouse_datasource.<table_name>
 
 ## Поддерживаемые типы данных
 
-По умолчанию в ClickHouse колонки физически не могут содержать значение `NULL`, однако пользователь имеет возможность создать таблицу с колонками опциональных, или [nullable](https://clickhouse.com/docs/ru/sql-reference/data-types/nullable) типов. Типы колонок, отображаемые {{ ydb-short-name }} при извлечении данных из внешней базы данных ClickHouse, будут зависеть от того, используются ли в таблице ClickHouse примитивные или опциональные типы. При этом в связи с рассмотренными выше ограничениями типов {{ ydb-short-name }}, использующихся для хранения дат и времени, все аналогичные типы ClickHouse отображаются в {{ ydb-short-name }} как [опциональные](../../../yql/reference/types/optional.md).
+По умолчанию в ClickHouse колонки физически не могут содержать значение `NULL`, однако пользователь имеет возможность создать таблицу с колонками опциональных, или [nullable](https://clickhouse.com/docs/ru/sql-reference/data-types/nullable) типов. Типы колонок, отображаемые {{ ydb-short-name }} при извлечении данных из внешней базы данных ClickHouse, будут зависеть от того, используются ли в таблице ClickHouse примитивные или опциональные типы. При этом в связи с рассмотренными выше ограничениями типов {{ ydb-short-name }}, использующихся для хранения дат и времени, все аналогичные типы ClickHouse отображаются в {{ ydb-short-name }} как [опциональные](../../../../yql/reference/types/optional.md).
 
 Ниже приведены таблицы соответствия типов ClickHouse и {{ ydb-short-name }}. Все остальные типы данных, за исключением перечисленных, не поддерживаются.
 

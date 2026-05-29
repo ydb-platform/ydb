@@ -1,18 +1,24 @@
 # Working with ClickHouse Databases
 
+{% note warning %}
+
+This data source is experimental and requires deploying the [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) connector service. The feature is subject to change and is not recommended for production use without explicit enablement in the cluster configuration.
+
+{% endnote %}
+
 <!-- markdownlint-disable blanks-around-lists -->
 
 This section describes the basic information about working with the external ClickHouse database [ClickHouse](https://clickhouse.com).
 
 To work with the external ClickHouse database, the following steps must be completed:
 
-1. Create a [secret](../../datamodel/secrets.md) containing the password to connect to the database.
+1. Create a [secret](../../../datamodel/secrets.md) containing the password to connect to the database.
 
     ```yql
     CREATE SECRET clickhouse_datasource_user_password WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../../datamodel/external_data_source.md) describing the target database inside the ClickHouse cluster. To connect to ClickHouse, you can use either the [native TCP protocol](https://clickhouse.com/docs/en/interfaces/tcp) (`PROTOCOL="NATIVE"`) or the [HTTP protocol](https://clickhouse.com/docs/en/interfaces/http) (`PROTOCOL="HTTP"`). To enable encryption for connections to the external database, use the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../../../datamodel/external_data_source.md) describing the target database inside the ClickHouse cluster. To connect to ClickHouse, you can use either the [native TCP protocol](https://clickhouse.com/docs/en/interfaces/tcp) (`PROTOCOL="NATIVE"`) or the [HTTP protocol](https://clickhouse.com/docs/en/interfaces/http) (`PROTOCOL="HTTP"`). To enable encryption for connections to the external database, use the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE clickhouse_datasource WITH (
@@ -27,7 +33,7 @@ To work with the external ClickHouse database, the following steps must be compl
     );
     ```
 
-3. {% include [!](_includes/connector_deployment.md) %}
+3. {% include [!](../_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the database.
 
 ## Query Syntax {#query}
@@ -47,11 +53,11 @@ Where:
 
 There are several limitations when working with ClickHouse clusters:
 
-1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+1. {% include [!](../_includes/supported_requests.md) %}
+1. {% include [!](../_includes/datetime_limits.md) %}
+1. {% include [!](../_includes/predicate_pushdown_preamble.md) %}
 
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
+   {% include [!](../_includes/predicate_pushdown_examples.md) %}
 
     Supported data types for filter pushdown:
 
@@ -72,7 +78,7 @@ There are several limitations when working with ClickHouse clusters:
 
 ## Supported Data Types
 
-By default, ClickHouse columns cannot physically contain `NULL` values. However, users can create tables with columns of optional or [nullable](https://clickhouse.com/docs/en/sql-reference/data-types/nullable) types. The column types displayed in {{ ydb-short-name }} when extracting data from the external ClickHouse database will depend on whether primitive or optional types are used in the ClickHouse table. Due to the previously discussed limitations of {{ ydb-short-name }} types used to store dates and times, all similar ClickHouse types are displayed in {{ ydb-short-name }} as [optional](../../../yql/reference/types/optional.md).
+By default, ClickHouse columns cannot physically contain `NULL` values. However, users can create tables with columns of optional or [nullable](https://clickhouse.com/docs/en/sql-reference/data-types/nullable) types. The column types displayed in {{ ydb-short-name }} when extracting data from the external ClickHouse database will depend on whether primitive or optional types are used in the ClickHouse table. Due to the previously discussed limitations of {{ ydb-short-name }} types used to store dates and times, all similar ClickHouse types are displayed in {{ ydb-short-name }} as [optional](../../../../yql/reference/types/optional.md).
 
 Below are the mapping tables for ClickHouse and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

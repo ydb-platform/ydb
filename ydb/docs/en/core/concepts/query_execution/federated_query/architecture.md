@@ -28,12 +28,16 @@ Users can deploy [one of the ready-made connectors](../../../devops/deployment-o
 
 ## List of Supported External Data Sources {#supported-datasources}
 
-| Source | Support |
-|--------|---------|
-| [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [MySQL](https://www.mysql.com/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [S3](https://aws.amazon.com/s3/) | Built into `ydbd` |
-| [{{ydb-short-name}}](https://ydb.tech/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+| Source | Support | Status |
+|--------|---------|--------|
+| [S3](https://aws.amazon.com/s3/) | Built into `ydbd` | Stable |
+| {{ monitoring-full-name }} | Built into `ydbd` | Stable |
+| YDB Topics | Built into `ydbd` (native streaming) | Stable |
+| [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Experimental** |
+| [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Experimental** |
+| [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Experimental** |
+| [MySQL](https://www.mysql.com/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Experimental** |
+| [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Experimental** |
+| [{{ydb-short-name}}](https://ydb.tech/) (YDB-to-YDB) | Via connector [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) | **Experimental** |
+
+Experimental data sources require explicit enablement in the {{ ydb-short-name }} cluster configuration and deployment of the [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) connector service. See [experimental data sources](experimental_external_connectors/index.md) for details.

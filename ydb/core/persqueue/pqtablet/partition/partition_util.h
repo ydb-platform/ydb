@@ -88,7 +88,7 @@ public:
         Sum_ -= Keys_.front().second;
         RecsCount_ -= Keys_.front().first.GetCount();
         InternalPartsCount_ -= Keys_.front().first.GetInternalPartsCount();
-        if (OffsetDelta_ > 0 && Keys_.front().first.HasOffsetDelta()) {
+        if (Keys_.front().first.HasOffsetDelta()) {
             OffsetDelta_ -= *Keys_.front().first.GetOffsetDelta();
         }
         auto res = Keys_.front();
@@ -101,7 +101,7 @@ public:
         Sum_ -= Keys_.back().second;
         RecsCount_ -= Keys_.back().first.GetCount();
         InternalPartsCount_ -= Keys_.back().first.GetInternalPartsCount();
-        if (OffsetDelta_ > 0 && Keys_.back().first.HasOffsetDelta()) {
+        if (Keys_.back().first.HasOffsetDelta()) {
             OffsetDelta_ -= *Keys_.back().first.GetOffsetDelta();
         }
         auto res = Keys_.back();

@@ -210,19 +210,19 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
 
     struct TReadyBatch {
     public:
-        TReadyBatch(const TPartitionKey& partitionKey, TMaybe<TInstant> watermark, ui32 dataCapacity)
+        TReadyBatch(const TPartitionKey& partitionKey, ui64 nextOffset, TMaybe<TInstant> watermark, const TRope& data)
             : PartitionKey(partitionKey)
+            , NextOffset(nextOffset)
             , Watermark(watermark)
+            , Data(data)
         {
-            Data.reserve(dataCapacity);
         }
 
     public:
         TPartitionKey PartitionKey;
-        TMaybe<TInstant> Watermark;
-        TVector<TRope> Data;
-        i64 UsedSpace = 0;
         ui64 NextOffset = 0;
+        TMaybe<TInstant> Watermark;
+        TRope Data;
     };
 
     enum class EState {
@@ -830,61 +830,47 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         Metrics.InFlyAsyncInputData->Dec();
         InFlyAsyncInputData = false;
     }
+
     buffer.clear();
     watermark = Nothing();
+    const auto now = TInstant::Now();
+    i64 usedSpace = 0;
+
+    for (; freeSpace > usedSpace && !ReadyBuffer.empty() && watermark.Empty(); ReadyBuffer.pop()) {
+        auto& readyBatch = ReadyBuffer.front();
+        usedSpace += readyBatch.Data.size();
+        AddMessageBatch(std::move(readyBatch.Data), buffer);
+        if (readyBatch.Watermark && WatermarkTracker) {
+            watermark = WatermarkTracker->NotifyNewPartitionTime(readyBatch.PartitionKey, *readyBatch.Watermark, now);
+        }
+        Partitions[readyBatch.PartitionKey].Offset = readyBatch.NextOffset;
+    }
+
+    ReadyBufferSizeBytes -= usedSpace;
 
     if (WatermarkTracker) {
-        const auto now = TInstant::Now();
-        const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
-
-        if (idleWatermark) {
+        if (const auto idleWatermark = WatermarkTracker->HandleIdleness(now)) {
             SRC_LOG_D("SessionId: " << GetSessionId() << " Idleness watermark " << idleWatermark << " was produced");
-            if (ReadyBuffer.empty()) {
-                watermark = *idleWatermark;
-            } else {
-                Y_ENSURE(ReadyBuffer.back().Watermark < *idleWatermark);
-                ReadyBuffer.back().Watermark = *idleWatermark;
-            }
+            watermark = *idleWatermark;
         }
         MaybeSchedulePartitionIdlenessCheck(now);
     }
 
-    if (freeSpace == 0 || ReadyBuffer.empty()) {
-        return 0;
-    }
+    SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space " << (freeSpace - usedSpace) << ", result size " << usedSpace);
 
-    i64 usedSpace = 0;
-    do {
-        auto readyBatch = std::move(ReadyBuffer.front());
-        ReadyBuffer.pop();
-
-        for (auto& messageBatch : readyBatch.Data) {
-            AddMessageBatch(std::move(messageBatch), buffer);
-        }
-
-        watermark = readyBatch.Watermark;
-        usedSpace += readyBatch.UsedSpace;
-        freeSpace -= readyBatch.UsedSpace;
-        Partitions[readyBatch.PartitionKey].Offset = readyBatch.NextOffset;
-        SRC_LOG_T("NextOffset " << readyBatch.NextOffset);
-    } while (freeSpace > 0 && !ReadyBuffer.empty() && watermark.Empty());
-
-    ReadyBufferSizeBytes -= usedSpace;
-    SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space " << freeSpace << ", result size " << usedSpace);
-
-    if (!ReadyBuffer.empty()) {
-        NotifyCA();
-    }
-    for (auto& clusterState : Clusters) {
-        auto child = clusterState.Child;
-        if (child == nullptr) {
-            continue;
-        }
-        for (auto& [rowDispatcherActorId, sessionInfo] : child->Sessions) {
-            // all actors are on same mailbox, safe to call
-            child->TrySendGetNextBatch(sessionInfo);
+    if (freeSpace > 0) {
+        for (auto& clusterState : Clusters) {
+            auto child = clusterState.Child;
+            if (child == nullptr) {
+                continue;
+            }
+            for (auto& [rowDispatcherActorId, sessionInfo] : child->Sessions) {
+                // all actors are on same mailbox, safe to call
+                child->TrySendGetNextBatch(sessionInfo);
+            }
         }
     }
+
     return usedSpace;
 }
 
@@ -1208,57 +1194,24 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     }
 
     TPartitionKey partitionKey { Cluster, partitionId };
-
-    if (Parent->ReadyBuffer.empty() || Parent->ReadyBuffer.back().PartitionKey != partitionKey) {
-        Parent->ReadyBuffer.emplace(partitionKey, Nothing(), messages.size());
-    }
-
     auto& nextOffset = NextOffsetFromRD[partitionId];
 
     for (const auto& message : messages) {
-        if (Parent->ReadyBuffer.back().Watermark.Defined()) {
-            Parent->ReadyBuffer.emplace(partitionKey, Nothing(), messages.size());
-        }
-        TReadyBatch& activeBatch = Parent->ReadyBuffer.back();
-
         const auto& offsets = message.GetOffsets();
         if (offsets.empty()) {
             Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << LogPrefix << "Got unexpected empty batch from row dispatcher")});
             return;
         }
-
-        activeBatch.Data.emplace_back(ev->Get()->GetPayload(message.GetPayloadId()));
-        auto size = activeBatch.Data.back().GetSize();
-        activeBatch.UsedSpace += size;
-        Parent->ReadyBufferSizeBytes += size;
-
         nextOffset = *offsets.rbegin() + 1;
-        activeBatch.NextOffset = nextOffset;
-        SRC_LOG_T("TEvMessageBatch NextOffset " << activeBatch.NextOffset);
 
-        // Watermark processing
         const auto& watermarksUs = message.GetWatermarksUs();
-        if (watermarksUs.empty() || !Parent->WatermarkTracker) {
-            continue;
-        }
-        TMaybe<TInstant> newWatermark;
-        for (auto watermarkUs : watermarksUs) {
-            const auto watermark = TInstant::MicroSeconds(watermarkUs);
-            const auto maybeNewWatermark = Parent->WatermarkTracker->NotifyNewPartitionTime(
-                partitionKey,
-                watermark,
-                TInstant::Now()
-            );
-            if (!maybeNewWatermark) {
-                continue;
-            }
-            newWatermark = *maybeNewWatermark;
-        }
 
-        if (newWatermark) {
-            SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << newWatermark << " was generated");
-            activeBatch.Watermark = newWatermark;
-        }
+        auto& activeBatch = Parent->ReadyBuffer.emplace(
+                partitionKey,
+                nextOffset,
+                watermarksUs.empty() ? Nothing() : TMaybe<TInstant>(TInstant::MicroSeconds(*std::max_element(watermarksUs.begin(), watermarksUs.end()))),
+                ev->Get()->GetPayload(message.GetPayloadId()));
+        Parent->ReadyBufferSizeBytes += activeBatch.Data.size();
     }
 
     Parent->NotifyCA();

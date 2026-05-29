@@ -56,7 +56,7 @@ public:
 
     std::vector<const TTabletChannelInfo::THistoryEntry*> GetHistoryToCut(ui32 channel) const {
         std::vector<const TTabletChannelInfo::THistoryEntry*> result;
-        if (channel > ChannelStats.size()) {
+        if (channel >= ChannelStats.size()) {
             return result;
         }
         if (!ChannelStats[channel].Certain) {
@@ -188,7 +188,7 @@ protected:
 
     bool AllowGarbageCollection;
 
-    TVector<ui32> ChannelsToCutHistory;
+    THashSet<ui32> ChannelsToCutHistory;
 
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
     static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);

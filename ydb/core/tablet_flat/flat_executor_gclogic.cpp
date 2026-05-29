@@ -111,7 +111,7 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
 
             if (chIt.second.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::None && chIt.second.GcWaitFor == 0) {
-                ChannelsToCutHistory.push_back(chIt.first);
+                ChannelsToCutHistory.insert(chIt.first);
             }
         }
     }
@@ -154,6 +154,7 @@ TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGar
                 record.SetGroupID(historyEntry->GroupID);
                 ctx.Send(launcher, ev.Release());
             }
+            channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::Cut;
         }
     } else {
         channel.OnCollectGarbageFailure();

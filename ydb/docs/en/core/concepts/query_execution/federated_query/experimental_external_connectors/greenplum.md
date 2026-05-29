@@ -2,7 +2,7 @@
 
 {% note warning %}
 
-This data source is experimental and requires deploying the [fq-connector-go](../../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) connector service. The feature is subject to change and is not recommended for production use without explicit enablement in the cluster configuration.
+This data source is experimental and requires deploying the [fq-connector-go](../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) connector service. The feature is subject to change and is not recommended for production use without explicit enablement in the cluster configuration.
 
 {% endnote %}
 

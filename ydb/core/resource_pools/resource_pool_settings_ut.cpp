@@ -1,3 +1,4 @@
+// CI validation touch for #41894 (OOM error_type pipeline).
 #include "resource_pool_settings.h"
 
 #include <library/cpp/testing/unittest/registar.h>

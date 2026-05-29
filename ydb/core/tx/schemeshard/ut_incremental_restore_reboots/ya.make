@@ -18,6 +18,7 @@ PEERDIR(
 
 SRCS(
     ut_incremental_restore_reboots.cpp
+    ut_init_recovery_dropped_invariant.cpp
 )
 
 YQL_LAST_ABI_VERSION()

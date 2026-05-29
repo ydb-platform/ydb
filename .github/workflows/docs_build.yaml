@@ -4,6 +4,12 @@ on:
   pull_request_target:
     paths: 
     - 'ydb/docs/**'
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Pull Request number to build documentation'
+        required: true
+        type: string  
 
 jobs:
   add-label:
@@ -17,26 +23,26 @@ jobs:
         with:
           script: |
             github.rest.issues.addLabels({
-              issue_number: context.issue.number,
+              issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: ['documentation']
             })
             
   build-docs:
-    needs: add-label
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.state == 'open'
     concurrency:
-      group: docs-build-${{ github.event.pull_request.number }}
+      group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pull_number || github.event.pull_request.head.sha }}
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
-          revision: "pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
+          revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
           src-root: "./ydb/docs"
           cli-version: stable

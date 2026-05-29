@@ -158,21 +158,17 @@ void CheckMerge(const TCollectResult& result, std::vector<TString> expectedToken
     CheckMergeFull(result, expectedTokenList, expectedMode, "CheckMerge");
 }
 
-void CheckMergeSymmetric(const TString& a, const TString& b, std::vector<TString> expected) {
-    CheckMerge(MergeAnd(MakeTokens({a}), MakeTokens({b})), expected, EMode::And);
-    CheckMerge(MergeAnd(MakeTokens({b}), MakeTokens({a})), expected, EMode::And);
-    CheckMerge(MergeOr(MakeTokens({a}), MakeTokens({b})), expected, EMode::Or);
-    CheckMerge(MergeOr(MakeTokens({b}), MakeTokens({a})), expected, EMode::Or);
+void CheckPathAndOrMerge(const TString& a, const TString& b,
+    const std::vector<TString>& andExpected, const std::vector<TString>& orExpected)
+{
+    CheckMerge(MergeAnd(MakeTokens({a}), MakeTokens({b})), andExpected, EMode::And);
+    CheckMerge(MergeAnd(MakeTokens({b}), MakeTokens({a})), andExpected, EMode::And);
+    CheckMerge(MergeOr(MakeTokens({a}), MakeTokens({b})), orExpected, EMode::Or);
+    CheckMerge(MergeOr(MakeTokens({b}), MakeTokens({a})), orExpected, EMode::Or);
 }
 
-void CheckPathAndOrMerge(
-    const TString& pathOnly, const TString& pathWithLiteral,
-    std::vector<TString> expectedAnd, std::vector<TString> expectedOr)
-{
-    CheckMerge(MergeAnd(MakeTokens({pathOnly}), MakeTokens({pathWithLiteral})), expectedAnd, EMode::And);
-    CheckMerge(MergeAnd(MakeTokens({pathWithLiteral}), MakeTokens({pathOnly})), expectedAnd, EMode::And);
-    CheckMerge(MergeOr(MakeTokens({pathOnly}), MakeTokens({pathWithLiteral})), expectedOr, EMode::Or);
-    CheckMerge(MergeOr(MakeTokens({pathWithLiteral}), MakeTokens({pathOnly})), expectedOr, EMode::Or);
+void CheckMergeSymmetric(const TString& a, const TString& b, const std::vector<TString>& expected) {
+    CheckPathAndOrMerge(a, b, expected, expected);
 }
 
 }  // namespace

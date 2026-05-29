@@ -23,8 +23,18 @@ DEFAULT_PREFETCH_RETRY_DELAY_SEC = 5.0
 _FETCH_FAILED = object()
 
 _ERROR_TYPE_BLACKLIST = frozenset({"REGULAR"})
-_STORAGE_TAG_ORDER = ("TIMEOUT", "XFAILED", "NOT_LAUNCHED", "VERIFY", "SANITIZER")
+_STORAGE_TAG_ORDER = (
+    "TIMEOUT",
+    "XFAILED",
+    "NOT_LAUNCHED",
+    "VERIFY",
+    "SANITIZER",
+    "POSSIBLE_OOM",
+)
 _KNOWN_STORAGE_TAGS = frozenset(_STORAGE_TAG_ORDER)
+
+# Test runner reports `Process exit_code = -9` when killed by SIGKILL (typical OOM-killer).
+_POSSIBLE_OOM_RE = re.compile(r"\bProcess exit_code\s*=\s*-9\b")
 
 
 def _normalize_text(value):
@@ -70,6 +80,10 @@ def is_not_launched_issue(source_error_type, status_name=None):
     return _normalize_text(status_name).upper() in ("SKIP", "SKIPPED", "MUTE")
 
 
+def is_possible_oom_issue(source_error_type):
+    return source_has_tag(source_error_type, "POSSIBLE_OOM")
+
+
 def _is_verify_issue(text):
     text = _normalize_text(text)
     return bool(text and re.search(r'\bVERIFY\s+failed\b', text, re.IGNORECASE))
@@ -109,6 +123,14 @@ def is_sanitizer_classification(status_description=None, stderr_text=None, log_t
     )
 
 
+def is_possible_oom_classification(status_description=None, stderr_text=None, log_text=None):
+    """True if snippet or logs show SIGKILL exit (likely kernel OOM-killer)."""
+    for text in (status_description, stderr_text, log_text):
+        if text is not None and _POSSIBLE_OOM_RE.search(_normalize_text(text)):
+            return True
+    return False
+
+
 def build_error_type_csv_for_storage(
     status,
     status_description,
@@ -120,7 +142,7 @@ def build_error_type_csv_for_storage(
     """Return stable comma-separated error_type tags for DB storage.
 
     Seeds from upstream ``source_error_type``, then adds text-derived tags
-    (VERIFY, SANITIZER) for failure-like statuses. Blacklisted tags stripped.
+    (VERIFY, SANITIZER, POSSIBLE_OOM) for failure-like statuses. Blacklisted tags stripped.
     """
     tags = set()
     for part in re.split(r"\s*,\s*", _normalize_text(source_error_type).strip()):
@@ -133,6 +155,8 @@ def build_error_type_csv_for_storage(
             tags.add("VERIFY")
         if is_sanitizer_classification(status_description, stderr_text, log_text):
             tags.add("SANITIZER")
+        if is_possible_oom_classification(status_description, stderr_text, log_text):
+            tags.add("POSSIBLE_OOM")
         if status_name_for_not_launched is not None and is_not_launched_issue(
             source_error_type, status_name_for_not_launched
         ):

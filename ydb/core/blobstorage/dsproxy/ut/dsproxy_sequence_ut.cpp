@@ -604,8 +604,8 @@ struct TDyingDecorator : public TTestDecorator {
 };
 
 struct TGenerationRaceProbeParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGet> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_GET,
         .Name = "DSProxy.GenerationRaceProbe",
         .Activity = NKikimrServices::TActivity::BS_PROXY_GET_ACTOR,
@@ -613,40 +613,42 @@ struct TGenerationRaceProbeParameters {
     ui32 ExpectedResults = 0;
 };
 
-class TGenerationRaceProbeActor : public TBlobStorageGroupRequestActor {
+class TGenerationRaceProbeActor : public TBlobStorageGroupRequestActor<TGenerationRaceProbeActor> {
+    using TBase = TBlobStorageGroupRequestActor<TGenerationRaceProbeActor>;
+
     const TActorId EdgeActor;
     const ui32 ExpectedResults;
     ui32 Results = 0;
 
 public:
     explicit TGenerationRaceProbeActor(TGenerationRaceProbeParameters& params)
-        : TBlobStorageGroupRequestActor(params)
+        : TBase(params)
         , EdgeActor(params.Common.Source)
         , ExpectedResults(params.ExpectedResults)
     {
         LogCtx.SuppressLog = true;
     }
 
-    void Bootstrap() override {
+    void Bootstrap() {
         Become(&TGenerationRaceProbeActor::StateWork);
     }
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         Replied = true;
         ReplyStatus = status;
     }
 
-    std::unique_ptr<IEventBase> RestartQuery(ui32) override {
+    std::unique_ptr<IEventBase> RestartQuery(ui32) {
         return std::make_unique<TEvBlobStorage::TEvGet>(
             TLogoBlobID(1, 1, 1, 0, 1, 0), 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
     }
 
-    ERequestType GetRequestType() const override {
+    static constexpr ERequestType RequestType() {
         return ERequestType::Get;
     }
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
-        return Mon->ActiveGet;
+    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
+        return mon->ActiveGet;
     }
 
     bool Replied = false;

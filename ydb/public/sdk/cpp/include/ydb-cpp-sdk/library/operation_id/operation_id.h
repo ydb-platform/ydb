@@ -30,6 +30,7 @@ public:
         RESTORE = 12,
         COMPACTION = 13,
         FULL_BACKUP = 14,
+        ANALYZE = 15,
     };
 
     struct TData {

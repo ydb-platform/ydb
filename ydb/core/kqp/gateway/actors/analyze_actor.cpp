@@ -198,6 +198,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
     auto table = record.AddTables();
 
     PathId.ToProto(table->MutablePathId());
+    table->SetPath(TablePath);
 
     THashMap<TString, ui32> tagByColumnName;
     for (const auto& [_, tableInfo]: entry.Columns) {

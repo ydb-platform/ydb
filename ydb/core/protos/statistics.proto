@@ -81,6 +81,7 @@ enum EColumnStatisticType {
 message TTable {
     optional NKikimrProto.TPathID PathId = 1; // table path
     repeated uint32 ColumnTags = 2; // list of columns to gather statistics from. Empty means asking for every column.
+    optional string Path = 3; // full table path string, used for operation metadata
 }
 
 // KQP -> SA

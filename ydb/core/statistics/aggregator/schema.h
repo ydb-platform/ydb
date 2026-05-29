@@ -54,6 +54,9 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct CreatedAt      : Column<3, NScheme::NTypeIds::Uint64> {};
         struct DatabaseName   : Column<4, NScheme::NTypeIds::String> {};
         struct ReplyToActorId : Column<5, NScheme::NTypeIds::ActorId>{};
+        struct EndTime        : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct State          : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct UserSID        : Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
@@ -61,7 +64,10 @@ struct TAggregatorSchema : NIceDb::Schema {
             Types,
             CreatedAt,
             DatabaseName,
-            ReplyToActorId
+            ReplyToActorId,
+            EndTime,
+            State,
+            UserSID
         >;
     };
 
@@ -71,6 +77,7 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct LocalPathId    : Column<3, NScheme::NTypeIds::Uint64> {};
         struct ColumnTags     : Column<4, NScheme::NTypeIds::String> {};
         struct Status         : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Path           : Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OperationId, OwnerId, LocalPathId>;
         using TColumns = TableColumns<
@@ -78,7 +85,8 @@ struct TAggregatorSchema : NIceDb::Schema {
             OwnerId,
             LocalPathId,
             ColumnTags,
-            Status
+            Status,
+            Path
         >;
     };
 

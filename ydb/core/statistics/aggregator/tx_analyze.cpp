@@ -36,7 +36,13 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         // update existing force traversal
         if (existingOperation) {
-            if (existingOperation->ReplyToActorId == Event->Sender) {
+            const bool isTerminal =
+                existingOperation->State == Ydb::Table::AnalyzeState::STATE_DONE ||
+                existingOperation->State == Ydb::Table::AnalyzeState::STATE_CANCELLED;
+            if (isTerminal) {
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Replace terminal force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
+                Self->DeleteForceTraversalOperation(operationId, db);
+            } else if (existingOperation->ReplyToActorId == Event->Sender) {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Reattach to existing force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
                 existingOperation->RequestingActorReattached = true;
                 return true;
@@ -71,16 +77,17 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 table.GetColumnTags().begin(),table.GetColumnTags().end());
             const TString columnTagsStr = JoinVectorIntoString(columnTags, ",");
             const auto status = TForceTraversalTable::EStatus::None;
+            const TString path = table.GetPath();
 
             SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table"
                 << ", OperationId: " << operationId.Quote()
                 << ", PathId: " << pathId
                 << ", ColumnTags: " << columnTagsStr);
 
-            // create new force traversal
             TForceTraversalTable operationTable {
                 .PathId = pathId,
                 .ColumnTags = std::move(columnTags),
+                .Path = path,
                 .Status = status
             };
             operation.Tables.emplace_back(operationTable);
@@ -90,7 +97,8 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 NIceDb::TUpdate<Schema::ForceTraversalTables::OwnerId>(pathId.OwnerId),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::LocalPathId>(pathId.LocalPathId),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::ColumnTags>(columnTagsStr),
-                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status)
+                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::Path>(path)
             );
         }
 

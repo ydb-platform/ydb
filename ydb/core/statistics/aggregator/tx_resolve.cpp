@@ -31,7 +31,9 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/true);
+                // Resolve failure -> mark the operation terminal CANCELLED (proto has no
+                // STATE_FAILED; errors are represented as CANCELLED with attached issues).
+                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_CANCELLED);
             }
             return true;
         }
@@ -60,7 +62,9 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         }
 
         if (Self->TraversalIsColumnTable && Self->TabletsForReqDistribution.empty()) {
-            Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/false);
+            // Natural completion of an empty table — pass nullopt so FinishTraversal marks only the
+            // current table done; the operation flips to STATE_DONE when all its tables are done.
+            Self->FinishTraversal(db, std::nullopt);
             StartColumnShardEventDistribution = false;
         }
 

@@ -603,6 +603,26 @@ private:
     TMetadata Metadata_;
 };
 
+class TAnalyzeOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TAnalyzeOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        EAnalyzeState State = EAnalyzeState::Unspecified;
+        float Progress = 0;
+        std::vector<std::string> Paths;
+        uint32_t TablesTotal = 0;
+        uint32_t TablesDone = 0;
+        uint32_t ShardsTotal = 0;
+        uint32_t ShardsDone = 0;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents changefeed description

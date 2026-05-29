@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -34,7 +35,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
             )
         )", "Root/Database/Table");
     if (ColumnStore) {
-        createTable += 
+        createTable +=
             R"(
                 PARTITION BY HASH(Key)
                 WITH (
@@ -52,7 +53,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     for (size_t i = 0; i < 1500; ++i) {
         auto key = TValueBuilder().Uint64(i).Build();
         auto value = TValueBuilder().OptionalString("Hello,world!").Build();
-        
+
         rows.AddListItem();
             rows.BeginStruct();
                 rows.AddMember("Key", key);
@@ -60,7 +61,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
             rows.EndStruct();
     }
     rows.EndList();
-    
+
     result = client.BulkUpsert("Root/Database/Table", rows.Build()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -72,7 +73,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     auto& runtime = *env.GetServer().GetRuntime();
     ui64 saTabletId;
     auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
-    
+
     auto countMin = ExtractCountMin(runtime, pathId, 2);
     TString value = "Hello,world!";
     auto stat = countMin->Probe(value.data(), value.size());
@@ -131,6 +132,116 @@ Y_UNIT_TEST(AnalyzeError) {
 
 } // suite
 
+Y_UNIT_TEST_SUITE(KqpAnalyzeOperations) {
+
+using namespace NStat;
+
+Y_UNIT_TEST(AnalyzeOperationsLifecycle) {
+    TTestEnv env(1, 1, true);
+    CreateDatabase(env, "Database");
+
+    // Use the same driver for both the session and operation client to ensure database name consistency.
+    // DiscoveryMode::Off avoids discovery against the dynamic tenant (which races test setup);
+    // requests go directly to the static node's gRPC port, which routes by the database header.
+    NYdb::TDriver opDriver(NYdb::TDriverConfig()
+        .SetEndpoint(env.GetEndpoint())
+        .SetDatabase("/Root/Database")
+        .SetDiscoveryMode(NYdb::EDiscoveryMode::Off));
+    NYdb::NOperation::TOperationClient operationClient(opDriver);
+
+    TTableClient tableClient(opDriver);
+    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+    // Empty list before any ANALYZE
+    {
+        auto result = operationClient.List<NYdb::NTable::TAnalyzeOperation>().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+            result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+    }
+
+    // Create and populate a table in the tenant database
+    {
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `Root/Database/AnalyzeTest` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `Root/Database/AnalyzeTest` (Key, Value)
+                VALUES (1, "a"), (2, "b"), (3, "c");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    // Run ANALYZE TABLE (blocking from caller's view)
+    {
+        auto result = session.ExecuteSchemeQuery(
+            "ANALYZE `Root/Database/AnalyzeTest`"
+        ).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    // After ANALYZE completes, the operation is retained as DONE
+    NYdb::TOperation::TOperationId opId;
+    {
+        auto listResult = operationClient.List<NYdb::NTable::TAnalyzeOperation>().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS,
+            listResult.GetIssues().ToString());
+        UNIT_ASSERT_GE(listResult.GetList().size(), 1);
+
+        const auto& op = listResult.GetList()[0];
+        opId = op.Id();
+        UNIT_ASSERT_C(op.Ready(), op.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(op.Status().GetStatus(), NYdb::EStatus::SUCCESS);
+
+        const auto& meta = op.Metadata();
+        UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::EAnalyzeState::Done);
+        UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100.0f, 0.1f);
+        UNIT_ASSERT_GE(meta.TablesTotal, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(meta.TablesDone, meta.TablesTotal);
+    }
+
+    // Get by ID matches
+    {
+        auto getResult = operationClient.Get<NYdb::NTable::TAnalyzeOperation>(opId).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+            getResult.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(getResult.Metadata().State, NYdb::NTable::EAnalyzeState::Done);
+        UNIT_ASSERT_DOUBLES_EQUAL(getResult.Metadata().Progress, 100.0f, 0.1f);
+    }
+
+    // Cancel of a terminal op is idempotent
+    {
+        auto cancelResult = operationClient.Cancel(opId).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(cancelResult.GetStatus(), NYdb::EStatus::SUCCESS,
+            cancelResult.GetIssues().ToString());
+    }
+
+    // Forget removes it from history
+    {
+        auto forgetResult = operationClient.Forget(opId).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(forgetResult.GetStatus(), NYdb::EStatus::SUCCESS,
+            forgetResult.GetIssues().ToString());
+    }
+
+    // Now Get returns NOT_FOUND
+    {
+        auto getAfterForget = operationClient.Get<NYdb::NTable::TAnalyzeOperation>(opId).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getAfterForget.Status().GetStatus(), NYdb::EStatus::NOT_FOUND,
+            getAfterForget.Status().GetIssues().ToString());
+    }
+
+    opDriver.Stop(true);
+}
+
+} // suite KqpAnalyzeOperations
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -140,6 +140,7 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/local_indexes/bloom
     ydb/core/protos
+    ydb/core/statistics
     ydb/core/scheme
     ydb/core/sys_view
     ydb/core/tx

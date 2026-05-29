@@ -436,6 +436,7 @@ struct TMapOperationParams {
     std::vector<TFmrTableRef> Output;
     TString SerializedMapJobState;
     EFmrJobType MapJobType;
+    bool ForceSingleTask = false;
 };
 
 struct TMapTaskParams {

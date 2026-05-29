@@ -252,8 +252,22 @@ ui32 TBatch::GetPackedSize() const {
 
 TCursor TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
     AFL_ENSURE(!Packed);
-    if (offset < GetOffset() || offset == GetOffset() && partNo < GetPartNo()) {
+    if (offset < GetOffset() || (offset == GetOffset() && partNo < GetPartNo())) {
         return TCursor{Max<ui32>(), 0, 0};
+    }
+
+    if (!HasOffsetDelta()) {
+        ui32 pos = 0;
+        if (offset == GetOffset()) {
+            pos = partNo - GetPartNo();
+        } else {
+            pos = offset - GetOffset();
+            for (ui32 i = 0; i < InternalPartsPos.size() && InternalPartsPos[i] < pos; ++i) {
+                ++pos;
+            }
+            pos += partNo;
+        }
+        return pos < Blobs.size() ? TCursor{pos, offset, partNo} : TCursor{Max<ui32>(), 0, 0};
     }
 
     ui64 curOffset = GetOffset();

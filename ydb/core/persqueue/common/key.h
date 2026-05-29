@@ -368,7 +368,7 @@ private:
     TKey(const TString& data)
     {
         Assign(data.data(), data.size());
-        const ui32 bodySize = HasSuffix() ? Size() - 1 : Size();
+        const ui32 bodySize = GetBodySize();
         AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
         AFL_ENSURE(*(PtrOffset() - 1) == '_');
         AFL_ENSURE(*(PtrCount() - 1) == '_');

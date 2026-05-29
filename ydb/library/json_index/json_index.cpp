@@ -88,6 +88,20 @@ bool IsPredicateType(EJsonPathItemType type) {
     }
 }
 
+TStringBuf GetPathPrefix(TStringBuf pathToken) {
+    if (const auto pos = pathToken.find('\0'); pos != TStringBuf::npos) {
+        return pathToken.SubStr(0, pos);
+    }
+    return pathToken;
+}
+
+bool IsPathPrefixAncestor(const TToken& ancestor, const TToken& descendant) {
+    const bool ancestorHasSuffix = ancestor.PathToken.find('\0') != TStringBuf::npos || !ancestor.ParamName.empty();
+    const TStringBuf ancestorPath = GetPathPrefix(ancestor.PathToken);
+    const TStringBuf descendantPath = GetPathPrefix(descendant.PathToken);
+    return !ancestorHasSuffix && !descendantPath.empty() && descendantPath.StartsWith(ancestorPath);
+}
+
 // Remove redundant tokens based on prefix (ancestor/descendant) relationships
 //
 // OR  -> keep roots (minimal tokens): if token A is a prefix of token B, B is redundant
@@ -96,12 +110,12 @@ bool IsPredicateType(EJsonPathItemType type) {
 // AND -> keep leaves (maximal tokens): if token A is a prefix of token B, A is redundant
 //        because requiring both A and B is satisfied by B alone (descendant implies ancestor)
 //
-// String prefix check is unambiguous because:
+// Path prefix comparison uses only the portion before the literal separator (\x00):
 //   1. AppendKey encodes key lengths as (actual_length + 1), so no key-length byte is ever \x00
 //   2. AppendJsonIndexLiteral always starts the literal suffix with \x00
-// Therefore \x00 can only appear at the start of a literal suffix, never inside the path portion
-// A token B whose content after position A.size() starts with \x00 has the SAME path as A but
-// carries a value constraint - still a valid ancestor/descendant relationship for pruning.
+// Therefore \x00 can only appear at the start of a literal suffix, never inside the path portion.
+// Literal suffix bytes must not participate in StartsWith, or tokens with the same path but
+// different values could be collapsed when their encoded literals share a byte prefix.
 void PruneRedundantTokens(TTokens& tokens, TCollectResult::ETokensMode mode) {
     if (tokens.size() <= 1 || mode == TCollectResult::ETokensMode::NotSet) {
         return;
@@ -113,7 +127,7 @@ void PruneRedundantTokens(TTokens& tokens, TCollectResult::ETokensMode mode) {
     if (mode == TCollectResult::ETokensMode::Or) {
         // OR: keep minimal tokens (roots). Token is redundant if a shorter prefix is already kept
         for (const auto& token : tokens) {
-            if (lastKept.has_value() && token.PathToken.StartsWith(lastKept->PathToken)) {
+            if (lastKept.has_value() && IsPathPrefixAncestor(*lastKept, token)) {
                 continue;
             }
 
@@ -125,7 +139,7 @@ void PruneRedundantTokens(TTokens& tokens, TCollectResult::ETokensMode mode) {
     } else {
         // AND: keep maximal tokens (leaves). Token is redundant if a longer token that starts with it is already kept
         for (const auto& token : std::ranges::reverse_view(tokens)) {
-            if (token.ParamName.empty() && lastKept.has_value() && lastKept->PathToken.StartsWith(token.PathToken)) {
+            if (lastKept.has_value() && IsPathPrefixAncestor(token, *lastKept)) {
                 continue;
             }
 

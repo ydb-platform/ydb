@@ -158,22 +158,22 @@ void CheckMerge(const TCollectResult& result, std::vector<TString> expectedToken
     CheckMergeFull(result, expectedTokenList, expectedMode, "CheckMerge");
 }
 
-// void CheckMergeSymmetric(const TString& a, const TString& b, std::vector<TString> expected) {
-//     CheckMerge(MergeAnd(MakeTokens({a}), MakeTokens({b})), expected, EMode::And);
-//     CheckMerge(MergeAnd(MakeTokens({b}), MakeTokens({a})), expected, EMode::And);
-//     CheckMerge(MergeOr(MakeTokens({a}), MakeTokens({b})), expected, EMode::Or);
-//     CheckMerge(MergeOr(MakeTokens({b}), MakeTokens({a})), expected, EMode::Or);
-// }
+void CheckMergeSymmetric(const TString& a, const TString& b, std::vector<TString> expected) {
+    CheckMerge(MergeAnd(MakeTokens({a}), MakeTokens({b})), expected, EMode::And);
+    CheckMerge(MergeAnd(MakeTokens({b}), MakeTokens({a})), expected, EMode::And);
+    CheckMerge(MergeOr(MakeTokens({a}), MakeTokens({b})), expected, EMode::Or);
+    CheckMerge(MergeOr(MakeTokens({b}), MakeTokens({a})), expected, EMode::Or);
+}
 
-// void CheckPathAndOrMerge(
-//     const TString& pathOnly, const TString& pathWithLiteral,
-//     std::vector<TString> expectedAnd, std::vector<TString> expectedOr)
-// {
-//     CheckMerge(MergeAnd(MakeTokens({pathOnly}), MakeTokens({pathWithLiteral})), expectedAnd, EMode::And);
-//     CheckMerge(MergeAnd(MakeTokens({pathWithLiteral}), MakeTokens({pathOnly})), expectedAnd, EMode::And);
-//     CheckMerge(MergeOr(MakeTokens({pathOnly}), MakeTokens({pathWithLiteral})), expectedOr, EMode::Or);
-//     CheckMerge(MergeOr(MakeTokens({pathWithLiteral}), MakeTokens({pathOnly})), expectedOr, EMode::Or);
-// }
+void CheckPathAndOrMerge(
+    const TString& pathOnly, const TString& pathWithLiteral,
+    std::vector<TString> expectedAnd, std::vector<TString> expectedOr)
+{
+    CheckMerge(MergeAnd(MakeTokens({pathOnly}), MakeTokens({pathWithLiteral})), expectedAnd, EMode::And);
+    CheckMerge(MergeAnd(MakeTokens({pathWithLiteral}), MakeTokens({pathOnly})), expectedAnd, EMode::And);
+    CheckMerge(MergeOr(MakeTokens({pathOnly}), MakeTokens({pathWithLiteral})), expectedOr, EMode::Or);
+    CheckMerge(MergeOr(MakeTokens({pathWithLiteral}), MakeTokens({pathOnly})), expectedOr, EMode::Or);
+}
 
 }  // namespace
 
@@ -2515,109 +2515,108 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             {"\2a\2b", "\2a\2c"}, EMode::Or);
     }
 
-    // TODO [ditimizhev@]: fix suffix matching
-    // Y_UNIT_TEST(MergeAndOr_ValueTokens) {
-    //     CheckMerge(
-    //         MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
-    //         {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::And);
-    //     CheckMerge(
-    //         MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
-    //         {"\2a\2b" + strSuffix("x")}, EMode::And);
+    Y_UNIT_TEST(MergeAndOr_ValueTokens) {
+        CheckMerge(
+            MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
+            {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::And);
+        CheckMerge(
+            MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
+            {"\2a\2b" + strSuffix("x")}, EMode::And);
 
-    //     CheckMerge(
-    //         MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
-    //         {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::Or);
-    //     CheckMerge(
-    //         MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
-    //         {"\2a\2b"}, EMode::Or);
-    // }
+        CheckMerge(
+            MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
+            {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::Or);
+        CheckMerge(
+            MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
+            {"\2a\2b"}, EMode::Or);
+    }
 
-    // // Literal suffixes at a path and at root ($); bool false is \0\0 (must not be confused with path bytes).
-    // Y_UNIT_TEST(MergeAndOr_LiteralValues) {
-    //     const TString ab = "\2a\2b";
-    //     const TString abStrX = ab + strSuffix("x");
-    //     const TString abStrXyz = ab + strSuffix("xyz");
-    //     const TString abStrEmpty = ab + strSuffix("");
-    //     const TString abNum5 = ab + numSuffix(5.0);
-    //     const TString abNum7 = ab + numSuffix(7.0);
-    //     const TString abTrue = ab + boolTrueSuffix;
-    //     const TString abFalse = ab + boolFalseSuffix;
-    //     const TString abNull = ab + nullSuffix;
+    // Literal suffixes at a path and at root ($); bool false is \0\0 (must not be confused with path bytes).
+    Y_UNIT_TEST(MergeAndOr_LiteralValues) {
+        const TString ab = "\2a\2b";
+        const TString abStrX = ab + strSuffix("x");
+        const TString abStrXyz = ab + strSuffix("xyz");
+        const TString abStrEmpty = ab + strSuffix("");
+        const TString abNum5 = ab + numSuffix(5.0);
+        const TString abNum7 = ab + numSuffix(7.0);
+        const TString abTrue = ab + boolTrueSuffix;
+        const TString abFalse = ab + boolFalseSuffix;
+        const TString abNull = ab + nullSuffix;
 
-    //     const TString rootStrX = strSuffix("x");
-    //     const TString rootStrA = strSuffix("a");
-    //     const TString rootStrAb = strSuffix("ab");
-    //     const TString rootStrEmpty = strSuffix("");
-    //     const TString rootNum0 = numSuffix(0.0);
-    //     const TString rootNum1 = numSuffix(1.0);
+        const TString rootStrX = strSuffix("x");
+        const TString rootStrA = strSuffix("a");
+        const TString rootStrAb = strSuffix("ab");
+        const TString rootStrEmpty = strSuffix("");
+        const TString rootNum0 = numSuffix(0.0);
+        const TString rootNum1 = numSuffix(1.0);
 
-    //     // Same path, same kind, different values -> both kept (no byte-prefix collapse).
-    //     CheckMergeSymmetric(abStrX, abStrXyz, {abStrX, abStrXyz});
-    //     CheckMergeSymmetric(abNum5, abNum7, {abNum5, abNum7});
-    //     CheckMergeSymmetric(rootStrA, rootStrAb, {rootStrA, rootStrAb});
-    //     CheckMergeSymmetric(rootNum0, rootNum1, {rootNum0, rootNum1});
+        // Same path, same kind, different values -> both kept (no byte-prefix collapse).
+        CheckMergeSymmetric(abStrX, abStrXyz, {abStrX, abStrXyz});
+        CheckMergeSymmetric(abNum5, abNum7, {abNum5, abNum7});
+        CheckMergeSymmetric(rootStrA, rootStrAb, {rootStrA, rootStrAb});
+        CheckMergeSymmetric(rootNum0, rootNum1, {rootNum0, rootNum1});
 
-    //     // Same path: path-only vs each literal kind.
-    //     CheckPathAndOrMerge(ab, abStrX, {abStrX}, {ab});
-    //     CheckPathAndOrMerge(ab, abNum5, {abNum5}, {ab});
-    //     CheckPathAndOrMerge(ab, abTrue, {abTrue}, {ab});
-    //     CheckPathAndOrMerge(ab, abFalse, {abFalse}, {ab});
-    //     CheckPathAndOrMerge(ab, abNull, {abNull}, {ab});
+        // Same path: path-only vs each literal kind.
+        CheckPathAndOrMerge(ab, abStrX, {abStrX}, {ab});
+        CheckPathAndOrMerge(ab, abNum5, {abNum5}, {ab});
+        CheckPathAndOrMerge(ab, abTrue, {abTrue}, {ab});
+        CheckPathAndOrMerge(ab, abFalse, {abFalse}, {ab});
+        CheckPathAndOrMerge(ab, abNull, {abNull}, {ab});
 
-    //     // Same path: different literal kinds (false suffix is \0\0).
-    //     CheckMergeSymmetric(abStrX, abFalse, {abStrX, abFalse});
-    //     CheckMergeSymmetric(abStrX, abTrue, {abStrX, abTrue});
-    //     CheckMergeSymmetric(abStrX, abNull, {abStrX, abNull});
-    //     CheckMergeSymmetric(abStrX, abNum5, {abStrX, abNum5});
-    //     CheckMergeSymmetric(abFalse, abTrue, {abFalse, abTrue});
-    //     CheckMergeSymmetric(abFalse, abNull, {abFalse, abNull});
-    //     CheckMergeSymmetric(abFalse, abNum5, {abFalse, abNum5});
-    //     CheckMergeSymmetric(abTrue, abNull, {abTrue, abNull});
-    //     CheckMergeSymmetric(abNum5, abTrue, {abNum5, abTrue});
-    //     CheckMergeSymmetric(abStrEmpty, abFalse, {abStrEmpty, abFalse});
+        // Same path: different literal kinds (false suffix is \0\0).
+        CheckMergeSymmetric(abStrX, abFalse, {abStrX, abFalse});
+        CheckMergeSymmetric(abStrX, abTrue, {abStrX, abTrue});
+        CheckMergeSymmetric(abStrX, abNull, {abStrX, abNull});
+        CheckMergeSymmetric(abStrX, abNum5, {abStrX, abNum5});
+        CheckMergeSymmetric(abFalse, abTrue, {abFalse, abTrue});
+        CheckMergeSymmetric(abFalse, abNull, {abFalse, abNull});
+        CheckMergeSymmetric(abFalse, abNum5, {abFalse, abNum5});
+        CheckMergeSymmetric(abTrue, abNull, {abTrue, abNull});
+        CheckMergeSymmetric(abNum5, abTrue, {abNum5, abTrue});
+        CheckMergeSymmetric(abStrEmpty, abFalse, {abStrEmpty, abFalse});
 
-    //     // Root-only literals: pairwise distinct kinds and values.
-    //     CheckMergeSymmetric(boolFalseSuffix, boolTrueSuffix, {boolFalseSuffix, boolTrueSuffix});
-    //     CheckMergeSymmetric(boolFalseSuffix, nullSuffix, {boolFalseSuffix, nullSuffix});
-    //     CheckMergeSymmetric(boolFalseSuffix, rootStrX, {boolFalseSuffix, rootStrX});
-    //     CheckMergeSymmetric(boolFalseSuffix, rootStrEmpty, {boolFalseSuffix, rootStrEmpty});
-    //     CheckMergeSymmetric(boolFalseSuffix, rootNum0, {boolFalseSuffix, rootNum0});
-    //     CheckMergeSymmetric(boolTrueSuffix, nullSuffix, {boolTrueSuffix, nullSuffix});
-    //     CheckMergeSymmetric(boolTrueSuffix, rootStrX, {boolTrueSuffix, rootStrX});
-    //     CheckMergeSymmetric(nullSuffix, rootNum1, {nullSuffix, rootNum1});
-    //     CheckMergeSymmetric(nullSuffix, rootStrX, {nullSuffix, rootStrX});
-    //     CheckMergeSymmetric(rootStrX, rootNum1, {rootStrX, rootNum1});
+        // Root-only literals: pairwise distinct kinds and values.
+        CheckMergeSymmetric(boolFalseSuffix, boolTrueSuffix, {boolFalseSuffix, boolTrueSuffix});
+        CheckMergeSymmetric(boolFalseSuffix, nullSuffix, {boolFalseSuffix, nullSuffix});
+        CheckMergeSymmetric(boolFalseSuffix, rootStrX, {boolFalseSuffix, rootStrX});
+        CheckMergeSymmetric(boolFalseSuffix, rootStrEmpty, {boolFalseSuffix, rootStrEmpty});
+        CheckMergeSymmetric(boolFalseSuffix, rootNum0, {boolFalseSuffix, rootNum0});
+        CheckMergeSymmetric(boolTrueSuffix, nullSuffix, {boolTrueSuffix, nullSuffix});
+        CheckMergeSymmetric(boolTrueSuffix, rootStrX, {boolTrueSuffix, rootStrX});
+        CheckMergeSymmetric(nullSuffix, rootNum1, {nullSuffix, rootNum1});
+        CheckMergeSymmetric(nullSuffix, rootStrX, {nullSuffix, rootStrX});
+        CheckMergeSymmetric(rootStrX, rootNum1, {rootStrX, rootNum1});
 
-    //     // Root literal vs keyed path / empty-key path (no \0-byte false positive).
-    //     CheckMergeSymmetric(boolFalseSuffix, abFalse, {boolFalseSuffix, abFalse});
-    //     CheckMergeSymmetric(boolFalseSuffix, ab, {boolFalseSuffix, ab});
-    //     CheckMergeSymmetric(boolTrueSuffix, "\1", {boolTrueSuffix, "\1"});
-    //     CheckMergeSymmetric(boolFalseSuffix, abStrX, {boolFalseSuffix, abStrX});
-    //     CheckMergeSymmetric(nullSuffix, abNull, {nullSuffix, abNull});
+        // Root literal vs keyed path / empty-key path (no \0-byte false positive).
+        CheckMergeSymmetric(boolFalseSuffix, abFalse, {boolFalseSuffix, abFalse});
+        CheckMergeSymmetric(boolFalseSuffix, ab, {boolFalseSuffix, ab});
+        CheckMergeSymmetric(boolTrueSuffix, "\1", {boolTrueSuffix, "\1"});
+        CheckMergeSymmetric(boolFalseSuffix, abStrX, {boolFalseSuffix, abStrX});
+        CheckMergeSymmetric(nullSuffix, abNull, {nullSuffix, abNull});
 
-    //     // Multi-token merge: literals on the same path must survive together under AND.
-    //     CheckMerge(
-    //         MergeAnd(MakeTokens({ab, abFalse, abStrX, abTrue, abNull, abNum5}, EMode::And),
-    //                  MakeTokens({abNum7}, EMode::And)),
-    //         {abFalse, abStrX, abTrue, abNull, abNum5, abNum7}, EMode::And);
+        // Multi-token merge: literals on the same path must survive together under AND.
+        CheckMerge(
+            MergeAnd(MakeTokens({ab, abFalse, abStrX, abTrue, abNull, abNum5}, EMode::And),
+                     MakeTokens({abNum7}, EMode::And)),
+            {abFalse, abStrX, abTrue, abNull, abNum5, abNum7}, EMode::And);
 
-    //     // OR: path-only on $.a.b covers all literals on that path.
-    //     CheckMerge(
-    //         MergeOr(MakeTokens({ab, abFalse, abStrX}, EMode::Or),
-    //                 MakeTokens({abTrue, abNull, abNum5}, EMode::Or)),
-    //         {ab}, EMode::Or);
+        // OR: path-only on $.a.b covers all literals on that path.
+        CheckMerge(
+            MergeOr(MakeTokens({ab, abFalse, abStrX}, EMode::Or),
+                    MakeTokens({abTrue, abNull, abNum5}, EMode::Or)),
+            {ab}, EMode::Or);
 
-    //     // Root-only batch: no token is a prefix of another.
-    //     CheckMerge(
-    //         MergeOr(MakeTokens({boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootNum0}, EMode::Or),
-    //                 MakeTokens({rootStrAb, rootNum1}, EMode::Or)),
-    //         {boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootStrAb, rootNum0, rootNum1}, EMode::Or);
+        // Root-only batch: no token is a prefix of another.
+        CheckMerge(
+            MergeOr(MakeTokens({boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootNum0}, EMode::Or),
+                    MakeTokens({rootStrAb, rootNum1}, EMode::Or)),
+            {boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootStrAb, rootNum0, rootNum1}, EMode::Or);
 
-    //     CheckMerge(
-    //         MergeAnd(MakeTokens({boolFalseSuffix, boolTrueSuffix, nullSuffix}, EMode::And),
-    //                  MakeTokens({rootStrX, rootNum0}, EMode::And)),
-    //         {boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootNum0}, EMode::And);
-    // }
+        CheckMerge(
+            MergeAnd(MakeTokens({boolFalseSuffix, boolTrueSuffix, nullSuffix}, EMode::And),
+                     MakeTokens({rootStrX, rootNum0}, EMode::And)),
+            {boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootNum0}, EMode::And);
+    }
 
     // Ensure different-length key names don't create false prefix matches.
     // Key "ab" (2 bytes, length prefix \x02) must NOT match as a prefix for key "a" (\x01).

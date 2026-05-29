@@ -16,6 +16,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3o
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/client/ut TFlatTest.SplitEmptyToMany
 ydb/core/client/ut unittest.[*/*] chunk
+ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
@@ -37,6 +38,14 @@ ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.Spli
 ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
+ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/mysql py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/postgresql py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/join py3test.sole chunk
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
@@ -59,6 +68,8 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnothe
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-1-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-2-1]
+ydb/tests/fq/generic/analytics py3test.sole chunk
+ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[True-False-kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[True-True-kikimr0]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks[True-1-no_shared-kikimr0]
@@ -74,8 +85,6 @@ ydb/tests/functional/secrets test_secrets.py.test_alter_without_grants
 ydb/tests/functional/secrets test_secrets.py.test_create_without_grants
 ydb/tests/functional/secrets test_secrets.py.test_drop_without_grants
 ydb/tests/functional/secrets test_secrets_usage.py.test_create_eds_with_single_secret_with_fail
-ydb/tests/functional/split_merge/by_load test_split_merge_by_load.py.test_split_merge_by_load[tenant_db-follower]
-ydb/tests/functional/split_merge/by_load test_split_merge_by_load.py.test_split_merge_by_load[tenant_db-leader]
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

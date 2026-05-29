@@ -97,6 +97,9 @@ TStatus ConstraintDqPhyLength(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus ConstraintDqPhyHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+        return status;
+    }
     if (input->Head().GetConstraint<TStreamingConstraintNode>()) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Streaming input is not supported for DqPhyHashCombine"));
         return TStatus::Error;

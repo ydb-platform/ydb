@@ -35,6 +35,15 @@ struct TJoinInputDesc {
     const TStreamingConstraintNode* Streaming = nullptr;
 };
 
+TString FormatJoinType(TStringBuf joinType, TStringBuf prefix) {
+    if (joinType == prefix) {
+        return to_upper(TString(joinType));
+    }
+
+    joinType.SkipPrefix(prefix);
+    return TStringBuilder() << to_upper(TString(prefix)) << " " << to_upper(TString(joinType));
+}
+
 void CollectJoinColumns(const TExprBase& joinSettings, THashMap<TStringBuf, TVector<TStringBuf>>* columnsToRename,
     THashSet<TStringBuf>* columnsToDrop)
 {
@@ -217,13 +226,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         mode = EHashJoinMode::Map;
 
         if (joinType.StartsWith("Left") && rStreaming) {
-            ctx.AddError(TIssue(ctx.GetPosition(joinTuple.Pos()), TStringBuilder() << "Streaming right input is not supported for " << joinType << " join"));
+            ctx.AddError(TIssue(ctx.GetPosition(joinTuple.Pos()), TStringBuilder() << "Streaming right input is not supported for " << FormatJoinType(joinType, "Left"sv) << " join"));
             hasErrors = true;
             return {};
         }
 
         if (joinType.StartsWith("Right") && lStreaming) {
-            ctx.AddError(TIssue(ctx.GetPosition(joinTuple.Pos()), TStringBuilder() << "Streaming left input is not supported for " << joinType << " join"));
+            ctx.AddError(TIssue(ctx.GetPosition(joinTuple.Pos()), TStringBuilder() << "Streaming left input is not supported for " << FormatJoinType(joinType, "Right"sv) << " join"));
             hasErrors = true;
             return {};
         }

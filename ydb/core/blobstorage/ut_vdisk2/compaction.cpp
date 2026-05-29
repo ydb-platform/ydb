@@ -50,8 +50,11 @@ Y_UNIT_TEST_SUITE(VDiskCompactionTests) {
 
         // Issue only DoNotKeep for this blob and move it behind soft barrier.
         auto doNotKeepRes = env->Collect(tabletId, generation, 1, channel, std::make_pair(generation, step), false,
-            {}, {id.FullID()});
+            {id.FullID()}, {});
         UNIT_ASSERT_VALUES_EQUAL(doNotKeepRes.GetStatus(), NKikimrProto::OK);
+        env->Compact(true);
+        auto doNotKeepRes1 = env->Collect(tabletId, generation, 1, channel, std::nullopt, false, {}, {id.FullID()});
+        UNIT_ASSERT_VALUES_EQUAL(doNotKeepRes1.GetStatus(), NKikimrProto::OK);
 
         // Sanity check before explicit fresh compaction.
         checkGet(NKikimrProto::NODATA, "before fresh compaction data");

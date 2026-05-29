@@ -1412,8 +1412,9 @@ NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
         return NKikimrViewer::EFlag::Orange;
     case NKikimrWhiteboard::EFlag::Red:
         return NKikimrViewer::EFlag::Red;
+    default:
+        return NKikimrViewer::EFlag::Grey;
     }
-    return static_cast<NKikimrViewer::EFlag>((int)flag);
 }
 
 }

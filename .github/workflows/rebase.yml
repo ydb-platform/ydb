@@ -70,19 +70,6 @@ jobs:
               body: `@${sender} Rebase declined: rebase can only be run on open pull requests.` + footer
             });
 
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                name: 'rebase-user-branch'
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) {
-                throw error;
-              }
-            }
-
       - name: Decline rebase — label sender is not a contributor
         if: steps.preflight.outputs.pr_is_open == 'true' && steps.preflight.outputs.sender_is_contributor != 'true'
         uses: actions/github-script@v7
@@ -98,19 +85,6 @@ jobs:
               body: `@${sender} Rebase declined, only contributor can rebase user branch` + footer
             });
 
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                name: 'rebase-user-branch'
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) {
-                throw error;
-              }
-            }
-
       - name: Decline rebase — fork does not allow maintainer push
         if: steps.preflight.outputs.pr_is_open == 'true' && steps.preflight.outputs.sender_is_contributor == 'true' && steps.preflight.outputs.fork_push_allowed != 'true'
         uses: actions/github-script@v7
@@ -125,19 +99,6 @@ jobs:
               issue_number: context.issue.number,
               body: `@${sender} Rebase declined: this PR is from a fork and **Allow edits from maintainers** is not enabled.\n\nThe PR author must enable it in the PR sidebar so maintainers can push the rebased branch. Alternatively, rebase locally and push to the fork.` + footer
             });
-
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                name: 'rebase-user-branch'
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) {
-                throw error;
-              }
-            }
 
       - name: Fail if preconditions are not met
         if: steps.preflight.outputs.pr_is_open != 'true' || steps.preflight.outputs.sender_is_contributor != 'true' || steps.preflight.outputs.fork_push_allowed != 'true'
@@ -239,24 +200,6 @@ jobs:
               body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-user-branch` label to retry.' + footer
             });
 
-      - name: Remove label after successful rebase
-        if: steps.push.outcome == 'success'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                name: 'rebase-user-branch'
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) {
-                throw error;
-              }
-            }
-
       - name: Add success comment
         if: steps.push.outcome == 'success'
         uses: actions/github-script@v7
@@ -271,31 +214,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: `✅ **Rebase complete!**\n\nPR has been automatically rebased onto \`${baseRef}\`.` + footer
-            });
-
-      - name: Replace label on failure
-        if: steps.rebase.outputs.rebase_status == 'failed'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                name: 'rebase-user-branch'
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) {
-                throw error;
-              }
-            }
-
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              labels: ['rebase-user-branch-failed']
             });
 
       - name: Add failure comment for conflicts
@@ -324,3 +242,37 @@ jobs:
       - name: Fail the job if conflicts
         if: steps.rebase.outputs.rebase_status == 'failed'
         run: exit 1
+
+      - name: Fail if push failed
+        if: steps.rebase.outputs.rebase_status == 'success' && steps.push.outcome == 'failure'
+        run: exit 1
+
+      - name: Remove trigger label
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'rebase-user-branch'
+              });
+            } catch (error) {
+              if (!error.status || error.status != 404) {
+                throw error;
+              }
+            }
+
+      - name: Mark rebase as failed
+        if: always() && steps.push.outcome != 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['rebase-user-branch-failed']
+            });

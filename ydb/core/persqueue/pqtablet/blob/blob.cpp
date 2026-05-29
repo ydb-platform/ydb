@@ -254,7 +254,20 @@ TCursor TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
             }
             pos += partNo;
         }
-        return pos < Blobs.size() ? TCursor{pos, offset, partNo} : TCursor{Max<ui32>(), 0, 0};
+
+        if (pos >= Blobs.size()) {
+            return TCursor{Max<ui32>(), 0, 0};
+        }
+
+        if (!Blobs[pos].PartData && partNo == 0) {
+            return TCursor{pos, offset, partNo};
+        } else if (!Blobs[pos].PartData) {
+            return TCursor{Max<ui32>(), 0, 0};
+        }
+
+        return partNo <= Blobs[pos].GetPartNo() ?
+            TCursor{pos, offset, partNo} :
+            TCursor{Max<ui32>(), 0, 0};
     }
 
     ui64 curOffset = GetOffset();

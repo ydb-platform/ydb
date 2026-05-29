@@ -198,14 +198,30 @@ Y_UNIT_TEST(TestBatchPacking) {
     Y_ABORT_UNLESS(batch2.Blobs.size() == 100);
 
     TBatch batch3;
+    TString value;
+    value.reserve(64_KB);
+    ui32 rnd = 0x12345678;
+    for (ui32 i = 0; i < 64_KB; ++i) {
+        rnd ^= rnd << 13;
+        rnd ^= rnd >> 17;
+        rnd ^= rnd << 5;
+        value.push_back(static_cast<char>(rnd));
+    }
+    const TString expectedValue = value;
     batch3.AddBlob(TClientBlob(
-        "sourceId", 999'999'999'999'999ll, "abacaba", TPartData{33, 66, 4'000'000'000u},
+        "sourceId", 999'999'999'999'999ll, std::move(value), TPartData{33, 66, 4'000'000'000u},
         TInstant::MilliSeconds(999'999'999'999ll), TInstant::MilliSeconds(1000), 0, "", ""
     ));
     batch3.Pack();
-    UNIT_ASSERT(batch3.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
     batch3.Unpack();
     Y_ABORT_UNLESS(batch3.Blobs.size() == 1);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].SourceId, "sourceId");
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].SeqNo, 999'999'999'999'999ull);
+    UNIT_ASSERT(batch3.Blobs[0].PartData.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].PartData->PartNo, 33u);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].PartData->TotalParts, 66u);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].PartData->TotalSize, 4'000'000'000u);
+    UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].Data, expectedValue);
 }
 
 const TString ToHex(const TString& value) {

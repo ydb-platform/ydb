@@ -1,7 +1,7 @@
 #include "fetcher.h"
 #include "fetching_executor.h"
 
-#include <library/actors/prof/tag.h>
+#include <ydb/library/actors/prof/tag.h>
 
 namespace NKikimr::NOlap::NDataFetcher {
 

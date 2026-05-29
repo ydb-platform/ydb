@@ -11,17 +11,19 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/actors/http
-    ydb/library/grpc/actor_client
     library/cpp/monlib/service/pages
     library/cpp/openssl/io
+    library/cpp/string_utils/url
     ydb/core/audit
     ydb/core/base
+    ydb/core/mon
     ydb/core/protos
     ydb/core/security/util
     ydb/library/aclib
     ydb/library/aclib/protos
+    ydb/library/actors/core
+    ydb/library/actors/http
+    ydb/library/grpc/actor_client
     ydb/library/login
     ydb/library/login/protos
     ydb/library/ncloud/impl

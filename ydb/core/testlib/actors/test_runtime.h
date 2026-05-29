@@ -122,6 +122,10 @@ namespace NActors {
             return *this;
         }
 
+        void SetMonitoringAllowOrigin(TString allowOrigin) {
+            MonitoringAllowOrigin_ = std::move(allowOrigin);
+        }
+
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
 
     public:
@@ -148,6 +152,7 @@ namespace NActors {
         TKeyConfigGenerator KeyConfigGenerator;
         THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
+        TString MonitoringAllowOrigin_;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
         bool NeedStatsCollectors = false;
         std::optional<TActorSystemSetupConfig> ActorSystemSetupConfig;

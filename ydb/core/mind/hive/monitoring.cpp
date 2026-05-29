@@ -18,10 +18,10 @@ namespace NHive {
 static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
 static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 
-TStringBuf GetTabletDevUiAppPath() {
-    return AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
-        ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
-        : TStringBuf("app");
+void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, bool enableSecurePath) {
+    const TStringBuf monRoot = IsTabletDevUiSecurePath(pathInfo) ? TStringBuf("../..") : TStringBuf("..");
+    out << "<script src=\"" << monRoot << "/cms/hive.js\"></script>";
+    out << "<script>EnableTabletDevUiSecurePath=" << (enableSecurePath ? "true" : "false") << ";</script>";
 }
 
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {
@@ -523,7 +523,8 @@ public:
             out << "<td>" << domainKey << "</td>";
             out << "<td>" << domainInfo.Path << "</td>";
             if (domainInfo.HiveId) {
-                out << "<td><a href='" << GetTabletDevUiAppPath() << "?TabletID=" << domainInfo.HiveId << "'>" << domainInfo.HiveId << "</a></td>";
+                out << "<td><a href='#' onclick='location.href=makeTabletDevUiUrl(\"TabletID="
+                    << domainInfo.HiveId << "\");return false;'>" << domainInfo.HiveId << "</a></td>";
                 if (domainInfo.HiveId == Self->TabletID()) {
                     out << "<td>itself</td>";
                 } else {
@@ -1582,6 +1583,10 @@ public:
         }
 
         out << "<head>";
+        AppendTabletDevUiMonScript(
+            out,
+            Event.Get()->PathInfo(),
+            AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath());
         out << "<style>";
         out << "table.simple-table1 th { text-align: center; }";
         out << "table.simple-table1 td { padding: 1px 3px; }";
@@ -1697,49 +1702,49 @@ public:
 
         out << "<div class='row' style='margin-top:100px'>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=MemStateTablets&bad=1&max=1000\";' style='width:138px'>Bad Tablets</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateTablets&bad=1&max=1000\");' style='width:138px'>Bad Tablets</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=MemStateTablets&sort=weight&max=1000\";' style='width:138px'>Heavy Tablets</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateTablets&sort=weight&max=1000\");' style='width:138px'>Heavy Tablets</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=MemStateTablets&wait=1&max=1000\";' style='width:138px'>Waiting Tablets</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateTablets&wait=1&max=1000\");' style='width:138px'>Waiting Tablets</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=Resources\";' style='width:138px'>Resources</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Resources\");' style='width:138px'>Resources</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=MemStateDomains\";' style='width:138px'>Tenants</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateDomains\");' style='width:138px'>Tenants</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#rebalance' style='width:138px'>Balancer</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=OperationsLog&max=100\";' style='width:138px'>Operations Log</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=OperationsLog&max=100\");' style='width:138px'>Operations Log</button>";
         out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:10px'>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=MemStateNodes\";' style='width:138px'>Nodes</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=MemStateNodes\");' style='width:138px'>Nodes</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=Storage\";' style='width:138px'>Storage</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Storage\");' style='width:138px'>Storage</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=Groups\";' style='width:138px'>Groups</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Groups\");' style='width:138px'>Groups</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=Settings\";' style='width:138px'>Settings</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Settings\");' style='width:138px'>Settings</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#reassign-groups' style='width:138px'>Reassign Groups</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=Subactors\");' style='width:138px'>SubActors</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"" << GetTabletDevUiAppPath() << "?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=makeTabletDevUiUrl(\"TabletID=" << Self->HiveId << "&page=ManualOperations\");' style='width:138px'>Manual Ops</button>";
         out << "</div>";
         out << "</div>";
 
@@ -1985,7 +1990,6 @@ public:
                )___";
         out << "<script>";
         out << "var hiveId = '" << Self->HiveId << "';";
-        out << "var hiveAppPath = '" << GetTabletDevUiAppPath() << "';";
         out << "var tablets = [";
         for (auto itTablet = tabletTypesToChannels.begin(); itTablet != tabletTypesToChannels.end(); ++itTablet) {
             if (itTablet != tabletTypesToChannels.begin()) {
@@ -1997,10 +2001,6 @@ public:
         out << "var lastReassign = '" << Self->LastReassignStatus << "';";
         out << "var maxReassigns = " << MAX_REASSIGNS_WITHOUT_CONFIRMATION << ";";
         out << R"___(
-
-function hiveAppUrl(query) {
-    return hiveAppPath + '?' + query;
-}
 
 $('.container')
     .toggleClass('container container-fluid')
@@ -4958,14 +4958,19 @@ public:
     const TActorId Source;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
-    TTxMonEvent_ManualOps(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr&, TSelf* hive)
+    TTxMonEvent_ManualOps(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Source(source)
+        , Event(ev->Release())
     {
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         TStringStream out;
+        AppendTabletDevUiMonScript(
+            out,
+            Event.Get()->PathInfo(),
+            AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath());
         out << "<div>";
         out << "<form id='dynamicForm' method='POST'>";
         out << R"(
@@ -5020,7 +5025,6 @@ public:
 
         out << "<script>";
         out << "var hiveId = '" << Self->TabletID() << "';";
-        out << "var hiveAppPath = '" << GetTabletDevUiAppPath() << "';";
 
         out << R"(
                 function toggleCustomInput() {
@@ -5087,7 +5091,7 @@ public:
 
                 function sendPostRequest(data) {
                     $.ajax({
-                        url: hiveAppPath,
+                        url: hiveAppUrl('TabletID=' + hiveId),
                         method: 'POST',
                         data: data,
                         success: function(d) {

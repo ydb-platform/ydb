@@ -31,8 +31,23 @@ DEFAULT_CANON = (
 
 DEFAULT_OUTPUT = SCRIPT_DIR / 'mon_endpoints_auth.md'
 
-VIEWER_CPP = REPO_ROOT / 'ydb/core/viewer/viewer.cpp'
+VIEWER_DIR = REPO_ROOT / 'ydb/core/viewer'
+VIEWER_CPP = VIEWER_DIR / 'viewer.cpp'
 AUDIT_DENYLIST_CPP = REPO_ROOT / 'ydb/core/mon/audit/audit_denylist.cpp'
+
+CHECK_ACCESS_PATTERN = re.compile(
+    r'CheckAccess(Monitoring|Viewer|Administration)\s*\(',
+)
+ADD_HANDLER_PATTERN = re.compile(
+    r'AddHandler\("([^"]+)"\s*,\s*new\s+T(?:Json|Http)Handler<(\w+)>',
+)
+CLASS_NAME_PATTERN = re.compile(r'\bclass\s+(T[A-Za-z0-9_]+)')
+
+POLICY_CHECK_LABEL = {
+    'monitoring': 'CheckAccessMonitoring',
+    'viewer': 'CheckAccessViewer',
+    'admin': 'CheckAccessAdministration',
+}
 
 TOKEN_ORDER = [
     ('__none__', 'public'),
@@ -121,8 +136,14 @@ class Row:
         return self.current_level
 
 
-def _is_valid_access(code: int) -> bool:
-    return 200 <= code < 300 or code == 400
+def _is_success(code: int) -> bool:
+    return 200 <= code < 300
+
+
+def _reaches_handler(code: int | None) -> bool:
+    if code is None:
+        return False
+    return _is_success(code) or code == 400
 
 
 def _uniform_statuses(status_by_token: dict[str, int]) -> bool:
@@ -130,32 +151,149 @@ def _uniform_statuses(status_by_token: dict[str, int]) -> bool:
     return bool(values) and len(set(values)) == 1
 
 
-def current_access_level(status_by_token: dict[str, int]) -> str:
-    if _uniform_statuses(status_by_token):
-        code = next(iter(status_by_token.values()))
-        if code in (404, 405):
-            return 'public'
-    for token, level in TOKEN_ORDER:
-        code = status_by_token.get(token)
-        if code is not None and _is_valid_access(code):
+def _canon_success_level(status_by_token: dict[str, int]) -> str | None:
+    for _token, level in TOKEN_ORDER:
+        code = status_by_token.get(_token)
+        if code is not None and _is_success(code):
             return level
-    return 'unavailable'
+    return None
 
 
-def _access_level_comment(status_by_token: dict[str, int], access_level: str) -> str:
-    if access_level == 'unavailable':
-        return 'нет валидного доступа (2xx или 400)'
+def _canon_handler_reach_level(status_by_token: dict[str, int]) -> str | None:
+    """Lowest token that reached handler logic (2xx or 400), not blocked at 401/403."""
+    for _token, level in TOKEN_ORDER:
+        code = status_by_token.get(_token)
+        if _reaches_handler(code):
+            return level
+    return None
 
+
+def _build_class_to_header(viewer_dir: Path) -> dict[str, Path]:
+    mapping: dict[str, Path] = {}
+    if not viewer_dir.is_dir():
+        return mapping
+    for header in viewer_dir.glob('*.h'):
+        text = header.read_text(encoding='utf-8')
+        for match in CLASS_NAME_PATTERN.finditer(text):
+            mapping.setdefault(match.group(1), header)
+    return mapping
+
+
+def _strictest_policy_in_header(header: Path) -> str | None:
+    text = header.read_text(encoding='utf-8')
+    checks = CHECK_ACCESS_PATTERN.findall(text)
+    if not checks:
+        return None
+    for check_name in ('Administration', 'Monitoring', 'Viewer'):
+        if check_name in checks:
+            return {
+                'Administration': 'admin',
+                'Monitoring': 'monitoring',
+                'Viewer': 'viewer',
+            }[check_name]
+    return None
+
+
+def _parse_handler_policy_levels(viewer_dir: Path) -> dict[str, str]:
+    class_to_header = _build_class_to_header(viewer_dir)
+    path_to_class: dict[str, str] = {}
+    if viewer_dir.is_dir():
+        for cpp in viewer_dir.glob('json_handlers*.cpp'):
+            text = cpp.read_text(encoding='utf-8')
+            for path, class_name in ADD_HANDLER_PATTERN.findall(text):
+                path_to_class[path] = class_name
+
+    policy: dict[str, str] = {}
+    for path, class_name in path_to_class.items():
+        header = class_to_header.get(class_name)
+        if header is None:
+            continue
+        level = _strictest_policy_in_header(header)
+        if level is not None:
+            policy[path] = level
+
+    # /healthcheck is registered as a mon page, same handler family as /viewer/healthcheck.
+    if '/viewer/healthcheck' in policy:
+        policy.setdefault('/healthcheck', policy['/viewer/healthcheck'])
+    return policy
+
+
+def resolve_access_level(
+    path: str,
+    status_by_token: dict[str, int],
+    *,
+    policy_levels: dict[str, str],
+    viewer_access: dict[str, str],
+) -> tuple[str, str]:
+    """Return (access_level, comment).
+
+    For public/database endpoints, 400 still means the request passed the access
+    check and reached handler validation. For viewer+ endpoints, 400 can be a
+    bad method/body/params before the protected action, so use handler policy
+    when there is no successful response.
+    """
     if _uniform_statuses(status_by_token):
         code = next(iter(status_by_token.values()))
         if code in (404, 405):
-            return f'одинаковый {code} для всех токенов'
+            return 'public', f'одинаковый {code} для всех токенов'
 
-    token = next((token for token, level in TOKEN_ORDER if level == access_level), None)
-    if token is None:
-        return ''
+    policy = viewer_access.get(path) or policy_levels.get(path)
+    reach = _canon_handler_reach_level(status_by_token)
 
-    return f'{LEVEL_LABELS[access_level]}: {status_by_token[token]}'
+    if reach is not None and ACCESS_LEVEL_RANK.get(reach, 99) < ACCESS_LEVEL_RANK['viewer']:
+        token = next(t for t, lvl in TOKEN_ORDER if lvl == reach)
+        code = status_by_token[token]
+        comment = f'{LEVEL_LABELS[reach]}: {code} — запрос дошёл до handler'
+        if policy is not None and ACCESS_LEVEL_RANK.get(policy, 99) <= ACCESS_LEVEL_RANK[reach]:
+            comment += f'; политика: {POLICY_CHECK_LABEL.get(policy, policy)}'
+        return reach, comment
+
+    success = _canon_success_level(status_by_token)
+    if success is not None:
+        token = next(t for t, lvl in TOKEN_ORDER if lvl == success)
+        return success, f'{LEVEL_LABELS[success]}: {status_by_token[token]}'
+
+    if policy is not None and ACCESS_LEVEL_RANK.get(policy, 99) >= ACCESS_LEVEL_RANK['viewer']:
+        return policy, _policy_access_comment(policy, status_by_token, reach)
+
+    if reach is not None:
+        token = next(t for t, lvl in TOKEN_ORDER if lvl == reach)
+        code = status_by_token[token]
+        if code == 400:
+            return reach, (
+                f'{LEVEL_LABELS[reach]}: 400 — запрос дошёл до handler, '
+                f'но ответ bad request'
+            )
+        return reach, f'{LEVEL_LABELS[reach]}: {code}'
+
+    if policy is not None:
+        return policy, _policy_access_comment(policy, status_by_token, reach)
+
+    return 'unavailable', 'нет успешного доступа (2xx) и нет политики handler'
+
+
+def _policy_access_comment(
+    policy: str,
+    status_by_token: dict[str, int],
+    reach: str | None,
+) -> str:
+    label = POLICY_CHECK_LABEL.get(policy, policy)
+    parts = [f'политика: {label}']
+    canon_bits: list[str] = []
+    for _token, level in TOKEN_ORDER:
+        if ACCESS_LEVEL_RANK.get(level, 99) < ACCESS_LEVEL_RANK['viewer']:
+            continue
+        code = status_by_token.get(_token)
+        if code is None:
+            continue
+        canon_bits.append(f'{LEVEL_LABELS[level]}: {code}')
+    if canon_bits:
+        parts.append('canon: ' + ', '.join(canon_bits))
+    if reach is not None and reach != policy:
+        parts.append(
+            f'canon доходит до handler с {LEVEL_LABELS[reach]} (400 ≠ уровень доступа)'
+        )
+    return '; '.join(parts)
 
 
 def _parse_viewer_endpoint_access(viewer_cpp: Path) -> dict[str, str]:
@@ -222,7 +360,7 @@ def _target_access_level(path: str, viewer_access: dict[str, str]) -> str:
     if path.startswith('/fq_diag/'):
         return 'monitoring'
     if path.startswith('/vdisk') or path.startswith('/pdisk'):
-        return 'viewer'
+        return 'monitoring'
     if path.startswith('/healthcheck'):
         return 'monitoring'
     if path.startswith('/counters'):
@@ -291,9 +429,19 @@ def _iter_rows(
     *,
     all_queries: bool,
     viewer_access: dict[str, str],
+    policy_levels: dict[str, str],
     denylist: list[tuple[str, bool]],
 ) -> list[Row]:
     rows: list[Row] = []
+
+    def _resolved_level(status_by_token: dict[str, int], endpoint_path: str) -> str:
+        return resolve_access_level(
+            endpoint_path,
+            status_by_token,
+            policy_levels=policy_levels,
+            viewer_access=viewer_access,
+        )[0]
+
     for method, paths in sorted(canon.items()):
         for path, queries in sorted(paths.items()):
             query_items = sorted(queries.items())
@@ -302,14 +450,19 @@ def _iter_rows(
                     min(
                         query_items,
                         key=lambda item: (
-                            ACCESS_LEVEL_RANK[current_access_level(item[1])],
+                            ACCESS_LEVEL_RANK[_resolved_level(item[1], path)],
                             item[0] != '',
                             item[0],
                         ),
                     )
                 ]
             for query, status_by_token in query_items:
-                current = current_access_level(status_by_token)
+                current, comment = resolve_access_level(
+                    path,
+                    status_by_token,
+                    policy_levels=policy_levels,
+                    viewer_access=viewer_access,
+                )
                 target = _target_access_level(path, viewer_access)
                 audited = _target_audited(method, path, target, denylist)
                 rows.append(
@@ -320,7 +473,7 @@ def _iter_rows(
                         current_level=current,
                         target_level=target,
                         audited=audited,
-                        comment=_access_level_comment(status_by_token, current),
+                        comment=comment,
                     )
                 )
     rows.sort(key=lambda r: (r.group, r.endpoint, r.method, r.query))
@@ -349,6 +502,17 @@ def _render_markdown(rows: list[Row], canon_path: Path) -> str:
         '- Обращения в `/viewer/acl`, `/viewer/describe` к объектам без схемных прав становятся аудируемыми '
         '(решение по внутреннему отказу, не по внешнему HTTP-коду).',
         '- Исключения: `/internal` (псевдостатика).',
+        '',
+        '## Как определяется «текущий уровень»',
+        '',
+        '- Для public/database уровней **400** считается признаком, что запрос прошёл access check '
+        'и дошёл до валидации handler.',
+        '- Для viewer+ уровней **2xx** из canon считается успешным доступом.',
+        '- Если **2xx** нет, для ручек viewer+ уровень берётся из политики handler '
+        '(`CheckAccessViewer` / `CheckAccessMonitoring` / `CheckAccessAdministration` в C++), '
+        'а не из первого **400** в canon.',
+        '- **400** в комментарии для viewer+ — диагностика (невалидный метод/body/параметры), '
+        'а не доказательство, что этого токена достаточно для действия.',
         '',
     ]
 
@@ -409,11 +573,13 @@ def main() -> None:
 
     canon = _load_canon(args.canon)
     viewer_access = _parse_viewer_endpoint_access(VIEWER_CPP)
+    policy_levels = _parse_handler_policy_levels(VIEWER_DIR)
     denylist = _parse_audit_denylist(AUDIT_DENYLIST_CPP)
     rows = _iter_rows(
         canon,
         all_queries=args.all_queries,
         viewer_access=viewer_access,
+        policy_levels=policy_levels,
         denylist=denylist,
     )
     markdown = _render_markdown(rows, args.canon)

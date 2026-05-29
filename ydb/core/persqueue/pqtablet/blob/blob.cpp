@@ -16,19 +16,6 @@ bool CanWriteOffsetDeltaInKeys() {
     return HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
 }
 
-bool HasOffsetDeltaInBlobs(const std::deque<TClientBlob>& blobs) {
-    for (const auto& blob : blobs) {
-        if ((!blob.PartData || blob.PartData->PartNo == 0) && blob.BatchMessageCount >= 1) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool HasOffsetDeltaInHead(const THead& head) {
-    return !head.GetBatches().empty() && head.GetLastBatch().HasOffsetDelta();
-}
-
 }
 
 //
@@ -643,12 +630,7 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     AFL_ENSURE(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
-    const bool hasOffsetDelta =
-        (GlueHead && HasOffsetDeltaInHead(Head)) ||
-        (GlueNewHead && HasOffsetDeltaInHead(NewHead)) ||
-        HasOffsetDeltaInBlobs(Blobs);
-    const bool writeOffsetDelta = CanWriteOffsetDeltaInKeys() && hasOffsetDelta;
-    const ui64 offsetDelta = writeOffsetDelta ? GetOffsetDelta() : 0;
+    const ui64 offsetDelta = CanWriteOffsetDeltaInKeys() ? GetOffsetDelta() : 0;
     TMaybe<ui32> keyOffsetDelta;
     if (offsetDelta > 0) {
         AFL_ENSURE(offsetDelta <= Max<ui32>());

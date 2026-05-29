@@ -385,8 +385,7 @@ namespace {
 TKey WithHeadOffsetDelta(TKey&& key, const THead& head) {
     if (HasAppData()
         && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()
-        && !head.GetBatches().empty()
-        && head.GetLastBatch().HasOffsetDelta())
+        && !head.GetBatches().empty())
     {
         key.SetOffsetDelta(head.GetOffsetDelta());
     }

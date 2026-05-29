@@ -158,6 +158,13 @@ TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
 void TBatch::AddBlob(const TClientBlob &b) {
     ui32 count = GetCount();
     ui64 offsetDelta = GetOffsetDelta();
+    if (!Header.HasOffsetDelta() && !Blobs.empty()) {
+        offsetDelta = GetCount();
+        if (!Blobs.back().IsLastPart()) {
+            ++offsetDelta;
+        }
+    }
+
     ui32 unpackedSize = GetUnpackedSize();
     ui32 i = Blobs.size();
 

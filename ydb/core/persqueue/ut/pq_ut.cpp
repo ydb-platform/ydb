@@ -129,6 +129,23 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
+Y_UNIT_TEST(BatchedMessagesWriteWithInconsistentMaxSeqNoFails) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    CmdWriteBatched(0, "sourceid_batch_inconsistent_max_seqno", 1, TString(16, 'a'), 5, tc,
+        -1, false, 10, NPersQueue::NErrorCode::BAD_REQUEST);
+
+    CmdWriteBatched(0, "sourceid_batch_inconsistent_max_seqno", 1, TString(16, 'b'), 5, tc);
+
+    PQGetPartInfo(0, 5, tc);
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteRead) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

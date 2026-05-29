@@ -1187,6 +1187,41 @@ void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
     }
 }
 
+bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& p) {
+    if (p.Msg.BatchMessageCount < 1) {
+        return true;
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) {
+        CancelOneWriteOnWrite(ctx,
+                              TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
+                              p,
+                              NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
+    if (!p.Msg.MaxSeqNo.has_value()) {
+        CancelOneWriteOnWrite(ctx,
+                              TStringBuilder() << "MaxSeqNo is required for batch messages, partitionId: " << Partition,
+                              p,
+                              NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
+    if (*p.Msg.MaxSeqNo != p.Msg.SeqNo + p.Msg.BatchMessageCount - 1) {
+        CancelOneWriteOnWrite(ctx,
+                              TStringBuilder() << "MaxSeqNo is inconsistent with BatchMessageCount, partitionId: " << Partition
+                                               << ", seqNo: " << p.Msg.SeqNo
+                                               << ", maxSeqNo: " << *p.Msg.MaxSeqNo
+                                               << ", batchMessageCount: " << p.Msg.BatchMessageCount,
+                              p,
+                              NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
+    return true;
+}
+
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
                          "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
@@ -1217,19 +1252,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
-    if (p.Msg.BatchMessageCount >= 1 && !AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) {
-        CancelOneWriteOnWrite(ctx,
-                                TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
-                                p,
-                                NPersQueue::NErrorCode::BAD_REQUEST);
-        return false;
-    }
-
-    if (p.Msg.BatchMessageCount >= 1 && !p.Msg.MaxSeqNo.has_value()) {
-        CancelOneWriteOnWrite(ctx,
-                                TStringBuilder() << "MaxSeqNo is required for batch messages, partitionId: " << Partition,
-                                p,
-                                NPersQueue::NErrorCode::BAD_REQUEST);
+    if (!ValidateBatchMessage(ctx, p)) {
         return false;
     }
 

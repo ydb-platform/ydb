@@ -55,8 +55,6 @@ WHERE JSON_VALUE(payload, '$.data.type()' RETURNING Utf8) = "array"u
 
 ## Найти документы со значением `false` или `null`
 
-TODO: валидация содержимого ниже @mzinal
-
 Для проверки «значение равно `false`» или «значение равно `null`» используйте JsonPath внутри `JSON_EXISTS`, а не `JSON_VALUE(...) IS NULL`:
 
 ```yql
@@ -71,11 +69,11 @@ FROM documents VIEW json_idx
 WHERE JSON_EXISTS(payload, '$.value ? (@ == null)');
 ```
 
-В индекс попадает токен пути `$.archived` (или `$.value`), а точное сравнение с `false` или `null` выполняется пост-фильтром.
+В операцию поиска по индексу попадает путь `$.archived` (или `$.value`) и значения `false` или `null`, соответственно.
 
 {% note info %}
 
-Подробнее об ограничениях `IS NULL` и `JSON_VALUE` с булевым результатом см. в разделе [{#T}](../../dev/json-indexes.md#json-value).
+Указанные выше условия отбирают документы, в которых указанный атрибут явно установлен в значение false или null. Проверку отсутствия атрибута нельзя выполнить с помощью JSON-индекса.
 
 {% endnote %}
 

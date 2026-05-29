@@ -91,23 +91,23 @@ public:
     }
 
     ~TSqlSessionRunner() override {
-        if (!EnableInteractiveTransactions) {
+        if (!IsInteractiveTransactionActive()) {
             return;
         }
-        if (Transaction && Transaction->IsActive()) {
-            Cerr << Colors.Yellow() << "Warning: open transaction is rolled back on exit." << Colors.OldColor() << Endl;
-        }
+        Cerr << Colors.Yellow() << "Warning: open transaction is rolled back on exit." << Colors.OldColor() << Endl;
         RollbackOpenTransaction(/* silent */ true);
     }
 
     void HandleLine(const TString& line) final {
         Y_DEFER { ResetInterrupted(); };
-        // Keep the driver alive while an interactive transaction is open.
-        const bool inTransaction = EnableInteractiveTransactions
-            && Transaction && Transaction->IsActive();
-        if (!inTransaction) {
-            Y_DEFER { SqlLazyDriver->Stop(true); };
-        }
+        // Stop the driver at the end of the line iff no transaction is active.
+        // The flag is re-evaluated at scope exit (after BEGIN/COMMIT/ROLLBACK
+        // mutate the state) so the driver lives across queries inside a tx.
+        Y_DEFER {
+            if (!IsInteractiveTransactionActive()) {
+                SqlLazyDriver->Stop(true);
+            }
+        };
 
         if (to_lower(line) == "/help") {
             PrintFtxuiMessage(
@@ -135,29 +135,11 @@ public:
             return;
         }
 
-        if (IsBeginCommand(line) || IsCommitCommand(line) || IsRollbackCommand(line)) {
-            if (!EnableInteractiveTransactions) {
-                PrintInteractiveTransactionsNotAvailable();
-                return;
-            }
-        }
-
-        if (IsBeginCommand(line)) {
-            HandleBegin(line);
+        if (HandleTransactionControlCommand(line)) {
             return;
         }
 
-        if (IsCommitCommand(line)) {
-            HandleCommit();
-            return;
-        }
-
-        if (IsRollbackCommand(line)) {
-            HandleRollback();
-            return;
-        }
-
-        if (inTransaction) {
+        if (IsInteractiveTransactionActive()) {
             ExecuteInTransaction(line);
             return;
         }
@@ -202,16 +184,50 @@ public:
         }
     }
 
+    // Returns true if the line was a TCL command (regardless of success).
+    bool HandleTransactionControlCommand(const TString& line) {
+        const bool isBegin = IsBeginCommand(line);
+        const bool isCommit = !isBegin && IsCommitCommand(line);
+        const bool isRollback = !isBegin && !isCommit && IsRollbackCommand(line);
+        if (!isBegin && !isCommit && !isRollback) {
+            return false;
+        }
+        if (!EnableInteractiveTransactions) {
+            PrintInteractiveTransactionsNotAvailable();
+            return true;
+        }
+        if (isBegin) {
+            HandleBegin(line);
+        } else if (isCommit) {
+            HandleCommit();
+        } else {
+            HandleRollback();
+        }
+        return true;
+    }
+
     void HandleBegin(const TString& line) {
-        if (Transaction && Transaction->IsActive()) {
+        if (IsInteractiveTransactionActive()) {
             Cerr << Colors.Red() << "\nThere is already a transaction in progress." << Colors.OldColor() << Endl;
             return;
         }
 
         auto txSettings = ParseBeginTransactionIsolation(line);
         if (!txSettings) {
-            Cerr << Colors.Red() << "\nUnknown transaction isolation level." << Colors.OldColor() << Endl;
-            Cerr << "Supported modes: " << GetTxModeNamesForHelp() << Endl;
+            const auto modeToken = ExtractBeginModeToken(line);
+            if (modeToken && IsOneShotOnlyTxMode(*modeToken)) {
+                Cerr << Colors.Red()
+                     << "\nMode \"" << *modeToken
+                     << "\" cannot be used with BEGIN — the Query service does"
+                        " not support open transactions for this mode."
+                     << Colors.OldColor() << Endl;
+                Cerr << "Use it as a one-shot transaction mode for a single"
+                        " statement, e.g. \"ydb table query --tx-mode "
+                     << *modeToken << " ...\"." << Endl;
+            } else {
+                Cerr << Colors.Red() << "\nUnknown or malformed transaction mode." << Colors.OldColor() << Endl;
+                Cerr << "Supported modes: " << GetTxModeNamesForHelp() << "." << Endl;
+            }
             return;
         }
 
@@ -223,16 +239,16 @@ public:
             UpdateTransactionPrompt();
             Cout << "BEGIN" << Endl;
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            Cerr << Colors.Red() << "\nFailed to begin transaction:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
+            PrintTcError("Failed to begin transaction", ToString(error));
             ResetTransactionState();
         } catch (std::exception& error) {
-            Cerr << Colors.Red() << "\nFailed to begin transaction:" << Colors.OldColor() << Endl << Strip(error.what()) << Endl;
+            PrintTcError("Failed to begin transaction", error.what());
             ResetTransactionState();
         }
     }
 
     void HandleCommit() {
-        if (!Transaction || !Transaction->IsActive()) {
+        if (!IsInteractiveTransactionActive()) {
             Cerr << Colors.Red() << "\nThere is no active transaction." << Colors.OldColor() << Endl;
             return;
         }
@@ -241,17 +257,18 @@ public:
             auto commitResult = Transaction->Commit().GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(commitResult);
             Cout << "COMMIT" << Endl;
+            ResetTransactionState();
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            Cerr << Colors.Red() << "\nFailed to commit transaction:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
+            PrintTcError("Failed to commit transaction", ToString(error));
+            // Keep the transaction state so the user can retry the COMMIT or
+            // explicitly ROLLBACK. The destructor rolls it back if needed.
         } catch (std::exception& error) {
-            Cerr << Colors.Red() << "\nFailed to commit transaction:" << Colors.OldColor() << Endl << Strip(error.what()) << Endl;
+            PrintTcError("Failed to commit transaction", error.what());
         }
-        ResetTransactionState();
-        SqlLazyDriver->Stop(true);
     }
 
     void HandleRollback() {
-        if (!Transaction || !Transaction->IsActive()) {
+        if (!IsInteractiveTransactionActive()) {
             Cerr << Colors.Red() << "\nThere is no active transaction." << Colors.OldColor() << Endl;
             return;
         }
@@ -260,13 +277,12 @@ public:
             auto rollbackResult = Transaction->Rollback().GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(rollbackResult);
             Cout << "ROLLBACK" << Endl;
+            ResetTransactionState();
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            Cerr << Colors.Red() << "\nFailed to rollback transaction:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
+            PrintTcError("Failed to rollback transaction", ToString(error));
         } catch (std::exception& error) {
-            Cerr << Colors.Red() << "\nFailed to rollback transaction:" << Colors.OldColor() << Endl << Strip(error.what()) << Endl;
+            PrintTcError("Failed to rollback transaction", error.what());
         }
-        ResetTransactionState();
-        SqlLazyDriver->Stop(true);
     }
 
     void ExecuteInTransaction(const TString& line) {
@@ -352,18 +368,26 @@ private:
 
         if (enableInteractiveTransactions) {
             elements.emplace_back(CreateListItem(hbox({
-                keyword("BEGIN"), text(" ["), keyword("TRANSACTION"), text("] ["),
-                keyword("ISOLATION LEVEL"), text(" "), CreateEntityName("MODE"),
+                keyword("BEGIN"), text(" ["), keyword("TRANSACTION"), text(" | "),
+                keyword("WORK"), text("] ["), CreateEntityName("MODE"),
                 text("]: start an interactive transaction (Query service session).")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                text("  Modes: "), CreateEntityName(GetTxModeNamesForHelp())
+                keyword("START TRANSACTION"), text(" ["), CreateEntityName("MODE"),
+                text("]: alias of BEGIN TRANSACTION.")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("COMMIT"), text(" | "), keyword("END"), text(": commit the current transaction.")
+                text("  "), CreateEntityName("MODE"), text(": "), CreateEntityName(GetTxModeNamesForHelp()),
+                text(" (default: "), CreateEntityName(TString(kTxModeSerializableRw)), text(").")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("ROLLBACK"), text(": rollback the current transaction.")
+                keyword("COMMIT"), text(" | "), keyword("COMMIT TRANSACTION"), text(" | "),
+                keyword("COMMIT WORK"), text(" | "), keyword("END"), text(" | "),
+                keyword("END TRANSACTION"), text(": commit the current transaction.")
+            })));
+            elements.emplace_back(CreateListItem(hbox({
+                keyword("ROLLBACK"), text(" | "), keyword("ROLLBACK TRANSACTION"), text(" | "),
+                keyword("ROLLBACK WORK"), text(": rollback the current transaction.")
             })));
         }
 
@@ -384,12 +408,20 @@ private:
         }
         placeholder << ", Ctrl+D to exit)";
 
+        std::vector<TString> tclCommands;
+        if (settings.EnableInteractiveTransactions) {
+            for (auto& candidate : GetTransactionControlCompletions()) {
+                tclCommands.push_back(std::move(candidate));
+            }
+        }
+
         return {
             .LazyDriver = settings.CompleterLazyDriver,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
             .AdditionalCommands = {"/help", "/config"},
+            .TclCommands = std::move(tclCommands),
             .Placeholder = placeholder,
             .EnableSwitchMode = settings.EnableAiInteractive,
         };
@@ -452,6 +484,15 @@ private:
         Session = sessionResult.GetSession();
     }
 
+    bool IsInteractiveTransactionActive() const {
+        return EnableInteractiveTransactions && Transaction && Transaction->IsActive();
+    }
+
+    void PrintTcError(TStringBuf prefix, TStringBuf details) {
+        Cerr << Colors.Red() << "\n" << prefix << ":" << Colors.OldColor() << Endl
+             << Strip(TString(details)) << Endl;
+    }
+
     void UpdateTransactionPrompt() {
         if (LineReader) {
             LineReader->SetPrompt(TStringBuilder() << BasePrompt << "* ");
@@ -471,17 +512,18 @@ private:
         ResetTransactionPrompt();
     }
 
+    // Rollback any transaction left open at shutdown. Errors are swallowed.
     void RollbackOpenTransaction(bool silent) {
         if (!Transaction || !Transaction->IsActive()) {
             ResetTransactionState();
             return;
         }
-        auto rollbackResult = Transaction->Rollback().GetValueSync();
-        if (!rollbackResult.IsSuccess() && !silent) {
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(rollbackResult);
-        }
-        if (!silent) {
-            Cout << "ROLLBACK" << Endl;
+        try {
+            Transaction->Rollback().GetValueSync();
+        } catch (...) {
+            if (!silent) {
+                throw;
+            }
         }
         ResetTransactionState();
     }

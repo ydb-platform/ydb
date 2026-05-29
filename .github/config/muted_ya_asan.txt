@@ -63,6 +63,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWith
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ErroneousRequestGetRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestCreateStream
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShards
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsEmptyFields
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsExclusiveStartShardId
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsTimestamp
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsToken
@@ -102,6 +103,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListDeadLetterSourceQu
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListQueueTags
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMoveMessagesToDLQ
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue_TableImplementation
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessageWithAttemptId
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_Fifo_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_TopicImplementation_Compatibility
@@ -221,9 +223,11 @@ ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtl
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtlAndForgetAfter
 ydb/core/kqp/ut/service KqpWarmup.WarmupQueryTypePropagation
+ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.InvisibleRowSkips
+ydb/core/kqp/ut/tli KqpTli.LogDisabled
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks

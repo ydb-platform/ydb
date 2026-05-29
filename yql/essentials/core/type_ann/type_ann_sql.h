@@ -6,6 +6,24 @@ namespace NYql::NTypeAnnImpl {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TInput {
+    enum EInputPriority {
+        External,
+        Current,
+        Projection
+    };
+
+    TString Alias;
+    const TStructExprType* Type = nullptr;
+    TMaybe<TColumnOrder> Order;
+    EInputPriority Priority = External;
+    TSet<TString> UsedExternalColumns;
+};
+
+using TInputs = TVector<TInput>;
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -25,7 +25,7 @@ def discover_cases():
 
 
 TSpec = collections.namedtuple(
-    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'extra_env']
+    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'extra_env', 'secure_params']
 )
 
 
@@ -83,6 +83,8 @@ def make_test(case):
     if "YA_TEST_RUNNER" in extra_env:
         del extra_env["YA_TEST_RUNNER"]
 
+    secure_params = yql_utils.get_secure_params(cfg)
+
     return TSpec(
         program=program,
         canonize_ast=canonize_ast,
@@ -93,10 +95,11 @@ def make_test(case):
         diff_tool=diff_tool,
         scan_udfs=scan_udfs,
         extra_env=extra_env,
+        secure_params=secure_params,
     )
 
 
-def facade_runner(prov, cfg_dir, binary=None):
+def facade_runner(prov, cfg_dir, binary=None, secure_params={}):
     """Returns a factory that creates YQLRun instances with the given fixed parameters."""
 
     def make(langver, gateway_config=None, extra_args=[]):
@@ -117,6 +120,7 @@ def facade_runner(prov, cfg_dir, binary=None):
             gateway_config=gateway_config,
             extra_args=extra_args,
             langver=langver,
+            secure_params=secure_params
         )
 
     return make

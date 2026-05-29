@@ -11,7 +11,7 @@ namespace NKikimr::NNbsDbgLike {
 // TNbsDbgLikeLoadActor — standard load actor that drives a
 // TNbsDbgLikeLoadTablet via a tablet pipe using TEvLoad::TEvNbsWrite /
 // TEvNbsRead. It owns the address sampler (Sequential / random, `M_eff`
-// slice), the InFlightWrites / InFlightReads budgets, the ReadRatio
+// slice), the MaxInFlight budget, the ReadRatio
 // pacing, and the per-Run latency histograms. On TEvPoisonPill
 // (scheduled at DurationSeconds) the actor drains, sends
 // TEvLoadTestFinished to its parent (the service actor), and PassAways.

@@ -315,7 +315,7 @@ private:
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartDelayMs());
         ptr->MaxShardAttempts = settings.GetMaxShardRetries();
         ptr->MaxShardResolves = settings.GetMaxShardResolves();
-        ptr->UnsertaintyRatio = settings.GetUnsertaintyRatio();
+        ptr->UncertaintyRatio = settings.GetUnsertaintyRatio();
         ptr->Multiplier = settings.GetMultiplier();
         if (settings.GetMaxTotalRetries()) {
             ptr->MaxTotalRetries = settings.GetMaxTotalRetries();

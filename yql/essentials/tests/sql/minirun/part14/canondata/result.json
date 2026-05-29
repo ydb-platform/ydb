@@ -1216,6 +1216,20 @@
             "uri": "https://{canondata_backend}/1942671/177e34c44b7724978f8e24b71ca17680c51e77ee/resource.tar.gz#test.test_select_yql-group_by_count_b-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-join_implicit_using_case_sensitivity_key-default.txt-Debug]": [
+        {
+            "checksum": "e905b22cbafed125f234481ffcd660d0",
+            "size": 711,
+            "uri": "https://{canondata_backend}/1889210/44350f19457fd077dc49a5c98e18db4c09643620/resource.tar.gz#test.test_select_yql-join_implicit_using_case_sensitivity_key-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-join_implicit_using_case_sensitivity_key-default.txt-Results]": [
+        {
+            "checksum": "7bb3fb103287203c3ff375dc53de16e3",
+            "size": 1552,
+            "uri": "https://{canondata_backend}/1889210/44350f19457fd077dc49a5c98e18db4c09643620/resource.tar.gz#test.test_select_yql-join_implicit_using_case_sensitivity_key-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-uncorrelated_asterisk_asterisk_subquery_scalar-default.txt-Debug]": [
         {
             "checksum": "b5957911dea1be740cc22a1cc605a8fb",

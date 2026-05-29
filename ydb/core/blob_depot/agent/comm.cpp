@@ -92,10 +92,7 @@ namespace NKikimr::NBlobDepot {
             ? std::make_optional(msg.GetS3BackendSettings())
             : std::nullopt;
 
-        if (S3WrapperId) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, S3WrapperId, SelfId(), nullptr, 0));
-            S3WrapperId = {};
-        }
+        ReleaseS3Wrapper();
 
 #ifndef KIKIMR_DISABLE_S3_OPS
         InitS3(msg.GetName());

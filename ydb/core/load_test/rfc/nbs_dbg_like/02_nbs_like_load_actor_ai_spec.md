@@ -28,8 +28,8 @@ DDisk and the same allocate API the partition uses to talk to BSC.
 >   `TPerDbgState` slot is populated and the tablet starts accepting
 >   `TEvNbsWrite` / `TEvNbsRead`. There is no separate worker actor.
 > - `TNbsDbgLikeLoadActor` (`nbs_dbg_like_load.{h,cpp}`) — the **load
->   generator**: address sampler (`PickAddress`), `InFlightWrites` /
->   `InFlightReads` budgets, `ReadRatio` pacing, `Sequential` / random mode,
+>   generator**: address sampler (`PickAddress`), `MaxInFlight`
+>   budget, `ReadRatio` pacing, `Sequential` / random mode,
 >   per-Run latency histograms and run-level metrics. It is **per-Run**;
 >   spawned by the service actor (`TLoadActor`) via `CreateNbsDbgLikeLoadActor`
 >   with the tablet ID from `TNbsDbgLikeLoad.NbsDbgLikeTabletId`. On
@@ -91,7 +91,7 @@ by `WriteConfirmed.count() >= 3` for that LSN. Same-host pairs always; no
 cross-host flush.
 - Erase: per-PB `TEvBatchErasePersistentBuffer` for every PB **of the LSN's
 DBG** that received the write (3 PBs in steady state), gated by
-`FillRatio`.
+`SyncRequestsBatchSize`.
 - Optional reads (`ReadRatio > 0`) — random-address reads routed to **PB
 or DDisk** depending on the per-LSN dirty state at the chosen address
 (mirrors `TBlocksDirtyMap::MakeReadHint`,
@@ -198,7 +198,7 @@ pipe, see §3 and §23.5).
 | Address-to-`(dbg, vChunk, offset)` decoding               | tablet (merged worker) |
 | LSN allocation, `Lsns` map, flush + erase loop            | tablet (merged worker) |
 | Read routing (PB vs DDisk)                                | tablet (merged worker) |
-| In-flight tracking for back-pressure (`InFlightWrites`, `InFlightReads`) | load actor  |
+| In-flight tracking for back-pressure (`MaxInFlight`) | load actor  |
 | LSN-level back-pressure (`MaxInflightLsns`)               | tablet (merged worker) |
 | Latency timestamps (start/finish)                         | load actor (tablet reply carries `Status` only) |
 | Per-stage histograms (`WriteQuorumMs`, `FlushMs`, `EraseMs`) | tablet (merged worker, Solomon) |
@@ -211,12 +211,12 @@ pipe, see §3 and §23.5).
 | ------------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `(TabletId, Generation)` credentials | actor-wide                     | Single key for BSC + connect handshake; matches how a partition tablet uses one tablet id across all 32 DBGs.                                 |
 | `SequenceGenerator` (LSN counter)    | actor-wide                     | Mirrors `TFastPathService::SequenceGenerator` (`fast_path_service.cpp:308-311`). LSNs are globally unique within the actor, even across DBGs. |
-| `InFlightWrites` budget              | actor-wide                     | One global cap on outstanding `TEvWritePersistentBuffers`. Per-DBG inflight is a derived gauge.                                               |
+| `MaxInFlight` budget              | actor-wide                     | One global cap on outstanding writes + reads. Per-DBG inflight is a derived gauge.                                               |
 | `MaxInflightLsns` budget             | actor-wide                     | Caps total LSNs across all DBGs in the actor's memory.                                                                                        |
 | `Lsns` map                           | per-DBG (`TPerDbgState::Lsns`) | Mirrors per-vChunk dirty map (`TVChunk::BlocksDirtyMap`).                                                                                     |
 | `ReadyToErase` set                   | per-DBG                        | Same.                                                                                                                                         |
 | `InFlightTo[PB[k]]` counters         | per-DBG                        | Coordinator round-robin is per-DBG.                                                                                                           |
-| Last-reported `FreeSpace` per PB     | per-DBG                        | Drives the `FillRatio` erase gate; averaged per DBG, then min/max across DBGs in §14.                                                         |
+| Last-reported `FreeSpace` per PB     | per-DBG                        | Monitoring metric; averaged per DBG, then min/max across DBGs in §14.                                                                        |
 | 10 wire connections (5 PB + 5 DD)    | per-DBG                        | Each DBG has its own peers from BSC.                                                                                                          |
 
 
@@ -239,15 +239,15 @@ reads it from `TEvNbsLoadTabletAllocateGroups.AllocConfig`.
 - `TConfigureTablet` — **worker-only knobs**, sent by the parent tablet
 to the long-lived worker at the start of every Run: `MaxInflightLsns`,
 `FlushBatchSize`, `EraseBatchSize`, `SyncRequestsBatchSize`,
-`PBufferReplyTimeoutMicroseconds`, `FillRatio` (v2: moved here from
-`TWorkloadConfig`), `NumDirectBlockGroupsToUse` (so the worker can
+`PBufferReplyTimeoutMicroseconds`,
+`NumDirectBlockGroupsToUse` (so the worker can
 validate that incoming `TNbsWrite.Address` is in range for the active
 DBG slice), and `IoSizeBytes` (the per-Run I/O size; the worker rejects
 mismatched `TNbsWrite.SizeBytes`).
 - `TWorkloadConfig` — **load-actor-only knobs**, delivered to the load
 actor via `TNbsDbgLikeLoad.WorkloadConfig` when the service actor starts
 the actor: `Tag`, `DurationSeconds`, `DelayBeforeMeasurementsSeconds`,
-`NumDirectBlockGroupsToUse`, `ReadWriteSizeKiB`, `InFlightWrites`,
+`NumDirectBlockGroupsToUse`, `ReadWriteSizeKiB`, `MaxInFlight`,
 `ReadRatio`, `Sequential`. It also carries `TabletConfig TConfigureTablet`
 so a single run request can deliver both halves; the load actor forwards
 `TabletConfig` to the tablet via `TEvConfigureTablet` at Bootstrap.
@@ -341,11 +341,11 @@ message TNbsDbgLikeLoad {
     // and ReadWriteSizeKiB * 1024 <= VChunkSizeBytes.
     optional uint32 ReadWriteSizeKiB = 14 [default = 4];
 
-    // InFlightWrites caps in-flight TEvWritePersistentBuffers across ALL
+    // MaxInFlight caps concurrent in-flight writes + reads across ALL
     // DBGs (global cap). For multi-DBG runs you typically want this to
     // scale with NumDirectBlockGroups so each DBG has comparable
     // per-DBG inflight to the single-DBG case.
-    optional uint32 InFlightWrites = 15;
+    optional uint32 MaxInFlight = 15;
 
     // MaxInflightLsns caps the total size of all per-DBG Lsns maps
     // (sum across DBGs). An LSN sits in its DBG's map from "write sent"
@@ -357,8 +357,8 @@ message TNbsDbgLikeLoad {
     // every DBG can hold its own steady-state window.
     optional uint32 MaxInflightLsns = 16 [default = 4096];
 
-    optional uint32 FillRatio = 17 [default = 50];   // % PB occupancy that
-                                                     // gates erase startup
+    // Deprecated for TNbsDbgLikeLoadTablet: erase now fires on SyncRequestsBatchSize gate alone.
+    optional uint32 FillRatio = 17 [default = 50];   // retained for wire compatibility
     optional uint32 ReadRatio = 18 [default = 0];    // % reads relative to writes
 
     // SyncRequestsBatchSize mirrors the partition's
@@ -403,7 +403,7 @@ Conscious omissions vs the existing per-PB / per-DDisk load actors:
 - No hand-off / hedging knobs.
 - No `Hosts[5*N]` manual override; the BSC alloc round-trip is the only
 path.
-- No per-DBG override of `ReadWriteSizeKiB` / `FillRatio` / `ReadRatio` — every
+- No per-DBG override of `ReadWriteSizeKiB` / `ReadRatio` — every
 DBG gets the same workload-shaping config; per-DBG load divergence is a
 property of the address sampler (§7), not of separate config blobs.
 
@@ -427,7 +427,7 @@ actor is `TNbsDbgLikeLoadActor`.
    tablet pipe) it first does a best-effort sweep of any residual LSNs
    left over from a prior Run, then updates `MaxInflightLsns`,
    `FlushBatchSize`, `EraseBatchSize`, `SyncRequestsBatchSize`,
-   `PBufferReplyTimeoutMicroseconds`, `FillRatio`,
+   `PBufferReplyTimeoutMicroseconds`,
    `NumDirectBlockGroupsToUse`, `IoSizeBytes`.
 4. **Running (`Phase = WorkerRunning`)**: handles `TNbsWrite` /
    `TNbsRead` from the load actor (or from a tablet-pipe client; tests
@@ -447,7 +447,7 @@ actor is `TNbsDbgLikeLoadActor`.
    `TEvConfigureTablet`, then validates `ReadWriteSizeKiB` and schedules
    a `TEvPoisonPill` at `DurationSeconds`, starts emitting `TNbsWrite` /
    `TNbsRead`.
-2. **Run**: maintains the `InFlightWrites` / `InFlightReads` budgets,
+2. **Run**: maintains the `MaxInFlight` budget,
    picks addresses via `PickAddress`, sends `TNbsWrite { addr, size,
    PayloadId }` with a per-write `TRope` payload to the tablet, records
    `now - SentAt` on the reply.
@@ -542,7 +542,7 @@ In v2 the hot path is split between the two actors:
 - **Load actor** picks an address in the flat user-level space (§2.1) and
   sends a single `TNbsWrite { Address, SizeBytes }` to the worker; the
   load actor stamps `SentAt = Now()` into its own in-flight map (keyed
-  by `Cookie`) and decrements `InFlightWrites` capacity.
+  by `Cookie`) and tracks in-flight count against the `MaxInFlight` cap.
 - **Worker** decodes the address into `(dbgIndex, vChunkIndex, offset)`,
   allocates an LSN, sends `TEvWritePersistentBuffers` to the chosen
   coordinator PB of that DBG, and on quorum (success or failure) emits
@@ -565,12 +565,12 @@ PickAddress(SizeBytes):
 
 SendNext():                              // load actor
     SizeBytes = ReadWriteSizeKiB * 1024     // KiB from TWorkloadConfig; validated
-    while InFlightWrites < MaxInFlightWrites:
+    while WriteInFlight + ReadInFlight < MaxInFlight:
         addr = PickAddress(SizeBytes)
         cookie = ++NextWriteCookie
         Inflight[cookie] = {Address=addr, SizeBytes, SentAt=Now()}
         Send(WorkerActorId, TNbsWrite{Address=addr, SizeBytes}, cookie)
-        ++InFlightWrites
+        ++WriteInFlight
 
 // === Worker side ===============================================
 HandleNbsWrite(msg, sender, cookie):
@@ -736,8 +736,6 @@ Per `nbs_architecture.md §5.3`. Runs **per-DBG**.
 
 ```text
 DoErase(dbg):
-    if Phase == Running
-       and dbg->AvgPbFreeSpacePct > 100 - FillRatio: return // FillRatio gate
     // SyncRequestsBatchSize gate (mirrors the partition's MakeEraseHint
     // early-return, dirty_map.cpp:433-435). Bypassed during drain so the
     // shutdown sweep can finalize. PHASE_DONE early-returns at the top.
@@ -794,16 +792,6 @@ A failed PB erase clears its bit and re-queues the LSN for retry on the next
 `DoErase(dbg)` tick — same as
 [ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.cpp](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.cpp)
 lines 467-492.
-
-`FillRatio` gates **starting** to erase **per DBG**: erases do not begin
-on a given DBG until that DBG's PBs are at least `FillRatio`% full. Once
-started, erase keeps up with writes; the gate is read from `FreeSpace`
-reported in `TEvWritePersistentBufferResult` /
-`TEvErasePersistentBufferResult` (same source as
-[ydb/core/load_test/persistent_buffer_write.cpp](ydb/core/load_test/persistent_buffer_write.cpp)
-line 359-360, 415, 431). Each DBG has its own `LastFreeSpace[5]` and
-`AvgPbFreeSpacePct` — DBGs hit the gate independently, so a hot DBG can
-already be erasing while a cold DBG still fills.
 
 `SyncRequestsBatchSize` gates **batching density** per DBG (same value
 governs flush in §8 and erase here). With the default `10`, up to 9
@@ -1554,8 +1542,7 @@ max LSN seen by that DBG).
 - `AvgPbFreeSpacePct` (gauge; per-DBG = mean of `LastFreeSpace` across that
 DBG's PB0..PB2; root has both `AvgPbFreeSpacePctMin` and
 `AvgPbFreeSpacePctMax` over the per-DBG values plus the cluster-wide
-`AvgPbFreeSpacePct` mean) — drives the per-DBG `FillRatio` erase gate;
-same source as
+`AvgPbFreeSpacePct` mean) — monitoring metric; same source as
 [persistent_buffer_write.cpp:359-360,415,431](ydb/core/load_test/persistent_buffer_write.cpp).
 - `SyncGateThreshold` (gauge; root and per-DBG — echo of
 `TWorkloadConfig.SyncRequestsBatchSize` for headroom comparisons against
@@ -1873,7 +1860,7 @@ draining, and the (rare) worker shutdown driven by the tablet on Delete
 
 On `TEvPoisonPill` (scheduled at `DurationSeconds`):
 
-1. `MaxInFlightWrites = MaxInFlightReads = 0`. The sampler stops issuing
+1. `MaxInFlight = 0`. The sampler stops issuing
    new `TNbsWrite` / `TNbsRead`.
 2. Wait for all outstanding `TNbsWriteResult` / `TNbsReadResult` to
    arrive (with a `kDrainTimeout` wakeup as the upper bound).
@@ -2032,7 +2019,7 @@ YDB tablet so:
 restarts (tablet-local DB),
 - two-phase UX (`Create` once, `Run` many times) lets back-to-back runs
 reuse the same DBGs (the user's "multiple inflights" case — same
-allocation, different `InFlightWrites` per run),
+allocation, different `MaxInFlight` per run),
 - `Generation` is bumped automatically by `Executor()->Generation()` on
 every tablet boot.
 
@@ -2322,7 +2309,7 @@ OnTEvNbsLoadTabletDelete():
 alloc-shape fields live in `TAllocConfig`). Concretely it carries: `Tag`,
 `DurationSeconds`, `DelayBeforeMeasurementsSeconds`,
 `NumDirectBlockGroupsToUse`, `ReadWriteSizeKiB`,
-`InFlightWrites`, `FillRatio`, `ReadRatio`, `Sequential`,
+`MaxInFlight`, `ReadRatio`, `Sequential`,
 plus `TabletConfig TConfigureTablet` that the load actor forwards to the
 tablet at Bootstrap.
 
@@ -2407,7 +2394,7 @@ separate `nbs_dbg_like_worker.{h,cpp}` files (with
 `CreateNbsDbgLikeWorker`) are gone in v2.1; their state and handlers
 are tablet members. Per-Run knobs (`MaxInflightLsns`, `FlushBatchSize`,
 `EraseBatchSize`, `SyncRequestsBatchSize`,
-`PBufferReplyTimeoutMicroseconds`, `FillRatio`,
+`PBufferReplyTimeoutMicroseconds`,
 `NumDirectBlockGroupsToUse`, `IoSizeBytes`) are installed via a
 `TEvConfigureTablet` self-event the tablet posts to itself at the start
 of every Run; the same event is also accepted from a tablet pipe
@@ -2671,10 +2658,9 @@ TWorkloadConfig: {
 
     NumDirectBlockGroupsToUse: 0          # 0 = use all 32; set 8 to stress first 8 DBGs only
     ReadWriteSizeKiB: 4
-    InFlightWrites: 2048                     # tweak per run (the user's "multiple inflights" use case)
+    MaxInFlight: 2048                     # tweak per run (the user's "multiple inflights" use case)
     MaxInflightLsns: 131072
 
-    FillRatio: 50
     ReadRatio: 0
     SyncRequestsBatchSize: 10                # matches partition default
     FlushBatchSize: 16
@@ -2691,7 +2677,7 @@ the tablet rejects a `TAllocConfig` change after first Create
 (§23.5: `AlreadyInitialized`).
 
 A typical "multiple-inflight" experiment is therefore one `Create` +
-N `Run`s, each with a different `InFlightWrites` and a fresh `Tag`.
+N `Run`s, each with a different `MaxInFlight` and a fresh `Tag`.
 The Solomon tree under `load_actor/tablet=<OwnerIdx>/...` accumulates
 all N runs side-by-side because the per-Tag prefix lives one level
 deeper.
@@ -2778,7 +2764,7 @@ in-flight write window. With multi-DBG the blast radius is per-DBG
 sampler will re-pick the affected DBG anyway and pile up there until
 back-pressure kicks in. The min-inflight tie-break in §7 mitigates
 this partially but not as well as a real Oracle would.
-- `**InFlightWrites` / `MaxInflightLsns` must be scaled with
+- `**MaxInFlight` / `MaxInflightLsns` must be scaled with
 `NumDirectBlockGroups`**: both caps are global. Leaving them at the
 single-DBG default with `N = 32` divides the per-DBG pipeline by 32
 and you measure a starved hot path, not the cluster. Rule of thumb:

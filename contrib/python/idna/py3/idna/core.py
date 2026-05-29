@@ -57,18 +57,54 @@ def _unot(s: int) -> str:
 
 
 def valid_label_length(label: Union[bytes, str]) -> bool:
+    """Check that a label does not exceed the maximum permitted length.
+
+    Per :rfc:`1035` (and :rfc:`5891` §4.2.4) a DNS label must not exceed
+    63 octets. The argument may be either a :class:`str` (a U-label, where
+    length is measured in characters) or :class:`bytes` (an A-label, where
+    length is measured in octets).
+
+    :param label: The label to check.
+    :returns: ``True`` if the label is within the length limit, otherwise
+        ``False``.
+    """
     if len(label) > 63:
         return False
     return True
 
 
 def valid_string_length(label: Union[bytes, str], trailing_dot: bool) -> bool:
+    """Check that a full domain name does not exceed the maximum length.
+
+    Per :rfc:`1035`, a domain name is limited to 253 octets when no trailing
+    dot is present, or 254 octets when one is included.
+
+    :param label: The full (possibly multi-label) domain name.
+    :param trailing_dot: ``True`` if ``label`` includes a trailing ``.``.
+    :returns: ``True`` if the domain is within the length limit, otherwise
+        ``False``.
+    """
     if len(label) > (254 if trailing_dot else 253):
         return False
     return True
 
 
 def check_bidi(label: str, check_ltr: bool = False) -> bool:
+    """Validate the Bidi Rule from :rfc:`5893` for a single label.
+
+    The Bidi Rule constrains how bidirectional characters (Hebrew, Arabic,
+    etc.) may appear within a label. By default the check is only applied
+    when the label contains at least one right-to-left character (Unicode
+    bidirectional categories ``R``, ``AL``, or ``AN``); set ``check_ltr``
+    to ``True`` to apply it to LTR-only labels as well.
+
+    :param label: The label to validate, as a Unicode string.
+    :param check_ltr: If ``True``, apply the rules even when the label
+        contains no RTL characters.
+    :returns: ``True`` if the label satisfies the Bidi Rule.
+    :raises IDNABidiError: If any of Bidi Rule conditions 1-6 are violated,
+        or if the directional category of a codepoint cannot be determined.
+    """
     # Bidi rules should only be applied if string contains RTL characters
     bidi_label = False
     for idx, cp in enumerate(label, 1):
@@ -139,12 +175,31 @@ def check_bidi(label: str, check_ltr: bool = False) -> bool:
 
 
 def check_initial_combiner(label: str) -> bool:
+    """Reject labels that begin with a combining mark.
+
+    Per :rfc:`5891` §4.2.3.2 a label must not start with a character of
+    Unicode general category ``M`` (Mark).
+
+    :param label: The label to check.
+    :returns: ``True`` if the first character is not a combining mark.
+    :raises IDNAError: If the label begins with a combining character.
+    """
     if unicodedata.category(label[0])[0] == "M":
         raise IDNAError("Label begins with an illegal combining character")
     return True
 
 
 def check_hyphen_ok(label: str) -> bool:
+    """Validate the hyphen restrictions for a label.
+
+    Per :rfc:`5891` §4.2.3.1 a label must not start or end with a hyphen
+    (``U+002D``), and must not have hyphens in both the third and fourth
+    positions (the prefix reserved for A-labels).
+
+    :param label: The label to check.
+    :returns: ``True`` if the hyphen restrictions are satisfied.
+    :raises IDNAError: If any of the hyphen restrictions are violated.
+    """
     if label[2:4] == "--":
         raise IDNAError("Label has disallowed hyphens in 3rd and 4th position")
     if label[0] == "-" or label[-1] == "-":
@@ -153,11 +208,30 @@ def check_hyphen_ok(label: str) -> bool:
 
 
 def check_nfc(label: str) -> None:
+    """Require that a label is in Unicode Normalization Form C.
+
+    :param label: The label to check.
+    :raises IDNAError: If ``label`` differs from its NFC normalisation.
+    """
     if unicodedata.normalize("NFC", label) != label:
         raise IDNAError("Label must be in Normalization Form C")
 
 
 def valid_contextj(label: str, pos: int) -> bool:
+    """Validate the CONTEXTJ rules from :rfc:`5892` Appendix A.
+
+    These rules govern the contextual use of the joiner codepoints
+    ``U+200C`` (ZERO WIDTH NON-JOINER, Appendix A.1) and ``U+200D``
+    (ZERO WIDTH JOINER, Appendix A.2) within a label.
+
+    :param label: The label containing the codepoint.
+    :param pos: Index of the joiner codepoint within ``label``.
+    :returns: ``True`` if the codepoint at ``pos`` satisfies its CONTEXTJ
+        rule, ``False`` otherwise (including when the codepoint at
+        ``pos`` is not a recognised joiner).
+    :raises ValueError: If an adjacent codepoint has no Unicode name when
+        determining its combining class.
+    """
     cp_value = ord(label[pos])
 
     if cp_value == 0x200C:
@@ -202,6 +276,19 @@ def valid_contextj(label: str, pos: int) -> bool:
 
 
 def valid_contexto(label: str, pos: int, exception: bool = False) -> bool:
+    """Validate the CONTEXTO rules from :rfc:`5892` Appendix A.
+
+    Covers the contextual rules for codepoints such as MIDDLE DOT
+    (``U+00B7``), Greek lower numeral sign, Hebrew punctuation, Katakana
+    middle dot, and the Arabic-Indic / Extended Arabic-Indic digit ranges.
+
+    :param label: The label containing the codepoint.
+    :param pos: Index of the codepoint within ``label``.
+    :param exception: Reserved for forward compatibility; currently unused.
+    :returns: ``True`` if the codepoint at ``pos`` satisfies its CONTEXTO
+        rule, ``False`` otherwise (including when the codepoint is not a
+        recognised CONTEXTO codepoint).
+    """
     cp_value = ord(label[pos])
 
     if cp_value == 0x00B7:
@@ -244,6 +331,23 @@ def valid_contexto(label: str, pos: int, exception: bool = False) -> bool:
 
 
 def check_label(label: Union[str, bytes, bytearray]) -> None:
+    """Run the full set of IDNA 2008 validity checks on a single label.
+
+    Applies, in order: NFC normalisation (:func:`check_nfc`), hyphen
+    restrictions (:func:`check_hyphen_ok`), the no-leading-combiner rule
+    (:func:`check_initial_combiner`), per-codepoint validity (PVALID,
+    CONTEXTJ, CONTEXTO classes from :rfc:`5892`), and the Bidi Rule
+    (:func:`check_bidi`).
+
+    :param label: The label to validate. ``bytes`` or ``bytearray`` input
+        is decoded as UTF-8 first.
+    :raises IDNAError: If the label is empty or fails a structural rule.
+    :raises InvalidCodepoint: If the label contains a DISALLOWED or
+        UNASSIGNED codepoint.
+    :raises InvalidCodepointContext: If a CONTEXTJ or CONTEXTO codepoint
+        is not valid in its context.
+    :raises IDNABidiError: If the Bidi Rule is violated.
+    """
     if isinstance(label, (bytes, bytearray)):
         label = label.decode("utf-8")
     if len(label) == 0:
@@ -283,6 +387,18 @@ def check_label(label: Union[str, bytes, bytearray]) -> None:
 
 
 def alabel(label: str) -> bytes:
+    """Convert a single U-label into its A-label form.
+
+    The result is the ASCII-Compatible Encoding (ACE) form per :rfc:`5891`
+    §4: the label is validated, Punycode-encoded, and prefixed with
+    ``xn--``. Pure ASCII labels that are already valid IDNA labels are
+    returned unchanged (as :class:`bytes`).
+
+    :param label: The label to convert, as a Unicode string.
+    :returns: The A-label as ASCII-encoded :class:`bytes`.
+    :raises IDNAError: If the label is invalid or the resulting A-label
+        exceeds 63 octets.
+    """
     try:
         label_bytes = label.encode("ascii")
         ulabel(label_bytes)
@@ -302,6 +418,18 @@ def alabel(label: str) -> bytes:
 
 
 def ulabel(label: Union[str, bytes, bytearray]) -> str:
+    """Convert a single A-label into its U-label form.
+
+    Performs the inverse of :func:`alabel`: an ``xn--``-prefixed label is
+    Punycode-decoded and validated. Labels that are already Unicode (or
+    plain ASCII without the ACE prefix) are validated and returned as a
+    Unicode string.
+
+    :param label: The label to convert. ``bytes`` or ``bytearray`` input
+        is treated as ASCII.
+    :returns: The U-label as a Unicode string.
+    :raises IDNAError: If the label is malformed or fails validation.
+    """
     if not isinstance(label, (bytes, bytearray)):
         try:
             label_bytes = label.encode("ascii")
@@ -331,7 +459,24 @@ def ulabel(label: Union[str, bytes, bytearray]) -> str:
 
 
 def uts46_remap(domain: str, std3_rules: bool = True, transitional: bool = False) -> str:
-    """Re-map the characters in the string according to UTS46 processing."""
+    """Apply the UTS #46 character mapping to a domain string.
+
+    Implements the mapping table from `UTS #46 §4
+    <https://www.unicode.org/reports/tr46/>`_: each character is kept,
+    replaced, or rejected based on its status (``V``, ``M``, ``D``, ``3``,
+    ``I``). The result is returned in Normalisation Form C.
+
+    :param domain: The full domain name to remap.
+    :param std3_rules: If ``True``, apply the stricter STD3 ASCII rules
+        (status ``3`` codepoints raise instead of being kept or mapped).
+    :param transitional: If ``True``, use transitional processing (status
+        ``D`` codepoints are mapped instead of kept). Transitional
+        processing has been removed from UTS #46 and this option is
+        retained only for backwards compatibility.
+    :returns: The remapped domain, in Normalisation Form C.
+    :raises InvalidCodepoint: If the domain contains a disallowed
+        codepoint under the chosen rules.
+    """
     from .uts46data import uts46data
 
     output = ""
@@ -342,7 +487,7 @@ def uts46_remap(domain: str, std3_rules: bool = True, transitional: bool = False
         status = uts46row[1]
         replacement: Optional[str] = None
         if len(uts46row) == 3:
-            replacement = uts46row[2]
+            replacement = uts46row[2]  # ty: ignore[index-out-of-bounds]
         if status == "V" or (status == "D" and not transitional) or (status == "3" and not std3_rules and replacement is None):
             output += char
         elif replacement is not None and (
@@ -366,6 +511,27 @@ def encode(
     std3_rules: bool = False,
     transitional: bool = False,
 ) -> bytes:
+    """Encode a Unicode domain name into its ASCII (A-label) form.
+
+    Splits the input on label separators (only ``U+002E`` if ``strict`` is
+    set; otherwise also IDEOGRAPHIC FULL STOP ``U+3002``, FULLWIDTH FULL
+    STOP ``U+FF0E``, and HALFWIDTH IDEOGRAPHIC FULL STOP ``U+FF61``),
+    encodes each label with :func:`alabel`, and rejoins them with ``.``.
+    Optionally pre-processes the input through :func:`uts46_remap`.
+
+    :param s: The domain name to encode.
+    :param strict: If ``True``, only ``U+002E`` is recognised as a label
+        separator.
+    :param uts46: If ``True``, apply UTS #46 mapping before encoding.
+    :param std3_rules: Forwarded to :func:`uts46_remap` when ``uts46`` is
+        ``True``.
+    :param transitional: Forwarded to :func:`uts46_remap` when ``uts46``
+        is ``True``. Deprecated: emits a :class:`DeprecationWarning` and
+        will be removed in a future version.
+    :returns: The encoded domain as ASCII :class:`bytes`.
+    :raises IDNAError: If the domain is empty, contains an invalid label,
+        or exceeds the maximum domain length.
+    """
     if transitional:
         warnings.warn(
             "Transitional processing has been removed from UTS #46. "
@@ -376,10 +542,16 @@ def encode(
     if not isinstance(s, str):
         try:
             s = str(s, "ascii")
-        except UnicodeDecodeError:
+        except (UnicodeDecodeError, TypeError):
             raise IDNAError("should pass a unicode string to the function rather than a byte string.")
     if uts46:
         s = uts46_remap(s, std3_rules, transitional)
+
+    # Reject inputs that exceed the maximum DNS domain length up-front
+    # to avoid expensive computation on long inputs.
+    if not valid_string_length(s, trailing_dot=True):
+        raise IDNAError("Domain too long")
+
     trailing_dot = False
     result = []
     if strict:
@@ -411,13 +583,34 @@ def decode(
     uts46: bool = False,
     std3_rules: bool = False,
 ) -> str:
-    try:
-        if not isinstance(s, str):
+    """Decode an A-label-encoded domain name back to Unicode.
+
+    Splits the input on label separators (see :func:`encode` for the
+    rules), decodes each label with :func:`ulabel`, and rejoins them
+    with ``.``. Optionally pre-processes the input through
+    :func:`uts46_remap`.
+
+    :param s: The domain name to decode.
+    :param strict: If ``True``, only ``U+002E`` is recognised as a label
+        separator.
+    :param uts46: If ``True``, apply UTS #46 mapping before decoding.
+    :param std3_rules: Forwarded to :func:`uts46_remap` when ``uts46`` is
+        ``True``.
+    :returns: The decoded domain as a Unicode string.
+    :raises IDNAError: If the input is not valid ASCII, contains an
+        invalid label, or is empty.
+    """
+    if not isinstance(s, str):
+        try:
             s = str(s, "ascii")
-    except UnicodeDecodeError:
-        raise IDNAError("Invalid ASCII in A-label")
+        except (UnicodeDecodeError, TypeError):
+            raise IDNAError("Invalid ASCII in A-label")
     if uts46:
         s = uts46_remap(s, std3_rules, False)
+    # Reject inputs that exceed the maximum DNS domain length up-front
+    # to avoid expensive computation on long inputs.
+    if not valid_string_length(s, trailing_dot=True):
+        raise IDNAError("Domain too long")
     trailing_dot = False
     result = []
     if not strict:

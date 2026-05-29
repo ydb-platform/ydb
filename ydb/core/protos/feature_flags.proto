@@ -306,4 +306,5 @@ message TFeatureFlags {
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
     optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
+    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
 }

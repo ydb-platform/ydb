@@ -4,6 +4,7 @@
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/charset/ci_string.h>
@@ -829,6 +830,11 @@ public:
             return Y("MrWalkFolders", initPath, rootAttributes, pickledInitState, initStateType,
                      preHandler, resolveHandler, diveHandler, postHandler);
         } else if (func == "tables") {
+            if (!ctx.Settings.AllowTablesFunction) {
+                ctx.Error(Pos_) << Func_ << " is not allowed in this context";
+                return nullptr;
+            }
+
             if (!Args_.empty()) {
                 ctx.Error(Pos_) << Func_ << " doesn't accept arguments";
                 return nullptr;
@@ -869,11 +875,7 @@ public:
             result = L(result, Q(settings));
             return result;
         } else if (func == "partitionlist" || func == "partitionliststrict") {
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                    Pos_,
-                    "PARTITION_LIST table function",
-                    MakeLangVersion(2025, 4)))
-            {
+            if (!ctx.EnsureAvailable(Pos_, NYql::NFeature::PartitionListTableFunction)) {
                 return nullptr;
             }
 
@@ -908,11 +910,7 @@ public:
             }
             return partitionList;
         } else if (func == "partitions" || func == "partitionsstrict") {
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                    Pos_,
-                    "PARTITIONS table function",
-                    MakeLangVersion(2025, 4)))
-            {
+            if (!ctx.EnsureAvailable(Pos_, NYql::NFeature::PartitionsTableFunction)) {
                 return nullptr;
             }
 

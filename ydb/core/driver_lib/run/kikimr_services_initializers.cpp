@@ -87,7 +87,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
@@ -2384,24 +2383,13 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         GlobalObjects.AddGlobalObject(std::make_shared<NYql::NLog::YqlLoggerScope>(
             new NYql::NLog::TTlsLogBackend(new TNullLogBackend())));
 
-        auto federatedQuerySetupFactory = NKqp::MakeKqpFederatedQuerySetupFactory(setup, appData, Config);
-
-        auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
             Config.GetQueryServiceConfig(), Config.GetTliConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources),
-            federatedQuerySetupFactory, s3ActorsFactory
+            NKqp::MakeKqpFederatedQuerySetupFactory(setup, appData, Config), NYql::NDq::CreateS3ActorsFactory()
         );
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
-
-        // Create finalize script service
-        auto finalize = NKqp::CreateKqpFinalizeScriptService(
-            Config.GetQueryServiceConfig(), federatedQuerySetupFactory, s3ActorsFactory
-        );
-        setup->LocalServices.push_back(std::make_pair(
-            NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
-            TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
 
         auto describeSchemaSecretsService = NKqp::TDescribeSchemaSecretsServiceFactory().CreateService();
         setup->LocalServices.push_back(std::make_pair(
@@ -2422,24 +2410,6 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));
-        }
-
-        // Create Compute Scheduler service
-        {
-            NKqp::NScheduler::TOptions schedulerOptions {
-                .DelayParams = {
-                    .MaxDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
-                    .MinDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMinTaskDelayUs()),
-                    .AttemptBonus = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
-                    .MaxRandomDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
-                },
-                .UpdateFairSharePeriod = TDuration::MilliSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetUpdateFairShareMs()),
-            };
-            auto* computeSchedulerActor = NKqp::CreateKqpComputeSchedulerService(schedulerOptions);
-            setup->LocalServices.push_back(std::make_pair(
-                NKqp::MakeKqpSchedulerServiceId(NodeId),
-                TActorSetupCmd(computeSchedulerActor, TMailboxType::HTSwap, appData->UserPoolId)
-            ));
         }
     }
 }

@@ -50,7 +50,7 @@ class YdbCluster:
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))
             if 'Storage' in ss.get('Roles', []):
                 self.role = YdbCluster.Node.Role.STORAGE
-            elif 'Tenants' in ss.get('Roles', []):
+            elif 'Tenant' in ss.get('Roles', []):
                 self.role = YdbCluster.Node.Role.COMPUTE
             else:
                 self.role = YdbCluster.Node.Role.UNKNOWN

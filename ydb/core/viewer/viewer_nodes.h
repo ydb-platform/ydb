@@ -2627,7 +2627,8 @@ public:
                     for (const auto& tabletState : tabletResponse.GetTabletStateInfo()) {
                         TNode* node = FindNode(tabletState.GetNodeId());
                         if (node) {
-                            if (tabletState.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead) {
+                            if (tabletState.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead
+                                && tabletState.GetState() != NKikimrWhiteboard::TTabletStateInfo::Deleted) {
                                 NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
                                 viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(tabletState.GetType()));
                                 viewerTablet.SetState(GetFlagFromTabletState(tabletState.GetState()));
@@ -2643,7 +2644,8 @@ public:
                     TNode* node = FindNode(nodeId);
                     if (node) {
                         for (const auto& protoTabletState : tabletState.GetTabletStateInfo()) {
-                            if (protoTabletState.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead) {
+                            if (protoTabletState.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead
+                                && protoTabletState.GetState() != NKikimrWhiteboard::TTabletStateInfo::Deleted) {
                                 NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
                                 viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(protoTabletState.GetType()));
                                 viewerTablet.SetState(GetFlagFromTabletState(protoTabletState.GetState()));

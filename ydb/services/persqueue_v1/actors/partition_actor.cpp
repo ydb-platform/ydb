@@ -25,7 +25,7 @@ using namespace Topic;
 TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
-        const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
+        const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
         const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
@@ -68,7 +68,6 @@ TPartitionActor::TPartitionActor(
     , LockCounted(false)
     , TopicHolder(topicHolder)
     , Counters(counters)
-    , CommitsDisabled(commitsDisabled)
     , CommitCookie(1)
     , Topic(topic)
     , Database(database)
@@ -83,13 +82,13 @@ TPartitionActor::TPartitionActor(
 
 
 void TPartitionActor::MakeCommit(const TActorContext& ctx) {
-    if (!CommitProcessingIsEnabled) {
+    if (!CommitProcessingIsEnabled()) {
         return;
     }
 
     ui64 offset = ClientReadOffset;
 
-    if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY) {
+    if (NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY) {
         return;
     }
 
@@ -320,7 +319,6 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                                                                   << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason << ", current pipe: " << PipeClient.ToString());
     PipeClient = TActorId{};
-    CommitProcessingIsEnabled = false;
     if (errorCode != NPersQueue::NErrorCode::OVERLOAD)
         ++PipeGeneration;
 
@@ -428,13 +426,16 @@ void TPartitionActor::ResendRecentRequests() {
             if (c.second.Offset != Max<ui64>())
                 SendCommit(c.first, c.second.Offset, ctx);
         }
-        CommitProcessingIsEnabled = true;
         MakeCommit(ctx);
         if (WaitForData) { //resend wait-for-data requests
             WaitDataInfly.clear();
             WaitDataInPartition(ctx);
         }
     }
+}
+
+bool TPartitionActor::CommitProcessingIsEnabled() const {
+    return PipeClient && InitDone;
 }
 
 i64 GetBatchWriteTimestampMS(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
@@ -642,7 +643,6 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
         WTime = resp.GetWriteTimestampMS();
 
     InitDone = true;
-    CommitProcessingIsEnabled = !!PipeClient;
     PipeGeneration = 0; //reset tries counter - all ok
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INIT DONE " << Partition
                         << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset);
@@ -808,7 +808,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);
 
-    if (!CommitsDisabled && !RangesMode) {
+    if (!RangesMode) {
         Offsets.push_back({ReadIdToResponse, ReadOffset});
     }
 
@@ -1214,7 +1214,6 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
             .DoFirstRetryInstantly = true
         };
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
-        CommitProcessingIsEnabled = InitDone;
         auto request = MakeCreateSessionRequest(true, ++InitCookie);
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);

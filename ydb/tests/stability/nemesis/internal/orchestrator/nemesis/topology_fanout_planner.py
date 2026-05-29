@@ -104,6 +104,10 @@ class DataCenterFanoutPlanner(NemesisPlannerBase):
             for h in target_hosts
         ]
 
+    def manual(self, host, action, payload=None):
+        """Disabled: planner relies on cross-tick state (DC round-robin cursor)."""
+        return None
+
     def _drain_tracked_hosts(self) -> list[str]:
         out = list(self._last_hosts)
         self._last_hosts = []

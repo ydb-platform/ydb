@@ -57,6 +57,10 @@ protected:
         return std::make_shared<TChunkPreparation>(std::move(data), cRecord, columnInfo);
     }
 
+    virtual std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> DoGetAdditionalAccessorData() const override {
+        return Record.GetMeta().GetAdditionalAccessorData();
+    }
+
 public:
     const TColumnRecord& GetRecord() const {
         return Record;

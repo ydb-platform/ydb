@@ -12,7 +12,7 @@ on:
 
 jobs:
   rebase:
-    if: github.event.label.name == 'rebase-user-branch' && github.event.pull_request.state == 'open'
+    if: github.event.label.name == 'rebase-user-branch'
 
     runs-on: ubuntu-latest
     permissions:
@@ -23,8 +23,9 @@ jobs:
 
     steps:
       # Preconditions:
-      # 1. Label was added by a repository contributor (not PR author check).
-      # 2. For fork PRs, "Allow edits from maintainers" must be enabled.
+      # 1. Pull request must be open.
+      # 2. Label was added by a repository contributor (not PR author check).
+      # 3. For fork PRs, "Allow edits from maintainers" must be enabled.
       - name: Verify rebase preconditions
         id: preflight
         uses: actions/github-script@v7
@@ -50,11 +51,40 @@ jobs:
             const pr = context.payload.pull_request;
             const forkPushAllowed = !pr.head.repo.fork || pr.maintainer_can_modify;
 
+            core.setOutput('pr_is_open', pr.state == 'open' ? 'true' : 'false');
             core.setOutput('sender_is_contributor', senderIsContributor ? 'true' : 'false');
             core.setOutput('fork_push_allowed', forkPushAllowed ? 'true' : 'false');
 
+      - name: Decline rebase — pull request is not open
+        if: steps.preflight.outputs.pr_is_open != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sender = context.payload.sender.login;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `@${sender} Rebase declined: rebase can only be run on open pull requests.` + footer
+            });
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'rebase-user-branch'
+              });
+            } catch (error) {
+              if (!error.status || error.status != 404) {
+                throw error;
+              }
+            }
+
       - name: Decline rebase — label sender is not a contributor
-        if: steps.preflight.outputs.sender_is_contributor != 'true'
+        if: steps.preflight.outputs.pr_is_open == 'true' && steps.preflight.outputs.sender_is_contributor != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -82,7 +112,7 @@ jobs:
             }
 
       - name: Decline rebase — fork does not allow maintainer push
-        if: steps.preflight.outputs.sender_is_contributor == 'true' && steps.preflight.outputs.fork_push_allowed != 'true'
+        if: steps.preflight.outputs.pr_is_open == 'true' && steps.preflight.outputs.sender_is_contributor == 'true' && steps.preflight.outputs.fork_push_allowed != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -110,7 +140,7 @@ jobs:
             }
 
       - name: Fail if preconditions are not met
-        if: steps.preflight.outputs.sender_is_contributor != 'true' || steps.preflight.outputs.fork_push_allowed != 'true'
+        if: steps.preflight.outputs.pr_is_open != 'true' || steps.preflight.outputs.sender_is_contributor != 'true' || steps.preflight.outputs.fork_push_allowed != 'true'
         run: exit 1
 
       - name: Remove previous failure label

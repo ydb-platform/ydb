@@ -205,13 +205,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CREATE TABLE `/Root/minmax_test_applied_applied` (
                 `key` Int32 NOT NULL,
                 `value` String NOT NULL,
-                INDEX `value_mm` LOCAL USING min_max ON(`value`),
                 PRIMARY KEY (`key`)
             )
             PARTITION BY HASH (`key`)
             WITH (
                 STORE = COLUMN
             );
+            ALTER TABLE `/Root/minmax_test_applied_applied` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
         )");
 
         runDMLQuery(R"(
@@ -291,6 +291,17 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_VALUES_EQUAL_C(resNeq.CountResult, 1499999, "incorrect result for query with '!=' filter over min_max-indexed column");
         UNIT_ASSERT_C(!resNeq.MinMaxIndexUsed, "query with '!=' filter over min_max-indexed column use min_max index, but it shouldn't");
         
+        TQueryResult resIsNotNull = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS NOT NULL;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resIsNotNull.CountResult, 1500000, "incorrect result for query with 'IS NOT NULL' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resIsNotNull.MinMaxIndexUsed, "query with 'IS NOT NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
+        
+        TQueryResult resDistinctFromNull = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS DISTINCT FROM NULL;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resDistinctFromNull.CountResult, 1500000, "incorrect result for query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resDistinctFromNull.MinMaxIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
     }
 
     Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {

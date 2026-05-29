@@ -62,7 +62,7 @@ struct TClientBlob {
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
 
-struct TPackedBatchDataOwner final: public TAtomicRefCount<TPackedBatchDataOwner> {
+struct TPackedBatchDataOwner final: public TSimpleRefCount<TPackedBatchDataOwner> {
     explicit TPackedBatchDataOwner(TString&& data);
 
     TString Data;

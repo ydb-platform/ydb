@@ -518,14 +518,14 @@ void TBatch::Pack() {
     TBuffer packedData;
     packedData.Reserve(GetUnpackedSize() + GetMaxHeaderSize());
     TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>(*this, packedData).Pack();
-    PackedData = TPackedBatchData(std::move(packedData));
 
-    if (GetPackedSize() > GetUnpackedSize() + GetMaxHeaderSize()) { //packing is not effective, write as-is
-        TBuffer unpackedData;
-        unpackedData.Reserve(GetUnpackedSize() + GetMaxHeaderSize());
-        TBatchSerializer<NKikimrPQ::TBatchHeader::EUncompressed>(*this, unpackedData).Pack();
-        PackedData = TPackedBatchData(std::move(unpackedData));
+    const ui32 packedSize = sizeof(ui16) + packedData.size() + Header.ByteSize();
+    if (packedSize > GetUnpackedSize() + GetMaxHeaderSize()) { //packing is not effective, write as-is
+        packedData.Clear(); //reuse the already reserved capacity
+        TBatchSerializer<NKikimrPQ::TBatchHeader::EUncompressed>(*this, packedData).Pack();
     }
+
+    PackedData = TPackedBatchData(std::move(packedData));
 
     for (auto& b : Blobs) {
         EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);

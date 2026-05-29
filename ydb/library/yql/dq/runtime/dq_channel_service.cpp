@@ -986,8 +986,7 @@ TNodeState::~TNodeState() {
         LOG_D(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId);
     } else {
         LOG_E(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId << ", ID=" << InputDescriptors.size() << ", OD=" << OutputDescriptors.size());
-        FailInputs(NActors::TActorId{}, 0);
-        FailOutputs(NActors::TActorId{}, 0);
+        FailDescriptors();
     }
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
@@ -996,6 +995,11 @@ TNodeState::~TNodeState() {
     *OutputBufferWaiterCount -= WaitersQueue.size();
     *OutputBufferWaiterBytes -= WaiterBytes.load();
     *OutputBufferWaiterMessages -= WaiterMessages.load();
+}
+
+void TNodeState::FailDescriptors() {
+    FailInputs(NActors::TActorId{}, 0);
+    FailOutputs(NActors::TActorId{}, 0);
 }
 
 void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
@@ -1984,6 +1988,7 @@ void TNodeState::DoReconciliation() {
         // give up and request destroy
         LOG_E(LogPrefix << "RECONCILIATION FAILURE x" << ReconciliationCount);
         Terminating.store(true);
+        FailDescriptors();
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
             new TEvPrivate::TEvFreeNodeSession(NodeId)));
         return;

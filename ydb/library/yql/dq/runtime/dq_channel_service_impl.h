@@ -557,6 +557,7 @@ public:
     }
 
     virtual ~TNodeState();
+    void FailDescriptors();
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -634,7 +635,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
-    const TDuration ReconciliationTimeout = TDuration::MilliSeconds(250);
+    const TDuration ReconciliationTimeout = TDuration::MilliSeconds(1000);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;

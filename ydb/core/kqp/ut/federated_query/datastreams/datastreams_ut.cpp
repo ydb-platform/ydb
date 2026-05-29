@@ -1967,6 +1967,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto testJoinQuery = [&](const TString& text, const TString& hashMode, const TString& algo, bool lAny, bool rAny, bool lStream, bool rStream, bool self) {
             const auto fullText = fmt::format(R"sql(
                     {opt_pragma};
+                    PRAGMA ydb.UseGraceJoinCoreForMap = "true";
 
                     $data = {query_text};
 

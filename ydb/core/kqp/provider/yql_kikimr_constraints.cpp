@@ -91,10 +91,6 @@ TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKi
     return CreateFunctorTransformer([dq = std::move(dqTransformer)](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
         output = input;
 
-        TIssueScopeGuard issueScope(ctx.IssueManager, [&input, &ctx] {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << input->Content());
-        });
-
         if (TKqpWriteConstraint::Match(input.Get())) {
             return ConstraintKqpWriteConstraint(input, ctx);
         }

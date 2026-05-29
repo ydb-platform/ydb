@@ -200,6 +200,69 @@ def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
     )
 
 
+def _link_url_from_report(links, *keys):
+    for key in keys:
+        vals = links.get(key)
+        if isinstance(vals, list) and vals:
+            return vals[0]
+    return None
+
+
+def failure_row_from_report_result(result: Dict[str, Any], status_str: str) -> FailureRow:
+    links = result.get("links") or {}
+    return FailureRow(
+        status=status_str,
+        status_description=result.get("rich-snippet"),
+        source_error_type=result.get("error_type"),
+        stderr_url=_link_url_from_report(links, "stderr"),
+        log_url=_link_url_from_report(links, "log", "Log"),
+    )
+
+
+def _failure_status_str_for_report(result: Dict[str, Any]) -> Optional[str]:
+    status = _normalize_text(result.get("status")).upper()
+    if status in ("FAILED", "ERROR"):
+        return "failure"
+    if status == "MUTE":
+        return "mute"
+    return None
+
+
+def enrich_error_types_in_results(
+    results: Sequence[Dict[str, Any]],
+    public_dir: Optional[str] = None,
+    public_dir_url: Optional[str] = None,
+) -> None:
+    """Classify failure-like test rows and write merged tags into ``error_type``."""
+    failure_rows = []
+    targets = []
+    for result in results:
+        status_str = _failure_status_str_for_report(result)
+        if not status_str:
+            continue
+        failure_rows.append(failure_row_from_report_result(result, status_str))
+        targets.append(result)
+
+    if not failure_rows:
+        return
+
+    cache = prefetch_text_cache_for_failure_rows(
+        failure_rows,
+        local_dir=public_dir,
+        local_url_prefix=public_dir_url,
+    )
+    for result, fr in zip(targets, failure_rows):
+        stderr_text, log_text = get_debug_texts_from_cache(fr, cache)
+        result["error_type"] = build_error_type_csv_for_storage(
+            fr.status,
+            fr.status_description,
+            fr.source_error_type,
+            stderr_text,
+            log_text,
+            status_name_for_not_launched=result.get("status"),
+        )
+
+
 def get_debug_texts_from_cache(fr: FailureRow, fetch_cache: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
     """Return (stderr_text, log_text) from cache. None if URL missing, not fetched, or fetch failed."""
     if not is_failure_like_status(fr.status):

@@ -13,14 +13,10 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
-    build_error_type_csv_for_storage,
-    failure_row_from_test_result,
-    get_debug_texts_from_cache,
     is_not_launched_issue,
     is_possible_oom_issue,
     is_timeout_issue,
     is_xfailed_issue,
-    prefetch_text_cache_for_failure_rows,
     source_has_tag,
 )
 
@@ -193,7 +189,7 @@ class TestResult:
             stderr_url=log_urls.get('stderr', ''),
             log_url=log_url,
             error_type=error_type or '',
-            # is_sanitizer_issue, is_verify_issue and is_possible_oom are set after stderr/log prefetch in gen_summary.
+            # is_sanitizer_issue, is_verify_issue and is_possible_oom are set in gen_summary from error_type.
             is_sanitizer_issue=False,
             is_timeout_issue=is_timeout_issue(error_type),
             is_xfailed_issue=is_xfailed_issue(error_type),
@@ -589,29 +585,6 @@ def iter_build_results_files(path):
             continue
 
 
-def _status_string_for_error_utils(st: TestStatus) -> str:
-    """Map TestStatus to the failure|error|mute tokens used by is_failure_like_status."""
-    return {
-        TestStatus.FAIL: "failure",
-        TestStatus.ERROR: "error",
-        TestStatus.MUTE: "mute",
-    }.get(st, "")
-
-
-def _failure_row_pairs_for_summary_tests(tests):
-    """Return ``[(TestResult, FailureRow)]`` for tests with failure-like statuses."""
-    pairs = []
-    for test in tests:
-        st = getattr(test, "status", None)
-        if st is None or not getattr(st, "is_error", False):
-            continue
-        status_str = _status_string_for_error_utils(st)
-        if not status_str:
-            continue
-        pairs.append((test, failure_row_from_test_result(test, status_str)))
-    return pairs
-
-
 # Did dmesg show ANY OOM-killer event during this try?
 _OOM_DMESG_EVIDENCE_RE = re.compile(
     r'\b(?:Out of memory:\s+Killed process|invoked oom-killer|Memory cgroup out of memory)\b',
@@ -632,32 +605,8 @@ def _dmesg_has_oom(oom_dmesg_log):
         return False
 
 
-def _apply_classified_error_types_to_reports(files_data, test_source_result, pairs, stderr_fetch_cache):
-    """Write merged error_type tags back into report JSON for upload_tests_results."""
-    for test, fr in pairs:
-        stderr_text, log_text = get_debug_texts_from_cache(fr, stderr_fetch_cache)
-        status_str = _status_string_for_error_utils(test.status)
-        new_error_type = build_error_type_csv_for_storage(
-            status_str,
-            test.status_description,
-            test.error_type,
-            stderr_text,
-            log_text,
-            status_name_for_not_launched=test.status.name,
-        )
-        test.error_type = new_error_type
-        _fn, result = test_source_result.get(id(test), (None, None))
-        if result is not None:
-            result["error_type"] = new_error_type
-
-    for fn, report in files_data.items():
-        with open(fn, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False)
-
-
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None, oom_dmesg_log=None):
     summary = TestSummary(is_retry=is_retry)
-    stderr_fetch_cache = {}
     summary.dmesg_has_oom = _dmesg_has_oom(oom_dmesg_log)
     if summary.dmesg_has_oom and oom_dmesg_log:
         try:
@@ -671,35 +620,14 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
-        files_data = {}
-        test_source_result = {}
 
-        for fn in _list_build_results_report_files(path):
-            with open(fn, encoding="utf-8") as f:
-                files_data[fn] = json.load(f)
+        for _fn, result in iter_build_results_files(path):
+            test_result = TestResult.from_build_results_report(result)
+            summary_line.add(test_result)
 
-        for fn, report in files_data.items():
-            for result in report.get("results") or []:
-                if not result.get("status"):
-                    continue
-                test_result = TestResult.from_build_results_report(result)
-                summary_line.add(test_result)
-                if _status_string_for_error_utils(test_result.status):
-                    test_source_result[id(test_result)] = (fn, result)
-
-        pairs = _failure_row_pairs_for_summary_tests(summary_line.tests)
-        stderr_fetch_cache = prefetch_text_cache_for_failure_rows(
-            [fr for _, fr in pairs],
-            existing_cache=stderr_fetch_cache,
-            local_dir=public_dir,
-            local_url_prefix=public_dir_url,
-        )
-        if pairs:
-            _apply_classified_error_types_to_reports(
-                files_data, test_source_result, pairs, stderr_fetch_cache
-            )
-        # Badge flags from merged error_type (same tags as YDB / report.json).
-        for test, _fr in pairs:
+        for test in summary_line.tests:
+            if not test.status.is_error:
+                continue
             et = test.error_type
             test.is_sanitizer_issue = source_has_tag(et, "SANITIZER")
             test.is_verify_issue = source_has_tag(et, "VERIFY")

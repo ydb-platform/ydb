@@ -1103,7 +1103,7 @@ NKikimrKeyValue::StorageChannel::StatusFlag GetStatusFlag(const TStorageStatusFl
     if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceOrange)) {
         return NKikimrKeyValue::StorageChannel::STATUS_FLAG_ORANGE_OUT_SPACE;
     }
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceOrange)) {
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
         return NKikimrKeyValue::StorageChannel::STATUS_FLAG_YELLOW_STOP;
     }
     return NKikimrKeyValue::StorageChannel::STATUS_FLAG_GREEN;

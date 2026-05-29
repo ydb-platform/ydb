@@ -25,10 +25,13 @@ items:
   href: secondary-indexes.md
 - name: Vector indexes
   href: vector-indexes.md
-- name: Query plans optimization
-  href: query-plans-optimization.md
-- name: Query hints
-  href: query-hints.md
+- name: Vector index type vector_kmeans_tree
+  href: vector-indexes-kmeans-tree-type.md
+- name: Query execution optimization
+  href: query-execution-optimization/index.md
+  include:
+    mode: link
+    path: query-execution-optimization/toc_p.yaml
 - name: Batch upload
   href: batch-upload.md
 - name: Paging

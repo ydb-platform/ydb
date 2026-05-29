@@ -19,7 +19,8 @@ docker_args=(
     -d                              # запуск в фоне
     --rm                            # автоматическое удаление после установки
     --name ydb-local                # имя контейнера
-    -h localhost                    # хостейм
+    --hostname localhost            # хостейм
+    --platform linux/amd64          # платформа
     -p 2135:2135                    # открытие внешнего доступа к grpcs порту
     -p 2136:2136                    # открытие внешнего доступа к grpc порту
     -p 8765:8765                    # открытие внешнего доступа к http порту
@@ -108,7 +109,7 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
        -e MON_PORT=8765
        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
    )
-
+   
    docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
    ```
 

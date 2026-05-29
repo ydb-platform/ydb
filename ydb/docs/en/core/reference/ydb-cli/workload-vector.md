@@ -1,6 +1,6 @@
 # Vector Workload
 
-This workload type is suited for testing the performance and completeness of exact and approximate [vector search](../../concepts/vector_search.md).
+This workload type is suited for testing the performance and completeness of exact and approximate [vector search](../../concepts/query_execution/vector_search.md).
 
 Testing of global and filtered [vector indexes](../../yql/reference/syntax/create_table/vector_index.md) is supported.
 
@@ -23,8 +23,8 @@ You can see vector index creation examples on the documentation page [Vector Ind
    - Otherwise, `targets` random entries are selected from the main table.
 2. Completeness measurement is performed:
    - Two queries are executed for each item in the test set.
-   - The first query performs an [exact vector search](../../concepts/vector_search.md#vector-search-exact) (full scan) based on vector distance, forming the `R_exact` result set.
-   - The second query performs an [approximate vector search](../../concepts/vector_search.md#vector-search-index) using the vector index, forming the `R_approx` result set.
+   - The first query performs an [exact vector search](../../concepts/query_execution/vector_search.md#vector-search-exact) (full scan) based on vector distance, forming the `R_exact` result set.
+   - The second query performs an [approximate vector search](../../concepts/query_execution/vector_search.md#vector-search-index) using the vector index, forming the `R_approx` result set.
    - If a filtered vector index is selected, both queries scan only the entries with matching vector column values.
    - Completeness of the approximate search is calculated using the formula $\frac{|R_{approx} \bigcap R_{exact}|}{R_{exact}}$ (here `|A|` is the number of elements in the set A and `A ∩ B` is the intersection of sets A and B).
 3. Performance measurement is performed:

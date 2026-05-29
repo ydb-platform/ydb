@@ -2190,6 +2190,116 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 4: when two erase requests share the same in-flight disk write and
+    //         that write fails, BOTH erase replies must report failure.
+    //
+    // Before the fix, only the original inflight's status was updated on
+    // failure; shared inflights kept their default OK status and could reply
+    // with success even though the underlying write failed.
+    //
+    // Setup: write lsn=5, then send two separate TEvBatchErasePersistentBuffer
+    // requests for lsn=5 before the PDisk write completes.  The second erase
+    // shares the first's disk write (same partCookie via
+    // PersistentBufferEraseInflightsByRecord).
+    // Inject a failure for the single shared disk write completion.
+    //
+    // NOTE: We use TEvBatchErasePersistentBuffer (single-record batch) instead
+    // of TEvErasePersistentBuffer because:
+    //   - TEvErasePersistentBuffer routes to BarrierErasePersistentBuffer which
+    //     calls MoveBarrier; a second call with the same lsn triggers an
+    //     assertion ("new barrier lsn is not bigger than previous").
+    //   - TEvBatchErasePersistentBuffer with a single lsn routes to
+    //     ErasePersistentBuffer (PersistentBufferBarriersManager::Erase returns
+    //     nullopt when lsns.size() < 2), which contains the shared-inflight
+    //     path that Fix 4 corrects.
+    //
+    // Covers: Handle(TEvWritePersistentBufferPart) → propagate error to
+    //         inflight2 before calling HandleErasePart(inflight2, ...) (the fix).
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferSharedEraseInflightFailurePropagation) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(33, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 73, 1);
+
+        const ui64 lsn = 5;
+        const TString payload = MakeData('D', BlockSize);
+        const NDDisk::TBlockSelector selector{8, 0, BlockSize};
+
+        // Write lsn=5 and complete it successfully.
+        {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(payload));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+            auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::OK);
+        }
+
+        // Send two TEvBatchErasePersistentBuffer requests for the same lsn=5
+        // before the PDisk write completes.  The second erase will share the
+        // first's disk write via PersistentBufferEraseInflightsByRecord.
+        //
+        // A single-record batch bypasses the fast-erase path
+        // (PersistentBufferBarriersManager::Erase returns nullopt when
+        // lsns.size() < 2) and goes directly to ErasePersistentBuffer where
+        // the shared-inflight logic lives.
+        {
+            auto batchErase1 = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
+            batchErase1->AddErase(lsn, creds.Generation);
+            SendToDDisk(ctx, disk.PBServiceId, batchErase1.release());
+        }
+        {
+            auto batchErase2 = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
+            batchErase2->AddErase(lsn, creds.Generation);
+            SendToDDisk(ctx, disk.PBServiceId, batchErase2.release());
+        }
+
+        // There must be exactly one PDisk write (shared by both erases).
+        auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+
+        // Install a filter that injects a failure for the shared erase disk write.
+        bool intercepted = false;
+        ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
+            if (!intercepted &&
+                    ev->GetTypeRewrite() == NDDisk::TDDiskActor::TEvPrivate::TEvWritePersistentBufferPart::EventType) {
+                auto* orig = reinterpret_cast<TEventHandle<NDDisk::TDDiskActor::TEvPrivate::TEvWritePersistentBufferPart>*>(ev.get());
+                if (orig->Get()->IsErase) {
+                    intercepted = true;
+                    auto failed = std::make_unique<NDDisk::TDDiskActor::TEvPrivate::TEvWritePersistentBufferPart>(
+                        orig->Get()->InflightCookie,
+                        orig->Get()->PartCookie,
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+                        "injected shared erase failure",
+                        /*isErase=*/true);
+                    ev.reset(new IEventHandle(ev->Recipient, ev->Sender, failed.release(), 0, ev->Cookie));
+                }
+            }
+            return true;
+        };
+
+        // Respond OK to PDisk — the filter will replace the internal completion
+        // with an error before it reaches the PB actor.
+        ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        // Collect both erase results.
+        auto eraseResult1 = WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx);
+        auto eraseResult2 = WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx);
+        ctx.Runtime.FilterFunction = {};
+
+        UNIT_ASSERT_C(intercepted, "Filter must have fired for the shared erase disk write");
+
+        // Both erase replies must report failure — the fix propagates the error
+        // to all shared inflights before calling HandleErasePart on them.
+        UNIT_ASSERT_C(
+            static_cast<TReplyStatus::E>(eraseResult1->Get()->Record.GetStatus()) != TReplyStatus::OK,
+            "First erase reply must report failure when the shared disk write failed");
+        UNIT_ASSERT_C(
+            static_cast<TReplyStatus::E>(eraseResult2->Get()->Record.GetStatus()) != TReplyStatus::OK,
+            "Second erase reply must report failure when the shared disk write failed");
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 } // NKikimr

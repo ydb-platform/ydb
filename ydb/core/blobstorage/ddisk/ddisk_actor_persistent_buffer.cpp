@@ -506,6 +506,10 @@ namespace NKikimr::NDDisk {
                             continue;
                         }
                         auto& inflight2 = itInflight2->second;
+                        if (!resultStatus) {
+                            inflight2.Status = status;
+                            inflight2.ErrorMessage = ev->Get()->ErrorMessage;
+                        }
                         HandleErasePart(inflight2, opCookie2, partCookie, resultStatus);
                     }
                 }

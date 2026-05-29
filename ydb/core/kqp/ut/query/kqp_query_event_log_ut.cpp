@@ -349,13 +349,13 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
     UNIT_ASSERT_C(sawTruncated, "expected a truncated completed envelope at DEBUG");
 }
 
-// UI-excluded queries skip success-path logs; failures still surface at WARN.
+
 Y_UNIT_TEST(UiExcludedSuccessSilentButFailureLogged) {
     TStringStream logStream;
     size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
-        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_WARN);
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
         logStart = logStream.Size();
 
         auto db = kikimr.GetQueryClient();
@@ -384,23 +384,30 @@ Y_UNIT_TEST(UiExcludedSuccessSilentButFailureLogged) {
 
     bool excludedSuccessSeen = false;
     bool excludedFailureSeen = false;
+    bool controlSuccessSeen = false;
     for (const auto& e : entries) {
-        const auto data = e.Json["request"]["data"].GetStringSafe("");
-        const bool isExcluded = data.StartsWith("/*UI-QUERY-EXCLUDE*/")
-            || data.Contains("/*UI-QUERY-EXCLUDE*/");
-        if (!isExcluded) {
+        if (e.Event != "completed" || e.Part != 1) {
             continue;
         }
-        if (e.Event == "completed" && e.Part == 1) {
-            const auto status = e.Json["request"]["status"].GetStringSafe("");
+        const auto data = e.Json["request"]["data"].GetStringSafe("");
+        const auto status = e.Json["request"]["status"].GetStringSafe("");
+        const bool isExcluded = data.Contains("/*UI-QUERY-EXCLUDE*/");
+        const bool isControl = !isExcluded && data.Contains("SELECT 2 AS y");
+        if (isExcluded) {
             if (status == "SUCCESS") {
                 excludedSuccessSeen = true;
             } else {
                 excludedFailureSeen = true;
                 UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "WARN", e.RawLine);
             }
+        } else if (isControl && status == "SUCCESS") {
+            controlSuccessSeen = true;
+            UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "DEBUG", e.RawLine);
         }
     }
+    UNIT_ASSERT_C(controlSuccessSeen,
+        "non-excluded success must log at DEBUG — otherwise the excluded-success "
+        "assertion below would pass trivially via the priority gate");
     UNIT_ASSERT_C(!excludedSuccessSeen, "UI-excluded successful query must not log completed");
     UNIT_ASSERT_C(excludedFailureSeen, "UI-excluded failure must log completed at WARN");
 }

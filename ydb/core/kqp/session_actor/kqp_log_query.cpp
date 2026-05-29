@@ -165,13 +165,13 @@ NActors::NLog::EPriority PickCompletedPriority(Ydb::StatusIds::StatusCode status
 TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
                                const NKikimrKqp::TEvQueryResponse& record,
                                ui64 responseByteSize) {
-    return TLogQuery([&state, &record, responseByteSize]() {
-        const auto status = record.GetYdbStatus();
-        const auto prio = PickCompletedPriority(status);
-        if (!IsLogPriorityEnabled(prio)) {
-            return;
-        }
+    const auto status = record.GetYdbStatus();
+    const auto prio = PickCompletedPriority(status);
+    if (!IsLogPriorityEnabled(prio)) {
+        return {};
+    }
 
+    return TLogQuery([&state, &record, responseByteSize, status, prio]() {
         const TString queryText = SafeExtractQueryText(state);
         if (IsUiExcludedQuery(queryText) && status == Ydb::StatusIds::SUCCESS) {
             return;

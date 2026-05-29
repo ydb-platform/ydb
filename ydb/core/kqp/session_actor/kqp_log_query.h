@@ -18,6 +18,8 @@ class TLogQuery {
 public:
     using TAction = std::function<void()>;
 
+    TLogQuery() = default;
+
     explicit TLogQuery(TAction action)
         : Action(std::move(action))
     {}

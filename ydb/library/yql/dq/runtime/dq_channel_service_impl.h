@@ -283,7 +283,7 @@ public:
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
-    void HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
@@ -320,7 +320,7 @@ public:
     std::atomic<bool> Aborted = false;
     std::atomic<bool> Finished = false;
     std::atomic<bool> FinishPushed = false;
-    std::atomic<bool> Leading = false;
+    std::atomic<bool> Leading = true;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
@@ -352,6 +352,7 @@ public:
     std::shared_ptr<TOutputDescriptor> Descriptor;
     std::atomic<EState> State;
     ui64 SeqNo;
+    bool Leading;
 };
 
 class TOutputBuffer : public IChannelBuffer {
@@ -435,6 +436,7 @@ public:
     std::atomic<bool> Finished = false;
     std::atomic<bool> EarlyFinished = false;
     std::atomic<bool> Aborted = false;
+    std::atomic<bool> Finishing = false;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;

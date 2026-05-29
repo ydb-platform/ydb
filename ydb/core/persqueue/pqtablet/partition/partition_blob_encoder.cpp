@@ -69,7 +69,7 @@ ui64 TPartitionBlobEncoder::GetBodySizeBefore(TInstant expirationTimestamp) cons
     return size;
 }
 
-bool TPartitionBlobEncoder::IsGreaterThanKey(const TKey& key, ui64 offset, ui32 partNo) const {
+bool TPartitionBlobEncoder::IsKeyGreaterThan(const TKey& key, ui64 offset, ui32 partNo) const {
     return offset < key.GetOffset() || (offset == key.GetOffset() && partNo < key.GetPartNo());
 }
 
@@ -85,7 +85,7 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
     TVector<TRequestedBlob> blobs;
     if (!DataKeysBody.empty() && PositionInBody(startOffset, partNo)) { //will read smth from body
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
-            [this](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return IsGreaterThanKey(p.Key, offsetAndPartNo.first, offsetAndPartNo.second); });
+            [this](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return IsKeyGreaterThan(p.Key, offsetAndPartNo.first, offsetAndPartNo.second); });
         if (it == DataKeysBody.begin()) { //could be true if data is deleted or gaps are created
             return blobs;
         }

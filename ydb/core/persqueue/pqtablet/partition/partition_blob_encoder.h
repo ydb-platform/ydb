@@ -48,7 +48,7 @@ struct TPartitionBlobEncoder {
     bool IsNothingWritten() const;
     bool IsLastBatchPacked() const;
 
-    bool IsGreaterThanKey(const TKey& key, ui64 offset, ui32 partNo) const;
+    bool IsKeyGreaterThan(const TKey& key, ui64 offset, ui32 partNo) const;
 
     TString SerializeForKey(const TKey& key, ui32 size,
                             ui64 endOffset,

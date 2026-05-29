@@ -21,6 +21,7 @@ from ydb.tools.mnc.viewer.widgets import (
     OverviewPane,
     OverviewStatusCard,
     PathPickerScreen,
+    ViewerState,
 )
 
 
@@ -54,6 +55,7 @@ class Viewer(App):
         }
         self._editing_config_field: Optional[ConfigFieldItem] = None
         self._mnc_config = self._load_mnc_config()
+        self._state = ViewerState(mnc_config_ok=self._mnc_config_ok())
         self._navigation_generation = 0
 
     def compose(self) -> ComposeResult:
@@ -61,7 +63,7 @@ class Viewer(App):
 
         with TabbedContent(initial="general", id="tabs"):
             with TabPane("General", id="general"):
-                yield OverviewPane(self._mnc_config_ok())
+                yield OverviewPane(self._state)
 
         yield Footer()
 
@@ -152,6 +154,16 @@ class Viewer(App):
             os.path.isfile(MNC_CONFIG_PATH)
             and self._is_valid_git_ydb_root(self._mnc_config.get("git_ydb_root", ""))
         )
+
+    def _refresh_overview(self) -> None:
+        try:
+            self.query_one(OverviewPane).refresh_state()
+        except NoMatches:
+            return
+
+    def _refresh_mnc_config_status(self) -> None:
+        self._state.mnc_config_ok = self._mnc_config_ok()
+        self._refresh_overview()
 
     def _show_invalid_path(self, path: str) -> None:
         self.push_screen(
@@ -282,7 +294,11 @@ class Viewer(App):
         await self._open_tab(
             "cluster-config",
             self._tab_titles["cluster-config"],
-            ClusterConfigPane(self._discover_cluster_config_candidates()),
+            ClusterConfigPane(
+                self._discover_cluster_config_candidates(),
+                self._state,
+                self._refresh_overview,
+            ),
         )
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -316,6 +332,7 @@ class Viewer(App):
             field.save_edit()
             self._mnc_config[field.field_name] = normalized_path
             self._save_mnc_config()
+            self._refresh_mnc_config_status()
             self.refresh_bindings()
             self.call_after_refresh(self._focus_mnc_config_fields)
 
@@ -341,6 +358,7 @@ class Viewer(App):
         field.save_edit()
         self._mnc_config[field.field_name] = field.value
         self._save_mnc_config()
+        self._refresh_mnc_config_status()
         self._editing_config_field = None
         self.refresh_bindings()
         self.call_after_refresh(self._focus_mnc_config_fields)

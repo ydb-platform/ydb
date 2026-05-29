@@ -1,7 +1,7 @@
 import glob
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 import yaml
 from textual.app import ComposeResult
@@ -19,18 +19,42 @@ CONFIG_FIELD_TITLES = {
 }
 
 
+def _status_class(status: str) -> str:
+    return "status-" + status.lower().replace(" ", "-")
+
+
 class OverviewStatusCard(ListItem):
-    def __init__(self, title: str, status: str, action: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        status: str,
+        action: Optional[str] = None,
+        id: Optional[str] = None,
+        status_kind: Optional[str] = None,
+    ) -> None:
         self.action = action
-        status_class = status.lower().replace(" ", "-")
+        self._status = status
+        self._status_kind = status_kind or status
+        self._status_label = Label(status, classes=f"overview-status-value {_status_class(self._status_kind)}")
         super().__init__(
             Vertical(
                 Label(title, classes="overview-status-title"),
-                Label(status, classes=f"overview-status-value status-{status_class}"),
+                self._status_label,
                 classes="overview-status-card-content",
             ),
+            id=id,
             classes="overview-status-card",
         )
+
+    @property
+    def status(self) -> str:
+        return self._status
+
+    def update_status(self, status: str, status_kind: Optional[str] = None) -> None:
+        self._status = status
+        self._status_kind = status_kind or status
+        self._status_label.update(status)
+        self._status_label.set_classes(f"overview-status-value {_status_class(self._status_kind)}")
 
 
 class OverviewPane(Vertical):
@@ -95,21 +119,44 @@ class OverviewPane(Vertical):
         color: $error;
     }
 
+    .status-fail {
+        color: $error;
+    }
+
     .status-not-selected {
         color: $text-muted;
     }
     """
 
-    def __init__(self, mnc_config_ok: bool, cluster_config_status: str = "NOT SELECTED") -> None:
+    def __init__(self, state: "ViewerState") -> None:
         super().__init__()
-        self._mnc_config_status = "OK" if mnc_config_ok else "ERROR"
-        self._cluster_config_status = cluster_config_status
+        self._state = state
 
     def compose(self) -> ComposeResult:
         yield ListView(
-            OverviewStatusCard("MNC Config", self._mnc_config_status, action="open_mnc_config"),
-            OverviewStatusCard("Cluster Config", self._cluster_config_status, action="open_cluster_config"),
+            OverviewStatusCard(
+                "MNC Config",
+                self._state.mnc_config_status(),
+                action="open_mnc_config",
+                id="overview-mnc-config-card",
+            ),
+            OverviewStatusCard(
+                "Cluster Config",
+                self._state.cluster_config_status(),
+                action="open_cluster_config",
+                id="overview-cluster-config-card",
+                status_kind=self._state.cluster_config_status_kind(),
+            ),
             id="overview-status-row",
+        )
+
+    def refresh_state(self) -> None:
+        self.query_one("#overview-mnc-config-card", OverviewStatusCard).update_status(
+            self._state.mnc_config_status()
+        )
+        self.query_one("#overview-cluster-config-card", OverviewStatusCard).update_status(
+            self._state.cluster_config_status(),
+            self._state.cluster_config_status_kind(),
         )
 
     def on_key(self, event: Key) -> None:
@@ -280,6 +327,37 @@ def _validate_multinode_config(path: str) -> ConfigValidation:
     if validated is None:
         return ConfigValidation(errors or ["Config does not match multinode scheme"])
     return ConfigValidation([])
+
+
+@dataclass
+class SelectedClusterConfig:
+    candidate: ConfigCandidate
+    validation: ConfigValidation
+
+
+@dataclass
+class ViewerState:
+    mnc_config_ok: bool
+    selected_cluster_config: Optional[SelectedClusterConfig] = None
+
+    def mnc_config_status(self) -> str:
+        return "OK" if self.mnc_config_ok else "ERROR"
+
+    def cluster_config_status(self) -> str:
+        if self.selected_cluster_config is None:
+            return "NOT SELECTED"
+        return self.selected_cluster_config.candidate.name
+
+    def cluster_config_status_kind(self) -> str:
+        if self.selected_cluster_config is None:
+            return "NOT SELECTED"
+        return "OK" if self.selected_cluster_config.validation.ok else "FAIL"
+
+    def is_selected_cluster_config(self, candidate: ConfigCandidate) -> bool:
+        return (
+            self.selected_cluster_config is not None
+            and self.selected_cluster_config.candidate.path == candidate.path
+        )
 
 
 class ConfigCandidateItem(ListItem):
@@ -484,10 +562,16 @@ class ClusterConfigPane(Horizontal):
     }
     """
 
-    def __init__(self, candidates: list[ConfigCandidate]) -> None:
+    def __init__(
+        self,
+        candidates: list[ConfigCandidate],
+        state: ViewerState,
+        on_state_changed: Callable[[], None],
+    ) -> None:
         super().__init__()
         self._candidates = candidates
-        self._selected_candidate: Optional[ConfigCandidate] = None
+        self._state = state
+        self._on_state_changed = on_state_changed
 
     def compose(self) -> ComposeResult:
         with Vertical(id="cluster-config-left"):
@@ -506,8 +590,16 @@ class ClusterConfigPane(Horizontal):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.list_view.id == "cluster-configs" and isinstance(event.item, ConfigCandidateItem):
             event.stop()
-            self._selected_candidate = event.item.candidate
-            self._show_details(event.item.candidate)
+            validation = _validate_multinode_config(event.item.candidate.path)
+            if not validation.ok:
+                self._show_details(event.item.candidate, validation)
+                return
+            self._state.selected_cluster_config = SelectedClusterConfig(
+                event.item.candidate,
+                validation,
+            )
+            self._on_state_changed()
+            self._show_details(event.item.candidate, validation)
 
     def on_key(self, event: Key) -> None:
         if event.key == "right" and self.screen.focused is self.query_one("#cluster-configs", ListView):
@@ -518,22 +610,31 @@ class ClusterConfigPane(Horizontal):
         list_view = self.query_one("#cluster-configs", ListView)
         list_view.clear()
         list_view.extend([ConfigCandidateItem(candidate) for candidate in self._candidates])
-        list_view.index = 0 if self._candidates else None
+        selected_index = next(
+            (
+                index
+                for index, candidate in enumerate(self._candidates)
+                if self._state.is_selected_cluster_config(candidate)
+            ),
+            None,
+        )
+        list_view.index = selected_index if selected_index is not None else (0 if self._candidates else None)
         if self._candidates:
-            self._show_details(self._candidates[0])
+            self._show_details(self._candidates[list_view.index or 0])
         else:
             self.query_one("#cluster-config-details", ClusterConfigDetails).update_empty("No configs found")
 
-    def _show_details(self, candidate: ConfigCandidate) -> None:
+    def _show_details(self, candidate: ConfigCandidate, validation: Optional[ConfigValidation] = None) -> None:
         try:
             with open(candidate.path) as file:
                 content = file.read()
         except Exception as error:
             content = f"Failed to read config: {error}"
+        validation = validation or _validate_multinode_config(candidate.path)
         self.query_one("#cluster-config-details", ClusterConfigDetails).update_candidate(
             candidate,
-            candidate == self._selected_candidate,
-            _validate_multinode_config(candidate.path),
+            self._state.is_selected_cluster_config(candidate),
+            validation,
             content,
         )
 

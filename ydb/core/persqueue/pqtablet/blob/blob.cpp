@@ -373,7 +373,17 @@ ui64 THead::GetOffsetDelta() const
     if (Batches.empty())
         return 0;
 
-    return Batches.back().GetOffset() - Offset + Batches.back().GetOffsetDelta();
+    if (Batches.back().HasOffsetDelta()) {
+        return Batches.back().GetOffset() - Offset + Batches.back().GetOffsetDelta();
+    }
+
+    ui64 lastBatchOffsetDelta = 0;
+    if (!Batches.back().Blobs.empty()) {
+        const auto& lastBlob = Batches.back().Blobs.back();
+        lastBatchOffsetDelta = Batches.back().GetCount() + !lastBlob.IsLastPart() ? 1 : 0;
+    }
+
+    return Batches.back().GetOffset() - Offset + lastBatchOffsetDelta;
 }
 
 

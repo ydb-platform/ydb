@@ -160,8 +160,6 @@
   await using var driver = await Driver.CreateInitialized(config);
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -186,7 +184,6 @@
   }
   ```
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 - PHP
 
   ```php

@@ -63,10 +63,6 @@
         balancers.RandomChoice(),
       ),
     )
-<<<<<<< HEAD
-    if err != nil {
-      panic(err)
-=======
 
     with ydb.Driver(driver_config) as driver:
         driver.wait(timeout=5)
@@ -132,7 +128,6 @@
             .withBalancingSettings(BalancingSettings.fromPolicy(BalancingSettings.Policy.USE_ALL_NODES))
             .build()) {
         // ...
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
     }
     defer nativeDriver.Close(ctx)
 

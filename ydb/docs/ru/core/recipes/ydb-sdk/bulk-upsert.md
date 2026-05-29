@@ -96,52 +96,6 @@
     private static final int BATCH_SIZE = 1000;
 
     public static void main(String[] args) {
-<<<<<<< HEAD
-        String connectionString = args[0];
-
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация
-                .build()) {
-
-            // Для bulk upsert необходимо использовать полный путь к таблице
-            String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-            try (TableClient tableClient = TableClient.newClient(transport).build()) {
-                SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-                execute(retryCtx, tablePath);
-            }
-        }
-    }
-
-    public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // описание таблицы
-        StructType structType = StructType.of(
-            "app", PrimitiveType.Text,
-            "timestamp", PrimitiveType.Timestamp,
-            "host", PrimitiveType.Text,
-            "http_code", PrimitiveType.Uint32,
-            "message", PrimitiveType.Text
-        );
-
-        // генерация пакета записей
-        List<Value<?>> list = new ArrayList<>(50);
-        for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // добавление новой строки в виде значения-структуры
-            list.add(structType.newValue(
-                "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
-                "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
-                "host", PrimitiveValue.newText("192.168.0." + i % 256),
-                "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
-                "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
-            ));
-        }
-
-        // Create list of structs
-        ListValue rows = ListType.of(structType).newValue(list);
-        // Do retry operation on errors with best effort
-        retryCtx.supplyStatus(
-            session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
-        ).join().expectSuccess("bulk upsert problem");
-=======
       String connectionString = args[0];
 
       try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
@@ -186,7 +140,6 @@
       retryCtx.supplyStatus(
           session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
       ).join().expectSuccess("bulk upsert problem");
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
     }
   ```
 
@@ -217,8 +170,6 @@
             e.printStackTrace();
         }
     }
-<<<<<<< HEAD
-=======
     ```
 
     В Spring Boot, Hibernate, JOOQ и других фреймворках вокруг ORM поверх JDBC можно выполнять нативный YQL (в том числе из репозиториев и `@Query`). Драйвер стремится оптимизировать крупные вставки; операции `UPDATE`, `INSERT`, `DELETE`, `UPSERT`, идущие через JDBC, при необходимости автоматически группируются в пакеты на стороне драйвера.
@@ -373,7 +324,6 @@
       'id'  => 'UINT64',
       'val' => 'UTF8',
   ]);
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
   ```
 
 {% endlist %}

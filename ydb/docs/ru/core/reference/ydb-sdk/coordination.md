@@ -41,8 +41,6 @@
      - Чем меньше значение, тем выше вероятность ложных срабатываний, когда живой лидер может завершить работу для перестраховки, так как не будет уверен, что этот период не закончился у нового лидера.
      - Должен быть строго больше, чем `SelfCheckPeriod`.
 
-<<<<<<< HEAD
-=======
 - Java
 
   ```java
@@ -129,7 +127,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Работа с сессиями {#session}
@@ -170,8 +167,6 @@
    - `OnStopped` - вызывается, когда сессия прекращает попытки восстановить связь с сервисом, что может быть полезно для установления нового соединения.
    - `Timeout` - максимальный таймаут, в течение которого сессия может быть восстановлена после потери связи с сервисом.
 
-<<<<<<< HEAD
-=======
 - Java
 
   Сессия (см. [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) создаётся через `createSession`; для установления двунаправленного gRPC-потока с узлом нужно вызвать `connect()` (асинхронно, возвращает `CompletableFuture<Status>`). Параметры повторных попыток и таймаут подключения задаются в [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
@@ -245,7 +240,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Контроль завершения сессии {#session-control}
@@ -262,8 +256,6 @@
 
   В C++ SDK установленная сессия в фоне поддерживает и автоматически восстанавливает связь с кластером {{ ydb-short-name }}.
 
-<<<<<<< HEAD
-=======
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
@@ -286,7 +278,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Работа с семафорами {#semaphore}
@@ -331,8 +322,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   В Python SDK семафор создаётся неявно при первом вызове `acquire()` в методе `session.semaphore(name, limit)`. Лимит указывается при создании объекта семафора.
@@ -399,7 +388,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Захват семафора {#acquire-semaphore}
@@ -449,8 +437,6 @@
     - `Shared()` - алиас для выставления `Count = 1`, захват семафора в shared режиме.
     - `Exclusive()` - алиас для выставления `Count = max`, захват семафора в exclusive режиме (для семафоров, созданных с лимитом `Max<ui64>()`).
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -545,7 +531,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -577,8 +562,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -636,7 +619,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 Этот вызов не требует захвата семафора и не приводит к нему. Если требуется, чтобы данные обновлял только один конкретный клиент, то это необходимо явным образом обеспечить, например, захватив семафор, обновив данные и отпустив семафор обратно.
@@ -692,8 +674,6 @@
     - `Count` - запрошенное в `AcquireSemaphore` значение.
     - `Data` - данные, которые были указаны в `AcquireSemaphore`.
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -763,7 +743,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Освобождение семафора {#release-semaphore}
@@ -789,8 +768,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   В Python SDK семафор освобождается методом `release()` у объекта семафора. При использовании контекстного менеджера (`with` или `async with`) освобождение происходит автоматически при выходе из блока.
@@ -854,7 +831,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Важные особенности

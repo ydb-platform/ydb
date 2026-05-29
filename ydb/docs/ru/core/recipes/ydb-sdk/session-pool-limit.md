@@ -90,8 +90,6 @@
     spring.datasource.hikari.maximum-pool-size=100 # maximum size of JDBC connections
   ```
 
-<<<<<<< HEAD
-=======
   {% endlist %}
 
 - Python
@@ -149,6 +147,5 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 
 {% endlist %}

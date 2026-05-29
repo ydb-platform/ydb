@@ -145,8 +145,6 @@
   }.Build();
   ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   Для работы с топиками создаётся экземпляр драйвера {{ ydb-short-name }}. Клиент топиков доступен через атрибут `topic_client` и используется для управляющих операций с топиками, а также создания писателей и читателей.
@@ -214,7 +212,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Управление топиками {#manage}
@@ -305,8 +302,6 @@
   });
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -331,7 +326,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Изменение топика {#alter-topic}
@@ -467,8 +461,6 @@
   TopicDescription description = topicDescriptionResult.getValue();
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -488,7 +480,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Удаление топика {#drop-topic}
@@ -527,8 +518,6 @@
   await topicClient.DropTopic(topicName);
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -548,7 +537,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Запись сообщений {#write}
@@ -670,8 +658,6 @@
   }.Build();
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -689,7 +675,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись сообщений {#writing-messages}
@@ -836,8 +821,6 @@
   var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -859,7 +842,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
@@ -989,8 +971,6 @@
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   Все сообщения записываются во внутренний буфер. Для отправки на сервер есть 3 механизма: два автоматических и один ручной. Ручной - это вызов метода `writer.flush` который возвращает последний seqno записанный на сервере. Автоматическая отправка происходит по условиям:
@@ -1021,7 +1001,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Выбор кодека для сжатия сообщений {#codec}
@@ -1084,8 +1063,6 @@
           .build();
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -1114,7 +1091,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись сообщений без дедупликации {#nodedup}
@@ -1137,8 +1113,6 @@
 
   Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1159,7 +1133,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись метаданных на уровне сообщения {#messagemeta}
@@ -1254,8 +1227,6 @@
   );
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -1274,7 +1245,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись в транзакции {#write-tx}
@@ -1494,8 +1464,6 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1508,7 +1476,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 
@@ -1667,8 +1634,6 @@
   }.Build();
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -1686,7 +1651,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`:
@@ -1761,8 +1725,6 @@
   }.Build();
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -1818,7 +1780,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение сообщений {#reading-messages}
@@ -1857,8 +1818,6 @@
 
   {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1871,7 +1830,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 
@@ -1939,8 +1897,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -1958,7 +1914,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 #### Чтение сообщений пакетом
@@ -2047,8 +2002,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -2064,7 +2017,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение с подтверждением обработки сообщений {#commit}
@@ -2161,8 +2113,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -2181,7 +2131,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 #### Чтение сообщений пакетом с подтверждением
@@ -2291,8 +2240,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -2309,7 +2256,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение с хранением позиции на клиентской стороне {#client-commit}
@@ -2405,8 +2351,6 @@
 
   Также поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -2430,7 +2374,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение без указания Consumer'а {#no-consumer}
@@ -2489,8 +2432,6 @@
   )
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2503,7 +2444,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение в транзакции {#read-tx}
@@ -2689,9 +2629,6 @@
   }
   ```
 
-<<<<<<< HEAD
-{% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
-=======
   {% endlist %}
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
@@ -2707,7 +2644,6 @@
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 
 {% endlist %}
 
@@ -2787,10 +2723,6 @@
 
       // Confirm that session can be closed
       event.confirm();
-<<<<<<< HEAD
-  }
-  ```
-=======
     }
     ```
 
@@ -2807,7 +2739,6 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 
 {% endlist %}
 
@@ -2878,10 +2809,6 @@
   @Override
   public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
-<<<<<<< HEAD
-  }
-  ```
-=======
     }
     ```
 
@@ -2898,7 +2825,6 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 
 {% endlist %}
 
@@ -3095,8 +3021,6 @@
 
   С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3113,7 +3037,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Подтверждение обработки вне читателя {#commit-outside-the-reader}
@@ -3126,15 +3049,6 @@
 
   Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
 
-<<<<<<< HEAD
-  ```python
-  driver.topic_client.commit_offset(
-      topic_path,
-      consumer_name,
-      partition_id,
-      offset,
-  )
-=======
   {% list tabs %}
 
   - Native SDK
@@ -3184,7 +3098,6 @@
           .setOffset(offset)
           .build()
   ).join().expectSuccess("Error commit!");
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
   ```
 
 - Rust

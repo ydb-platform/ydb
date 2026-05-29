@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -350,6 +351,22 @@ class ConfigCandidate:
     path: str
 
 
+def _config_candidate_name_from_path(path: str) -> str:
+    name = os.path.basename(path)
+    base, ext = os.path.splitext(name)
+    return base if ext else name
+
+
+def _config_path_for_name(candidate: ConfigCandidate, name: str) -> str:
+    name = name.strip()
+    base_name = os.path.basename(name)
+    base, ext = os.path.splitext(base_name)
+    if not ext:
+        ext = os.path.splitext(candidate.path)[1] or ".yaml"
+        base_name = base_name + ext
+    return os.path.join(os.path.dirname(candidate.path), base_name)
+
+
 @dataclass
 class ConfigValidation:
     errors: list[str]
@@ -528,6 +545,12 @@ class ClusterConfigDetails(VerticalScroll, inherit_bindings=False):
 
 
 class ClusterConfigPane(Horizontal):
+    BINDINGS = [
+        Binding("r", "rename_config", "Rename"),
+        Binding("e", "edit_config", "Edit"),
+        Binding("c", "copy_config", "Copy"),
+    ]
+
     DEFAULT_CSS = """
     ClusterConfigPane {
         height: 1fr;
@@ -657,11 +680,15 @@ class ClusterConfigPane(Horizontal):
         candidates: list[ConfigCandidate],
         state: ViewerState,
         on_state_changed: Callable[[], None],
+        load_candidates: Callable[[], list[ConfigCandidate]],
+        edit_file: Callable[[str], Optional[str]],
     ) -> None:
         super().__init__()
         self._candidates = candidates
         self._state = state
         self._on_state_changed = on_state_changed
+        self._load_candidates = load_candidates
+        self._edit_file = edit_file
 
     def compose(self) -> ComposeResult:
         with Vertical(id="cluster-config-left"):
@@ -680,23 +707,47 @@ class ClusterConfigPane(Horizontal):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.list_view.id == "cluster-configs" and isinstance(event.item, ConfigCandidateItem):
             event.stop()
-            validation = _validate_multinode_config(event.item.candidate.path)
-            if not validation.ok:
-                self._show_details(event.item.candidate, validation)
-                return
-            self._state.selected_cluster_config = SelectedClusterConfig(
-                event.item.candidate,
-                validation,
-            )
-            self._on_state_changed()
-            self._show_details(event.item.candidate, validation)
+            self._select_candidate(event.item.candidate)
 
     def on_key(self, event: Key) -> None:
         if event.key == "right" and self.screen.focused is self.query_one("#cluster-configs", ListView):
             self.query_one("#cluster-config-details", ClusterConfigDetails).focus()
             event.stop()
 
-    def _refresh(self) -> None:
+    def action_rename_config(self) -> None:
+        candidate = self._highlighted_candidate()
+        if candidate is None:
+            return
+
+        self.app.push_screen(
+            ConfigNameModal("Rename config", candidate.name, "Rename"),
+            lambda name: self._rename_candidate(candidate, name),
+        )
+
+    def action_copy_config(self) -> None:
+        candidate = self._highlighted_candidate()
+        if candidate is None:
+            return
+
+        self.app.push_screen(
+            ConfigNameModal("Copy config", f"{candidate.name}_copy", "Copy"),
+            lambda name: self._copy_candidate(candidate, name),
+        )
+
+    def action_edit_config(self) -> None:
+        candidate = self._highlighted_candidate()
+        if candidate is None:
+            return
+
+        error = self._edit_file(candidate.path)
+        if error is not None:
+            self._show_message("Editor failed", error)
+            return
+
+        self._reload_candidates(candidate.path)
+        self._select_candidate_by_path(candidate.path)
+
+    def _refresh(self, preferred_path: Optional[str] = None) -> None:
         list_view = self.query_one("#cluster-configs", ListView)
         list_view.clear()
         list_view.extend([ConfigCandidateItem(candidate) for candidate in self._candidates])
@@ -704,7 +755,7 @@ class ClusterConfigPane(Horizontal):
             (
                 index
                 for index, candidate in enumerate(self._candidates)
-                if self._state.is_selected_cluster_config(candidate)
+                if candidate.path == preferred_path or self._state.is_selected_cluster_config(candidate)
             ),
             None,
         )
@@ -713,6 +764,88 @@ class ClusterConfigPane(Horizontal):
             self._show_details(self._candidates[list_view.index or 0])
         else:
             self.query_one("#cluster-config-details", ClusterConfigDetails).update_empty("No configs found")
+
+    def _highlighted_candidate(self) -> Optional[ConfigCandidate]:
+        item = self.query_one("#cluster-configs", ListView).highlighted_child
+        if isinstance(item, ConfigCandidateItem):
+            return item.candidate
+        return None
+
+    def _reload_candidates(self, preferred_path: Optional[str] = None) -> None:
+        self._candidates = self._load_candidates()
+        self._refresh(preferred_path)
+
+    def _select_candidate_by_path(self, path: str) -> None:
+        candidate = next((candidate for candidate in self._candidates if candidate.path == path), None)
+        if candidate is None:
+            if (
+                self._state.selected_cluster_config is not None
+                and self._state.selected_cluster_config.candidate.path == path
+            ):
+                self._state.selected_cluster_config = None
+                self._on_state_changed()
+            return
+        self._select_candidate(candidate)
+
+    def _select_candidate(self, candidate: ConfigCandidate) -> bool:
+        validation = _validate_multinode_config(candidate.path)
+        if not validation.ok:
+            if self._state.is_selected_cluster_config(candidate):
+                self._state.selected_cluster_config = None
+                self._on_state_changed()
+            self._show_details(candidate, validation)
+            return False
+        self._state.selected_cluster_config = SelectedClusterConfig(candidate, validation)
+        self._on_state_changed()
+        self._show_details(candidate, validation)
+        return True
+
+    def _rename_candidate(self, candidate: Optional[ConfigCandidate], name: Optional[str]) -> None:
+        if candidate is None or name is None:
+            return
+
+        target_path = self._target_path(candidate, name)
+        if target_path is None:
+            return
+        if target_path == candidate.path:
+            return
+        if os.path.exists(target_path):
+            self._show_message("Rename failed", f"Config already exists:\n{target_path}")
+            return
+
+        os.rename(candidate.path, target_path)
+        renamed = ConfigCandidate(_config_candidate_name_from_path(target_path), target_path)
+        if self._state.is_selected_cluster_config(candidate):
+            validation = _validate_multinode_config(target_path)
+            self._state.selected_cluster_config = SelectedClusterConfig(renamed, validation)
+            self._on_state_changed()
+        self._reload_candidates(target_path)
+
+    def _copy_candidate(self, candidate: Optional[ConfigCandidate], name: Optional[str]) -> None:
+        if candidate is None or name is None:
+            return
+
+        target_path = self._target_path(candidate, name)
+        if target_path is None:
+            return
+        if os.path.exists(target_path):
+            self._show_message("Copy failed", f"Config already exists:\n{target_path}")
+            return
+
+        shutil.copy2(candidate.path, target_path)
+        self._reload_candidates(target_path)
+
+    def _target_path(self, candidate: ConfigCandidate, name: str) -> Optional[str]:
+        if not name.strip():
+            self._show_message("Invalid config name", "Config name must not be empty.")
+            return None
+        if os.path.basename(name) != name:
+            self._show_message("Invalid config name", "Config name must not include directories.")
+            return None
+        return _config_path_for_name(candidate, name)
+
+    def _show_message(self, title: str, message: str) -> None:
+        self.app.push_screen(MessageModal(title, message))
 
     def _show_details(self, candidate: ConfigCandidate, validation: Optional[ConfigValidation] = None) -> None:
         try:
@@ -804,6 +937,160 @@ class InvalidPathModal(ModalScreen[None]):
             self.dismiss(None)
 
     def action_close(self) -> None:
+        self.dismiss(None)
+
+
+class MessageModal(ModalScreen[None]):
+    CSS = """
+    MessageModal {
+        color: $foreground;
+        background: $background 60%;
+        align: center middle;
+    }
+
+    #message-dialog {
+        width: 72;
+        height: auto;
+        padding: 1 2;
+        border: hkey $error;
+        background: $surface;
+    }
+
+    #message-dialog:dark {
+        background: $panel-darken-1;
+    }
+
+    #message-title {
+        height: auto;
+        text-style: bold;
+        color: $error;
+        margin-bottom: 1;
+    }
+
+    #message-body {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #message-actions {
+        height: auto;
+        align-horizontal: right;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "close", "Close"),
+    ]
+
+    def __init__(self, title: str, message: str) -> None:
+        super().__init__()
+        self._title = title
+        self._message = message
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(self._title, id="message-title"),
+            Static(self._message, id="message-body"),
+            Horizontal(
+                Button("OK", id="message-ok", variant="primary"),
+                id="message-actions",
+            ),
+            id="message-dialog",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#message-ok", Button).focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "message-ok":
+            event.stop()
+            self.dismiss(None)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
+class ConfigNameModal(ModalScreen[Optional[str]]):
+    CSS = """
+    ConfigNameModal {
+        color: $foreground;
+        background: $background 60%;
+        align: center middle;
+    }
+
+    #config-name-dialog {
+        width: 72;
+        height: auto;
+        padding: 1 2;
+        border: hkey $border;
+        background: $surface;
+    }
+
+    #config-name-dialog:dark {
+        background: $panel-darken-1;
+    }
+
+    #config-name-title {
+        height: auto;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #config-name-input {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #config-name-actions {
+        height: auto;
+        align-horizontal: right;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self, title: str, initial_name: str, action_label: str) -> None:
+        super().__init__()
+        self._title = title
+        self._initial_name = initial_name
+        self._action_label = action_label
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(self._title, id="config-name-title"),
+            Input(value=self._initial_name, id="config-name-input"),
+            Horizontal(
+                Button(self._action_label, id="config-name-ok", variant="primary"),
+                Button("Cancel", id="config-name-cancel"),
+                id="config-name-actions",
+            ),
+            id="config-name-dialog",
+        )
+
+    def on_mount(self) -> None:
+        name_input = self.query_one("#config-name-input", Input)
+        name_input.focus()
+        name_input.cursor_position = len(name_input.value)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "config-name-input":
+            event.stop()
+            self._accept()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "config-name-ok":
+            event.stop()
+            self._accept()
+        elif event.button.id == "config-name-cancel":
+            event.stop()
+            self.dismiss(None)
+
+    def _accept(self) -> None:
+        self.dismiss(self.query_one("#config-name-input", Input).value.strip())
+
+    def action_cancel(self) -> None:
         self.dismiss(None)
 
 

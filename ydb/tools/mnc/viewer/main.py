@@ -1,10 +1,13 @@
 import asyncio
 import os
+import shlex
+import shutil
+import subprocess
 from typing import Optional
 
 import yaml
 
-from textual.app import App, ComposeResult, ScreenStackError
+from textual.app import App, ComposeResult, ScreenStackError, SuspendNotSupported
 from textual.binding import Binding
 from textual.command import CommandPalette
 from textual.css.query import NoMatches
@@ -31,6 +34,7 @@ from ydb.tools.mnc.viewer.widgets import (
 
 MNC_CONFIG_PATH = os.path.join(os.environ.get("HOME", "/"), ".mnc", "mnc.yaml")
 DEFAULT_GIT_YDB_ROOT = os.path.join(os.environ.get("HOME", "/"), "ydbwork", "ydb")
+DEFAULT_EDITOR = "vi"
 
 class Viewer(App):
     COMMANDS = App.COMMANDS | {ViewerCommands}
@@ -361,6 +365,8 @@ class Viewer(App):
                 self._discover_cluster_config_candidates(),
                 self._state,
                 self._on_viewer_state_changed,
+                self._discover_cluster_config_candidates,
+                self._edit_file,
             ),
         )
 
@@ -447,6 +453,25 @@ class Viewer(App):
         if self._editing_config_field is not None and event.key == "escape":
             event.stop()
             self._cancel_config_field_edit()
+
+    def _editor_command(self) -> list[str]:
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        if editor:
+            return shlex.split(editor)
+        return [shutil.which("vim") or shutil.which("vi") or DEFAULT_EDITOR]
+
+    def _edit_file(self, path: str) -> Optional[str]:
+        command = self._editor_command() + [path]
+        try:
+            with self.suspend():
+                result = subprocess.run(command, check=False)
+        except FileNotFoundError:
+            return f"Editor not found: {command[0]}"
+        except SuspendNotSupported as error:
+            return str(error)
+        if result.returncode != 0:
+            return f"Editor exited with status {result.returncode}"
+        return None
         
     async def action_close_tab(self) -> None:
         tabs = self.query_one("#tabs", TabbedContent)

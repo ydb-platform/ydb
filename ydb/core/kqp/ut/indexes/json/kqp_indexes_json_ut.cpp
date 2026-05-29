@@ -2693,6 +2693,31 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    Y_UNIT_TEST(SafeCast) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Supported literal casts
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST(10 AS Int32))");
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST(7 AS Int32), 8))");
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.key' RETURNING String) == CAST(10 AS String))");
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST(2.5f AS Int32))");
+
+            // Supported parameter casts
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST($p AS Int32))",
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) IN (CAST($p AS Int64), CAST($q AS Int32)))",
+                TParamsBuilder()
+                    .AddParam("$p").Int64(10).Build()
+                    .AddParam("$q").Int32(20).Build()
+                    .Build());
+
+            // Unsupported parameter casts
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST($p AS Int32))",
+                TParamsBuilder().AddParam("$p").Double(2.5).Build().Build());
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN (CAST($p AS Utf8), "x"))",
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+        });
+    }
+
     Y_UNIT_TEST(ShowCreateTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableJsonIndex(true);
@@ -5205,8 +5230,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (Just(5), 6))",
                 {"\3k1" + numSuffix(5), "\3k1" + numSuffix(6)}, "or");
 
-            // TODO: CAST type mismatch
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST("7" AS Int32), 8))", {"\3k1" + strSuffix("7"), "\3k1" + numSuffix(8)}, "or");
+            // Supported CAST
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Float) IN (CAST(7 AS Float), 8.0f))",
+                {"\3k1" + numSuffix(7), "\3k1" + numSuffix(8)}, "or");
+            // Unsupported CAST
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST("7" AS Int32), 8))");
 
             // IN with mixed types
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2u, 3l))",
@@ -5396,6 +5424,96 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v)' PASSING Date('2026-01-01') AS v))");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v)' PASSING DateTime('2026-01-01T00:00:00Z') AS v))");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v)' PASSING Timestamp('2026-01-01T00:00:00Z') AS v))");
+        });
+    }
+
+    Y_UNIT_TEST(SafeCast) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Supported literal casts: YQL folds CAST of a literal to the target typed literal
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST(10 AS Int32))", {"\3k1" + numSuffix(10)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == CAST(5 AS Int64))", {"\3k1" + numSuffix(5)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Double) == CAST(1.0f AS Double))", {"\3k1" + numSuffix(1.0)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == CAST("abc" AS Utf8))", {"\3k1" + strSuffix("abc")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) == CAST("abc"u AS String))", {"\3k1" + strSuffix("abc")});
+
+            // Supported literal casts in SQL IN
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST(7 AS Int32), 8))",
+                {"\3k1" + numSuffix(7), "\3k1" + numSuffix(8)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) IN (CAST(1 AS Int32), CAST(2 AS Int64)))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Float) IN (CAST(1 AS Int32), CAST(2.5f AS Float)))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2.5)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN (CAST("x"s AS Utf8), CAST("y"u AS Utf8)))",
+                {"\3k1" + strSuffix("x"), "\3k1" + strSuffix("y")}, "or");
+
+            // Supported parameter casts
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST($p AS Int32))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == CAST($p AS Int64))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").Int32(5).Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Double) == CAST($p AS Double))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").Float(1.5f).Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == CAST($p AS Utf8))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").Utf8("abc").Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) == CAST($p AS String))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").String("abc").Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST($p AS Int32), 2))",
+                {NJsonIndex::TToken{"\3k1", "$p"}, NJsonIndex::TToken{"\3k1" + numSuffix(2)}},
+                TParamsBuilder().AddParam("$p").Int32(1).Build().Build(), "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) IN (CAST($p AS Int64), CAST($q AS Int32)))",
+                {NJsonIndex::TToken{"\3k1", "$p"}, NJsonIndex::TToken{"\3k1", "$q"}},
+                TParamsBuilder()
+                    .AddParam("$p").Int64(10).Build()
+                    .AddParam("$q").Int32(20).Build()
+                    .Build(), "or");
+
+            // Unsupported parameter casts
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST($p AS Int32))",
+                {NJsonIndex::TToken("\3k1", "")},
+                TParamsBuilder().AddParam("$p").Double(2.5).Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == CAST($p AS Int32))",
+                {NJsonIndex::TToken("\3k1", "")},
+                TParamsBuilder().AddParam("$p").Float(2.5f).Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == CAST($p AS Utf8))",
+                {NJsonIndex::TToken("\3k1", "")},
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) == CAST($p AS String))",
+                {NJsonIndex::TToken("\3k1", "")},
+                TParamsBuilder().AddParam("$p").Int64(10).Build().Build());
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST($p AS Int32), 2))",
+                TParamsBuilder().AddParam("$p").Double(2.5).Build().Build(), "or");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN (CAST($p AS Utf8), "x"))",
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+
+            // PASSING: supported parameter casts
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1 == $v' PASSING CAST($p AS Int32) AS v RETURNING Bool))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1 == $v' PASSING CAST($p AS Int64) AS v RETURNING Bool))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").Int32(5).Build().Build());
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v)' PASSING CAST($p AS Utf8) AS v))",
+                {NJsonIndex::TToken{"\3k1\3k2", "$p"}},
+                TParamsBuilder().AddParam("$p").Utf8("abc").Build().Build());
+
+            // PASSING: unsupported parameter casts
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1 == $v' PASSING CAST($p AS Int32) AS v RETURNING Bool))",
+                TParamsBuilder().AddParam("$p").Double(2.5).Build().Build());
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1 == $v' PASSING CAST($p AS Utf8) AS v RETURNING Bool))",
+                TParamsBuilder().AddParam("$p").Int32(10).Build().Build());
+
+            // Allowed cast of a column reference unwraps to the column
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == CAST(Data AS Utf8))", {"\3k1"});
         });
     }
 

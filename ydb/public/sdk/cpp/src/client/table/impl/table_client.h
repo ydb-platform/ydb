@@ -164,7 +164,6 @@ public:
     );
 
     TClientSettings Settings_;
-    bool InRetryOperationContext_ = false;
 
 private:
     static void SetParams(

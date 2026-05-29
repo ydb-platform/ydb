@@ -58,7 +58,7 @@ auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOn
 
     using TResult = decltype(runOnce(TDuration::Max()));
 
-    auto operation = [&runOnce](TClient& /*clientRef*/, TDuration remainingTimeout) -> TResult {
+    auto operation = [runOnce = std::forward<TRunOnce>(runOnce)](TClient& /*clientRef*/, TDuration remainingTimeout) -> TResult {
         return runOnce(remainingTimeout);
     };
 

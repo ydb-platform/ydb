@@ -1576,12 +1576,16 @@ int64_t TTableClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
 }
 
+namespace {
+thread_local bool TableClientInRetryOperationContext = false;
+} // namespace
+
 bool TTableClient::GetInRetryOperationContext() const {
-    return Impl_->InRetryOperationContext_;
+    return TableClientInRetryOperationContext;
 }
 
 void TTableClient::SetInRetryOperationContext(bool value) {
-    Impl_->InRetryOperationContext_ = value;
+    TableClientInRetryOperationContext = value;
 }
 
 TTableBuilder TTableClient::GetTableBuilder() {
@@ -1628,10 +1632,12 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
         settings.RetrySettings_,
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
-    const TValue rowsCopy = rows;
+    if (!retrySettings.MaxRetries_ == 0 || GetInRetryOperationContext()) {
+        return Impl_->BulkUpsert(table, std::move(rows), settings);
+    }
 
     return NRetry::RunUnaryWithRetry(*this, retrySettings,
-        [this, table, rowsCopy, settings](TDuration timeout) {
+        [this, table, rowsCopy = rows, settings](TDuration timeout) {
             auto opSettings = settings;
             if (timeout != TDuration::Max()) {
                 opSettings.ClientTimeout(timeout);

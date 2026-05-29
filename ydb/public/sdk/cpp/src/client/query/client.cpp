@@ -647,7 +647,6 @@ public:
     }
 
     TClientSettings Settings_;
-    bool InRetryOperationContext_ = false;
 
 private:
     std::shared_ptr<TQueryObservation> MakeObservation(const std::string& operationName) {
@@ -805,12 +804,16 @@ int64_t TQueryClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
 }
 
+namespace {
+thread_local bool QueryClientInRetryOperationContext = false;
+} // namespace
+
 bool TQueryClient::GetInRetryOperationContext() const {
-    return Impl_->InRetryOperationContext_;
+    return QueryClientInRetryOperationContext;
 }
 
 void TQueryClient::SetInRetryOperationContext(bool value) {
-    Impl_->InRetryOperationContext_ = value;
+    QueryClientInRetryOperationContext = value;
 }
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings)

@@ -255,9 +255,26 @@ void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TT
     }
 
     auto pType = ImportTypeFromProto(type, txTypeEnv);
+<<<<<<< HEAD
     if (pType == nullptr || !parameterType->IsSameType(*pType)) {
         ythrow yexception() << "Parameter " << name
             << " type mismatch, expected: " << type << ", actual: " << *parameterType;
+=======
+    if (pType == nullptr) {
+        ythrow yexception() << "Parameter " << name << " type is empty";
+    }
+
+    if (!parameterType->IsSameType(*pType)) {
+        TString incompatibility;
+        if (GetFirstTypeIncompatibility(pType, parameterType, "root", incompatibility) && incompatibility) {
+            // shorter message with the first actual incompatibility reported
+            ythrow yexception() << "Parameter " << name << " type mismatch: " << incompatibility;
+        } else {
+            // fallback to old option
+            ythrow yexception() << "Parameter " << name
+                << " type mismatch, expected: " << *pType << ", actual: " << *parameterType;
+        }
+>>>>>>> 96bde41db5e (kqp: produce readable messages for query parameter type incompatibility (#35635))
     }
 }
 

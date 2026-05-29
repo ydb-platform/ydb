@@ -1465,37 +1465,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                  select max(t1.a) from `/Root/t1` as t1 group by t1.b, t1.a order by t1.a, t1.b;
             )",
-            /* NOT SUPPORTED IN YQLSELECT
             R"(
-                PRAGMA YqlSelect = 'force';
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select count(*) from `/Root/t1` as t1 group by t1.b + 1 order by t1.b + 1;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
-                select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b from `/Root/t1` as t1 group by t1.b order by sum_c;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select distinct min(t1.a) as min_a, max(t1.a) as max_a from `/Root/t1` as t1 group by t1.b order by min_a;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select sum(t1.c) as sum0, sum(t1.a + 3) as sum1 from `/Root/t1` as t1 group by t1.b + 1 order by sum0;
             )",
+            /*
             R"(
-                PRAGMA YqlSelect = 'force';
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select sum(t1.c) as sum0, t1.b + 1, t1.c + 2 from `/Root/t1` as t1 group by t1.b + 1, t1.c + 2 order by sum0;
             )",
+            */
             R"(
-                PRAGMA YqlSelect = 'force';
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select sum(t1.c + 2) as sum0 from `/Root/t1` as t1 group by t1.b + t1.a order by sum0;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select
                        sum(case when t1.a > 0
                             then 1
@@ -1504,17 +1493,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                             then 1
                             else 0 end) + 1, sum(t1.a) as r, t1.b + 2 as group_key from `/Root/t1` as t1 group by t1.b + 2 order by r;
             )",
-            // distinct
+            /*
+            R"(
+                select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b from `/Root/t1` as t1 group by t1.b order by sum_c;
+            )",
+            R"(
+                select distinct min(t1.a) as min_a, max(t1.a) as max_a from `/Root/t1` as t1 group by t1.b order by min_a;
+            )",
+
             R"(
                 PRAGMA YqlSelect = 'force';
-                select distinct t1.b from `/Root/t1` as t1 order by t1.b;
+                select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                select sum(t1.c) as sum from `/Root/t1` as t1 group by t1.b
-                union all
-                select sum(t1.b) as sum from `/Root/t1` as t1
-                order by sum;
+                select distinct t1.b from `/Root/t1` as t1 order by t1.b;
             )",
             */
         };
@@ -1549,10 +1542,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[3;1];[4;0]])",
                                             R"([[0;0];[1;1];[2;2];[3;3];[4;4]])",
                                             R"([[0];[1];[2];[3];[4]])",
+                                            R"([[2u];[3u]])",
+                                            R"([[[4];10];[[6];15]])",
+                                            //R"([[[4];[2];[4]];[[6];[3];[4]]])"
+                                            R"([[[4]];[[8]];[[8]]])",
+                                            R"([[3;4;[3]];[3;6;[4]]])"
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
+            //Cout << query << Endl;
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;

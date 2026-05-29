@@ -1,7 +1,7 @@
 # SECURITY NOTE:
 # This workflow uses pull_request_target with checkout from forks.
 # Only git operations (rebase, push) are performed - no build/test scripts.
-# Preflight checks require a repository collaborator to add the label and,
+# Preflight checks require a repository collaborator to trigger rebase and,
 # for fork PRs, maintainer_can_modify (Allow edits from maintainers).
 # Do NOT add steps that execute untrusted code from the PR head.
 name: rebase
@@ -9,10 +9,20 @@ name: rebase
 on:
   pull_request_target:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Pull Request number to rebase'
+        required: true
+        type: string
+
+concurrency:
+  group: rebase-pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   rebase:
-    if: github.event.label.name == 'rebase-user-branch'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'rebase-user-branch'
 
     runs-on: ubuntu-latest
     permissions:
@@ -22,9 +32,42 @@ jobs:
       WF_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
+      - name: Resolve pull request
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            let pr;
+            if (context.eventName === 'workflow_dispatch') {
+              const pullNumber = Number.parseInt('${{ inputs.pull_number }}', 10);
+              if (!Number.isFinite(pullNumber) || pullNumber <= 0) {
+                core.setFailed('pull_number must be a positive integer');
+                return;
+              }
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+              });
+              pr = data;
+            } else {
+              pr = context.payload.pull_request;
+            }
+
+            core.setOutput('number', String(pr.number));
+            core.setOutput('state', pr.state);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('head_repo_full_name', pr.head.repo.full_name);
+            core.setOutput('head_repo_fork', pr.head.repo.fork ? 'true' : 'false');
+            core.setOutput('maintainer_can_modify', pr.maintainer_can_modify ? 'true' : 'false');
+            core.setOutput('base_ref', pr.base.ref);
+            core.setOutput('base_repo_clone_url', pr.base.repo.clone_url);
+
       # Preconditions:
       # 1. Pull request must be open.
-      # 2. Label was added by a repository collaborator (not PR author check).
+      # 2. Triggered by a repository collaborator (label sender or workflow_dispatch actor).
       # 3. For fork PRs, "Allow edits from maintainers" must be enabled.
       - name: Verify rebase preconditions
         id: preflight
@@ -32,7 +75,9 @@ jobs:
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
-            const sender = context.payload.sender.login;
+            const sender = context.eventName === 'workflow_dispatch'
+              ? context.actor
+              : context.payload.sender.login;
             let senderIsCollaborator = false;
 
             try {
@@ -48,10 +93,11 @@ jobs:
               }
             }
 
-            const pr = context.payload.pull_request;
-            const forkPushAllowed = !pr.head.repo.fork || pr.maintainer_can_modify;
+            const forkPushAllowed = '${{ steps.pr.outputs.head_repo_fork }}' !== 'true'
+              || '${{ steps.pr.outputs.maintainer_can_modify }}' === 'true';
 
-            core.setOutput('pr_is_open', pr.state == 'open' ? 'true' : 'false');
+            core.setOutput('sender', sender);
+            core.setOutput('pr_is_open', '${{ steps.pr.outputs.state }}' === 'open' ? 'true' : 'false');
             core.setOutput('sender_is_collaborator', senderIsCollaborator ? 'true' : 'false');
             core.setOutput('fork_push_allowed', forkPushAllowed ? 'true' : 'false');
 
@@ -60,28 +106,30 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const sender = context.payload.sender.login;
+            const sender = '${{ steps.preflight.outputs.sender }}';
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: `⚠️ @${sender} Rebase declined: rebase can only be run on open pull requests.` + footer
             });
 
-      - name: Decline rebase — label sender is not a collaborator
+      - name: Decline rebase — trigger is not a collaborator
         if: steps.preflight.outputs.pr_is_open == 'true' && steps.preflight.outputs.sender_is_collaborator != 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            const sender = context.payload.sender.login;
+            const sender = '${{ steps.preflight.outputs.sender }}';
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: `⚠️ @${sender} Rebase declined, only collaborator can rebase user branch` + footer
             });
 
@@ -90,13 +138,14 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const sender = context.payload.sender.login;
+            const sender = '${{ steps.preflight.outputs.sender }}';
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: `⚠️ @${sender} Rebase declined: this PR is from a fork and **Allow edits from maintainers** is not enabled.\n\nThe PR author must enable it in the PR sidebar so maintainers can push the rebased branch. Alternatively, rebase locally and push to the fork.` + footer
             });
 
@@ -108,11 +157,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             try {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
+                issue_number: issueNumber,
                 name: 'rebase-user-branch-failed'
               });
             } catch (error) {
@@ -124,8 +174,8 @@ jobs:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ steps.pr.outputs.head_sha }}
+          repository: ${{ steps.pr.outputs.head_repo_full_name }}
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
           filter: blob:none
@@ -137,8 +187,8 @@ jobs:
 
       - name: Fetch base branch
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          BASE_REPO: ${{ github.event.pull_request.base.repo.clone_url }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+          BASE_REPO: ${{ steps.pr.outputs.base_repo_clone_url }}
         run: |
           git remote set-url upstream "$BASE_REPO" 2>/dev/null || git remote add upstream "$BASE_REPO"
           git fetch upstream "$BASE_REF"
@@ -147,7 +197,7 @@ jobs:
         id: rebase
         continue-on-error: true
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
         run: |
           if git rebase "upstream/$BASE_REF"; then
             echo "rebase_status=success" >> $GITHUB_OUTPUT
@@ -161,12 +211,13 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-user-branch` label.' + footer
             });
 
@@ -179,7 +230,7 @@ jobs:
         if: steps.rebase.outputs.rebase_status == 'success'
         continue-on-error: true
         env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
         run: |
           git push --force-with-lease origin HEAD:"$HEAD_REF"
 
@@ -188,7 +239,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const isFork = context.payload.pull_request.head.repo.fork;
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
+            const isFork = '${{ steps.pr.outputs.head_repo_fork }}' === 'true';
             const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
             const forkHint = isFork
               ? '\n\nIf this is a fork PR, verify that **Allow edits from maintainers** is still enabled.'
@@ -196,7 +248,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-user-branch` label to retry.' + footer
             });
 
@@ -204,15 +256,16 @@ jobs:
         if: steps.push.outcome == 'success'
         uses: actions/github-script@v7
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
         with:
           script: |
             const baseRef = process.env.BASE_REF;
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL})`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: `✅ **Rebase complete!**\n\nPR has been automatically rebased onto \`${baseRef}\`.` + footer
             });
 
@@ -220,11 +273,12 @@ jobs:
         if: steps.rebase.outputs.rebase_status == 'failed'
         uses: actions/github-script@v7
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
         with:
           script: |
             const baseRef = process.env.BASE_REF;
-            const isFork = context.payload.pull_request.head.repo.fork;
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
+            const isFork = '${{ steps.pr.outputs.head_repo_fork }}' === 'true';
             const upstreamUrl = 'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '.git';
             const instructions = isFork
               ? 'git remote set-url upstream ' + upstreamUrl + ' 2>/dev/null || git remote add upstream ' + upstreamUrl + '\n' +
@@ -236,7 +290,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body: '❌ **Rebase failed due to conflicts.**\n\nPlease resolve them manually:\n```\n' + instructions + '\n```\nAfter resolving conflicts and pushing your branch, PR checks will restart automatically.' + footer
             });
 
@@ -253,11 +307,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             try {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
+                issue_number: issueNumber,
                 name: 'rebase-user-branch'
               });
             } catch (error) {
@@ -271,9 +326,10 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               labels: ['rebase-user-branch-failed']
             });

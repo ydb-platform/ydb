@@ -18,6 +18,9 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      WF_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      WF_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/rebase.yml
 
     steps:
       - name: Check if sender is a collaborator
@@ -48,12 +51,13 @@ jobs:
         with:
           script: |
             const sender = context.payload.sender.login;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `@${sender} Rebase declined, only contributor can rebase user branch`
+              body: `@${sender} Rebase declined, only contributor can rebase user branch` + footer
             });
 
             try {
@@ -90,12 +94,13 @@ jobs:
         with:
           script: |
             const sender = context.payload.sender.login;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `@${sender} Rebase declined: this PR is from a fork and **Allow edits from maintainers** is not enabled.\n\nThe PR author must enable it in the PR sidebar so maintainers can push the rebased branch. Alternatively, rebase locally and push to the fork.`
+              body: `@${sender} Rebase declined: this PR is from a fork and **Allow edits from maintainers** is not enabled.\n\nThe PR author must enable it in the PR sidebar so maintainers can push the rebased branch. Alternatively, rebase locally and push to the fork.` + footer
             });
 
             try {
@@ -177,11 +182,13 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-user-branch` label.'
+              body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-user-branch` label.' + footer
             });
 
       - name: Fail on unexpected error
@@ -203,6 +210,7 @@ jobs:
         with:
           script: |
             const isFork = context.payload.pull_request.head.repo.fork;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
             const forkHint = isFork
               ? '\n\nIf this is a fork PR, verify that **Allow edits from maintainers** is still enabled.'
               : '';
@@ -210,7 +218,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-user-branch` label to retry.'
+              body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-user-branch` label to retry.' + footer
             });
 
       - name: Remove label after successful rebase
@@ -239,11 +247,12 @@ jobs:
         with:
           script: |
             const baseRef = process.env.BASE_REF;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `✅ **Rebase complete!**\n\nPR has been automatically rebased onto \`${baseRef}\`.`
+              body: `✅ **Rebase complete!**\n\nPR has been automatically rebased onto \`${baseRef}\`.` + footer
             });
 
       - name: Replace label on failure
@@ -286,11 +295,12 @@ jobs:
                 'git rebase upstream/' + baseRef
               : 'git fetch origin\n' +
                 'git rebase origin/' + baseRef;
+            const footer = `\n\n---\n[Workflow run](${process.env.WF_RUN_URL}) · [rebase workflow](${process.env.WF_URL})`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '❌ **Rebase failed due to conflicts.**\n\nPlease resolve them manually:\n```\n' + instructions + '\n```\nAfter resolving conflicts and pushing your branch, PR checks will restart automatically.'
+              body: '❌ **Rebase failed due to conflicts.**\n\nPlease resolve them manually:\n```\n' + instructions + '\n```\nAfter resolving conflicts and pushing your branch, PR checks will restart automatically.' + footer
             });
 
       - name: Fail the job if conflicts

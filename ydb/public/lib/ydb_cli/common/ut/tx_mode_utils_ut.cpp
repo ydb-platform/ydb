@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NYdb::NConsoleClient {
 
 Y_UNIT_TEST_SUITE(TxModeUtils) {

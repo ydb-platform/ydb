@@ -1286,6 +1286,144 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         UNIT_ASSERT(checkStat(movedTablePath));
     }
+
+    Y_UNIT_TEST(MoveTableStatsQuota) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(false);
+
+        TTestEnv env(runtime, opts);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+        auto& appData = runtime.GetAppData();
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        constexpr const char* databaseDescription = R"(
+            DatabaseQuotas {
+                data_size_hard_quota: 1000000
+                data_size_soft_quota: 900000
+            }
+        )";
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                Name: "SomeDatabase"
+            )" << databaseDescription
+        );
+
+        const TString tableSchema = R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        NTxUT::TPlanStep planStep;
+        {
+            auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                auto& self = record.GetPathDescription().GetSelf();
+                pathId = self.GetPathId();
+                txId = self.GetCreateTxId() + 1;
+                planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+                auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+                UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+                shardId = sharding.GetColumnShards()[0];
+            };
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), {checkFn});
+        }
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep.Val());
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        ui32 rowsInBatch = 100000;
+        ui64 writeId = 0;
+
+        {   // Write data directly into shard to exceed quota
+            TActorId sender = runtime.AllocateEdgeActor();
+            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TSet<ui64> txIds;
+            for (ui32 i = 0; i < 100; ++i) {
+                std::vector<ui64> writeIds;
+                ++txId;
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+                txIds.insert(txId);
+            }
+
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
+
+            WaitTableStats(runtime, shardId);
+            CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+        }
+
+        ui64 totalBytesBefore = 0;
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+            totalBytesBefore = diskSpaceUsage.GetTables().GetTotalSize();
+            UNIT_ASSERT_GT_C(totalBytesBefore, 0, DEBUG_HINT);
+        }
+
+        ++txId;
+        TestMoveTable(runtime, txId, "/MyRoot/SomeDatabase/ColumnTable", "/MyRoot/SomeDatabase/MovedColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/SomeDatabase/ColumnTable", false, NLs::PathNotExist);
+
+        WaitTableStats(runtime, shardId);
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+            ui64 totalBytesAfter = diskSpaceUsage.GetTables().GetTotalSize();
+            UNIT_ASSERT_GT_C(totalBytesAfter, 0, DEBUG_HINT << ", DiskSpaceTablesTotalBytes should not be zero after move");
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfter, totalBytesBefore,
+                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be preserved after move");
+        }
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "MovedColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/SomeDatabase/MovedColumnTable", false, NLs::PathNotExist);
+
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
+            ui64 totalBytesAfterDrop = diskSpaceUsage.GetTables().GetTotalSize();
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterDrop, 0,
+                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after drop");
+        }
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TOlapNaming) {

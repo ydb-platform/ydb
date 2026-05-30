@@ -2,6 +2,28 @@
 
 using namespace NKikimr::NDDisk;
 
+namespace {
+    constexpr ui64 RequestIdHeadroom = 1ull << 48;
+
+    ui64 NormalizeFirstRequestId(ui64 firstRequestId) {
+        if (!firstRequestId || firstRequestId == Max<ui64>()) {
+            return 1;
+        }
+        if (firstRequestId > Max<ui64>() - RequestIdHeadroom) {
+            return firstRequestId - RequestIdHeadroom;
+        }
+        return firstRequestId;
+    }
+}
+
+TSegmentManager::TSegmentManager()
+    : TSegmentManager(1)
+{}
+
+TSegmentManager::TSegmentManager(ui64 firstRequestId)
+    : NextRequestId(NormalizeFirstRequestId(firstRequestId))
+{}
+
 TString TSegmentManager::TRequestInFlight::ToString() const {
     TStringBuilder builder;
     builder << "{\"TabletId\": " << TabletId

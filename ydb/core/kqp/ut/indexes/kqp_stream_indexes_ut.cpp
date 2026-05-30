@@ -833,6 +833,60 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(UpdateDeleteReturningOnlyKey, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = Sprintf(R"(
+            CREATE TABLE `/Root/DataShard` (
+                c0 Int64, c1 Int64, c2 Int64,
+                PRIMARY KEY (c0, c1),
+                INDEX idx0 GLOBAL SYNC ON (c1)
+            );
+        )");
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        auto it = client.ExecuteQuery(
+            R"(
+                INSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES (0, 0, 0);
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        {
+            auto it = client.StreamExecuteQuery(
+                R"(
+                    UPDATE `/Root/DataShard` ON (c0, c1, c2) VALUES (0, 0, 1)
+                    RETURNING c1;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                R"(
+                    DELETE FROM `/Root/DataShard` ON (c0, c1) VALUES (0, 0)
+                    RETURNING c1;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0]]])");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(SecondaryIndexInsertDuplicates, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);

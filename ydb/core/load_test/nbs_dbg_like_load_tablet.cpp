@@ -453,6 +453,7 @@ public:
     TNbsDbgLikeLoadTablet(const TActorId& tablet, TTabletStorageInfo* info)
         : NKeyValue::TKeyValueFlat(tablet, info)
     {
+        SetActivityType(ActorActivityType());
     }
 
     // KV's DefaultSignalTabletActive is final and empty - the tablet is
@@ -1108,8 +1109,7 @@ void TNbsDbgLikeLoadTablet::EnsureCounters(const TActorContext& ctx) {
     if (Counters) {
         return;
     }
-    Counters = GetServiceCounters(AppData(ctx)->Counters, "load_actor")
-        ->GetSubgroup("tablet", Sprintf("%" PRIu64, TabletID()));
+    Counters = GetServiceCounters(AppData(ctx)->Counters, "load_actor")->GetSubgroup("load", "tablet");
     PhaseGauge = Counters->GetCounter("Phase", false);
     auto life = Counters->GetSubgroup("subsystem", "lifecycle");
     BscAllocOk    = life->GetCounter("BscAllocOk", true);
@@ -1371,9 +1371,21 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletGetSummary::TPtr& ev
     r->Record.SetStatus(NBSLT_OK);
     r->Record.SetDDiskPoolName(AllocConfig.GetDDiskPoolName());
     r->Record.SetPersistentBufferDDiskPoolName(AllocConfig.GetPersistentBufferDDiskPoolName());
-    r->Record.SetNumDirectBlockGroups(AllocConfig.GetNumDirectBlockGroups());
+    // Use actual allocated count, not just what was requested in AllocConfig.
+    r->Record.SetNumDirectBlockGroups(static_cast<ui32>(Dbgs.size()));
     r->Record.SetVChunkSizeBytes(AllocConfig.GetVChunkSizeBytes());
     r->Record.SetTargetNumVChunks(AllocConfig.GetTargetNumVChunks());
+    // Count the longest contiguous prefix [0, N) of DBGs that have at least
+    // kPrimaryHostsPerDbg PB peers connected. The load actor uses this to
+    // limit its address space to DBGs that can actually accept writes.
+    ui32 readyDbgs = 0;
+    for (ui32 i = 0; i < static_cast<ui32>(DbgStates.size()); ++i) {
+        if (DbgStates[i].PBConnected.count() < kPrimaryHostsPerDbg) {
+            break;
+        }
+        ++readyDbgs;
+    }
+    r->Record.SetNumReadyDirectBlockGroups(readyDbgs);
     ctx.Send(ev->Sender, r.release(), 0, ev->Cookie);
 }
 
@@ -1871,7 +1883,7 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    LOG_D("HandleNbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
+    LOG_T("HandleNbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
     if (Phase != ETabletPhase::Ready) {
         ReplyWriteErr(origin, cookie, /*status=*/1);
@@ -2089,7 +2101,7 @@ void TNbsDbgLikeLoadTablet::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    LOG_D("HandleNbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
+    LOG_T("HandleNbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
     if (Phase != ETabletPhase::Ready) {
         ReplyReadErr(origin, cookie, /*status=*/1);

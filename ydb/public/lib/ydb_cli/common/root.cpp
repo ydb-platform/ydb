@@ -124,7 +124,7 @@ void TClientCommandRootBase::ParseCaCerts(TConfig& config) {
 
 void TClientCommandRootBase::ParseClientCert(TConfig& config) {
     if (!config.EnableSsl && config.ClientCert) {
-        TMisuseException()
+        throw TMisuseException()
             << "\"client-cert-file\"/\"client-cert-key-file\"/\"client-cert-key-password-file\" options are provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
     }
 

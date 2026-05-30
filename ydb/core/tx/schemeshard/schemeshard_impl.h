@@ -468,6 +468,20 @@ public:
 
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
+    struct TTablePartitionsFormatSweepState {
+        enum class EStatus : ui8 {
+            Idle = 0,
+            Running,
+            Paused,
+        };
+        EStatus Status = EStatus::Idle;
+        bool TargetIsShardIdx = false;
+        TDeque<TPathId> Queue;
+        ui64 Done = 0;
+        ui64 Skipped = 0;
+    };
+    TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
+
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
@@ -816,11 +830,22 @@ public:
     void PersistTable(NIceDb::TNiceDb &db, const TPathId pathId);
     void PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx shardId, const TChannelsBindings& bindedChannels);
     void PersistTablePartitioning(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
+    void PersistTablePartitioningVersion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
+    // O(k) helpers for the ByShardIdx-format fast path; called before/after ApplySplitMerge.
+    void PersistTablePartitioningByShardIdxDelete(NIceDb::TNiceDb& db, const TPathId tableId, const TTableInfo::TPtr tableInfo, const TVector<TShardIdx>& srcShardIdxs);
+    void PersistTablePartitioningByShardIdxInsert(NIceDb::TNiceDb& db, const TPathId tableId, const TTableInfo::TPtr tableInfo, ui64 srcFirstIdx, ui64 kAdded);
     void PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableShardInfo* partition, const TTableInfo::TPtr tableInfo);
-    void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, ui64 partitionId, const TPartitionStats& stats);
+    // Two row writers, one per backing schema table. PartitionsInShardIdxFormat
+    // selects which one is used; the dispatchers below hide that choice.
+    void PersistTablePartitionStatsByPosition(NIceDb::TNiceDb& db, const TPathId& tableId, ui64 partitionId, const TPartitionStats& stats);
+    void PersistTablePartitionStatsByShardIdx(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TPartitionStats& stats);
+    // One partition (looks up stats in tableInfo).
     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo);
-    void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
+    // All partitions starting at startIdx.
+    void PersistAllTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
+    // Rewrite all partition rows in the format selected by `shardIdxFormat`, deleting the alternative-format rows in the same tx.
+    void PersistTablePartitioningInFormat(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, bool shardIdxFormat);
     void PersistTableCreated(NIceDb::TNiceDb& db, const TPathId tableId);
     void PersistTableAlterVersion(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo);
     void PersistClearAlterTableFull(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -930,7 +955,7 @@ public:
 
     // ColumnTable
     void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
-    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx);
+    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx, bool skipStatsUpdate = false);
     void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
     void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
@@ -1182,6 +1207,33 @@ public:
 
     struct TTxMakeAccessDatabaseNoInheritable;
     NTabletFlatExecutor::ITransaction* CreateTxMakeAccessDatabaseNoInheritable(const TActorId& answerTo, bool isDryRun, std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) >);
+
+    // Per-table conversion table partitions storage format (include partition stats).
+    // Atomic: eligibility check + DB row moves across localdb tables + live table flag flip in one go.
+    enum class EFormatSwitchStatus {
+        Ok,
+        AlreadyDone,
+        Busy,
+        NotATable,
+    };
+    EFormatSwitchStatus SwitchTablePartitionsFormat(NIceDb::TNiceDb& db, TPathId pathId, bool shardIdxFormat);
+
+    struct TTxTablePartitionsFormatSwitch;
+    NTabletFlatExecutor::ITransaction* CreateTxTablePartitionsFormatSwitch(NMon::TEvRemoteHttpInfo::TPtr ev, TPathId pathId, bool shardIdxFormat);
+
+    struct TTxTablePartitionsFormatSweepStep;
+    NTabletFlatExecutor::ITransaction* CreateTxTablePartitionsFormatSweepStep();
+
+    struct TTxTablePartitionsFormatSweepAutoStart;
+    NTabletFlatExecutor::ITransaction* CreateTxTablePartitionsFormatSweepAutoStart();
+
+    void InitializeTablePartitionsFormatSweep();
+    void ContinueTablePartitionsFormatSweep();
+    void StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool targetIsShardIdx);
+    void PauseTablePartitionsFormatSweep(NIceDb::TNiceDb& db);
+    void ResumeTablePartitionsFormatSweep(NIceDb::TNiceDb& db);
+    void CancelTablePartitionsFormatSweep(NIceDb::TNiceDb& db);
+    void ClearTablePartitionsFormatSweep(NIceDb::TNiceDb& db);
 
     struct TTxServerlessStorageBilling;
     NTabletFlatExecutor::ITransaction* CreateTxServerlessStorageBilling();
@@ -1510,6 +1562,8 @@ public:
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvLoginFinalize::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPrivate::TEvProgressTablePartitionsFormatSweep::TPtr& ev, const TActorContext& ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 

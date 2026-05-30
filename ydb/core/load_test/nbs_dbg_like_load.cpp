@@ -119,9 +119,17 @@ private:
             return;
         }
 
-        EffectiveDbgCount = rec.GetNumDirectBlockGroups();
+        const ui32 totalDbgs = rec.GetNumDirectBlockGroups();
+        const ui32 readyDbgs = rec.GetNumReadyDirectBlockGroups();
         VChunkSizeBytes = rec.GetVChunkSizeBytes();
         TargetNumVChunks = rec.GetTargetNumVChunks();
+
+        // Use the ready count (longest contiguous prefix of DBGs with peers
+        // connected) as the base. Only target DBGs that can actually accept
+        // writes; targeting unconnected DBGs would silently drop writes and
+        // consume the entire inflight budget. Fall back to the total count for
+        // backward compatibility with tablets that don't set the field yet.
+        EffectiveDbgCount = (readyDbgs > 0) ? readyDbgs : totalDbgs;
 
         // Apply NumDirectBlockGroupsToUse slice.
         const ui32 mDbg = Config.GetNumDirectBlockGroupsToUse();
@@ -137,6 +145,8 @@ private:
         }
 
         LOG_N("GetSummary OK Tag# " << Tag
+            << " TotalDbgCount# " << totalDbgs
+            << " ReadyDbgCount# " << readyDbgs
             << " EffectiveDbgCount# " << EffectiveDbgCount
             << " VChunkSizeBytes# " << VChunkSizeBytes
             << " TargetNumVChunks# " << TargetNumVChunks
@@ -256,8 +266,7 @@ private:
         if (!Counters) {
             Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }
-        Root = Counters->GetSubgroup("tag", Sprintf("%" PRIu64, Tag))
-                       ->GetSubgroup("load", "actor");
+        Root = Counters->GetSubgroup("load", "actor");
         Writes.Init(Root->GetSubgroup("op", "Writes"));
         Reads.Init(Root->GetSubgroup("op", "Reads"));
     }

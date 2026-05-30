@@ -519,12 +519,20 @@ namespace NKikimr::NStorage {
                     status->SetStatus(TEvGather::TProposeStorageConfig::RACE);
                 } else if (const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
                         proposed.GetGeneration() <= StorageConfig->GetGeneration()) {
+                    // We have already applied a configuration with a generation >= the proposed one, so we must not
+                    // persist this proposition (doing so could resurrect an abandoned/divergent config at a generation
+                    // that is already settled). Answering ERROR is safe and self-correcting: this reply just won't count
+                    // towards the propose quorum, which makes the root re-collect configs and advance the generation.
+                    //
+                    // This is reachable under normal binding-tree churn (interconnect session resets, node restarts): a
+                    // stale propose task lingering in a subtree that got detached from the gather may be re-delivered
+                    // (e.g. replayed to a freshly bound node) after the same -- or a newer -- generation has already been
+                    // committed elsewhere and applied here. Hence it is not an abort-worthy condition.
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
-                    STLOG(PRI_ERROR, BS_NODE, NWDC49, "ProposedStorageConfig generation mismatch",
+                    STLOG(PRI_NOTICE, BS_NODE, NWDC49, "ProposedStorageConfig generation is not newer than the applied one",
                         (StorageConfig, StorageConfig.get()), (Request, task.Request), (RootNodeId, GetRootNodeId()));
-                    Y_DEBUG_ABORT();
                 } else if (proposed.HasClusterState() && (!BridgeInfo ||
                         !NBridge::PileStateTraits(proposed.GetClusterState().GetPerPileState(
                             BridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())).RequiresConfigQuorum)) {

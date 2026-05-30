@@ -1319,10 +1319,25 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
         for _ in range(4):
             child.sendcontrol('c')
 
-    def _expect_keyword(self, child, keyword: str):
+    def _expect_keyword(self, child, keyword: str, *, anchor: str = ""):
         # Replxx may interleave color escape sequences inside the rendered
         # keyword/candidate text, so accept ANSI noise between letters.
         pattern = ".*".join(keyword)
+        if anchor:
+            pattern = ".*".join(anchor) + ".*" + pattern
+        child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
+
+    def _expect_s_prefixed_tx_modes(self, child, anchor: str):
+        """Expect all tx modes starting with 's' in one completion list."""
+        pattern = (
+            ".*".join(anchor)
+            + ".*"
+            + ".*".join("serializable-rw")
+            + ".*"
+            + ".*".join("snapshot-ro")
+            + ".*"
+            + ".*".join("snapshot-rw")
+        )
         child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
 
     def test_tab_completes_beg_to_begin(self):
@@ -1362,9 +1377,9 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
             child.send("BEGIN s")
             child.send("\t")
-            self._expect_keyword(child, "serializable-rw")
-            self._expect_keyword(child, "snapshot-ro")
-            self._expect_keyword(child, "snapshot-rw")
+            # Single expect: avoid false positives on "Server" in the welcome
+            # banner (s.*e.*r matches) and require the full candidate list.
+            self._expect_s_prefixed_tx_modes(child, "BEGIN s")
         finally:
             self._discard_and_exit(child)
             child.close()
@@ -1377,8 +1392,7 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
             child.send("START TRANSACTION s")
             child.send("\t")
-            self._expect_keyword(child, "serializable-rw")
-            self._expect_keyword(child, "snapshot-ro")
+            self._expect_s_prefixed_tx_modes(child, "START TRANSACTION s")
         finally:
             self._discard_and_exit(child)
             child.close()

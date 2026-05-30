@@ -312,7 +312,10 @@ namespace {
                 return ToCompletions(MatchSlashCommands(prefixView, contextLen));
             }
             if (HasTclCompleter) {
-                const auto tokenization = TokenizeForCompletion(prefixView);
+                // Replxx may pass only the current word as `prefix`; TCL completion
+                // needs the full input line (e.g. "BEGIN s", not just "s").
+                const TStringBuf lineView = !text.empty() ? text : prefixView;
+                const auto tokenization = TokenizeForCompletion(lineView);
                 if (TclCompleter.IsContext(tokenization)) {
                     int tclCtx = 0;
                     auto tclWords = TclCompleter.Complete(tokenization, tclCtx);
@@ -329,7 +332,8 @@ namespace {
                 return MatchSlashCommands(prefixView, contextLen);
             }
             if (HasTclCompleter) {
-                const auto tokenization = TokenizeForCompletion(prefixView);
+                const TStringBuf lineView = !text.empty() ? text : prefixView;
+                const auto tokenization = TokenizeForCompletion(lineView);
                 if (TclCompleter.IsContext(tokenization)) {
                     int tclCtx = 0;
                     auto tclWords = TclCompleter.Complete(tokenization, tclCtx);

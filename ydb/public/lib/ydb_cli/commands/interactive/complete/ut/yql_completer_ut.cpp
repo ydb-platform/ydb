@@ -92,6 +92,20 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT(!set.contains("serializable-rw"));
     }
 
+    Y_UNIT_TEST(NextWordAfterBeginPartialS) {
+        auto completer = MakeTclOnlyCompleter();
+        int contextLen = -1;
+        const TString text = "BEGIN s";
+        // Replxx may pass only the current word as prefix; full line is in text.
+        auto hints = completer->ApplyLight(text, "s", contextLen);
+        UNIT_ASSERT_VALUES_EQUAL(contextLen, 1);
+        const auto set = AsSet(hints);
+        UNIT_ASSERT(set.contains("serializable-rw"));
+        UNIT_ASSERT(set.contains("snapshot-ro"));
+        UNIT_ASSERT(set.contains("snapshot-rw"));
+        UNIT_ASSERT(!set.contains("read-committed-rw"));
+    }
+
     Y_UNIT_TEST(NextWordAfterBeginTransactionSpace) {
         auto completer = MakeTclOnlyCompleter();
         int contextLen = -1;

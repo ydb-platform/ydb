@@ -14,6 +14,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsRejected;
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsBulkAccepted;
     NMonitoring::TDynamicCounters::TCounterPtr MergeQueue;
+    NMonitoring::TDynamicCounters::TCounterPtr MergeInflight;
+    NMonitoring::TDynamicCounters::TCounterPtr FetchInflight;
 
     NMonitoring::TDynamicCounters::TCounterPtr LeftBorders;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingBorders;
@@ -88,6 +90,14 @@ public:
 
     void OnMergeQueue(i64 count = 1) const {
         MergeQueue->Add(count);
+    }
+
+    void OnMergeInflight(i64 count) const {
+        MergeInflight->Add(count);
+    }
+
+    void OnFetchInflight(i64 count) const {
+        FetchInflight->Add(count);
     }
 };
 

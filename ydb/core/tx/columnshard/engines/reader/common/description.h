@@ -33,6 +33,7 @@ private:
     std::optional<std::shared_ptr<IScanCursor>> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
+    YDB_ACCESSOR_DEF(bool, FakeSort);
     YDB_READONLY(ui64, TabletId, 0);
 
 public:

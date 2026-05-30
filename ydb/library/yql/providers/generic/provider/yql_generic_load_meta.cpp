@@ -417,12 +417,9 @@ namespace NYql {
                 return;
             }
 
-            // 2. Client provided service account creds that must be converted into IAM-token
+            // 2. Client provided other creds (service account, iam delegated cloud auth,...) that must be converted into IAM-token
 
-            auto structuredTokenJSON = TStructuredTokenBuilder()
-                                           .SetServiceAccountIdAuth(clusterConfig.GetServiceAccountId(),
-                                                                    clusterConfig.GetServiceAccountIdSignature())
-                                           .ToJson();
+            auto structuredTokenJSON = State_->Configuration->Tokens[clusterConfig.name()];
 
             Y_ENSURE(structuredTokenJSON, "empty structured token");
 

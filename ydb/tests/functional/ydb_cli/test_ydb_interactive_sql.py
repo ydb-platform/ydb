@@ -975,8 +975,11 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert "1" in result.stdout
 
     def test_begin_with_ydb_tx_mode(self):
+        # snapshot-ro is used here (and in similar tests below) instead of
+        # read-committed-rw because read-committed-rw is gated by server-side
+        # configuration and is not enabled in the default CI YDB setup.
         result = self.run_interactive_session(
-            ["BEGIN read-committed-rw", "SELECT 3;", "COMMIT", "exit"],
+            ["BEGIN snapshot-ro", "SELECT 3;", "COMMIT", "exit"],
             self.tmp_path,
         )
         assert result.exit_code == 0
@@ -1014,7 +1017,7 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
 
     def test_start_transaction_with_mode(self):
         result = self.run_interactive_session(
-            ["START TRANSACTION read-committed-rw", "SELECT 7;", "COMMIT", "exit"],
+            ["START TRANSACTION snapshot-ro", "SELECT 7;", "COMMIT", "exit"],
             self.tmp_path,
         )
         assert result.exit_code == 0
@@ -1088,7 +1091,7 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
 
     def test_trailing_semicolon_in_begin_with_mode(self):
         result = self.run_interactive_session(
-            ["BEGIN read-committed-rw;", "SELECT 22;", "COMMIT", "exit"],
+            ["BEGIN snapshot-ro;", "SELECT 22;", "COMMIT", "exit"],
             self.tmp_path,
         )
         assert result.exit_code == 0
@@ -1348,30 +1351,31 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._discard_and_exit(child)
             child.close()
 
-    def test_tab_after_begin_proposes_next_words(self):
-        """`BEGIN <TAB>` proposes TRANSACTION / WORK / modes (not full phrases)."""
+    def test_tab_after_begin_with_s_proposes_modes(self):
+        """`BEGIN s<TAB>` proposes the s-prefixed mode names only."""
+        # We exercise TAB on a non-empty partial because Replxx in pty mode
+        # only renders the candidate list when the current partial is
+        # non-empty; this matches the existing test_tab_shows_candidate_list_for_ambiguous_prefix.
         child = self.spawn_interactive()
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_prompt(child)
-            child.send("BEGIN ")
+            child.send("BEGIN s")
             child.send("\t")
-            self._expect_keyword(child, "TRANSACTION")
-            self._expect_keyword(child, "WORK")
             self._expect_keyword(child, "serializable-rw")
             self._expect_keyword(child, "snapshot-ro")
-            self._expect_keyword(child, "read-committed-rw")
+            self._expect_keyword(child, "snapshot-rw")
         finally:
             self._discard_and_exit(child)
             child.close()
 
     def test_tab_after_start_transaction_proposes_modes(self):
-        """`START TRANSACTION <TAB>` proposes mode names, not the whole phrase."""
+        """`START TRANSACTION s<TAB>` proposes s-prefixed modes (no phrase repetition)."""
         child = self.spawn_interactive()
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_prompt(child)
-            child.send("START TRANSACTION ")
+            child.send("START TRANSACTION s")
             child.send("\t")
             self._expect_keyword(child, "serializable-rw")
             self._expect_keyword(child, "snapshot-ro")

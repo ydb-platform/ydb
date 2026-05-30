@@ -33,6 +33,15 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; }
 
+    bool IsFailStatusForPostponeRestart() const {
+        return Status != TEvLocal::TEvTabletStatus::StatusOk && Status != TEvLocal::TEvTabletStatus::StatusSupersededByLeader;
+    }
+
+    bool IsFailStatusForNodePenalty() const {
+        // Hive can send Poison to tablets, it must not make penalty for the node
+        return IsFailStatusForPostponeRestart() && Reason != TEvTablet::TEvTabletDead::EReason::ReasonPill;
+    }
+
     TString GetStatus() {
         TStringBuilder str;
         str << (ui32)Status;
@@ -129,10 +138,12 @@ public:
                     if (Generation < leader.KnownGeneration) {
                         return true;
                     }
-                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
-                        leader.PostponeStart(now + Self->GetPostponeStartPeriod());
-                        BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
-                            << " postponed start until " << leader.PostponedStart);
+                    if (IsFailStatusForPostponeRestart()) {
+                        if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
+                            leader.PostponeStart(now + Self->GetPostponeStartPeriod());
+                            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
+                                << " postponed start until " << leader.PostponedStart);
+                        }
                     }
                 }
                 if (Local) {
@@ -150,7 +161,9 @@ public:
                         }
                         tablet->InitiateStop(SideEffects);
                     }
-                    tablet->FailedNodeId = Local.NodeId();
+                    if (IsFailStatusForNodePenalty()) {
+                        tablet->FailedNodeId = Local.NodeId();
+                    }
                 }
                 switch (tablet->GetLeader().State) {
                 case ETabletState::GroupAssignment:

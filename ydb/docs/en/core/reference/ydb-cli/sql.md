@@ -46,16 +46,32 @@ For a detailed description with examples on how to use parameterized queries, se
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-A script to create a table, populate it with data, and select data from the table:
+Running DDL and DML together in a single query is not supported.
 
 ```bash
+# Creating a table
 {{ ydb-cli }} -p quickstart sql -s '
-    CREATE TABLE series (series_id Uint64, title Utf8, series_info Utf8, release_date Date, PRIMARY KEY (series_id));
-    COMMIT;
-    UPSERT INTO series (series_id, title, series_info, release_date) values (1, "Title1", "Info1", Cast("2023-04-20" as Date));
-    COMMIT;
-    SELECT * from series;
-  '
+  CREATE TABLE series (
+    series_id Uint64,
+    title Utf8,
+    series_info Utf8,
+    release_date Date,
+    PRIMARY KEY (series_id)
+  );
+'
+
+# Filling in data and selecting
+{{ ydb-cli }} -p quickstart sql -s '
+    UPSERT INTO series (series_id, title, series_info, release_date) 
+    VALUES (1, "Title1", "Info1", Cast("2023-04-20" as Date));
+    SELECT * FROM series;
+'
+
+# Adding an index
+{{ ydb-cli }} -p quickstart sql -s '
+    ALTER TABLE series 
+    ADD INDEX title_idx GLOBAL ON (title);
+'
 ```
 
 Command output:
@@ -68,10 +84,10 @@ Command output:
 └──────────────┴───────────┴─────────────┴──────────┘
 ```
 
-Running a script from the example above saved as the `script1.yql` file, with results output in `JSON` format:
+To run a query from a file (for example, script1.yql) with JSON output
 
 ```bash
-{{ ydb-cli }} -p quickstart sql -f script1.yql --format json
+{{ ydb-cli }} -p quickstart sql -f script1.yql --format json-unicode
 ```
 
 Command output:

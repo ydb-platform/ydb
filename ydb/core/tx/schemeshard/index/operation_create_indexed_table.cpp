@@ -44,6 +44,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TIndexObjectCounts totalCounts;
     ui32 indexCount = indexedTable.IndexDescriptionSize();
     for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+        if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDesc))) {
+            // Local indexes (e.g. row-table prefix bloom filter) create exactly one path
+            // (the index object itself) and no impl table / no extra shards.
+            continue;
+        }
         auto counts = GetIndexObjectCounts(indexDesc);
         totalCounts.IndexTableCount += counts.IndexTableCount;
         totalCounts.SequenceCount += counts.SequenceCount;
@@ -133,6 +138,23 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
+
+        if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDescription))) {
+            // Local indexes (e.g. row-table prefix bloom filter) have no impl table and no
+            // impl columns. Column validation (e.g. PK-prefix) is done in KQP; here we only
+            // enforce a valid, unique index name and reserve it in the bookkeeping map.
+            TPath indexPath = baseTablePath.Child(indexName);
+            TString msg = "invalid table index name: ";
+            if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
+            }
+            if (indexes.contains(indexName)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                    TStringBuilder() << "Can't create indexes with not unique names for table, for example: " << indexName)};
+            }
+            indexes.emplace(indexName, TTableColumns{});
+            continue;
+        }
         const auto indexType = GetIndexType(indexDescription);
         switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -310,6 +332,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.MutableCreateTableIndex()->SetType(GetIndexType(indexDescription));
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
+        }
+
+        if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDescription))) {
+            // Local index (e.g. row-table prefix bloom filter) has no impl table: the actual
+            // filter is driven by the table's PartitionConfig (ByKeyFilterPrefixes); the index
+            // object created above is the catalog metadata.
+            continue;
         }
 
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {

@@ -244,6 +244,92 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
         }
     }
 
+    // Row tables: legacy prefix bloom filters live as nameless ByKeyFilterPrefixes in the
+    // partition config. Synthesize a named TTableIndex scheme object per prefix.
+    for (const auto& [tablePathId, tableInfo] : Tables) {
+        const auto& partitionConfig = tableInfo->PartitionConfig();
+        if (partitionConfig.ByKeyFilterPrefixesSize() == 0) {
+            continue;
+        }
+
+        const TPathElement::TPtr tablePath = PathsById.at(tablePathId);
+        if (tablePath->Dropped() || !tablePath->IsTable()) {
+            continue;
+        }
+        const TPath path = TPath::Init(tablePathId, this);
+        if (!path.IsCommonSensePath()) {
+            // Skip index impl tables and other non-user tables.
+            continue;
+        }
+
+        // Ordered primary-key column names.
+        TVector<TString> pkColumns;
+        pkColumns.reserve(tableInfo->KeyColumnIds.size());
+        for (ui32 colId : tableInfo->KeyColumnIds) {
+            auto colIt = tableInfo->Columns.find(colId);
+            if (colIt == tableInfo->Columns.end()) {
+                break;
+            }
+            pkColumns.push_back(colIt->second.Name);
+        }
+
+        const TString workingDir = path.PathString();
+
+        for (const auto& prefix : partitionConfig.GetByKeyFilterPrefixes()) {
+            const ui32 prefixLen = prefix.GetPrefixLength();
+            if (prefixLen == 0 || prefixLen > pkColumns.size()) {
+                continue;
+            }
+
+            // Idempotency: skip if a local bloom index over this prefix already exists.
+            bool alreadyExists = false;
+            for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+                const auto& child = PathsById.at(childPathId);
+                if (!child->IsTableIndex() || child->Dropped()) {
+                    continue;
+                }
+                auto indexIt = Indexes.find(childPathId);
+                if (indexIt != Indexes.end()
+                    && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
+                    && indexIt->second->IndexKeys.size() == prefixLen) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+            if (alreadyExists) {
+                continue;
+            }
+
+            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+            TStringBuilder name;
+            name << "bloom_filter";
+            for (ui32 i = 0; i < prefixLen; ++i) {
+                name << "_" << pkColumns[i];
+                indexConfig.AddKeyColumnNames(pkColumns[i]);
+            }
+            if (tablePath->FindChild(name)) {
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CollectLocalIndexMigrations: skipping row bloom prefix " << prefixLen
+                    << " for table " << workingDir << " (name '" << name << "' already taken)");
+                continue;
+            }
+            indexConfig.SetName(name);
+            indexConfig.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            indexConfig.SetState(NKikimrSchemeOp::EIndexStateReady);
+            if (prefix.HasFalsePositiveProbability()) {
+                indexConfig.MutableBloomFilterDescription()->SetFalsePositiveProbability(prefix.GetFalsePositiveProbability());
+            }
+
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CollectLocalIndexMigrations: adding row bloom index " << name << " from table " << workingDir);
+            items.emplace_back(TLocalIndexMigrationItem{
+                .WorkingDir = workingDir,
+                .IndexConfig = std::move(indexConfig),
+                .IsColumnTable = false,
+            });
+        }
+    }
+
     if (items.empty()) {
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "LocalIndexMigrator: no indexes to migrate");

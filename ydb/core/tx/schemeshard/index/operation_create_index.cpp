@@ -147,9 +147,19 @@ public:
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-                checks
-                    .IsUnderCreating(NKikimrScheme::StatusNameConflict)
-                    .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                if (internal) {
+                    // Internal composite operations (e.g. row-table local prefix bloom index created
+                    // together with CREATE/ALTER TABLE, or the local-index migrator). The parent table
+                    // may be created under this same operation, already being altered under it, or
+                    // steady (migration). Reject only foreign concurrent operations.
+                    if (parentPath.IsUnderOperation()) {
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
+                } else {
+                    checks
+                        .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                }
             } else {
                 checks.NotBackupTable(); // allow to create backup table with index, but not to build index on a backup table
             }

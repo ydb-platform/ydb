@@ -808,6 +808,78 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
+    // KEY_BLOOM_FILTER = DISABLED clears all ByKeyFilterPrefixes on the table, which removes the
+    // engine backing of every named prefix bloom index. Drop those scheme objects together with
+    // the alter so the catalog stays consistent with the engine.
+    if (alter.HasPartitionConfig()
+        && alter.GetPartitionConfig().HasEnableFilterByKey()
+        && !alter.GetPartitionConfig().GetEnableFilterByKey())
+    {
+        TVector<TString> bloomIndexNames;
+        for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+            const auto& child = context.SS->PathsById.at(childPathId);
+            if (!child->IsTableIndex() || child->Dropped()) {
+                continue;
+            }
+            auto it = context.SS->Indexes.find(childPathId);
+            if (it != context.SS->Indexes.end()
+                && it->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                bloomIndexNames.push_back(childName);
+            }
+        }
+        if (!bloomIndexNames.empty()) {
+            TVector<ISubOperation::TPtr> result;
+            result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+            for (const auto& indexName : bloomIndexNames) {
+                AddDropIndex(result, id, path.Child(indexName));
+            }
+            return result;
+        }
+    }
+
+    // Row-table prefix bloom filter ADD INDEX (and migration of legacy ByKeyFilterPrefixes):
+    // the alter carries named local indexes to register as TTableIndex scheme objects, optionally
+    // alongside a partition-config (ByKeyFilterPrefixes) change. Decompose into the table alter
+    // (only when there is a real table-level change) plus one CreateNewTableIndex sub-op per index.
+    // The engine filter is driven by the alter's PartitionConfig; the index object is metadata.
+    if (alter.AddLocalIndexesSize() > 0) {
+        // Duplicate-column-set prevention: reject if a local bloom index over the same columns
+        // already exists on the table (goal: prevent duplicate indexes with the same column set).
+        for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
+            const TVector<TString> newKeys(indexConfig.GetKeyColumnNames().begin(), indexConfig.GetKeyColumnNames().end());
+            for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+                const auto& child = context.SS->PathsById.at(childPathId);
+                if (!child->IsTableIndex() || child->Dropped()) {
+                    continue;
+                }
+                auto it = context.SS->Indexes.find(childPathId);
+                if (it != context.SS->Indexes.end()
+                    && TTableIndexInfo::IsLocalIndex(it->second->Type)
+                    && it->second->IndexKeys == newKeys) {
+                    return {CreateReject(id, NKikimrScheme::EStatus::StatusAlreadyExists,
+                        TStringBuilder() << "Local bloom filter index over the same columns already exists on table " << name)};
+                }
+            }
+        }
+
+        TVector<ISubOperation::TPtr> result;
+        if (alter.HasPartitionConfig()) {
+            result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+        }
+
+        for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
+            auto scheme = TransactionTemplate(path.PathString(),
+                NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
+            scheme.SetFailOnExist(tx.GetFailOnExist());
+            // Internal so the generic create-index op accepts a steady/under-alter parent table.
+            scheme.SetInternal(true);
+            *scheme.MutableCreateTableIndex() = indexConfig;
+            result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
+        }
+
+        return result;
+    }
+
     if (path.IsCommonSensePath()) {
         return {CreateAlterTable(id, tx)};
     }

@@ -1652,7 +1652,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
         }
 
-        // ALTER TABLE ADD INDEX with custom false_positive_probability
+        // Each bloom filter is now a named TTableIndex scheme object, so adding a second index
+        // over the same PK prefix as an existing one is rejected (duplicate column set).
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/T`
+                ADD INDEX idx_bloom3 LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // DROP INDEX by name removes both the scheme object and the engine ByKeyFilterPrefix.
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            // only prefix 2 (idx_bloom2) remains
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
+        }
+
+        // After dropping the prefix-1 index, the same prefix can be re-added with a new FPP.
         execScheme(R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
@@ -1660,7 +1683,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         )");
         {
             auto cfg = getPartitionConfig();
-            // prefix 1 already existed, FPP should be updated to 0.05
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
             UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.05, 1e-9);
@@ -1721,6 +1743,52 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ADD INDEX idx_bloom_mix LOCAL USING bloom_filter ON (Key1),
                 ADD INDEX idx_global_mix GLOBAL ON (Value);
         )");
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexSchemeObject) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/T` (
+                    Key1 Uint64,
+                    Key2 Uint64,
+                    Value String,
+                    PRIMARY KEY (Key1, Key2),
+                    INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                    INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto pathType = [&](const TString& path) {
+            return kikimr.GetTestClient().Ls(path)->Record.GetPathDescription().GetSelf().GetPathType();
+        };
+        auto partitionConfig = [&]() {
+            return kikimr.GetTestClient().Ls("/Root/T")->Record.GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        // Both bloom filters are registered as TTableIndex scheme objects (children of the table)
+        // and the engine artifact (ByKeyFilterPrefixes) is present.
+        UNIT_ASSERT_VALUES_EQUAL(pathType("/Root/T/idx_bloom1"), NKikimrSchemeOp::EPathTypeTableIndex);
+        UNIT_ASSERT_VALUES_EQUAL(pathType("/Root/T/idx_bloom2"), NKikimrSchemeOp::EPathTypeTableIndex);
+        UNIT_ASSERT_VALUES_EQUAL(partitionConfig().ByKeyFilterPrefixesSize(), 2);
+
+        // DROP INDEX by name removes both the scheme object and the engine prefix.
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        auto cfg = partitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
     }
 
     void CreateTableWithReadReplicas(bool compat) {

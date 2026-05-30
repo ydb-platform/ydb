@@ -1166,6 +1166,19 @@ bool TPartitionConfigMerger::ApplyChanges(
         }
     }
 
+    if (changes.DropByKeyFilterPrefixLengthsSize() > 0) {
+        // Remove specific bloom filter prefixes (used when dropping a row-table prefix bloom index).
+        TSet<ui32> toRemove(changes.GetDropByKeyFilterPrefixLengths().begin(),
+                            changes.GetDropByKeyFilterPrefixLengths().end());
+        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TByKeyFilterPrefix> kept;
+        for (const auto& p : result.GetByKeyFilterPrefixes()) {
+            if (!toRemove.contains(p.GetPrefixLength())) {
+                *kept.Add() = p;
+            }
+        }
+        result.MutableByKeyFilterPrefixes()->Swap(&kept);
+    }
+
     if (changes.HasExecutorFastLogPolicy()) {
         result.SetExecutorFastLogPolicy(changes.GetExecutorFastLogPolicy());
     }

@@ -1274,6 +1274,7 @@ public:
              TTabletTypes::Mediator,
              TTabletTypes::SchemeShard,
              TTabletTypes::Hive,
+             TTabletTypes::Kesus,
              TTabletTypes::KeyValue,
              TTabletTypes::PersQueue,
              TTabletTypes::PersQueueReadBalancer,

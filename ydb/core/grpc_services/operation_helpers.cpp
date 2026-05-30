@@ -161,9 +161,6 @@ void ToOperation(const NKikimrAnalyzeOp::TAnalyzeOperation& op, Ydb::Operations:
     if (op.HasEndTime()) {
         *operation->mutable_end_time() = op.GetEndTime();
     }
-    if (op.HasUserSID()) {
-        operation->set_created_by(op.GetUserSID());
-    }
     if (op.IssuesSize() > 0) {
         operation->mutable_issues()->CopyFrom(op.GetIssues());
     }

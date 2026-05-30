@@ -56,7 +56,6 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct ReplyToActorId : Column<5, NScheme::NTypeIds::ActorId>{};
         struct EndTime        : Column<6, NScheme::NTypeIds::Uint64> {};
         struct State          : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct UserSID        : Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
@@ -66,8 +65,7 @@ struct TAggregatorSchema : NIceDb::Schema {
             DatabaseName,
             ReplyToActorId,
             EndTime,
-            State,
-            UserSID
+            State
         >;
     };
 

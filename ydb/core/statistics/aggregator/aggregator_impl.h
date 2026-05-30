@@ -444,7 +444,6 @@ private: // stored in local db
         // Terminal state (STATE_UNSPECIFIED means non-terminal; live state is derived at read time)
         Ydb::Table::AnalyzeState::State State = Ydb::Table::AnalyzeState::STATE_UNSPECIFIED;
         TInstant EndTime;
-        TString UserSID;
         // Issues attached to a terminal operation (cancellation reason, deadline message, scan errors).
         // In-memory only; lost on tablet restart (acceptable: the original requester already received
         // the issues via TEvAnalyzeResponse).

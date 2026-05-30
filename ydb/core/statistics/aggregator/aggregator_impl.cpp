@@ -1028,9 +1028,6 @@ void TStatisticsAggregator::FillAnalyzeOperationProto(
 {
     proto.SetOperationId(op.OperationId);
     proto.SetDatabaseName(op.DatabaseName);
-    if (op.UserSID) {
-        proto.SetUserSID(op.UserSID);
-    }
 
     {
         auto* ts = proto.MutableCreateTime();

@@ -205,7 +205,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TActorId replyToActorId = rowset.GetValue<Schema::ForceTraversalOperations::ReplyToActorId>();
                 ui64 endTime = rowset.GetValueOrDefault<Schema::ForceTraversalOperations::EndTime>(0);
                 ui64 stateVal = rowset.GetValueOrDefault<Schema::ForceTraversalOperations::State>(0);
-                TString userSID = rowset.GetValueOrDefault<Schema::ForceTraversalOperations::UserSID>(TString{});
 
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
@@ -217,7 +216,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .CreatedAt = TInstant::FromValue(createdAt),
                     .State = static_cast<Ydb::Table::AnalyzeState::State>(stateVal),
                     .EndTime = TInstant::FromValue(endTime),
-                    .UserSID = userSID,
                 };
                 Self->ForceTraversals.emplace_back(operation);
 

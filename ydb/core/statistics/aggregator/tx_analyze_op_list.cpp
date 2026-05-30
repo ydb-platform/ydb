@@ -1,5 +1,6 @@
 #include "aggregator_impl.h"
 
+#include <algorithm>
 #include <limits>
 
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::STATISTICS, "[" << Self->TabletID() << "][AnalyzeOp] " << stream)

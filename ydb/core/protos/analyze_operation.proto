@@ -18,8 +18,7 @@ message TAnalyzeOperation {
     optional uint32 ShardsTotal = 9;
     optional uint32 ShardsDone = 10;
     optional string DatabaseName = 11;
-    optional string UserSID = 12;
-    repeated Ydb.Issue.IssueMessage Issues = 13;
+    repeated Ydb.Issue.IssueMessage Issues = 12;
 }
 
 message TEvListRequest {

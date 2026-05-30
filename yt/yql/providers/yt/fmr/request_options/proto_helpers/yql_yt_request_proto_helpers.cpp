@@ -601,6 +601,7 @@ NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams&
     }
     protoMapOperationParams.SetSerializedMapJobState(mapOperationParams.SerializedMapJobState);
     protoMapOperationParams.SetMapJobType(static_cast<NProto::EFmrJobType>(mapOperationParams.MapJobType));
+    protoMapOperationParams.SetForceSingleTask(mapOperationParams.ForceSingleTask);
     return protoMapOperationParams;
 }
 
@@ -613,7 +614,7 @@ TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParam
     for (auto& protoFmrTableRef: protoMapOperationParams.GetOutput()) {
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
-    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState(), .MapJobType = static_cast<EFmrJobType>(protoMapOperationParams.GetMapJobType())};
+    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState(), .MapJobType = static_cast<EFmrJobType>(protoMapOperationParams.GetMapJobType()), .ForceSingleTask = protoMapOperationParams.GetForceSingleTask()};
 }
 
 NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams) {

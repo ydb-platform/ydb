@@ -76,6 +76,7 @@ SET(ORIG_SOURCES
     mkql_length.cpp
     mkql_linear.cpp
     mkql_listfromrange.cpp
+    mkql_list_join.cpp
     mkql_logical.cpp
     mkql_lookup.cpp
     mkql_map.cpp

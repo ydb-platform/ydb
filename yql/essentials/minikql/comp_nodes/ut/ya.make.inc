@@ -49,6 +49,7 @@ SET(ORIG_SOURCES
     mkql_flatmap_ut.cpp
     mkql_fromstring_ut.cpp
     mkql_linear_ut.cpp
+    mkql_list_join_ut.cpp
     mkql_multihopping_saveload_ut.cpp
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp

@@ -2,7 +2,7 @@
 
 A high performance core database driver for connecting ClickHouse to Python, Pandas, and Superset
 
-* Pandas DataFrames (numpy and arrow-backed). Pandas 2.x and above only, 1.x is deprecated and will be dropped in 1.0.
+* Pandas DataFrames (numpy and arrow-backed). Requires pandas 2.0 or later.
 * Numpy Arrays
 * PyArrow Tables
 * Polars DataFrames
@@ -17,8 +17,11 @@ ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum comp
 pip install clickhouse-connect
 ```
 
-ClickHouse Connect requires Python 3.9 or higher. We officially test against Python 3.10 through 3.14.
-Python 3.9 is deprecated and support will be removed entirely in 1.0.
+ClickHouse Connect requires Python 3.10 or higher.
+
+#### Upgrading from 0.x
+
+The 1.0 release includes breaking changes. If you are upgrading from a 0.15.x or earlier release, see [MIGRATION.md](MIGRATION.md) for a guide to the changes and their replacements.
 
 ### Superset Connectivity
 
@@ -53,13 +56,15 @@ are not implemented. The dialect is best suited for SQLAlchemy Core usage and Su
 
 ### Asyncio Support
 
-ClickHouse Connect provides an `AsyncClient` for use in `asyncio` environments.
-See the [run_async example](./examples/run_async.py) for more details.
+ClickHouse Connect provides native async support using aiohttp. To use the async client,
+install the optional async dependency:
 
-The current `AsyncClient` is a thread-pool executor wrapper around the synchronous client and is deprecated.
-In 1.0.0 it will be replaced by a fully native async implementation. The API surface is the same,
-with one difference: you will no longer be able to create a sync client first and pass it to the
-`AsyncClient` constructor. Instead, use `clickhouse_connect.get_async_client()` directly.
+```
+pip install clickhouse-connect[async]
+```
+
+Then create a client with `clickhouse_connect.get_async_client()`. See the
+[run_async example](./examples/run_async.py) for more details.
 
 ### Complete Documentation
 

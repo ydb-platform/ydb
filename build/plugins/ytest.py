@@ -922,6 +922,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestClasspathDeps.value,
         df.TestJar.value,
         df.DockerImage.value,
+        df.ParallelTestsInSingleNode.value,
     )
 )
 def onjava_test(fields, unit, *args):

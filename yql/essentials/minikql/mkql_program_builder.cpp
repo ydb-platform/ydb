@@ -5272,6 +5272,110 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode list, EJoinKind joinKi
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BuildColumnList(const TColumnsMap& columnsMap) {
+    TRuntimeNode::TList columnsNodes;
+    const auto index2node = std::bind(&TProgramBuilder::NewDataLiteral<ui32>, this, std::placeholders::_1);
+    for (const auto& column : columnsMap) {
+        columnsNodes.emplace_back(NewTuple({index2node(column.first), index2node(column.second)}));
+    }
+    return NewTuple(columnsNodes);
+}
+
+TRuntimeNode TProgramBuilder::ListJoinCore(TRuntimeNode stream,
+                                           TType* keyType, const TColumnsMap& keyColumns,
+                                           const TColumnsMap& leftColumns, const TColumnsMap& rightColumns,
+                                           TType* leftArgType, const TUnaryLambda& leftArgmapLambda,
+                                           TType* rightArgType, const TUnaryLambda& rightArgmapLambda,
+                                           TType* returnType, const TTernaryLambda& joinLambda) {
+    if constexpr (RuntimeVersion < 78U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    std::unordered_set<ui32> keyIndices;
+    std::transform(keyColumns.cbegin(), keyColumns.cend(), std::inserter(keyIndices, keyIndices.end()),
+                   [](const auto& keyColumn) { return keyColumn.first; });
+    MKQL_ENSURE(keyIndices.size() == keyColumns.size(), "Duplication of key columns.");
+
+    const auto inputType = stream.GetStaticType();
+    MKQL_ENSURE(inputType->IsStream(), "Expected Stream as an input stream");
+    const auto inputStreamType = AS_TYPE(TStreamType, inputType);
+    MKQL_ENSURE(inputStreamType->GetItemType()->IsStruct(),
+                "Expected Struct as an input item type");
+    const auto inputStructType = AS_TYPE(TStructType, inputStreamType->GetItemType());
+
+    const auto keyArg = Arg(keyType);
+    if (keyColumns.size() == 1) {
+        const auto [inColumn, outColumn] = keyColumns.front();
+        MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                    "Key column is out of bounds of input row");
+        MKQL_ENSURE(outColumn == 0U, "Key column has to be 0 for the single key");
+    } else {
+        MKQL_ENSURE(keyType->IsStruct(), "Expected Struct as a key type");
+        const auto keyStructType = AS_TYPE(TStructType, keyType);
+        for (const auto [inColumn, outColumn] : keyColumns) {
+            MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                        "Key column is out of input row bounds");
+            MKQL_ENSURE(outColumn < keyStructType->GetMembersCount(),
+                        "Key column is out of key structure bounds");
+        }
+    }
+
+    MKQL_ENSURE(leftArgType->IsStruct(), "Left premap lambda argument must be a struct");
+    const auto leftArgStructType = AS_TYPE(TStructType, leftArgType);
+    for (const auto [inColumn, outColumn] : leftColumns) {
+        MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                    "Left column is out of input row bounds");
+        const auto inColumnType = inputStructType->GetMemberType(inColumn);
+        MKQL_ENSURE(inColumnType->IsOptional() || inColumnType->IsPg(),
+                    "Left payload has to be optional");
+        MKQL_ENSURE(outColumn < leftArgStructType->GetMembersCount(),
+                    "Left column is out of left argument structure bounds");
+    }
+    const auto leftArgmapLambdaArg = Arg(leftArgType);
+    const auto leftArgmapLambdaRoot = leftArgmapLambda(leftArgmapLambdaArg);
+    const auto leftListType = TListType::Create(leftArgmapLambdaRoot.GetStaticType(), Env_);
+    const auto leftListArg = Arg(leftListType);
+
+    MKQL_ENSURE(rightArgType->IsStruct(), "Right premap lambda argument must be a struct");
+    const auto rightArgStructType = AS_TYPE(TStructType, rightArgType);
+    for (const auto [inColumn, outColumn] : rightColumns) {
+        MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                    "Right column is out of input row bounds");
+        const auto inColumnType = inputStructType->GetMemberType(inColumn);
+        MKQL_ENSURE(inColumnType->IsOptional() || inColumnType->IsPg(),
+                    "Right payload has to be optional");
+        MKQL_ENSURE(outColumn < rightArgStructType->GetMembersCount(),
+                    "Right column is out of right argument structure bounds");
+    }
+    const auto rightArgmapLambdaArg = Arg(rightArgType);
+    const auto rightArgmapLambdaRoot = rightArgmapLambda(rightArgmapLambdaArg);
+    const auto rightListType = TListType::Create(rightArgmapLambdaRoot.GetStaticType(), Env_);
+    const auto rightListArg = Arg(rightListType);
+
+    const auto joinResult = joinLambda(keyArg, leftListArg, rightListArg);
+    MKQL_ENSURE(returnType->IsSameType(*joinResult.GetStaticType()),
+                "ListJoinCore output type must be the same as the join lambda type");
+
+    const auto keyColumnsNodes = BuildColumnList(keyColumns);
+    const auto leftColumnsNodes = BuildColumnList(leftColumns);
+    const auto rightColumnsNodes = BuildColumnList(rightColumns);
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(stream);
+    callableBuilder.Add(keyColumnsNodes);
+    callableBuilder.Add(leftColumnsNodes);
+    callableBuilder.Add(rightColumnsNodes);
+    callableBuilder.Add(leftArgmapLambdaArg);
+    callableBuilder.Add(leftArgmapLambdaRoot);
+    callableBuilder.Add(rightArgmapLambdaArg);
+    callableBuilder.Add(rightArgmapLambdaRoot);
+    callableBuilder.Add(keyArg);
+    callableBuilder.Add(leftListArg);
+    callableBuilder.Add(rightListArg);
+    callableBuilder.Add(joinResult);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& extractor,
                                            const TBinaryWideLambda& init, const TTernaryWideLambda& update,
                                            const TBinaryWideLambda& finish) {

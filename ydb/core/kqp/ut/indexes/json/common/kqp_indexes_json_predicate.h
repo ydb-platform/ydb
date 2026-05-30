@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/ut/indexes/json/kqp_json_index_corpus.h>
+#include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_corpus.h>
 
 namespace NKikimr::NKqp {
 

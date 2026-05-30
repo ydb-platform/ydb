@@ -788,6 +788,40 @@ class TestSorting:
 """.strip()
         )
 
+    def test_sort_key_at_class_declaration(self) -> None:
+        # Test sorting by length of city name
+        def key(vals):
+            vals[0] = len(vals[0])
+            return vals
+
+        table = PrettyTable(
+            field_names=["City name", "Area", "Population", "Annual Rainfall"],
+            sortby="City name",
+            sort_key=key,
+        )
+        assert table.sort_key == key
+        table.add_row(["Adelaide", 1295, 1158259, 600.5])
+        table.add_row(["Brisbane", 5905, 1857594, 1146.4])
+        table.add_row(["Darwin", 112, 120900, 1714.7])
+        table.add_row(["Hobart", 1357, 205556, 619.5])
+        table.add_row(["Sydney", 2058, 4336374, 1214.8])
+        table.add_row(["Melbourne", 1566, 3806092, 646.9])
+        table.add_row(["Perth", 5386, 1554769, 869.4])
+        assert (
+            """+-----------+------+------------+-----------------+
+| City name | Area | Population | Annual Rainfall |
++-----------+------+------------+-----------------+
+|   Perth   | 5386 |  1554769   |      869.4      |
+|   Darwin  | 112  |   120900   |      1714.7     |
+|   Hobart  | 1357 |   205556   |      619.5      |
+|   Sydney  | 2058 |  4336374   |      1214.8     |
+|  Adelaide | 1295 |  1158259   |      600.5      |
+|  Brisbane | 5905 |  1857594   |      1146.4     |
+| Melbourne | 1566 |  3806092   |      646.9      |
++-----------+------+------------+-----------------+"""
+            == table.get_string().strip()
+        )
+
     def test_sort_slice(self) -> None:
         """Make sure sorting and slicing interact in the expected way"""
         table = PrettyTable(["Foo"])
@@ -799,6 +833,37 @@ class TestSorting:
         oldstyle = table.get_string(sortby="Foo", end=10, oldsortslice=True)
         assert "10" not in oldstyle
         assert "20" in oldstyle
+
+    def test_sortby_at_class_declaration(self) -> None:
+        """
+        Fix #354 where initialization of a table with sortby fails
+        """
+        table = PrettyTable(
+            field_names=["City name", "Area", "Population", "Annual Rainfall"],
+            sortby="Area",
+        )
+        assert table.sortby == "Area"
+        table.add_row(["Adelaide", 1295, 1158259, 600.5])
+        table.add_row(["Brisbane", 5905, 1857594, 1146.4])
+        table.add_row(["Darwin", 112, 120900, 1714.7])
+        table.add_row(["Hobart", 1357, 205556, 619.5])
+        table.add_row(["Sydney", 2058, 4336374, 1214.8])
+        table.add_row(["Melbourne", 1566, 3806092, 646.9])
+        table.add_row(["Perth", 5386, 1554769, 869.4])
+        assert (
+            """+-----------+------+------------+-----------------+
+| City name | Area | Population | Annual Rainfall |
++-----------+------+------------+-----------------+
+|   Darwin  | 112  |   120900   |      1714.7     |
+|  Adelaide | 1295 |  1158259   |      600.5      |
+|   Hobart  | 1357 |   205556   |      619.5      |
+| Melbourne | 1566 |  3806092   |      646.9      |
+|   Sydney  | 2058 |  4336374   |      1214.8     |
+|   Perth   | 5386 |  1554769   |      869.4      |
+|  Brisbane | 5905 |  1857594   |      1146.4     |
++-----------+------+------------+-----------------+"""
+            == table.get_string().strip()
+        )
 
 
 @pytest.fixture(scope="function")
@@ -1713,6 +1778,134 @@ class TestStyle:
             t.set_style(HRuleStyle.ALL)  # type: ignore[arg-type]
 
     @pytest.mark.parametrize(
+        "original_style,style, expected",
+        [
+            pytest.param(
+                TableStyle.MARKDOWN,
+                TableStyle.DEFAULT,
+                """
++---+---------+---------+---------+
+|   | Field 1 | Field 2 | Field 3 |
++---+---------+---------+---------+
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
++---+---------+---------+---------+
+""",
+                id="DEFAULT",
+            ),
+            pytest.param(
+                TableStyle.MSWORD_FRIENDLY,
+                TableStyle.MARKDOWN,
+                """
+|     | Field 1 | Field 2 | Field 3 |
+| :-: | :-----: | :-----: | :-----: |
+|  1  | value 1 |  value2 |  value3 |
+|  4  | value 4 |  value5 |  value6 |
+|  7  | value 7 |  value8 |  value9 |
+""",
+                id="MARKDOWN",
+            ),
+            pytest.param(
+                TableStyle.MARKDOWN,
+                TableStyle.MSWORD_FRIENDLY,
+                """
+|   | Field 1 | Field 2 | Field 3 |
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
+""",
+                id="MSWORD_FRIENDLY",
+            ),
+            pytest.param(
+                TableStyle.MARKDOWN,
+                TableStyle.ORGMODE,
+                """
+|---+---------+---------+---------|
+|   | Field 1 | Field 2 | Field 3 |
+|---+---------+---------+---------|
+| 1 | value 1 |  value2 |  value3 |
+| 4 | value 4 |  value5 |  value6 |
+| 7 | value 7 |  value8 |  value9 |
+|---+---------+---------+---------|
+""",
+                id="ORGMODE",
+            ),
+            pytest.param(
+                TableStyle.MARKDOWN,
+                TableStyle.PLAIN_COLUMNS,
+                """
+         Field 1        Field 2        Field 3        
+1        value 1         value2         value3        
+4        value 4         value5         value6        
+7        value 7         value8         value9
+""",  # noqa: W291
+                id="PLAIN_COLUMNS",
+            ),
+            pytest.param(
+                TableStyle.MARKDOWN,
+                TableStyle.RANDOM,
+                """
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^'
+%    1     value 1     value2     value3%
+%    4     value 4     value5     value6%
+%    7     value 7     value8     value9%
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^'
+""",
+                id="RANDOM",
+            ),
+            pytest.param(
+                TableStyle.MARKDOWN,
+                TableStyle.DOUBLE_BORDER,
+                """
+╔═══╦═════════╦═════════╦═════════╗
+║   ║ Field 1 ║ Field 2 ║ Field 3 ║
+╠═══╬═════════╬═════════╬═════════╣
+║ 1 ║ value 1 ║  value2 ║  value3 ║
+║ 4 ║ value 4 ║  value5 ║  value6 ║
+║ 7 ║ value 7 ║  value8 ║  value9 ║
+╚═══╩═════════╩═════════╩═════════╝
+""",
+                id="DOUBLE_BORDER",
+            ),
+            pytest.param(
+                TableStyle.MARKDOWN,
+                TableStyle.SINGLE_BORDER,
+                """
+┌───┬─────────┬─────────┬─────────┐
+│   │ Field 1 │ Field 2 │ Field 3 │
+├───┼─────────┼─────────┼─────────┤
+│ 1 │ value 1 │  value2 │  value3 │
+│ 4 │ value 4 │  value5 │  value6 │
+│ 7 │ value 7 │  value8 │  value9 │
+└───┴─────────┴─────────┴─────────┘
+""",
+                id="SINGLE_BORDER",
+            ),
+        ],
+    )
+    def test_style_reset(self, original_style, style, expected) -> None:
+        """
+            Testing to ensure that default styling is reset between changes
+            of styles on a PrettyTable
+
+        Args:
+            style (str): Style to be used (Default, markdown, etc)
+            expected (str): The expected format of style as a string representation
+        """
+        # Arrange
+        t = helper_table()
+        random.seed(1234)
+
+        # Act
+        t.set_style(original_style)
+        t.set_style(style)
+
+        # Assert
+        result = t.get_string()
+        assert result.strip() == expected.strip()
+
+    @pytest.mark.parametrize(
         "style, expected",
         [
             pytest.param(
@@ -2354,6 +2547,169 @@ class TestMaxTableWidth:
 +---+-----------------+---+-----------------+---+-----------------+""".strip()
         )
 
+    def test_table_width_on_init_wo_columns(self) -> None:
+        """See also #272"""
+        table = PrettyTable(max_width=10)
+        table.add_row(
+            [
+                "Lorem",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "ipsum",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "dolor",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++---------+------------+---------+------------+---------+------------+
+| Field 1 |  Field 2   | Field 3 |  Field 4   | Field 5 |  Field 6   |
++---------+------------+---------+------------+---------+------------+
+|  Lorem  |   Lorem    |  ipsum  |   Lorem    |  dolor  |   Lorem    |
+|         |   ipsum    |         |   ipsum    |         |   ipsum    |
+|         | dolor sit  |         | dolor sit  |         | dolor sit  |
+|         |   amet,    |         |   amet,    |         |   amet,    |
+|         | consetetur |         | consetetur |         | consetetur |
+|         | sadipscing |         | sadipscing |         | sadipscing |
+|         | elitr, sed |         | elitr, sed |         | elitr, sed |
+|         |    diam    |         |    diam    |         |    diam    |
++---------+------------+---------+------------+---------+------------+""".strip()
+        )
+
+    def test_table_width_on_init_with_columns(self) -> None:
+        """See also #272"""
+        table = PrettyTable(
+            ["Field 1", "Field 2", "Field 3", "Field 4", "Field 5", "Field 6"],
+            max_width=10,
+        )
+        table.add_row(
+            [
+                "Lorem",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "ipsum",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+                "dolor",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """
++---------+------------+---------+------------+---------+------------+
+| Field 1 |  Field 2   | Field 3 |  Field 4   | Field 5 |  Field 6   |
++---------+------------+---------+------------+---------+------------+
+|  Lorem  |   Lorem    |  ipsum  |   Lorem    |  dolor  |   Lorem    |
+|         |   ipsum    |         |   ipsum    |         |   ipsum    |
+|         | dolor sit  |         | dolor sit  |         | dolor sit  |
+|         |   amet,    |         |   amet,    |         |   amet,    |
+|         | consetetur |         | consetetur |         | consetetur |
+|         | sadipscing |         | sadipscing |         | sadipscing |
+|         | elitr, sed |         | elitr, sed |         | elitr, sed |
+|         |    diam    |         |    diam    |         |    diam    |
++---------+------------+---------+------------+---------+------------+""".strip()
+        )
+
+    def test_table_minwidth_on_init_with_columns(self) -> None:
+        table = PrettyTable(["Field 1", "Field 2"], min_width=20)
+        table.add_row(
+            [
+                "Lorem",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """+----------------------+--------------------------------------------------------------------+
+|       Field 1        |                              Field 2                               |
++----------------------+--------------------------------------------------------------------+
+|        Lorem         | Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam  |
++----------------------+--------------------------------------------------------------------+"""  # noqa: E501
+        )
+
+    def test_table_min_max_width_on_init_with_columns(self) -> None:
+        table = PrettyTable(["Field 1", "Field 2"], min_width=20, max_width=40)
+        table.add_row(
+            [
+                "Lorem",
+                "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam ",
+            ]
+        )
+
+        assert (
+            table.get_string().strip()
+            == """+----------------------+------------------------------------------+
+|       Field 1        |                 Field 2                  |
++----------------------+------------------------------------------+
+|        Lorem         |  Lorem ipsum dolor sit amet, consetetur  |
+|                      |        sadipscing elitr, sed diam        |
++----------------------+------------------------------------------+"""
+        )
+
+    def test_table_float_formatting_on_init_wo_columns(self) -> None:
+        """See also #243"""
+        table = prettytable.PrettyTable(float_format="10.2")
+        table.field_names = ["Metric", "Initial sol.", "Best sol."]
+        table.add_rows([["foo", 1.0 / 3.0, 1.0 / 3.0]])
+
+        assert (
+            table.get_string().strip()
+            == """
++--------+--------------+------------+
+| Metric | Initial sol. | Best sol.  |
++--------+--------------+------------+
+|  foo   |        0.33  |       0.33 |
++--------+--------------+------------+""".strip()
+        )
+
+    def test_table_formatted_html_autoindex(self) -> None:
+        """See also #199"""
+        table = PrettyTable(["Field 1", "Field 2", "Field 3"])
+        for row in range(1, 3 * 3, 3):
+            table.add_row(
+                [f"value {row*100}", f"value {row+1*100}", f"value {row+2*100}"]
+            )
+        table.format = True
+        table.add_autoindex("I")
+
+        assert (
+            table.get_html_string().strip()
+            == """
+<table frame="box" rules="cols">
+    <thead>
+        <tr>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">I</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 1</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 2</th>
+            <th style="padding-left: 1em; padding-right: 1em; text-align: center">Field 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">1</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 100</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 101</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 201</td>
+        </tr>
+        <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">2</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 400</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 104</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 204</td>
+        </tr>
+        <tr>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">3</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 700</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 107</td>
+            <td style="padding-left: 1em; padding-right: 1em; text-align: center; vertical-align: top">value 207</td>
+        </tr>
+    </tbody>
+</table>""".strip()  # noqa: E501
+        )
+
     def test_max_table_width_wide_vrules_frame(self) -> None:
         table = PrettyTable()
         table.max_table_width = 52
@@ -2419,52 +2775,59 @@ class TestMaxTableWidth:
         )
 
 
-class TestRowEndSection:
-    def test_row_end_section(self) -> None:
-        table = PrettyTable()
-        v = 1
-        for row in range(4):
-            if row % 2 == 0:
-                table.add_row(
-                    [f"value {v}", f"value{v+1}", f"value{v+2}"], divider=True
-                )
-            else:
-                table.add_row(
-                    [f"value {v}", f"value{v+1}", f"value{v+2}"], divider=False
-                )
-            v += 3
-        table.del_row(0)
+class TestFields:
+    def test_fields_at_class_declaration(self) -> None:
+        table = PrettyTable(
+            field_names=["City name", "Area", "Population", "Annual Rainfall"],
+            fields=["City name", "Annual Rainfall"],
+        )
+        table.add_row(["Adelaide", 1295, 1158259, 600.5])
+        table.add_row(["Brisbane", 5905, 1857594, 1146.4])
+        table.add_row(["Darwin", 112, 120900, 1714.7])
+        table.add_row(["Hobart", 1357, 205556, 619.5])
+        table.add_row(["Sydney", 2058, 4336374, 1214.8])
+        table.add_row(["Melbourne", 1566, 3806092, 646.9])
+        table.add_row(["Perth", 5386, 1554769, 869.4])
         assert (
-            table.get_string().strip()
-            == """
-+----------+---------+---------+
-| Field 1  | Field 2 | Field 3 |
-+----------+---------+---------+
-| value 4  |  value5 |  value6 |
-| value 7  |  value8 |  value9 |
-+----------+---------+---------+
-| value 10 | value11 | value12 |
-+----------+---------+---------+
-""".strip()
+            """+-----------+-----------------+
+| City name | Annual Rainfall |
++-----------+-----------------+
+|  Adelaide |      600.5      |
+|  Brisbane |      1146.4     |
+|   Darwin  |      1714.7     |
+|   Hobart  |      619.5      |
+|   Sydney  |      1214.8     |
+| Melbourne |      646.9      |
+|   Perth   |      869.4      |
++-----------+-----------------+"""
+            == table.get_string().strip()
         )
 
-
-class TestClearing:
-    def test_clear_rows(self, row_prettytable: PrettyTable) -> None:
-        t = helper_table()
-        t.add_row([0, "a", "b", "c"], divider=True)
-        t.clear_rows()
-        assert t.rows == []
-        assert t.dividers == []
-        assert t.field_names == ["", "Field 1", "Field 2", "Field 3"]
-
-    def test_clear(self, row_prettytable: PrettyTable) -> None:
-        t = helper_table()
-        t.add_row([0, "a", "b", "c"], divider=True)
-        t.clear()
-        assert t.rows == []
-        assert t.dividers == []
-        assert t.field_names == []
+    def test_fields(self) -> None:
+        table = PrettyTable()
+        table.field_names = ["City name", "Area", "Population", "Annual Rainfall"]
+        table.fields = ["City name", "Annual Rainfall"]
+        table.add_row(["Adelaide", 1295, 1158259, 600.5])
+        table.add_row(["Brisbane", 5905, 1857594, 1146.4])
+        table.add_row(["Darwin", 112, 120900, 1714.7])
+        table.add_row(["Hobart", 1357, 205556, 619.5])
+        table.add_row(["Sydney", 2058, 4336374, 1214.8])
+        table.add_row(["Melbourne", 1566, 3806092, 646.9])
+        table.add_row(["Perth", 5386, 1554769, 869.4])
+        assert (
+            """+-----------+-----------------+
+| City name | Annual Rainfall |
++-----------+-----------------+
+|  Adelaide |      600.5      |
+|  Brisbane |      1146.4     |
+|   Darwin  |      1714.7     |
+|   Hobart  |      619.5      |
+|   Sydney  |      1214.8     |
+| Melbourne |      646.9      |
+|   Perth   |      869.4      |
++-----------+-----------------+"""
+            == table.get_string().strip()
+        )
 
 
 class TestPreservingInternalBorders:

@@ -38,6 +38,14 @@ Or from `requirements.txt`:
 
     -e git://github.com/prettytable/prettytable.git#egg=prettytable
 
+## Demo
+
+To see demo output, run:
+
+```bash
+python3 -m prettytable
+```
+
 ## Tutorial on how to use the PrettyTable API
 
 ### Getting your data into (and out of) the table
@@ -383,14 +391,15 @@ instance of the data in the `sort_by` column.
 
 #### Adding sections to a table
 
-You can divide your table into different sections using the `divider` argument. This
-will add a dividing line into the table under the row who has this field set. So we can
-set up a table like this:
+You can divide your table into different sections using the `add_divider` method or
+`divider` argument . This will add a dividing line into the table under the row who has
+this field set. So we can set up a table like this:
 
 ```python
 table = PrettyTable()
 table.field_names = ["City name", "Area", "Population", "Annual Rainfall"]
 table.add_row(["Adelaide", 1295, 1158259, 600.5])
+table.add_divider()
 table.add_row(["Brisbane", 5905, 1857594, 1146.4])
 table.add_row(["Darwin", 112, 120900, 1714.7])
 table.add_row(["Hobart", 1357, 205556, 619.5], divider=True)
@@ -406,6 +415,7 @@ to get a table like this:
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
 |  Adelaide | 1295 |  1158259   |      600.5      |
++-----------+------+------------+-----------------+
 |  Brisbane | 5905 |  1857594   |      1146.4     |
 |   Darwin  | 112  |   120900   |      1714.7     |
 |   Hobart  | 1357 |   205556   |      619.5      |
@@ -432,8 +442,9 @@ You can set the style for your table using the `set_style` method before any cal
 `print` or `get_string`. Here's how to print a table in Markdown format:
 
 ```python
-from prettytable import MARKDOWN
-table.set_style(MARKDOWN)
+from prettytable import TableStyle
+
+table.set_style(TableStyle.MARKDOWN)
 print(table)
 ```
 

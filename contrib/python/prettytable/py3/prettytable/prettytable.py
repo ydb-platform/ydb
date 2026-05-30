@@ -276,11 +276,6 @@ class PrettyTable:
         self.custom_format = {}
         self._style = None
 
-        if field_names:
-            self.field_names = field_names
-        else:
-            self._widths: list[int] = []
-
         # Options
         self._options = [
             "title",
@@ -329,17 +324,26 @@ class PrettyTable:
             "escape_header",
             "escape_data",
         ]
+
+        self._none_format: dict[str, str | None] = {}
+        self._kwargs = {}
+        if field_names:
+            self.field_names = field_names
+        else:
+            self._widths: list[int] = []
+
         for option in self._options:
             if option in kwargs:
                 self._validate_option(option, kwargs[option])
+                self._kwargs[option] = kwargs[option]
             else:
                 kwargs[option] = None
+                self._kwargs[option] = None
 
         self._title = kwargs["title"] or None
         self._start = kwargs["start"] or 0
         self._end = kwargs["end"] or None
         self._fields = kwargs["fields"] or None
-        self._none_format: dict[str, str | None] = {}
 
         if kwargs["header"] in (True, False):
             self._header = kwargs["header"]
@@ -372,15 +376,8 @@ class PrettyTable:
             self._escape_header = kwargs["escape_header"]
         else:
             self._escape_header = True
-        # Column specific arguments, use property.setters
-        self.align = kwargs["align"] or {}
-        self.valign = kwargs["valign"] or {}
-        self.max_width = kwargs["max_width"] or {}
-        self.min_width = kwargs["min_width"] or {}
-        self.int_format = kwargs["int_format"] or {}
-        self.float_format = kwargs["float_format"] or {}
-        self.custom_format = kwargs["custom_format"] or {}
-        self.none_format = kwargs["none_format"] or {}
+
+        self._column_specific_args()
 
         self._min_table_width = kwargs["min_table_width"] or None
         self._max_table_width = kwargs["max_table_width"] or None
@@ -415,6 +412,22 @@ class PrettyTable:
         self._format = kwargs["format"] or False
         self._xhtml = kwargs["xhtml"] or False
         self._attributes = kwargs["attributes"] or {}
+
+    def _column_specific_args(self):
+        # Column specific arguments, use property.setters
+        for attr in (
+            "align",
+            "valign",
+            "max_width",
+            "min_width",
+            "int_format",
+            "float_format",
+            "custom_format",
+            "none_format",
+        ):
+            setattr(
+                self, attr, (self._kwargs[attr] or {}) if attr in self._kwargs else {}
+            )
 
     def _justify(self, text: str, width: int, align: AlignType) -> str:
         excess = width - _str_block_width(text)
@@ -761,6 +774,9 @@ class PrettyTable:
         if self._field_names:
             old_names = self._field_names[:]
         self._field_names = val
+
+        self._column_specific_args()
+
         if self._align and old_names:
             for old_name, new_name in zip(old_names, val):
                 self._align[new_name] = self._align[old_name]
@@ -1441,10 +1457,9 @@ class PrettyTable:
     ##############################
 
     def set_style(self, style: TableStyle) -> None:
+        self._set_default_style()
         self._style = style
-        if style == TableStyle.DEFAULT:
-            self._set_default_style()
-        elif style == TableStyle.MSWORD_FRIENDLY:
+        if style == TableStyle.MSWORD_FRIENDLY:
             self._set_msword_style()
         elif style == TableStyle.PLAIN_COLUMNS:
             self._set_columns_style()
@@ -1458,12 +1473,11 @@ class PrettyTable:
             self._set_single_border_style()
         elif style == TableStyle.RANDOM:
             self._set_random_style()
-        else:
+        elif style != TableStyle.DEFAULT:
             msg = "Invalid pre-set style"
             raise ValueError(msg)
 
     def _set_orgmode_style(self) -> None:
-        self._set_default_style()
         self.orgmode = True
 
     def _set_markdown_style(self) -> None:
@@ -1604,6 +1618,11 @@ class PrettyTable:
         del self._rows[row_index]
         del self._dividers[row_index]
 
+    def add_divider(self) -> None:
+        """Add a divider to the table"""
+        if len(self._dividers) >= 1:
+            self._dividers[-1] = True
+
     def add_column(
         self,
         fieldname: str,
@@ -1646,8 +1665,8 @@ class PrettyTable:
         Arguments:
         fieldname - name of the field to contain the new column of data"""
         self._field_names.insert(0, fieldname)
-        self._align[fieldname] = self.align
-        self._valign[fieldname] = self.valign
+        self._align[fieldname] = self._kwargs["align"] or "c"
+        self._valign[fieldname] = self._kwargs["valign"] or "t"
         for i, row in enumerate(self._rows):
             row.insert(0, i + 1)
 
@@ -1990,7 +2009,7 @@ class PrettyTable:
         for row, divider in zip(formatted_rows[:-1], dividers[:-1]):
             lines.append(self._stringify_row(row, options, self._hrule))
             if divider:
-                lines.append(self._stringify_hrule(options, where="bottom_"))
+                lines.append(self._stringify_hrule(options))
         if formatted_rows:
             lines.append(
                 self._stringify_row(
@@ -2506,9 +2525,12 @@ class PrettyTable:
                 if options["escape_header"]:
                     field = escape(field)
 
+                content = field.replace("\n", linebreak)
                 lines.append(
-                    '            <th style="padding-left: %dem; padding-right: %dem; text-align: center">%s</th>'  # noqa: E501
-                    % (lpad, rpad, field.replace("\n", linebreak))
+                    f'            <th style="'
+                    f"padding-left: {lpad}em; "
+                    f"padding-right: {rpad}em; "
+                    f'text-align: center">{content}</th>'
                 )
             lines.append("        </tr>")
             lines.append("    </thead>")
@@ -2536,15 +2558,13 @@ class PrettyTable:
                 if options["escape_data"]:
                     datum = escape(datum)
 
+                content = datum.replace("\n", linebreak)
                 lines.append(
-                    '            <td style="padding-left: %dem; padding-right: %dem; text-align: %s; vertical-align: %s">%s</td>'  # noqa: E501
-                    % (
-                        lpad,
-                        rpad,
-                        align,
-                        valign,
-                        datum.replace("\n", linebreak),
-                    )
+                    f'            <td style="'
+                    f"padding-left: {lpad}em; "
+                    f"padding-right: {rpad}em; "
+                    f"text-align: {align}; "
+                    f'vertical-align: {valign}">{content}</td>'
                 )
             lines.append("        </tr>")
         lines.append("    </tbody>")
@@ -2856,7 +2876,7 @@ def from_html_one(html_code: str, **kwargs) -> PrettyTable:
 
 def _warn_deprecation(name: str, module_globals: dict[str, Any]) -> Any:
     if (val := module_globals.get(f"_DEPRECATED_{name}")) is None:
-        msg = f"module '{__name__}' has no attribute '{name}"
+        msg = f"module '{__name__}' has no attribute '{name}'"
         raise AttributeError(msg)
     module_globals[name] = val
     if name in {"FRAME", "ALL", "NONE", "HEADER"}:

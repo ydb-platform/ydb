@@ -1,6 +1,6 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: prettytable
-Version: 3.12.0
+Version: 3.14.0
 Summary: A simple Python library for easily displaying tabular data in a visually appealing ASCII table format
 Project-URL: Changelog, https://github.com/prettytable/prettytable/releases
 Project-URL: Funding, https://tidelift.com/subscription/pkg/pypi-prettytable?utm_source=pypi-prettytable&utm_medium=pypi
@@ -10,7 +10,6 @@ Author-email: Luke Maurits <luke@maurits.id.au>
 Maintainer: Hugo van Kemenade
 License-Expression: BSD-3-Clause
 License-File: LICENSE
-Classifier: License :: OSI Approved :: BSD License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3 :: Only
 Classifier: Programming Language :: Python :: 3.9
@@ -18,6 +17,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Text Processing
@@ -69,6 +69,14 @@ Install latest development version:
 Or from `requirements.txt`:
 
     -e git://github.com/prettytable/prettytable.git#egg=prettytable
+
+## Demo
+
+To see demo output, run:
+
+```bash
+python3 -m prettytable
+```
 
 ## Tutorial on how to use the PrettyTable API
 
@@ -415,14 +423,15 @@ instance of the data in the `sort_by` column.
 
 #### Adding sections to a table
 
-You can divide your table into different sections using the `divider` argument. This
-will add a dividing line into the table under the row who has this field set. So we can
-set up a table like this:
+You can divide your table into different sections using the `add_divider` method or
+`divider` argument . This will add a dividing line into the table under the row who has
+this field set. So we can set up a table like this:
 
 ```python
 table = PrettyTable()
 table.field_names = ["City name", "Area", "Population", "Annual Rainfall"]
 table.add_row(["Adelaide", 1295, 1158259, 600.5])
+table.add_divider()
 table.add_row(["Brisbane", 5905, 1857594, 1146.4])
 table.add_row(["Darwin", 112, 120900, 1714.7])
 table.add_row(["Hobart", 1357, 205556, 619.5], divider=True)
@@ -438,6 +447,7 @@ to get a table like this:
 | City name | Area | Population | Annual Rainfall |
 +-----------+------+------------+-----------------+
 |  Adelaide | 1295 |  1158259   |      600.5      |
++-----------+------+------------+-----------------+
 |  Brisbane | 5905 |  1857594   |      1146.4     |
 |   Darwin  | 112  |   120900   |      1714.7     |
 |   Hobart  | 1357 |   205556   |      619.5      |
@@ -464,8 +474,9 @@ You can set the style for your table using the `set_style` method before any cal
 `print` or `get_string`. Here's how to print a table in Markdown format:
 
 ```python
-from prettytable import MARKDOWN
-table.set_style(MARKDOWN)
+from prettytable import TableStyle
+
+table.set_style(TableStyle.MARKDOWN)
 print(table)
 ```
 

@@ -287,6 +287,10 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
+        "ShuffleMode",
+        "Hash",
+        "FullscanLimit",
+        "0",
     ),
     # 5
     (
@@ -1013,6 +1017,93 @@ TESTCASES = [
         "1",
         "MaxCachedRows",
         "4",
+    ),
+    # 18
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            id Int32,
+                            ts String,
+                            ev_type String,
+                            user Int32,
+                        )
+                    )            ;
+
+            $formatTime = DateTime::Format("%H:%M:%S");
+
+            $enriched = select e.id as id,
+                            $formatTime(DateTime::ParseIso8601(e.ts)) as ts,
+                            e.user as user_id,
+                            u.id as uid,
+                            u.name as name,
+                            u.age as age
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as u
+                on(e.user = u.id)
+            ;
+
+            $enriched = select e.id as id,
+                            e.ts as ts,
+                            e.user_id as user_id,
+                            u2.id as uid,
+                            u2.name as name,
+                            u2.age as age
+                from
+                    $enriched as e
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as u2
+                on(e.name = u2.name and u2.age = e.age)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"ts":"20240701T113344","ev_type":"foo1","user":2}',
+                    '{"id":1,"ts":"11:33:44","uid":2,"user_id":2,"name":"Petr","age":25}',
+                ),
+                (
+                    '{"id":2,"ts":"20240701T112233","ev_type":"foo2","user":1}',
+                    '{"id":2,"ts":"11:22:33","uid":1,"user_id":1,"name":"Anya","age":15}',
+                ),
+                (
+                    '{"id":3,"ts":"20240701T113355","ev_type":"foo3","user":100}',
+                    '{"id":3,"ts":"11:33:55","uid":null,"user_id":100,"name":null,"age":null}',
+                ),
+                (
+                    '{"id":4,"ts":"20240701T113356","ev_type":"foo4","user":3}',
+                    '{"id":4,"ts":"11:33:56","uid":3,"user_id":3,"name":"Masha","age":17}',
+                ),
+                (
+                    '{"id":5,"ts":"20240701T113357","ev_type":"foo5","user":3}',
+                    '{"id":5,"ts":"11:33:57","uid":3,"user_id":3,"name":"Masha","age":17}',
+                ),
+                (
+                    '{"id":6,"ts":"20240701T112238","ev_type":"foo6","user":1}',
+                    '{"id":6,"ts":"11:22:38","uid":1,"user_id":1,"name":"Anya","age":15}',
+                ),
+                (
+                    '{"id":7,"ts":"20240701T113349","ev_type":"foo7","user":2}',
+                    '{"id":7,"ts":"11:33:49","uid":2,"user_id":2,"name":"Petr","age":25}',
+                ),
+            ]
+            * 1000
+        ),
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "5",
+        "MaxDelayedRows",
+        "100",
+        "ShuffleMode",
+        "Hash",
+        "FullscanLimit",
+        "0",
     ),
 ]
 

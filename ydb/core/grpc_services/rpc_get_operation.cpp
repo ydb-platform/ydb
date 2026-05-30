@@ -221,6 +221,9 @@ public:
                 ResolveDatabase();
                 break;
             case TOperationId::ANALYZE:
+                if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+                    return ReplyWithStatus(StatusIds::UNSUPPORTED);
+                }
                 if (!TryGetUlidId(OperationId_, AnalysisOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }

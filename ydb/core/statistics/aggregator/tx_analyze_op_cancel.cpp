@@ -74,6 +74,10 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeOpCancelRequest::TPtr& ev) {
+    if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+        SendAnalyzeLongRunningOpDisabled<TEvStatistics::TEvAnalyzeOpCancelResponse>(ev->Sender, ev->Cookie);
+        return;
+    }
     Execute(new TTxAnalyzeOpCancel(this, std::move(ev)), TActivationContext::AsActorContext());
 }
 

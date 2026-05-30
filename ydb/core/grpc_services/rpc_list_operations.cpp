@@ -387,6 +387,10 @@ public:
             SendListScriptExecutions();
             return;
         case TOperationId::ANALYZE:
+            if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+                return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR,
+                    "ANALYZE long-running operation is disabled");
+            }
             ResolveStatisticsAggregatorForList();
             return;
 

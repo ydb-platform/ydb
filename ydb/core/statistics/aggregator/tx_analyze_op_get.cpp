@@ -45,6 +45,10 @@ struct TStatisticsAggregator::TTxAnalyzeOpGet : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeOpGetRequest::TPtr& ev) {
+    if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+        SendAnalyzeLongRunningOpDisabled<TEvStatistics::TEvAnalyzeOpGetResponse>(ev->Sender, ev->Cookie);
+        return;
+    }
     Execute(new TTxAnalyzeOpGet(this, std::move(ev)), TActivationContext::AsActorContext());
 }
 

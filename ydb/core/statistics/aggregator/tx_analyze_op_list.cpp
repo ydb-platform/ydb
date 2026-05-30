@@ -95,6 +95,10 @@ struct TStatisticsAggregator::TTxAnalyzeOpList : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeOpListRequest::TPtr& ev) {
+    if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+        SendAnalyzeLongRunningOpDisabled<TEvStatistics::TEvAnalyzeOpListResponse>(ev->Sender, ev->Cookie);
+        return;
+    }
     Execute(new TTxAnalyzeOpList(this, std::move(ev)), TActivationContext::AsActorContext());
 }
 

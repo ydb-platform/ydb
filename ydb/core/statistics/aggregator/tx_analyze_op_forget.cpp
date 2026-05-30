@@ -67,6 +67,10 @@ struct TStatisticsAggregator::TTxAnalyzeOpForget : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeOpForgetRequest::TPtr& ev) {
+    if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+        SendAnalyzeLongRunningOpDisabled<TEvStatistics::TEvAnalyzeOpForgetResponse>(ev->Sender, ev->Cookie);
+        return;
+    }
     Execute(new TTxAnalyzeOpForget(this, std::move(ev)), TActivationContext::AsActorContext());
 }
 

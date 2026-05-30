@@ -82,6 +82,40 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         TestListAnalyzeOps(runtime, saTabletId, "", 100, {}, Ydb::StatusIds::BAD_REQUEST);
     }
 
+    Y_UNIT_TEST(FeatureFlagOff) {
+        const TString opId = "opOff";
+        TTestEnv env(1, 1, /*useRealThreads=*/false,
+            [](Tests::TServerSettings& settings) {
+                settings.FeatureFlags.SetEnableAnalyzeLongRunningOperation(false);
+            });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        PrepareTable(env, "Table");
+
+        ui64 saTabletId;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+
+        Analyze(runtime, saTabletId, {{pathId}}, opId, "/Root/Database");
+
+        TestListAnalyzeOps(runtime, saTabletId, "/Root/Database", 100, {},
+            Ydb::StatusIds::UNSUPPORTED);
+        TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+            Ydb::StatusIds::UNSUPPORTED);
+        TestCancelAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+            Ydb::StatusIds::UNSUPPORTED);
+        TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+            Ydb::StatusIds::UNSUPPORTED);
+
+        // Turn the flag back on so the Get handler proceeds to the lookup, then verify
+        // that the completed operation was deleted rather than
+        // retained as terminal history.
+        for (ui32 nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
+            runtime.GetAppData(nodeIdx).FeatureFlags.SetEnableAnalyzeLongRunningOperation(true);
+        }
+        TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", opId,
+            Ydb::StatusIds::NOT_FOUND);
+    }
+
     Y_UNIT_TEST(GetNotFound) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

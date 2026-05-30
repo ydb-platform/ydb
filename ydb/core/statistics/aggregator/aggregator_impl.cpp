@@ -1002,6 +1002,14 @@ void TStatisticsAggregator::MarkForceTraversalOperationFinished(
     {
         return;
     }
+
+    // When the long-running operation API is disabled, fall back to pre-PR behavior:
+    // delete the operation on completion instead of retaining it as history.
+    if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+        DeleteForceTraversalOperation(operationId, db);
+        return;
+    }
+
     op->State = state;
     op->EndTime = endTime;
     if (!issues.Empty()) {

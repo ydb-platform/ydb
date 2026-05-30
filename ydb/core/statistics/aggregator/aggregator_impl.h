@@ -477,6 +477,18 @@ private:
     void FillAnalyzeOperationProto(
         const TForceTraversalOperation& op,
         NKikimrAnalyzeOp::TAnalyzeOperation& proto) const;
+
+    // Build and send an UNSUPPORTED response for a long-running ANALYZE request
+    // when EnableAnalyzeLongRunningOperation is off.
+    template<typename TResponse>
+    void SendAnalyzeLongRunningOpDisabled(const TActorId& recipient, ui64 cookie) {
+        auto response = MakeHolder<TResponse>();
+        response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+        auto& issue = *response->Record.AddIssues();
+        issue.set_severity(NYql::TSeverityIds::S_ERROR);
+        issue.set_message("ANALYZE long-running operation is disabled");
+        Send(recipient, response.Release(), 0, cookie);
+    }
 };
 
 } // NKikimr::NStat

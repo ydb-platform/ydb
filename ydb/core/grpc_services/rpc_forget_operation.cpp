@@ -268,6 +268,10 @@ public:
                 break;
 
             case TOperationId::ANALYZE:
+                if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+                    return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR,
+                        "ANALYZE long-running operation is disabled");
+                }
                 if (!TryGetUlidId(OperationId, AnalysisOperationId_)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }

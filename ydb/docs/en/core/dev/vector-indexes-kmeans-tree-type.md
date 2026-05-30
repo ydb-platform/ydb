@@ -91,6 +91,8 @@ The index is implemented with two extra tables: the level table (`indexImplLevel
 
 For each centroid in the level table, the parent cluster at the level above is also stored. {{ ydb-short-name }} uses this to request only the centroids that belong to clusters selected at the previous level when moving down.
 
+To avoid re-reading centroids from distributed storage on every query, the level table can be cached in memory on each node — see [`resource_manager.kqp_level_cache_max_size_bytes`](../reference/configuration/table_service_config.md#resource-manager) in `table_service_config`.
+
 The posting table links the leaf-level centroids in the level table to the vectors in the source table. If a covering index is used, vectors and extra columns specified at index creation are also stored in this table:
 
 ![Posting table](../_assets/vector_kmeans_tree_8.png)

@@ -293,6 +293,173 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         }
     }
 
+    Y_UNIT_TEST(SkipGoodPortionCompactionPromoteWithoutRewrite) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(10 << 20));
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto alterQuery = TStringBuilder() << R"(
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS,
+                    `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`,
+                    `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`1`,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"levels":[
+                        {"class_name":"Zero","expected_blobs_size":10000,"portions_count_available":1,"portions_live_duration":"1s","skip_good_portion_compaction":true},
+                        {"class_name":"Zero","expected_blobs_size":50000}
+                    ]}`);
+            )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MIN_MAX,
+                    FEATURES=`{"column_name" : "level"}`);)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 0, 5000);
+
+        ui64 portionId = 0;
+        ui64 columnBlobBytes = 0;
+        ui64 indexBlobBytes = 0;
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT PortionId, ColumnBlobBytes, IndexBlobBytes, CompactionLevel
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            portionId = GetUint64(rows[0].at("PortionId"));
+            columnBlobBytes = GetUint64(rows[0].at("ColumnBlobBytes"));
+            indexBlobBytes = GetUint64(rows[0].at("IndexBlobBytes"));
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("CompactionLevel")), 0);
+            UNIT_ASSERT_C(indexBlobBytes > 0, "index blobs expected on insert");
+            UNIT_ASSERT_C(columnBlobBytes + indexBlobBytes > 50000,
+                "portion should exceed next-level expected_blobs_size for skip_good_portion_compaction");
+        }
+
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        bool promoted = false;
+        for (ui32 attempt = 0; attempt < 60; ++attempt) {
+            Sleep(TDuration::Seconds(1));
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT CompactionLevel
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            if (rows.size() == 1 && GetUint64(rows[0].at("CompactionLevel")) == 1) {
+                promoted = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(promoted, "portion was not promoted to compaction level 1");
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT PortionId, ColumnBlobBytes, IndexBlobBytes, CompactionLevel, Kind
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PortionId")), portionId);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("ColumnBlobBytes")), columnBlobBytes);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("IndexBlobBytes")), indexBlobBytes);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("CompactionLevel")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+        }
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT COUNT(*) AS cnt FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1 AND Kind == "SPLIT_COMPACTED"
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 0);
+        }
+    }
+
+    Y_UNIT_TEST(SkipGoodPortionCompactionDefaultPortionsCountAvailableBlocksL0) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(10 << 20));
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto alterQuery = TStringBuilder() << R"(
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS,
+                    `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`,
+                    `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`1`,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"levels":[
+                        {"class_name":"Zero","expected_blobs_size":10000,"portions_live_duration":"1s","skip_good_portion_compaction":true},
+                        {"class_name":"Zero","expected_blobs_size":50000}
+                    ]}`);
+            )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MIN_MAX,
+                    FEATURES=`{"column_name" : "level"}`);)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 0, 5000);
+
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            Sleep(TDuration::Seconds(1));
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT CompactionLevel
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            if (GetUint64(rows[0].at("CompactionLevel")) == 1) {
+                ythrow yexception() << "L0 compaction must not run without portions_count_available when L0 count < default(10)";
+            }
+        }
+    }
+
     Y_UNIT_TEST(OptimizationAfterDeletion) {
         TKikimrSettings settings;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

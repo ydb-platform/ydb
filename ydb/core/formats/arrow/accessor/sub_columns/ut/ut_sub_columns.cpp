@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     Y_UNIT_TEST(JsonRestorer) {
         NKikimr::NArrow::NAccessor::TJsonRestorer restorer;
         restorer.SetValueByPath("a", "b");
-        restorer.SetValueByPath("b.c", "d");
+        restorer.SetValueByPath(R"("b"."c")", "d");
         restorer.SetValueByPath(R"("d'".e)", "f");
         restorer.SetValueByPath(R"("g.h.".i)", "j");
         restorer.SetValueByPath(R"(".".k)", "l");

@@ -47,9 +47,22 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
                 return results;
             }
 
-            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
-                granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-            result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
+            auto repackPortions = data.GetRepackPortions(level->GetLevelId());
+            auto movePortions = data.GetMovePortions();
+            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, repackPortions, saverContext);
+            if (movePortions.size()) {
+                std::vector<std::shared_ptr<TPortionInfo>> portionsToMove;
+                portionsToMove.reserve(movePortions.size());
+                for (auto&& portion : movePortions) {
+                    portionsToMove.emplace_back(std::const_pointer_cast<TPortionInfo>(portion));
+                }
+                result->AddMovePortions(portionsToMove);
+                const ui32 targetLevel = repackPortions.empty() ? level->GetNextLevel()->GetLevelId() : data.GetTargetCompactionLevel();
+                result->SetTargetCompactionLevel(targetLevel);
+            }
+            if (repackPortions.empty() && !movePortions.empty()) {
+                result->SetAllowNoAppend(true);
+            }
             result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
             auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(

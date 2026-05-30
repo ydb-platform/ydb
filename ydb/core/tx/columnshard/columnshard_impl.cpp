@@ -589,7 +589,7 @@ private:
         if (NeedBlobs) {
             AFL_VERIFY(context.GetResourceGuards().size() == 3);
         } else {
-            AFL_VERIFY(context.GetResourceGuards().size() == 2);
+            AFL_VERIFY(context.GetResourceGuards().size() >= 2);
         }
         if (NeedBlobs) {
             Changes->Blobs = context.ExtractBlobs();
@@ -602,9 +602,15 @@ private:
         {
             NOlap::TConstructionContext context(*VersionedIndex, Counters, SnapshotModification);
             if (NeedBlobs) {
-                Changes->ConstructBlobs(context).Validate();
+                const auto constructResult = Changes->ConstructBlobs(context);
+                if (constructResult.IsFail()) {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ConstructBlobs failed")("error", constructResult.GetErrorMessage())(
+                        "task_class", Changes->TypeString())("task_id", Changes->GetTaskIdentifier());
+                    ev->SetPutStatus(NKikimrProto::ERROR);
+                    ev->ErrorMessage = constructResult.GetErrorMessage();
+                }
             }
-            if (!Changes->GetWritePortionsCount()) {
+            if (ev->GetPutStatus() == NKikimrProto::UNKNOWN && !Changes->GetWritePortionsCount()) {
                 ev->SetPutStatus(NKikimrProto::OK);
             }
         }
@@ -669,12 +675,21 @@ void TColumnShard::StartOneCompactionTask(const std::shared_ptr<NOlap::NCompacti
     static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
         NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
     auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
-    NOlap::NDataFetcher::TRequestInput rInput(indexChanges->GetSwitchedPortions(), actualIndexInfo,
-        NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, indexChanges->GetTaskIdentifier(), processGuard, TabletID());
+    const auto portionsForFetch = indexChanges->GetPortionsForCompactionFetch();
+    AFL_VERIFY(portionsForFetch.size());
+    const bool needBlobs = indexChanges->NeedsCompactionBlobs();
+    NOlap::NDataFetcher::TRequestInput rInput(portionsForFetch, actualIndexInfo, NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION,
+        indexChanges->GetTaskIdentifier(), processGuard, TabletID());
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
-    NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-        std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(),
-            GetLastCompletedTx(), TabletActivityImpl), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    auto compactionExecutor = std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo,
+        Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, needBlobs);
+    if (needBlobs) {
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(
+            std::move(rInput), std::move(compactionExecutor), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    } else {
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(
+            std::move(rInput), std::move(compactionExecutor), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    }
 }
 
 void TColumnShard::StartCompactionTasksUpToLimit() {
@@ -742,12 +757,21 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
         static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
             NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
         auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
-        NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
-            NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard, TabletID());
+        const auto portionsForFetch = compaction.GetPortionsForCompactionFetch();
+        AFL_VERIFY(portionsForFetch.size());
+        const bool needBlobs = compaction.NeedsCompactionBlobs();
+        NOlap::NDataFetcher::TRequestInput rInput(portionsForFetch, actualIndexInfo, NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION,
+            compaction.GetTaskIdentifier(), processGuard, TabletID());
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
-        NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-            std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(),
-                GetLastCompletedTx(), TabletActivityImpl), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        auto compactionExecutor = std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo,
+            Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, needBlobs);
+        if (needBlobs) {
+            NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(
+                std::move(rInput), std::move(compactionExecutor), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        } else {
+            NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(
+                std::move(rInput), std::move(compactionExecutor), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        }
     }
 }
 

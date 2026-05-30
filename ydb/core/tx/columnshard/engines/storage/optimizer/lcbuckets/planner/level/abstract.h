@@ -182,6 +182,9 @@ public:
         if (MemoryUsage > ((ui64)1 << 30)) {
             auto predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
             for (auto&& i : Portions) {
+                if (!RepackPortionIds.contains(i->GetPortionId())) {
+                    continue;
+                }
                 if (CurrentLevelPortionIds.contains(i->GetPortionId())) {
                     if (predictor->AddPortion(i) < MemoryUsage || result.size() < 2) {
                         result.emplace_back(i);
@@ -191,9 +194,16 @@ public:
                 }
             }
             return result;
-        } else {
-            return Portions;
         }
+        if (RepackPortionIds.empty()) {
+            return result;
+        }
+        for (auto&& i : Portions) {
+            if (RepackPortionIds.contains(i->GetPortionId())) {
+                result.emplace_back(i);
+            }
+        }
+        return result;
     }
 
     std::vector<TPortionInfo::TConstPtr> GetMovePortions() const {
@@ -256,14 +266,14 @@ public:
         AFL_VERIFY(CurrentLevelPortionIds.emplace(portion->GetPortionId()).second);
         Portions.emplace_back(portion);
         CurrentLevelPortionsInfo.AddPortion(portion);
-        if (repackMoved || (chain && chain->GetPortions().size())) {
+        if (repackMoved) {
+            RepackPortionIds.emplace(portion->GetPortionId());
+        }
+        if (repackMoved) {
             MemoryUsage = Predictor->AddPortion(portion);
         }
 
-        if (chain) {
-            if (chain->GetPortions().size()) {
-                RepackPortionIds.emplace(portion->GetPortionId());
-            }
+        if (repackMoved && chain) {
             if (NextLevelChainIds.emplace(chain->GetAddress()).second) {
                 Chains.emplace_back(std::move(*chain));
                 for (auto&& i : Chains.back().GetPortions()) {
@@ -273,6 +283,7 @@ public:
                     }
                     TargetLevelPortionsInfo.AddPortion(i);
                     Portions.emplace_back(i);
+                    RepackPortionIds.emplace(i->GetPortionId());
                     MemoryUsage = Predictor->AddPortion(i);
                     AFL_VERIFY(NextLevelPortionIds.emplace(i->GetPortionId()).second);
                 }

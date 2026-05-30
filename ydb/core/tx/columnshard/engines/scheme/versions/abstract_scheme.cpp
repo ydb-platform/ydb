@@ -394,14 +394,14 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
 
     const auto& insertOptions = GetIndexInfo().GetInsertOptions();
     const bool useCompression = insertOptions.ShouldCompressOnInsert(mType, totalRawBytes);
-    for (auto&& pending : pendingColumns) {
+    const auto buildColumnChunks = [&](const TPendingColumn& pending, const bool compress) {
         const auto loadContext = pending.Loader->BuildAccessorContext(pending.Array->GetRecordsCount());
         std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks;
         if (pending.IsDictionary) {
             auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(pending.Array, loadContext);
             columnChunks = { std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), pending.Array,
                 TChunkAddress(pending.ColumnId, 0), pending.ColumnFeatures, std::move(blobAndMeta.Meta)) };
-        } else if (useCompression) {
+        } else if (compress) {
             const auto batch = BuildRecordBatchForSaver(pending.Field, pending.Array);
             const auto data = GetIndexInfo().GetColumnSaver(pending.ColumnId).Apply(batch);
             columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
@@ -411,7 +411,12 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
                 pending.Loader->GetAccessorConstructor()->SerializeToString(pending.Array, loadContext), pending.Array,
                 TChunkAddress(pending.ColumnId, 0), pending.ColumnFeatures) };
         }
-        AFL_VERIFY(chunks.emplace(pending.ColumnId, std::move(columnChunks)).second);
+        return columnChunks;
+    };
+    for (auto&& pending : pendingColumns) {
+        const bool compressColumn = useCompression && pending.Loader->GetAccessorConstructor()->GetClassName() !=
+                                                          NArrow::NAccessor::TGlobalConst::SubColumnsDataAccessorName;
+        AFL_VERIFY(chunks.emplace(pending.ColumnId, buildColumnChunks(pending, compressColumn)).second);
     }
 
     TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
@@ -421,8 +426,16 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     THashMap<ui32, std::shared_ptr<IPortionDataChunk>> inplaceChunks;
     std::vector<TSplittedBlob> blobs;
     if (insertOptions.ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size()) {
-        auto dataWithSecondaryConclusion = GetIndexInfo().AppendIndexes(
-            slice.GetPortionChunksToHash(), storagesManager, slice.GetRecordsCount(), IStoragesManager::DefaultStorageId);
+        THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunksForIndexes;
+        if (useCompression) {
+            for (auto&& pending : pendingColumns) {
+                AFL_VERIFY(chunksForIndexes.emplace(pending.ColumnId, buildColumnChunks(pending, false)).second);
+            }
+        } else {
+            chunksForIndexes = slice.GetPortionChunksToHash();
+        }
+        auto dataWithSecondaryConclusion =
+            GetIndexInfo().AppendIndexes(chunksForIndexes, storagesManager, slice.GetRecordsCount(), IStoragesManager::DefaultStorageId);
         if (dataWithSecondaryConclusion.IsFail()) {
             return dataWithSecondaryConclusion;
         }

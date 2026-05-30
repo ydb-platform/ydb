@@ -267,6 +267,156 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(script)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
     }
 
+    TString scriptInsertCompressionEnabled = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableInsComp` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableInsComp` ALTER COLUMN `field` SET COMPRESSION(algorithm=lz4);
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableNoInsComp` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableNoInsComp` ALTER COLUMN `field` SET COMPRESSION(algorithm=off);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableInsComp` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.COMPRESSION_ENABLED`=`true`, `INSERT_OPTIONS.COMPRESSION_MIN_RAW_BYTES`=`1000`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTableInsComp` (pk, field) VALUES (1u, '__BIG_VALUE__');
+        REPLACE INTO `/Root/ColumnTableNoInsComp` (pk, field) VALUES (1u, '__BIG_VALUE__');
+        ------
+        READ: SELECT CAST((SELECT SUM(BlobRangeSize) FROM `/Root/ColumnTableInsComp/.sys/primary_index_stats` WHERE EntityName = "field" AND Activity == 1) AS Double)
+            < CAST((SELECT SUM(BlobRangeSize) FROM `/Root/ColumnTableNoInsComp/.sys/primary_index_stats` WHERE EntityName = "field" AND Activity == 1) AS Double);
+        EXPECTED: [[[%true]]]
+    )";
+    Y_UNIT_TEST(InsertCompressionEnabled) {
+        TString bigValue;
+        bigValue.reserve(20000);
+        bigValue.assign(20000, 'x');
+        TString script = scriptInsertCompressionEnabled;
+        size_t pos = 0;
+        while ((pos = script.find("__BIG_VALUE__", pos)) != TString::npos) {
+            script.replace(pos, 13, bigValue);
+            pos += bigValue.size();
+        }
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute(settings);
+    }
+
+    TString scriptInsertCompressionWithIndexOnInsert = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableInsCompIdx` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableInsCompIdx` ALTER COLUMN `field` SET COMPRESSION(algorithm=lz4);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableInsCompIdx` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.COMPRESSION_ENABLED`=`true`, `INSERT_OPTIONS.COMPRESSION_MIN_RAW_BYTES`=`1000`, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`1`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableInsCompIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTableInsCompIdx` (pk, field) VALUES (1u, '__BIG_VALUE__');
+        ------
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"__BIG_VALUE__\",\"max\":\"__BIG_VALUE__\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTableInsCompIdx/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
+    )";
+    Y_UNIT_TEST(InsertCompressionWithIndexOnInsert) {
+        TString bigValue;
+        bigValue.assign(20000, 'z');
+        TString script = scriptInsertCompressionWithIndexOnInsert;
+        size_t pos = 0;
+        while ((pos = script.find("__BIG_VALUE__", pos)) != TString::npos) {
+            script.replace(pos, 13, bigValue);
+            pos += bigValue.size();
+        }
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute(settings);
+    }
+
+    TString scriptInsertCompressionMinRawBytes = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableInsCompHighThr` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableInsCompHighThr` ALTER COLUMN `field` SET COMPRESSION(algorithm=lz4);
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTableInsCompLowThr` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTableInsCompLowThr` ALTER COLUMN `field` SET COMPRESSION(algorithm=lz4);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableInsCompHighThr` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.COMPRESSION_ENABLED`=`true`, `INSERT_OPTIONS.COMPRESSION_MIN_RAW_BYTES`=`100000000`);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTableInsCompLowThr` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.COMPRESSION_ENABLED`=`true`, `INSERT_OPTIONS.COMPRESSION_MIN_RAW_BYTES`=`1000`);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTableInsCompHighThr` (pk, field) VALUES (1u, '__BIG_VALUE__');
+        REPLACE INTO `/Root/ColumnTableInsCompLowThr` (pk, field) VALUES (1u, '__BIG_VALUE__');
+        ------
+        READ: SELECT
+            CAST((SELECT SUM(BlobRangeSize) FROM `/Root/ColumnTableInsCompHighThr/.sys/primary_index_stats` WHERE EntityName = "field" AND Activity == 1) AS Double)
+            >= CAST((SELECT SUM(BlobRangeSize) FROM `/Root/ColumnTableInsCompLowThr/.sys/primary_index_stats` WHERE EntityName = "field" AND Activity == 1) AS Double) AS ok;
+        EXPECTED: [[[%true]]]
+    )";
+    Y_UNIT_TEST(InsertCompressionMinRawBytesThreshold) {
+        TString bigValue;
+        bigValue.assign(20000, 'y');
+        TString script = scriptInsertCompressionMinRawBytes;
+        size_t pos = 0;
+        while ((pos = script.find("__BIG_VALUE__", pos)) != TString::npos) {
+            script.replace(pos, 13, bigValue);
+            pos += bigValue.size();
+        }
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute(settings);
+    }
+
     TString scriptMinMaxIndexOnInsertDeleteSkipped = R"(
         STOP_COMPACTION
         ------

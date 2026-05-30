@@ -2020,6 +2020,18 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
                                 if (zeroLevel.HasPortionsCountLimit()) {
                                     jsonLevel["portions_count_limit"] = zeroLevel.GetPortionsCountLimit();
                                 }
+                                if (zeroLevel.HasConcurrency()) {
+                                    jsonLevel["concurrency"] = zeroLevel.GetConcurrency();
+                                }
+                                if (zeroLevel.HasCompactionTaskMemoryLimit()) {
+                                    jsonLevel["compaction_task_memory_limit"] = zeroLevel.GetCompactionTaskMemoryLimit();
+                                }
+                                if (zeroLevel.HasCompactionTaskPortionsCountLimit()) {
+                                    jsonLevel["compaction_task_portions_count_limit"] = zeroLevel.GetCompactionTaskPortionsCountLimit();
+                                }
+                                if (zeroLevel.HasSkipGoodPortionCompaction() && zeroLevel.GetSkipGoodPortionCompaction()) {
+                                    jsonLevel["skip_good_portion_compaction"] = true;
+                                }
                                 break;
                             }
                             case NKikimrSchemeOp::TCompactionLevelConstructorContainer::kOneLayer: {

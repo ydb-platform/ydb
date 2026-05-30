@@ -57,6 +57,23 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
     NeedGranuleStatusProvide = false;
 }
 
+std::vector<TPortionInfo::TConstPtr> TCompactColumnEngineChanges::GetPortionsForCompactionFetch() const {
+    THashSet<ui64> seenPortionIds;
+    std::vector<TPortionInfo::TConstPtr> result;
+    auto addPortion = [&](const TPortionInfo::TConstPtr& portion) {
+        if (seenPortionIds.emplace(portion->GetPortionId()).second) {
+            result.emplace_back(portion);
+        }
+    };
+    for (const auto& portion : SwitchedPortions) {
+        addPortion(portion);
+    }
+    for (auto&& [_, portion] : GetPortionsToMove().GetPortionsToRemove()) {
+        addPortion(portion);
+    }
+    return result;
+}
+
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(
     std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)

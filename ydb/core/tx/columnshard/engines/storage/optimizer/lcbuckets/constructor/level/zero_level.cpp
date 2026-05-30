@@ -72,6 +72,13 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         CompactionTaskPortionsCountLimit = jsonValue.GetUInteger();
     }
+    if (json.Has("skip_good_portion_compaction")) {
+        const auto& jsonValue = json["skip_good_portion_compaction"];
+        if (!jsonValue.IsBoolean()) {
+            return TConclusionStatus::Fail("incorrect skip_good_portion_compaction value (have to be boolean)");
+        }
+        SkipGoodPortionCompaction = jsonValue.GetBoolean();
+    }
     return TConclusionStatus::Success();
 }
 
@@ -104,6 +111,9 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (pLevel.HasCompactionTaskPortionsCountLimit()) {
         CompactionTaskPortionsCountLimit = pLevel.GetCompactionTaskPortionsCountLimit();
     }
+    if (pLevel.HasSkipGoodPortionCompaction()) {
+        SkipGoodPortionCompaction = pLevel.GetSkipGoodPortionCompaction();
+    }
     return true;
 }
 
@@ -133,6 +143,9 @@ void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevel
     if (CompactionTaskPortionsCountLimit) {
         mLevel.SetCompactionTaskPortionsCountLimit(*CompactionTaskPortionsCountLimit);
     }
+    if (SkipGoodPortionCompaction) {
+        mLevel.SetSkipGoodPortionCompaction(true);
+    }
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
@@ -141,7 +154,8 @@ std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> T
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters,
         std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit.value_or(1000000), PortionsSizeLimit),
         PortionsLiveDuration.value_or(TDuration::Max()), ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10),
-        selectors, GetDefaultSelectorName(), Concurrency.value_or(1), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit);
+        selectors, GetDefaultSelectorName(), Concurrency.value_or(1), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, 0, true,
+        SkipGoodPortionCompaction);
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

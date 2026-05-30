@@ -2,6 +2,13 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
+bool TZeroLevelPortions::IsGoodPortionForSkipCompaction(const TPortionInfo::TConstPtr& portion) const {
+    if (!SkipGoodPortionCompaction || !portion->GetIndexBlobBytes()) {
+        return false;
+    }
+    return IsAppropriatePortionToMove(portion->GetCompactionInfo());
+}
+
 std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
     std::vector<TCompactionTaskData> result;
     AFL_VERIFY(Portions.size());
@@ -12,11 +19,17 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(cons
         if (!mayUsePortion(i.GetPortion())) {
             continue;
         }
-        auto affectedPortions = NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd(), mayUsePortion);
-        if (affectedPortions.has_value() && affectedPortions->HasBlockedPortions()) {
-            continue;
+        const bool repackMoved = !IsGoodPortionForSkipCompaction(i.GetPortion());
+        if (repackMoved) {
+            auto affectedPortions =
+                NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd(), mayUsePortion);
+            if (affectedPortions.has_value() && affectedPortions->HasBlockedPortions()) {
+                continue;
+            }
+            result.back().AddCurrentLevelPortion(i.GetPortion(), std::move(affectedPortions), true);
+        } else {
+            result.back().AddCurrentLevelPortion(i.GetPortion(), std::nullopt, false);
         }
-        result.back().AddCurrentLevelPortion(i.GetPortion(), std::move(affectedPortions), true);
         if (!result.back().CanTakeMore()) {
             //            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
             if (--tasksLeft <= 0) {
@@ -56,7 +69,19 @@ ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {
         if (GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) < std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())) {
-            return 0;
+            if (!SkipGoodPortionCompaction) {
+                return 0;
+            }
+            bool hasMoveEligible = false;
+            for (auto&& i : Portions) {
+                if (IsGoodPortionForSkipCompaction(i.GetPortion())) {
+                    hasMoveEligible = true;
+                    break;
+                }
+            }
+            if (!hasMoveEligible) {
+                return 0;
+            }
         }
     }
 
@@ -101,7 +126,8 @@ TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_pt
     const TLevelCounters& levelCounters, const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop,
     const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
     const TString& defaultSelectorName, const ui64 concurrency, std::optional<ui64> compactionTaskMemoryLimit,
-    std::optional<ui64> compactionTaskPortionsCountLimit, const ui64 highPriorityContribution, bool compactAtLevel)
+    std::optional<ui64> compactionTaskPortionsCountLimit, const ui64 highPriorityContribution, bool compactAtLevel,
+    bool skipGoodPortionCompaction)
     : TBase(levelIdx, nextLevel, overloadChecker, levelCounters, selectors, defaultSelectorName)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
@@ -111,6 +137,7 @@ TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_pt
     , Concurrency(concurrency)
     , CompactionTaskMemoryLimit(compactionTaskMemoryLimit)
     , CompactionTaskPortionsCountLimit(compactionTaskPortionsCountLimit)
+    , SkipGoodPortionCompaction(skipGoodPortionCompaction)
 {
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));

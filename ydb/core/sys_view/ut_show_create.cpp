@@ -2041,6 +2041,39 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
     );
 }
 
+Y_UNIT_TEST(TableCompactionPlannerSkipGoodPortionCompactionShowCreate) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "3600s", "expected_blobs_size" : 2097152, "portions_count_limit" : 15000000, "concurrency" : 1, "compaction_task_memory_limit" : 67108864, "skip_good_portion_compaction" : true},
+                                {"class_name" : "Zero", "expected_blobs_size" : 4194304, "portions_count_limit" : 15000000}]}`);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Col1` Uint64 NOT NULL,
+                PRIMARY KEY (`Col1`)
+            )
+            PARTITION BY HASH (`Col1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_live_duration":"3600.000000s","class_name":"Zero","skip_good_portion_compaction":true,"expected_blobs_size":2097152,"compaction_task_memory_limit":67108864,"concurrency":1,"portions_count_limit":15000000},{"class_name":"Zero","expected_blobs_size":4194304,"portions_count_limit":15000000}]}`);
+        )"
+    );
+}
+
 Y_UNIT_TEST(TableColumnUpsertIndex) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
 

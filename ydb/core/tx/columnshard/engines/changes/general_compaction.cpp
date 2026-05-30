@@ -9,11 +9,13 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<TWritePortionInfoWithBlobsResult> TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstructionContext& context,
     std::vector<TPortionToMerge>&& portions, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
-    const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats) noexcept {
+    const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats) {
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
     if (portions.empty()) {
         return {};
@@ -33,115 +35,123 @@ std::vector<TWritePortionInfoWithBlobsResult> TGeneralCompactColumnEngineChanges
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    TSimplePortionsGroupInfo insertedPortions;
-    TSimplePortionsGroupInfo compactedPortions;
-    THashMap<ui32, TSimplePortionsGroupInfo> portionGroups;
-    for (auto&& i : SwitchedPortions) {
-        portionGroups[i->GetMeta().GetCompactionLevel()].AddPortion(i);
-        if (i->GetProduced() == NPortion::EProduced::INSERTED) {
-            insertedPortions.AddPortion(i);
-        } else if (i->GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
-            compactedPortions.AddPortion(i);
-        } else {
-            AFL_VERIFY(false)("portion_prod", i->GetProduced())("portion_type", i->GetPortionType());
-        }
-    }
-    NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortions + compactedPortions);
-    NChanges::TGeneralCompactionCounters::OnRepackInsertedPortions(insertedPortions);
-    NChanges::TGeneralCompactionCounters::OnRepackCompactedPortions(compactedPortions);
-    if (GetPortionsToMove().GetTargetCompactionLevel()) {
-        NChanges::TGeneralCompactionCounters::OnRepackPortionsByLevel(portionGroups, *GetPortionsToMove().GetTargetCompactionLevel());
-    }
-
-    {
-        auto accessors = GetPortionDataAccessors(SwitchedPortions);
-        std::set<ui32> seqDataColumnIds;
-        std::shared_ptr<TFilteredSnapshotSchema> resultFiltered = context.BuildResultFiltered(accessors, seqDataColumnIds);
-        std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
-        for (auto&& accessor : accessors) {
-            stats->Merge(accessor.GetSerializationStat(*resultFiltered, true));
-        }
-
-        std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
-        THashSet<ui64> usedPortionIds;
-        std::vector<std::shared_ptr<ISubsetToMerge>> currentToMerge;
-        for (auto&& i : portions) {
-            AFL_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
-            currentToMerge.emplace_back(std::make_shared<TReadPortionToMerge>(std::move(i), GranuleMeta));
-        }
-
-        const auto buildPortionsToMerge = [&](const std::vector<std::shared_ptr<ISubsetToMerge>>& toMerge, const bool useDeletion) {
-            std::vector<TPortionToMerge> result;
-            for (auto&& i : toMerge) {
-                auto mergePortions = i->BuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds, useDeletion);
-                result.insert(result.end(), mergePortions.begin(), mergePortions.end());
+    try {
+        TSimplePortionsGroupInfo insertedPortions;
+        TSimplePortionsGroupInfo compactedPortions;
+        THashMap<ui32, TSimplePortionsGroupInfo> portionGroups;
+        for (auto&& i : SwitchedPortions) {
+            portionGroups[i->GetMeta().GetCompactionLevel()].AddPortion(i);
+            if (i->GetProduced() == NPortion::EProduced::INSERTED) {
+                insertedPortions.AddPortion(i);
+            } else if (i->GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
+                compactedPortions.AddPortion(i);
+            } else {
+                AFL_VERIFY(false)("portion_prod", i->GetProduced())("portion_type", i->GetPortionType());
             }
-            return result;
-        };
+        }
+        NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortions + compactedPortions);
+        NChanges::TGeneralCompactionCounters::OnRepackInsertedPortions(insertedPortions);
+        NChanges::TGeneralCompactionCounters::OnRepackCompactedPortions(compactedPortions);
+        if (GetPortionsToMove().GetTargetCompactionLevel()) {
+            NChanges::TGeneralCompactionCounters::OnRepackPortionsByLevel(portionGroups, *GetPortionsToMove().GetTargetCompactionLevel());
+        }
 
-        auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
-        while (true) {
-            std::vector<std::shared_ptr<ISubsetToMerge>> toMerge;
-            ui64 sumMemory = 0;
-            ui64 totalSumMemory = 0;
-            std::vector<std::shared_ptr<ISubsetToMerge>> appendedToMerge;
-            ui32 subsetsCount = 0;
-            for (auto&& i : currentToMerge) {
-                if (NYDBTest::TControllers::GetColumnShardController()->CheckPortionsToMergeOnCompaction(
-                        sumMemory + i->GetColumnMaxChunkMemory(), subsetsCount) &&
-                    subsetsCount > 1) {
-                    auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, false), resultFiltered, stats);
-                    if (merged.size()) {
-                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
-                    }
-                    toMerge.clear();
-                    sumMemory = 0;
-                    subsetsCount = 0;
+        {
+            auto accessors = GetPortionDataAccessors(SwitchedPortions);
+            std::set<ui32> seqDataColumnIds;
+            std::shared_ptr<TFilteredSnapshotSchema> resultFiltered = context.BuildResultFiltered(accessors, seqDataColumnIds);
+            std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
+            for (auto&& accessor : accessors) {
+                stats->Merge(accessor.GetSerializationStat(*resultFiltered, true));
+            }
+
+            std::vector<TReadPortionInfoWithBlobs> portions =
+                TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
+            THashSet<ui64> usedPortionIds;
+            std::vector<std::shared_ptr<ISubsetToMerge>> currentToMerge;
+            for (auto&& i : portions) {
+                AFL_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
+                currentToMerge.emplace_back(std::make_shared<TReadPortionToMerge>(std::move(i), GranuleMeta));
+            }
+
+            const auto buildPortionsToMerge = [&](const std::vector<std::shared_ptr<ISubsetToMerge>>& toMerge, const bool useDeletion) {
+                std::vector<TPortionToMerge> result;
+                for (auto&& i : toMerge) {
+                    auto mergePortions = i->BuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds, useDeletion);
+                    result.insert(result.end(), mergePortions.begin(), mergePortions.end());
                 }
-                sumMemory += i->GetColumnMaxChunkMemory();
-                totalSumMemory += i->GetColumnMaxChunkMemory();
-                toMerge.emplace_back(i);
-                ++subsetsCount;
-            }
-            if (toMerge.size()) {
-                auto merged =
-                    BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
-                if (appendedToMerge.size()) {
-                    if (merged.size()) {
-                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
+                return result;
+            };
+
+            auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
+            while (true) {
+                std::vector<std::shared_ptr<ISubsetToMerge>> toMerge;
+                ui64 sumMemory = 0;
+                ui64 totalSumMemory = 0;
+                std::vector<std::shared_ptr<ISubsetToMerge>> appendedToMerge;
+                ui32 subsetsCount = 0;
+                for (auto&& i : currentToMerge) {
+                    if (NYDBTest::TControllers::GetColumnShardController()->CheckPortionsToMergeOnCompaction(
+                            sumMemory + i->GetColumnMaxChunkMemory(), subsetsCount) &&
+                        subsetsCount > 1) {
+                        auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, false), resultFiltered, stats);
+                        if (merged.size()) {
+                            appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
+                        }
+                        toMerge.clear();
+                        sumMemory = 0;
+                        subsetsCount = 0;
                     }
-                } else {
-                    context.Counters.OnCompactionCorrectMemory(totalSumMemory);
-                    AppendedPortions = std::move(merged);
+                    sumMemory += i->GetColumnMaxChunkMemory();
+                    totalSumMemory += i->GetColumnMaxChunkMemory();
+                    toMerge.emplace_back(i);
+                    ++subsetsCount;
+                }
+                if (toMerge.size()) {
+                    auto merged =
+                        BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
+                    if (appendedToMerge.size()) {
+                        if (merged.size()) {
+                            appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
+                        }
+                    } else {
+                        context.Counters.OnCompactionCorrectMemory(totalSumMemory);
+                        AppendedPortions = std::move(merged);
+                        break;
+                    }
+                }
+                if (!appendedToMerge.size()) {
                     break;
                 }
+                context.Counters.OnCompactionHugeMemory(totalSumMemory, appendedToMerge.size());
+                currentToMerge = std::move(appendedToMerge);
             }
-            if (!appendedToMerge.size()) {
-                break;
+        }
+
+        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
+            TStringBuilder sbSwitched;
+            sbSwitched << "";
+            for (auto&& p : SwitchedPortions) {
+                sbSwitched << p->DebugString() << ";";
             }
-            context.Counters.OnCompactionHugeMemory(totalSumMemory, appendedToMerge.size());
-            currentToMerge = std::move(appendedToMerge);
+            sbSwitched << "";
+
+            TStringBuilder sbAppended;
+            for (auto&& p : AppendedPortions) {
+                sbAppended << p.GetPortionConstructor().DebugString() << ";";
+            }
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created_diff")("appended", sbAppended)("switched", sbSwitched);
         }
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created")("appended", AppendedPortions.size())(
+            "switched", SwitchedPortions.size());
+
+        return TConclusionStatus::Success();
+    } catch (const std::exception& e) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoConstructBlobs failed")("error", e.what());
+        return TConclusionStatus::Fail(e.what());
+    } catch (...) {
+        return TConclusionStatus::Fail("construct blobs failed");
     }
-
-    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-        TStringBuilder sbSwitched;
-        sbSwitched << "";
-        for (auto&& p : SwitchedPortions) {
-            sbSwitched << p->DebugString() << ";";
-        }
-        sbSwitched << "";
-
-        TStringBuilder sbAppended;
-        for (auto&& p : AppendedPortions) {
-            sbAppended << p.GetPortionConstructor().DebugString() << ";";
-        }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created_diff")("appended", sbAppended)("switched", sbSwitched);
-    }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created")("appended", AppendedPortions.size())(
-        "switched", SwitchedPortions.size());
-
-    return TConclusionStatus::Success();
 }
 
 void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {

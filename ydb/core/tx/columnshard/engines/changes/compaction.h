@@ -65,6 +65,12 @@ public:
         return SwitchedPortions;
     }
 
+    std::vector<TPortionInfo::TConstPtr> GetPortionsForCompactionFetch() const;
+
+    bool NeedsCompactionBlobs() const {
+        return !SwitchedPortions.empty();
+    }
+
     static TString StaticTypeName() {
         return "CS::GENERAL";
     }

@@ -62,6 +62,10 @@ public:
         PortionsToMove.SetTargetCompactionLevel(level);
     }
 
+    void SetAllowNoAppend(const bool value) {
+        NoAppendIsCorrect = value;
+    }
+
     const std::vector<TWritePortionInfoWithBlobsResult>& GetAppendedPortions() const {
         return AppendedPortions;
     }

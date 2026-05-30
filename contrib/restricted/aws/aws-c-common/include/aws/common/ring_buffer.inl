@@ -31,13 +31,16 @@ AWS_STATIC_IMPL bool aws_ring_buffer_is_empty(const struct aws_ring_buffer *ring
  * It is also a cheap check, in the sense it run in constant time (i.e., no loops or recursion).
  */
 AWS_STATIC_IMPL bool aws_ring_buffer_is_valid(const struct aws_ring_buffer *ring_buf) {
+    if (AWS_UNLIKELY(ring_buf == NULL)) {
+        return false;
+    }
     uint8_t *head = (uint8_t *)aws_atomic_load_ptr(&ring_buf->head);
     uint8_t *tail = (uint8_t *)aws_atomic_load_ptr(&ring_buf->tail);
     bool head_in_range = aws_ring_buffer_check_atomic_ptr(ring_buf, head);
     bool tail_in_range = aws_ring_buffer_check_atomic_ptr(ring_buf, tail);
     /* if head points-to the first element of the buffer then tail must too */
     bool valid_head_tail = (head != ring_buf->allocation) || (tail == ring_buf->allocation);
-    return ring_buf && (ring_buf->allocation != NULL) && head_in_range && tail_in_range && valid_head_tail &&
+    return (ring_buf->allocation != NULL) && head_in_range && tail_in_range && valid_head_tail &&
            (ring_buf->allocator != NULL);
 }
 AWS_EXTERN_C_END

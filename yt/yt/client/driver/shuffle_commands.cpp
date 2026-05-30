@@ -115,15 +115,15 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
         New<TControlAttributesConfig>(),
         /*keyColumnCount*/ 0);
 
-    TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
-        .Columnar = (format.GetType() == EFormatType::Arrow),
-    };
-
     PipeReaderToWriterByBatches(
         reader,
         writer,
-        options);
+        TPipeReaderToWriterByBatchesOptions{
+            .StartingOptions = {
+                .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+                .Columnar = (format.GetType() == EFormatType::Arrow),
+            },
+        });
 }
 
 //////////////////////////////////////////////////////////////////////////////

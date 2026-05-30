@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: mdit-py-plugins
-Version: 0.6.0
+Version: 0.6.1
 Summary: Collection of plugins for markdown-it-py
 Keywords: markdown,markdown-it,lexer,parser,development
 Author-email: Chris Sewell <chrisj_sewell@hotmail.com>

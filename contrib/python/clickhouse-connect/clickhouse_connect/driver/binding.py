@@ -1,11 +1,11 @@
 import ipaddress
 import re
 import uuid
-from datetime import tzinfo, datetime, date
+import zoneinfo
+from collections.abc import Sequence
+from datetime import date, datetime, timezone, tzinfo
 from enum import Enum
-from typing import Optional, Union, Sequence, Dict, Any, Tuple
-
-import pytz
+from typing import Any
 
 from clickhouse_connect import common
 from clickhouse_connect.driver import tzutil
@@ -13,20 +13,20 @@ from clickhouse_connect.driver.common import dict_copy
 from clickhouse_connect.driver.parser import parse_callable
 from clickhouse_connect.json_impl import any_to_json
 
-BS = '\\'
-must_escape = (BS, '\'', '`', '\t', '\n')
-external_bind_re = re.compile(r'\{(\w+):([^}]+)\}')
+BS = "\\"
+must_escape = (BS, "'", "`", "\t", "\n")
+external_bind_re = re.compile(r"\{(\w+):([^}]+)\}")
 
 
 class DT64Param:
     def __init__(self, value: datetime):
         self.value = value
 
-    def format(self, tz: tzinfo, top_level:bool) -> str:
+    def format(self, tz: tzinfo, top_level: bool) -> str:
         value = self.value
         if tz:
             value = value.astimezone(tz)
-        s = value.strftime('%Y-%m-%d %H:%M:%S.%f')
+        s = value.strftime("%Y-%m-%d %H:%M:%S.%f")
         if top_level:
             return s
         return f"'{s}'"
@@ -34,23 +34,22 @@ class DT64Param:
 
 def quote_identifier(identifier: str):
     first_char = identifier[0]
-    if first_char in ('`', '"') and identifier[-1] == first_char:
+    if first_char in ("`", '"') and identifier[-1] == first_char:
         # Identifier is already quoted, assume that it's valid
         return identifier
-    return f'`{escape_str(identifier)}`'
+    return f"`{escape_str(identifier)}`"
 
 
-def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
-                   server_tz: Optional[tzinfo] = None) -> str:
+def finalize_query(query: str, parameters: Sequence | dict[str, Any] | None, server_tz: tzinfo | None = None) -> str:
     query = query.rstrip(";")
     if not parameters:
         return query
-    if hasattr(parameters, 'items'):
+    if hasattr(parameters, "items"):
         return query % {k: format_query_value(v, server_tz) for k, v in parameters.items()}
     return query % tuple(format_query_value(v, server_tz) for v in parameters)
 
 
-def _extract_tz_from_type(type_str: str) -> Optional[tzinfo]:
+def _extract_tz_from_type(type_str: str) -> tzinfo | None:
     """Extract timezone from a ClickHouse type hint like DateTime64(6, 'UTC').
 
     Handles LowCardinality/Nullable wrappers and container types
@@ -69,8 +68,8 @@ def _extract_tz_from_type(type_str: str) -> Optional[tzinfo]:
             for v in values:
                 if isinstance(v, str) and v.startswith("'") and v.endswith("'"):
                     try:
-                        return pytz.timezone(v[1:-1])
-                    except pytz.UnknownTimeZoneError:
+                        return tzutil.resolve_zone(v[1:-1])
+                    except zoneinfo.ZoneInfoNotFoundError:
                         return None
             return None
 
@@ -82,13 +81,15 @@ def _extract_tz_from_type(type_str: str) -> Optional[tzinfo]:
                         return tz
 
         return None
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:
         return None
 
 
-# pylint: disable=too-many-locals,too-many-branches
-def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
-               server_tz: Optional[tzinfo] = None) -> Tuple[str, Dict[str, str]]:
+def bind_query(
+    query: str,
+    parameters: Sequence | dict[str, Any] | None,
+    server_tz: tzinfo | None = None,
+) -> tuple[str, dict[str, str]]:
     query = query.rstrip(";")
     if not parameters:
         return query, {}
@@ -97,13 +98,13 @@ def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]]
 
     if isinstance(parameters, dict):
         params_copy = dict_copy(parameters)
-        binary_binds = {k: v for k, v in params_copy.items() if k.startswith('$') and k.endswith('$') and len(k) > 1}
+        binary_binds = {k: v for k, v in params_copy.items() if k.startswith("$") and k.endswith("$") and len(k) > 1}
         for key in binary_binds.keys():
             del params_copy[key]
 
         final_params = {}
         for k, v in params_copy.items():
-            if k.endswith('_64'):
+            if k.endswith("_64"):
                 if isinstance(v, datetime):
                     k = k[:-3]
                     v = DT64Param(v)
@@ -142,7 +143,7 @@ def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]]
                     break
                 binary_indexes[item_index + len(key)] = key, v
                 item_index += len(key)
-        query = b''
+        query = b""
         start = 0
         for loc in sorted(binary_indexes.keys()):
             key, value = binary_indexes[loc]
@@ -157,11 +158,10 @@ def format_str(value: str):
 
 
 def escape_str(value: str):
-    return ''.join(f'{BS}{c}' if c in must_escape else c for c in value)
+    return "".join(f"{BS}{c}" if c in must_escape else c for c in value)
 
 
-# pylint: disable=too-many-return-statements
-def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
+def format_query_value(value: Any, server_tz: tzinfo = timezone.utc):
     """
     Format Python values in a ClickHouse query
     :param value: Python object
@@ -169,7 +169,7 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     :return: Literal string for python value
     """
     if value is None:
-        return 'NULL'
+        return "NULL"
     if isinstance(value, str):
         return format_str(value)
     if isinstance(value, DT64Param):
@@ -185,10 +185,9 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     if isinstance(value, tuple):
         return f"({', '.join(str_query_value(x, server_tz) for x in value)})"
     if isinstance(value, dict):
-        if common.get_setting('dict_parameter_format') == 'json':
+        if common.get_setting("dict_parameter_format") == "json":
             return format_str(any_to_json(value).decode())
-        pairs = [str_query_value(k, server_tz) + ':' + str_query_value(v, server_tz)
-                 for k, v in value.items()]
+        pairs = [str_query_value(k, server_tz) + ":" + str_query_value(v, server_tz) for k, v in value.items()]
         return f"{{{', '.join(pairs)}}}"
     if isinstance(value, Enum):
         return format_query_value(value.value, server_tz)
@@ -197,12 +196,11 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     return value
 
 
-def str_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
+def str_query_value(value: Any, server_tz: tzinfo = timezone.utc):
     return str(format_query_value(value, server_tz))
 
 
-# pylint: disable=too-many-branches
-def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool = True):
+def format_bind_value(value: Any, server_tz: tzinfo = timezone.utc, top_level: bool = True):
     """
     Format Python values in a ClickHouse query
     :param value: Python object
@@ -215,7 +213,7 @@ def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool 
         return format_bind_value(x, server_tz, False)
 
     if value is None:
-        return '\\N'
+        return "\\N"
     if isinstance(value, str):
         if top_level:
             # At the top levels, strings must not be surrounded by quotes
@@ -225,7 +223,7 @@ def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool 
         return value.format(server_tz, top_level)
     if isinstance(value, datetime):
         value = value.astimezone(server_tz)
-        val = value.strftime('%Y-%m-%d %H:%M:%S')
+        val = value.strftime("%Y-%m-%d %H:%M:%S")
         if top_level:
             return val
         return f"'{val}'"
@@ -238,10 +236,9 @@ def format_bind_value(value: Any, server_tz: tzinfo = pytz.UTC, top_level: bool 
     if isinstance(value, tuple):
         return f"({', '.join(recurse(x) for x in value)})"
     if isinstance(value, dict):
-        if common.get_setting('dict_parameter_format') == 'json':
+        if common.get_setting("dict_parameter_format") == "json":
             return any_to_json(value).decode()
-        pairs = [recurse(k) + ':' + recurse(v)
-                 for k, v in value.items()]
+        pairs = [recurse(k) + ":" + recurse(v) for k, v in value.items()]
         return f"{{{', '.join(pairs)}}}"
     if isinstance(value, Enum):
         return recurse(value.value)

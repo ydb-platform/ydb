@@ -7,7 +7,6 @@ from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
 from clickhouse_connect.cc_sqlalchemy.sql import format_table
 
 
-# pylint: disable=too-many-return-statements
 def _resolve_ch_type_name(sqla_type):
     """Resolve a SQLAlchemy type instance to a ClickHouse type name string.
 
@@ -40,10 +39,7 @@ def _resolve_ch_type_name(sqla_type):
     return "String"
 
 
-# pylint: disable=arguments-differ
 class ChStatementCompiler(SQLCompiler):
-
-    # pylint: disable=attribute-defined-outside-init,unused-argument
     def visit_delete(self, delete_stmt, visiting_cte=None, **kw):
         table = delete_stmt.table
         text = f"DELETE FROM {format_table(table)}"
@@ -59,7 +55,6 @@ class ChStatementCompiler(SQLCompiler):
 
         return text
 
-    # pylint: disable=protected-access
     def visit_values(self, element, asfrom=False, from_linter=None, visiting_cte=None, **kw):
         """Compile a VALUES clause using ClickHouse's VALUES table function syntax.
 
@@ -74,15 +69,12 @@ class ChStatementCompiler(SQLCompiler):
         if getattr(element, "_independent_ctes", None):
             self._dispatch_independent_ctes(element, kw)
 
-        structure = ", ".join(
-            f"{col.name} {_resolve_ch_type_name(col.type)}"
-            for col in element.columns
-        )
+        structure = ", ".join(f"{col.name} {_resolve_ch_type_name(col.type)}" for col in element.columns)
 
         kw.setdefault("literal_binds", element.literal_binds)
         tuples = ", ".join(
             self.process(
-                elements.Tuple(types=element._column_types, *elem).self_group(),
+                elements.Tuple(types=element._column_types, *elem).self_group(),  # noqa: B026
                 **kw,
             )
             for chunk in element._data
@@ -107,15 +99,11 @@ class ChStatementCompiler(SQLCompiler):
             if from_linter:
                 # SA 2.x has _de_clone(); SA 1.4 doesn't
                 key = element._de_clone() if hasattr(element, "_de_clone") else element
-                from_linter.froms[key] = (
-                    name if name is not None else "(unnamed VALUES element)"
-                )
+                from_linter.froms[key] = name if name is not None else "(unnamed VALUES element)"
 
             if visiting_cte is not None and visiting_cte.element is element:
                 if element._is_lateral:
-                    raise CompileError(
-                        "Can't use a LATERAL VALUES expression inside of a CTE"
-                    )
+                    raise CompileError("Can't use a LATERAL VALUES expression inside of a CTE")
                 v = f"SELECT * FROM {v}"
             elif name:
                 kw["include_table"] = False
@@ -201,7 +189,6 @@ class ChStatementCompiler(SQLCompiler):
     def update_from_clause(self, update_stmt, from_table, extra_froms, from_hints, **kw):
         raise NotImplementedError("ClickHouse doesn't support UPDATE with FROM clause")
 
-    # pylint: disable=unused-argument
     def visit_empty_set_expr(self, element_types, **kw):
         return "SELECT 1 WHERE 1=0"
 
@@ -213,7 +200,6 @@ class ChStatementCompiler(SQLCompiler):
         kw["_ch_group_by"] = True
         return super().group_by_clause(select, **kw)
 
-    # pylint: disable=protected-access
     def visit_label(
         self,
         label,
@@ -235,7 +221,6 @@ class ChStatementCompiler(SQLCompiler):
             **kw,
         )
 
-    # pylint: disable=protected-access
     def _compose_select_body(self, text, select, compile_state, inner_columns, froms, byfrom, toplevel, kwargs):
         ch_final = getattr(select, "_ch_final", set())
         ch_sample = getattr(select, "_ch_sample", {})

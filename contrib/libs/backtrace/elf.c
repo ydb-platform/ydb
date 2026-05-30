@@ -4661,317 +4661,350 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
 		  return 0;
 	      }
 
-	    pback = pblockend - 1;
-	    if (!elf_fetch_backward_init (&pback, pin, &val, &bits))
-	      return 0;
-
-	    bits -= literal_decode.table_bits;
-	    literal_state = ((val >> bits)
-			     & ((1U << literal_decode.table_bits) - 1));
-
-	    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-	      return 0;
-	    bits -= offset_decode.table_bits;
-	    offset_state = ((val >> bits)
-			    & ((1U << offset_decode.table_bits) - 1));
-
-	    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-	      return 0;
-	    bits -= match_decode.table_bits;
-	    match_state = ((val >> bits)
-			   & ((1U << match_decode.table_bits) - 1));
-
-	    seq = 0;
-	    while (1)
+	    if (seq_count == 0)
 	      {
-		const struct elf_zstd_fse_baseline_entry *pt;
-		uint32_t offset_basebits;
-		uint32_t offset_baseline;
-		uint32_t offset_bits;
-		uint32_t offset_base;
-		uint32_t offset;
-		uint32_t match_baseline;
-		uint32_t match_bits;
-		uint32_t match_base;
-		uint32_t match;
-		uint32_t literal_baseline;
-		uint32_t literal_bits;
-		uint32_t literal_base;
-		uint32_t literal;
-		uint32_t need;
-		uint32_t add;
-
-		pt = &offset_decode.table[offset_state];
-		offset_basebits = pt->basebits;
-		offset_baseline = pt->baseline;
-		offset_bits = pt->bits;
-		offset_base = pt->base;
-
-		/* This case can be more than 16 bits, which is all that
-		   elf_fetch_bits_backward promises.  */
-		need = offset_basebits;
-		add = 0;
-		if (unlikely (need > 16))
+		/* No sequences; copy all literals to the output. */
+		if (literal_count > 0 && plit != pout)
 		  {
-		    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-		      return 0;
-		    bits -= 16;
-		    add = (val >> bits) & ((1U << 16) - 1);
-		    need -= 16;
-		    add <<= need;
-		  }
-		if (need > 0)
-		  {
-		    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-		      return 0;
-		    bits -= need;
-		    add += (val >> bits) & ((1U << need) - 1);
-		  }
-
-		offset = offset_baseline + add;
-
-		pt = &match_decode.table[match_state];
-		need = pt->basebits;
-		match_baseline = pt->baseline;
-		match_bits = pt->bits;
-		match_base = pt->base;
-
-		add = 0;
-		if (need > 0)
-		  {
-		    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-		      return 0;
-		    bits -= need;
-		    add = (val >> bits) & ((1U << need) - 1);
-		  }
-
-		match = match_baseline + add;
-
-		pt = &literal_decode.table[literal_state];
-		need = pt->basebits;
-		literal_baseline = pt->baseline;
-		literal_bits = pt->bits;
-		literal_base = pt->base;
-
-		add = 0;
-		if (need > 0)
-		  {
-		    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-		      return 0;
-		    bits -= need;
-		    add = (val >> bits) & ((1U << need) - 1);
-		  }
-
-		literal = literal_baseline + add;
-
-		/* See the comment in elf_zstd_make_offset_baseline_fse.  */
-		if (offset_basebits > 1)
-		  {
-		    repeated_offset3 = repeated_offset2;
-		    repeated_offset2 = repeated_offset1;
-		    repeated_offset1 = offset;
-		  }
-		else
-		  {
-		    if (unlikely (literal == 0))
-		      ++offset;
-		    switch (offset)
+		    if (unlikely ((size_t)(poutend - pout) < literal_count))
 		      {
-		      case 1:
-			offset = repeated_offset1;
-			break;
-		      case 2:
-			offset = repeated_offset2;
-			repeated_offset2 = repeated_offset1;
-			repeated_offset1 = offset;
-			break;
-		      case 3:
-			offset = repeated_offset3;
-			repeated_offset3 = repeated_offset2;
-			repeated_offset2 = repeated_offset1;
-			repeated_offset1 = offset;
-			break;
-		      case 4:
-			offset = repeated_offset1 - 1;
-			repeated_offset3 = repeated_offset2;
-			repeated_offset2 = repeated_offset1;
-			repeated_offset1 = offset;
-			break;
+			elf_uncompress_failed ();
+			return 0;
 		      }
-		  }
 
-		++seq;
-		if (seq < seq_count)
-		  {
-		    uint32_t v;
-
-		    /* Update the three states.  */
-
-		    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-		      return 0;
-
-		    need = literal_bits;
-		    bits -= need;
-		    v = (val >> bits) & (((uint32_t)1 << need) - 1);
-
-		    literal_state = literal_base + v;
-
-		    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-		      return 0;
-
-		    need = match_bits;
-		    bits -= need;
-		    v = (val >> bits) & (((uint32_t)1 << need) - 1);
-
-		    match_state = match_base + v;
-
-		    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-		      return 0;
-
-		    need = offset_bits;
-		    bits -= need;
-		    v = (val >> bits) & (((uint32_t)1 << need) - 1);
-
-		    offset_state = offset_base + v;
-		  }
-
-		/* The next sequence is now in LITERAL, OFFSET, MATCH.  */
-
-		/* Copy LITERAL bytes from the literals.  */
-
-		if (unlikely ((size_t)(poutend - pout) < literal))
-		  {
-		    elf_uncompress_failed ();
-		    return 0;
-		  }
-
-		if (unlikely (literal_count < literal))
-		  {
-		    elf_uncompress_failed ();
-		    return 0;
-		  }
-
-		literal_count -= literal;
-
-		/* Often LITERAL is small, so handle small cases quickly.  */
-		switch (literal)
-		  {
-		  case 8:
-		    *pout++ = *plit++;
-		    ATTRIBUTE_FALLTHROUGH;
-		  case 7:
-		    *pout++ = *plit++;
-		    ATTRIBUTE_FALLTHROUGH;
-		  case 6:
-		    *pout++ = *plit++;
-		    ATTRIBUTE_FALLTHROUGH;
-		  case 5:
-		    *pout++ = *plit++;
-		    ATTRIBUTE_FALLTHROUGH;
-		  case 4:
-		    *pout++ = *plit++;
-		    ATTRIBUTE_FALLTHROUGH;
-		  case 3:
-		    *pout++ = *plit++;
-		    ATTRIBUTE_FALLTHROUGH;
-		  case 2:
-		    *pout++ = *plit++;
-		    ATTRIBUTE_FALLTHROUGH;
-		  case 1:
-		    *pout++ = *plit++;
-		    break;
-
-		  case 0:
-		    break;
-
-		  default:
-		    if (unlikely ((size_t)(plit - pout) < literal))
+		    if ((size_t)(plit - pout) < literal_count)
 		      {
 			uint32_t move;
 
 			move = plit - pout;
-			while (literal > move)
+			while (literal_count > move)
 			  {
 			    memcpy (pout, plit, move);
 			    pout += move;
 			    plit += move;
-			    literal -= move;
+			    literal_count -= move;
 			  }
 		      }
 
-		    memcpy (pout, plit, literal);
-		    pout += literal;
-		    plit += literal;
+		    memcpy (pout, plit, literal_count);
 		  }
 
-		if (match > 0)
+		pout += literal_count;
+	      }
+	    else
+	      {
+		pback = pblockend - 1;
+		if (!elf_fetch_backward_init (&pback, pin, &val, &bits))
+		  return 0;
+
+		bits -= literal_decode.table_bits;
+		literal_state = ((val >> bits)
+				 & ((1U << literal_decode.table_bits) - 1));
+
+		if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+		  return 0;
+		bits -= offset_decode.table_bits;
+		offset_state = ((val >> bits)
+				& ((1U << offset_decode.table_bits) - 1));
+
+		if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+		  return 0;
+		bits -= match_decode.table_bits;
+		match_state = ((val >> bits)
+			       & ((1U << match_decode.table_bits) - 1));
+
+		seq = 0;
+		while (1)
 		  {
-		    /* Copy MATCH bytes from the decoded output at OFFSET.  */
+		    const struct elf_zstd_fse_baseline_entry *pt;
+		    uint32_t offset_basebits;
+		    uint32_t offset_baseline;
+		    uint32_t offset_bits;
+		    uint32_t offset_base;
+		    uint32_t offset;
+		    uint32_t match_baseline;
+		    uint32_t match_bits;
+		    uint32_t match_base;
+		    uint32_t match;
+		    uint32_t literal_baseline;
+		    uint32_t literal_bits;
+		    uint32_t literal_base;
+		    uint32_t literal;
+		    uint32_t need;
+		    uint32_t add;
 
-		    if (unlikely ((size_t)(poutend - pout) < match))
+		    pt = &offset_decode.table[offset_state];
+		    offset_basebits = pt->basebits;
+		    offset_baseline = pt->baseline;
+		    offset_bits = pt->bits;
+		    offset_base = pt->base;
+
+		    /* This case can be more than 16 bits, which is all that
+		       elf_fetch_bits_backward promises.  */
+		    need = offset_basebits;
+		    add = 0;
+		    if (unlikely (need > 16))
 		      {
-			elf_uncompress_failed ();
-			return 0;
+			if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+			  return 0;
+			bits -= 16;
+			add = (val >> bits) & ((1U << 16) - 1);
+			need -= 16;
+			add <<= need;
+		      }
+		    if (need > 0)
+		      {
+			if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+			  return 0;
+			bits -= need;
+			add += (val >> bits) & ((1U << need) - 1);
 		      }
 
-		    if (unlikely ((size_t)(pout - poutstart) < offset))
+		    offset = offset_baseline + add;
+
+		    pt = &match_decode.table[match_state];
+		    need = pt->basebits;
+		    match_baseline = pt->baseline;
+		    match_bits = pt->bits;
+		    match_base = pt->base;
+
+		    add = 0;
+		    if (need > 0)
 		      {
-			elf_uncompress_failed ();
-			return 0;
+			if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+			  return 0;
+			bits -= need;
+			add = (val >> bits) & ((1U << need) - 1);
 		      }
 
-		    if (offset >= match)
+		    match = match_baseline + add;
+
+		    pt = &literal_decode.table[literal_state];
+		    need = pt->basebits;
+		    literal_baseline = pt->baseline;
+		    literal_bits = pt->bits;
+		    literal_base = pt->base;
+
+		    add = 0;
+		    if (need > 0)
 		      {
-			memcpy (pout, pout - offset, match);
-			pout += match;
+			if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+			  return 0;
+			bits -= need;
+			add = (val >> bits) & ((1U << need) - 1);
+		      }
+
+		    literal = literal_baseline + add;
+
+		    /* See the comment in elf_zstd_make_offset_baseline_fse.  */
+		    if (offset_basebits > 1)
+		      {
+			repeated_offset3 = repeated_offset2;
+			repeated_offset2 = repeated_offset1;
+			repeated_offset1 = offset;
 		      }
 		    else
 		      {
-			while (match > 0)
+			if (unlikely (literal == 0))
+			  ++offset;
+			switch (offset)
 			  {
-			    uint32_t copy;
-
-			    copy = match < offset ? match : offset;
-			    memcpy (pout, pout - offset, copy);
-			    match -= copy;
-			    pout += copy;
+			  case 1:
+			    offset = repeated_offset1;
+			    break;
+			  case 2:
+			    offset = repeated_offset2;
+			    repeated_offset2 = repeated_offset1;
+			    repeated_offset1 = offset;
+			    break;
+			  case 3:
+			    offset = repeated_offset3;
+			    repeated_offset3 = repeated_offset2;
+			    repeated_offset2 = repeated_offset1;
+			    repeated_offset1 = offset;
+			    break;
+			  case 4:
+			    offset = repeated_offset1 - 1;
+			    repeated_offset3 = repeated_offset2;
+			    repeated_offset2 = repeated_offset1;
+			    repeated_offset1 = offset;
+			    break;
 			  }
 		      }
-		  }
 
-		if (unlikely (seq >= seq_count))
-		  {
-		    /* Copy remaining literals.  */
-		    if (literal_count > 0 && plit != pout)
+		    ++seq;
+		    if (seq < seq_count)
 		      {
-			if (unlikely ((size_t)(poutend - pout)
-				      < literal_count))
+			uint32_t v;
+
+			/* Update the three states.  */
+
+			if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+			  return 0;
+
+			need = literal_bits;
+			bits -= need;
+			v = (val >> bits) & (((uint32_t)1 << need) - 1);
+
+			literal_state = literal_base + v;
+
+			if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+			  return 0;
+
+			need = match_bits;
+			bits -= need;
+			v = (val >> bits) & (((uint32_t)1 << need) - 1);
+
+			match_state = match_base + v;
+
+			if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+			  return 0;
+
+			need = offset_bits;
+			bits -= need;
+			v = (val >> bits) & (((uint32_t)1 << need) - 1);
+
+			offset_state = offset_base + v;
+		      }
+
+		    /* The next sequence is now in LITERAL, OFFSET, MATCH.  */
+
+		    /* Copy LITERAL bytes from the literals.  */
+
+		    if (unlikely ((size_t)(poutend - pout) < literal))
+		      {
+			elf_uncompress_failed ();
+			return 0;
+		      }
+
+		    if (unlikely (literal_count < literal))
+		      {
+			elf_uncompress_failed ();
+			return 0;
+		      }
+
+		    literal_count -= literal;
+
+		    /* Often LITERAL is small, so handle small cases quickly.  */
+		    switch (literal)
+		      {
+		      case 8:
+			*pout++ = *plit++;
+			ATTRIBUTE_FALLTHROUGH;
+		      case 7:
+			*pout++ = *plit++;
+			ATTRIBUTE_FALLTHROUGH;
+		      case 6:
+			*pout++ = *plit++;
+			ATTRIBUTE_FALLTHROUGH;
+		      case 5:
+			*pout++ = *plit++;
+			ATTRIBUTE_FALLTHROUGH;
+		      case 4:
+			*pout++ = *plit++;
+			ATTRIBUTE_FALLTHROUGH;
+		      case 3:
+			*pout++ = *plit++;
+			ATTRIBUTE_FALLTHROUGH;
+		      case 2:
+			*pout++ = *plit++;
+			ATTRIBUTE_FALLTHROUGH;
+		      case 1:
+			*pout++ = *plit++;
+			break;
+
+		      case 0:
+			break;
+
+		      default:
+			if (unlikely ((size_t)(plit - pout) < literal))
+			  {
+			    uint32_t move;
+
+			    move = plit - pout;
+			    while (literal > move)
+			      {
+				memcpy (pout, plit, move);
+				pout += move;
+				plit += move;
+				literal -= move;
+			      }
+			  }
+
+			memcpy (pout, plit, literal);
+			pout += literal;
+			plit += literal;
+		      }
+
+		    if (match > 0)
+		      {
+			/* Copy MATCH bytes from the decoded output at OFFSET.  */
+
+			if (unlikely ((size_t)(poutend - pout) < match))
 			  {
 			    elf_uncompress_failed ();
 			    return 0;
 			  }
 
-			if ((size_t)(plit - pout) < literal_count)
+			if (unlikely ((size_t)(pout - poutstart) < offset))
 			  {
-			    uint32_t move;
-
-			    move = plit - pout;
-			    while (literal_count > move)
-			      {
-				memcpy (pout, plit, move);
-				pout += move;
-				plit += move;
-				literal_count -= move;
-			      }
+			    elf_uncompress_failed ();
+			    return 0;
 			  }
 
-			memcpy (pout, plit, literal_count);
+			if (offset >= match)
+			  {
+			    memcpy (pout, pout - offset, match);
+			    pout += match;
+			  }
+			else
+			  {
+			    while (match > 0)
+			      {
+				uint32_t copy;
+
+				copy = match < offset ? match : offset;
+				memcpy (pout, pout - offset, copy);
+				match -= copy;
+				pout += copy;
+			      }
+			  }
 		      }
 
-		    pout += literal_count;
+		    if (unlikely (seq >= seq_count))
+		      {
+			/* Copy remaining literals.  */
+			if (literal_count > 0 && plit != pout)
+			  {
+			    if (unlikely ((size_t)(poutend - pout)
+					  < literal_count))
+			      {
+				elf_uncompress_failed ();
+				return 0;
+			      }
 
-		    break;
-		  }
+			    if ((size_t)(plit - pout) < literal_count)
+			      {
+				uint32_t move;
+
+				move = plit - pout;
+				while (literal_count > move)
+				  {
+				    memcpy (pout, plit, move);
+				    pout += move;
+				    plit += move;
+				    literal_count -= move;
+				  }
+			      }
+
+			    memcpy (pout, plit, literal_count);
+			  }
+
+			pout += literal_count;
+
+			break;
+		      }
+	          }
 	      }
 
 	    pin = pblockend;

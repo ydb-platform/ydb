@@ -4256,8 +4256,6 @@ PRAGMA ydb.OptShuffleElimination = "true";
                 JoinType(e f g Shuffle)
                 JoinType(e f g h Shuffle)
                 JoinType(a b c i d e f g h Shuffle)
-                Rows(a b c i d # 10000000)
-                Bytes(a b c i d # 10000000)
                 JoinOrder(((((a b) c) i) d) (((e f) g) h))
             ';
 

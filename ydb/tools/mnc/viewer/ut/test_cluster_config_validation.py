@@ -18,6 +18,7 @@ from ydb.tools.mnc.viewer.widgets import (
     ConfigCandidate,
     HostCard,
     HostTasksTable,
+    MncConfigForm,
     OperationsPane,
     SelectedClusterConfig,
     OverviewStatusCard,
@@ -267,6 +268,57 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(request.do_not_init)
         self.assertTrue(request.ignore_failed_stop)
 
+    async def test_operations_install_arguments_arrow_navigation(self):
+        app = Viewer()
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('install')")
+            await pilot.pause()
+
+            pane = app.query_one(OperationsPane)
+            pane._focus_operation_form_item(0)
+            self.assertIs(app.screen.focused, app.query_one("#operations-waiting", Input))
+
+            pane.move_operation_form_focus_from("operations-waiting", 1)
+            self.assertIs(app.screen.focused, app.query_one("#operations-bin-path", Input))
+
+            pane.move_operation_form_focus_from("operations-bin-path", 1)
+            self.assertIs(app.screen.focused, app.query_one("#operations-do-not-init", Checkbox))
+
+            pane.move_operation_form_focus_from("operations-do-not-init", 1)
+            self.assertIs(app.screen.focused, app.query_one("#operations-ignore-failed-stop", Checkbox))
+
+            pane.move_operation_form_focus_from("operations-ignore-failed-stop", 1)
+            self.assertIs(app.screen.focused, app.query_one("#operations-run", Button))
+
+            pane.move_operation_form_focus_from("operations-run", -1)
+            self.assertIs(app.screen.focused, app.query_one("#operations-ignore-failed-stop", Checkbox))
+
+    async def test_operations_uninstall_arguments_arrow_navigation(self):
+        app = Viewer()
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('uninstall')")
+            await pilot.pause()
+
+            pane = app.query_one(OperationsPane)
+            pane._focus_operation_form_item(0)
+            self.assertIs(app.screen.focused, app.query_one("#operations-ignore-failed-stop", Checkbox))
+
+            pane.move_operation_form_focus_from("operations-ignore-failed-stop", 1)
+            self.assertIs(app.screen.focused, app.query_one("#operations-run", Button))
+
+            pane.move_operation_form_focus_from("operations-run", -1)
+            self.assertIs(app.screen.focused, app.query_one("#operations-ignore-failed-stop", Checkbox))
+
     async def test_operations_action_opens_operation_picker(self):
         app = Viewer()
 
@@ -407,29 +459,31 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
             await app.run_action("open_mnc_config")
             await pilot.pause()
 
+            form = app.query_one(MncConfigForm)
             fields = app.query_one("#mnc-config-fields", ListView)
+            form.focus_config_fields()
             self.assertIs(app.screen.focused, fields)
             self.assertEqual(fields.index, 0)
 
-            await pilot.press("down")
+            form.focus_deploy_flag(0, 0)
             self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-rebuild-binary", Checkbox))
 
-            await pilot.press("right")
+            form.move_deploy_flag_from("mnc-deploy-flag-rebuild-binary", col_delta=1)
             self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-strip-binary", Checkbox))
 
-            await pilot.press("down")
+            form.move_deploy_flag_from("mnc-deploy-flag-strip-binary", row_delta=1)
             self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-transit-binary", Checkbox))
 
-            await pilot.press("down")
+            form.move_deploy_flag_from("mnc-deploy-flag-transit-binary", row_delta=1)
             self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-secure-mode", Checkbox))
 
-            await pilot.press("up")
+            form.move_deploy_flag_from("mnc-deploy-flag-secure-mode", row_delta=-1)
             self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-redeploy-binary", Checkbox))
 
-            await pilot.press("up")
+            form.move_deploy_flag_from("mnc-deploy-flag-redeploy-binary", row_delta=-1)
             self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-rebuild-binary", Checkbox))
 
-            await pilot.press("up")
+            form.move_deploy_flag_from("mnc-deploy-flag-rebuild-binary", row_delta=-1)
             self.assertIs(app.screen.focused, fields)
 
     async def test_operations_prepare_deploy_context_before_install(self):

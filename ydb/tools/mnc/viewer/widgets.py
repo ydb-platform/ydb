@@ -12,6 +12,7 @@ import yaml
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.events import Click, Key
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, DataTable, Input, Label, ListItem, ListView, Static
@@ -815,13 +816,13 @@ class MncConfigForm(Vertical):
     def focus_config_fields(self) -> None:
         fields = self.query_one("#mnc-config-fields", ListView)
         fields.index = 0
-        fields.focus()
+        self.screen.set_focus(fields)
 
     def focus_deploy_flag(self, row: int, column: int) -> None:
         row = max(0, min(row, len(MNC_DEPLOY_FLAG_OPTION_ROWS) - 1))
         column = max(0, min(column, len(MNC_DEPLOY_FLAG_OPTION_ROWS[row]) - 1))
         option = MNC_DEPLOY_FLAG_OPTION_ROWS[row][column]
-        self.query_one("#" + mnc_deploy_flag_checkbox_id(option.option_id), Checkbox).focus()
+        self.screen.set_focus(self.query_one("#" + mnc_deploy_flag_checkbox_id(option.option_id), Checkbox))
 
     def move_deploy_flag_from(self, checkbox_id: Optional[str], row_delta: int = 0, col_delta: int = 0) -> bool:
         position = self._deploy_flag_position(checkbox_id)
@@ -1145,6 +1146,57 @@ class ViewerState:
         )
 
 
+class OperationFormInput(Input):
+    def _move(self, event: Key, step: int) -> None:
+        form = self.parent
+        while form is not None:
+            if hasattr(form, "move_operation_form_focus_from"):
+                if form.move_operation_form_focus_from(self.id, step):
+                    event.stop()
+                return
+            form = form.parent
+
+    def key_up(self, event: Key) -> None:
+        self._move(event, -1)
+
+    def key_down(self, event: Key) -> None:
+        self._move(event, 1)
+
+
+class OperationFormCheckbox(Checkbox):
+    def _move(self, event: Key, step: int) -> None:
+        form = self.parent
+        while form is not None:
+            if hasattr(form, "move_operation_form_focus_from"):
+                if form.move_operation_form_focus_from(self.id, step):
+                    event.stop()
+                return
+            form = form.parent
+
+    def key_up(self, event: Key) -> None:
+        self._move(event, -1)
+
+    def key_down(self, event: Key) -> None:
+        self._move(event, 1)
+
+
+class OperationFormButton(Button):
+    def _move(self, event: Key, step: int) -> None:
+        form = self.parent
+        while form is not None:
+            if hasattr(form, "move_operation_form_focus_from"):
+                if form.move_operation_form_focus_from(self.id, step):
+                    event.stop()
+                return
+            form = form.parent
+
+    def key_up(self, event: Key) -> None:
+        self._move(event, -1)
+
+    def key_down(self, event: Key) -> None:
+        self._move(event, 1)
+
+
 class OperationsPane(VerticalScroll, inherit_bindings=False):
     DEFAULT_CSS = """
     OperationsPane {
@@ -1276,13 +1328,13 @@ class OperationsPane(VerticalScroll, inherit_bindings=False):
             Label("Arguments", classes="operations-title"),
             Vertical(
                 Label("waiting", classes="operations-label"),
-                Input(value="15", placeholder="15", id="operations-waiting", classes="operations-input"),
+                OperationFormInput(value="15", placeholder="15", id="operations-waiting", classes="operations-input"),
                 Label("bin_path", classes="operations-label"),
-                Input(value="", placeholder="optional path to ydb binary", id="operations-bin-path", classes="operations-input"),
-                Checkbox("do_not_init", value=False, id="operations-do-not-init", classes="operations-checkbox"),
+                OperationFormInput(value="", placeholder="optional path to ydb binary", id="operations-bin-path", classes="operations-input"),
+                OperationFormCheckbox("do_not_init", value=False, id="operations-do-not-init", classes="operations-checkbox"),
                 id="operations-install-arguments",
             ),
-            Checkbox(
+            OperationFormCheckbox(
                 "ignore_failed_stop",
                 value=False,
                 id="operations-ignore-failed-stop",
@@ -1290,7 +1342,7 @@ class OperationsPane(VerticalScroll, inherit_bindings=False):
             ),
             Static("", id="operations-error", markup=False),
             Horizontal(
-                Button("Run", id="operations-run", variant="error"),
+                OperationFormButton("Run", id="operations-run", variant="error"),
                 id="operations-actions",
             ),
             id="operations-form",
@@ -1316,10 +1368,7 @@ class OperationsPane(VerticalScroll, inherit_bindings=False):
 
     def on_mount(self) -> None:
         self.refresh_state()
-        if self._operation_id == "install":
-            self.query_one("#operations-waiting", Input).focus()
-        else:
-            self.query_one("#operations-run", Button).focus()
+        self.call_after_refresh(self._focus_operation_form_item, 0)
 
     def refresh_state(self) -> None:
         selected = self._selected_cluster()
@@ -1408,6 +1457,54 @@ class OperationsPane(VerticalScroll, inherit_bindings=False):
             do_not_init=bool(self.query_one("#operations-do-not-init", Checkbox).value),
             ignore_failed_stop=ignore_failed_stop,
         )
+
+    def _operation_form_focus_ids(self) -> list[str]:
+        if self._operation_id == "install":
+            return [
+                "operations-waiting",
+                "operations-bin-path",
+                "operations-do-not-init",
+                "operations-ignore-failed-stop",
+                "operations-run",
+            ]
+        return [
+            "operations-ignore-failed-stop",
+            "operations-run",
+        ]
+
+    def _focus_operation_form_item(self, index: int) -> bool:
+        focus_ids = self._operation_form_focus_ids()
+        if not focus_ids:
+            return False
+        index = max(0, min(index, len(focus_ids) - 1))
+        step = 1 if index < len(focus_ids) - 1 else -1
+        while 0 <= index < len(focus_ids):
+            try:
+                widget = self.query_one("#" + focus_ids[index])
+            except NoMatches:
+                index += step
+                continue
+            if (
+                getattr(widget, "visible", True)
+                and getattr(widget, "display", True)
+                and not getattr(widget, "disabled", False)
+            ):
+                self.screen.set_focus(widget)
+                return True
+            index += step
+        return False
+
+    def move_operation_form_focus_from(self, widget_id: Optional[str], step: int) -> bool:
+        if self._operation_started() or step == 0:
+            return False
+        focus_ids = self._operation_form_focus_ids()
+        if widget_id not in focus_ids:
+            return False
+        current_index = focus_ids.index(widget_id)
+        target_index = current_index + step
+        if target_index < 0 or target_index >= len(focus_ids):
+            return True
+        return self._focus_operation_form_item(target_index)
 
     def _operation_output(self):
         operation = self._state.operation

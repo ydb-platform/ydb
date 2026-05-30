@@ -22,7 +22,7 @@ class Sensors:
 
         return found["value"] if found is not None else None
 
-    def find_sensors(self, labels, key_label):
+    def find_sensors(self, labels, key_label, aggregate=None):
         result = {}
         for s in self.data:
             lbls = s["labels"]
@@ -31,7 +31,18 @@ class Sensors:
                 continue
             v = lbls.get(key_label, None)
             if v is not None:
-                result[v] = s.get("value", None)
+                nv = s.get("value", None)
+                if v in result:
+                    ov = result[v]
+                    if aggregate is 'list':
+                        if type(ov) is not list:
+                            ov = [ov]
+                            result[v] = ov
+                        ov.append(nv)
+                        continue
+                    if aggregate is 'sum':
+                        nv += ov
+                result[v] = nv
         return result
 
     def collect_non_zeros(self):

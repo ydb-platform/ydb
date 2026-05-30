@@ -75,7 +75,8 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
             
             // YQL AST rewriting
             if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, true);
+                THashMap<const TExprNode*, TExprNode::TPtr> translated;
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, translated, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else {

@@ -1006,7 +1006,7 @@ TExprNode::TListType FindSublinks(const TExprNode::TPtr& node) {
 }
 
 TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter) {
+                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
 
     auto sublinks = FindSublinks(node);
     YQL_CLOG(TRACE, ProviderKikimr) << "Sublinks size: " << sublinks.size();
@@ -1021,7 +1021,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         TExprNode::TPtr newNode;
 
-        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, false);
+        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
 
         if (sublink->Child(0)->Content() == "expr") {
             // clang-format off
@@ -1059,8 +1059,11 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
 } // anonymous namespace
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, bool generateRoot) {
-
+                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot) {
+    
+    if(translated.contains(input.Get())) {
+        return translated.at(input.Get());
+    }
     TVector<TString> finalColumnOrder;
     // Start from beggining for each proccesed select;
     ui64 uniqueAggColumnId = 0;
@@ -1068,8 +1071,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
     TExprNode::TPtr node = input;
 
     if (generateRoot) {
-        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter);
+        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated);
     }
+
+    //Y_ENSURE(false, "lets stop here");
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
     TVector<TExprNode::TPtr> setItemsResults;
@@ -1118,14 +1123,23 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     .Done().Ptr();
                     // clang-format on
                 }
-                else {
-                    auto subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, false);
+                else if (childExpr->IsCallable("YqlSelect")){
+                    TExprNode::TPtr subquery;
+
+                    if (translated.contains(childExpr.Get())) {
+                        subquery = translated.at(childExpr.Get());
+                    } else {
+                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+                    }
 
                     // We need to rename all the IUs in the subquery to reflect the new alias
                     fromExpr = Build<TKqpOpReplaceAlias>(ctx, node->Pos())
                         .Input(subquery)
                         .Alias(alias)
                         .Done().Ptr();
+                }
+                else {
+                    Y_ENSURE(false, TStringBuilder() << "Unsupported callable: " << childExpr->Content());
                 }
 
                 aliasToInputMap.insert({TString(alias->Content()), fromExpr});
@@ -1667,7 +1681,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
     */
 
     if (!generateRoot) {
-        return NormalizeMemberNames(opResult, ctx, node->Pos());
+        auto res =  NormalizeMemberNames(opResult, ctx, node->Pos());
+        translated.insert({input.Get(), res});
+        return res;
     }
 
     // clang-format off

@@ -125,7 +125,7 @@ common:
     to: /devops/backup-and-recovery/index.md
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
-    
+
   # Redirects for Deployment Options
   - from: /devops/(ansible|kubernetes|manual)/(.*)$
     to: /devops/deployment-options/$1/$2
@@ -485,8 +485,8 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
-# Redirects for query_execution
-
+  # Redirects for query_execution
+  
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
   - from: /concepts/mvcc.md
@@ -522,6 +522,7 @@ ru:
   - from: /concepts/topic.md
     to: /concepts/datamodel/topic.md
 
+en:
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /devops/manual/initial-deployment.md

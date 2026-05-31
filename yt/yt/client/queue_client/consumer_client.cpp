@@ -666,7 +666,7 @@ IConsumerClientPtr CreateConsumerClient(
 {
     if (consumerSchema == *YTMultiConsumerTableSchema) {
         if (!consumerPath.GetQueueConsumerName()) {
-            THROW_ERROR_EXCEPTION("Queue consumer name is required for multi consumer schema")
+            THROW_ERROR_EXCEPTION("Queue consumer name is required for multi-consumer schema")
                 << TErrorAttribute("consumer_schema", consumerSchema)
                 << TErrorAttribute("consumer_path", consumerPath);
         }

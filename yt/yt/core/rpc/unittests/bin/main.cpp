@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
 {
     try {
         if (argc != 2) {
-            THROW_ERROR_EXCEPTION("Config argument is missing. Pass empty string to get config schema.");
+            THROW_ERROR_EXCEPTION("Config argument is missing. Pass empty string to get config schema");
         }
 
         TYsonStringBuf configText(argv[1]);

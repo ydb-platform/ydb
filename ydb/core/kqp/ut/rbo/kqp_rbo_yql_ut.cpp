@@ -2185,17 +2185,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-<<<<<<< HEAD
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 7, 11, 13, 15, 18, 19, 21, 22, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                       50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82, 83,
                                                                       84, 85, 88, 90, 91, 92, 96, 99},
                            /*rbo never finish*/{5}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
-=======
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {/*1, 2,*/ 3,  4,  7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
-                                                                     50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 78, 79, 81, 82, 84, 85, 90, 91, 92, 96, 99},
-                           {1, 2, 5, 6, 8, 9, 10, 12, 14, 16, 17, 18, 20, 21, 23, 24, 27, 28, 31, 35, 36, 38, 39, 40, 41, 44, 47, 49,
-                            51, 53, 54, 57, 58, 63, 67, 69, 70, 75, 76, 77, 80, 83, 86, 87, 88, 89, 93, 94, 95, 97, 98}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
->>>>>>> 599ed8ec59b (Handled multiple-use named expressions)
                            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
     }

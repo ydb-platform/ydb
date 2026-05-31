@@ -1253,6 +1253,41 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert result.stdout.count("COMMIT") >= 2
         assert result.stdout.count("ROLLBACK") >= 1
 
+    def test_ddl_rejected_inside_transaction(self):
+        """CREATE TABLE must not be sent to the server while a transaction is open."""
+        ddl_table = f"ddl_blocked_{uuid.uuid4().hex}"
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                f"CREATE TABLE `{ddl_table}` (id Uint64, PRIMARY KEY (id));",
+                "ROLLBACK",
+                f"SELECT COUNT(*) FROM `{ddl_table}`;",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = (result.stdout + result.stderr).lower()
+        assert "cannot be executed inside an interactive transaction" in combined
+        assert "ROLLBACK" in result.stdout
+
+    def test_failed_query_invalidates_transaction(self):
+        """After a failed in-tx query the CLI must drop local tx state (server auto-rollback)."""
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                "SELECT * FROM `/path/that/does/not/exist`;",
+                "SELECT 2;",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "automatically rolled back" in combined
+        assert "Transaction not found" not in combined
+        assert "2" in result.stdout
+
 
 class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
     """
@@ -1298,6 +1333,34 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             + ".*".join("snapshot-rw")
         )
         child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
+
+    def _wait_for_tx_prompt(self, child):
+        child.expect(r"YQL\033\\[22;39m>\* ", timeout=self.PROMPT_TIMEOUT)
+
+    def _send_line(self, child, line: str):
+        child.send(line)
+        child.send("\r")
+
+    def test_no_ddl_completion_inside_transaction(self):
+        """Inside a transaction TAB must not propose CREATE / ALTER / DROP."""
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            self._send_line(child, "BEGIN")
+            child.expect("BEGIN", timeout=15)
+            self._wait_for_tx_prompt(child)
+            child.send("S")
+            child.send("\t")
+            child.expect("SELECT", timeout=self.COMPLETION_TIMEOUT)
+            try:
+                child.expect("CREATE", timeout=1)
+                raise AssertionError("CREATE must not be suggested inside a transaction")
+            except pexpect.TIMEOUT:
+                pass
+        finally:
+            self._discard_and_exit(child)
+            child.close()
 
     def test_tab_completes_beg_to_begin(self):
         """`BEG<TAB>` should expand to BEGIN."""

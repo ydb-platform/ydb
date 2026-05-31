@@ -238,6 +238,12 @@ public:
         Prompt = prompt;
     }
 
+    void SetExcludeSchemeQueryCompletion(bool exclude) final {
+        if (YQLCompleter) {
+            YQLCompleter->SetExcludeSchemeQueryCompletion(exclude);
+        }
+    }
+
 private:
     void InitReplxx(bool enableYqlCompletion) {
         EnableYqlCompletion = enableYqlCompletion;

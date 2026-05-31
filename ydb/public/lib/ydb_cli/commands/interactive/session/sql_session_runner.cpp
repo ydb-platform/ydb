@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_query_utils.h>
 #include <ydb/public/lib/ydb_cli/common/tx_mode_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
@@ -259,6 +260,7 @@ public:
             Transaction = beginResult.GetTransaction();
             InteractiveTxActive = true;
             UpdateTransactionPrompt();
+            UpdateSchemeQueryCompletionMode();
             Cout << "BEGIN" << Endl;
         } catch (NStatusHelpers::TYdbErrorException& error) {
             PrintTcError("Failed to begin transaction", ToString(error));
@@ -320,6 +322,17 @@ public:
     }
 
     void ExecuteInTransaction(const TString& line) {
+        if (LooksLikeSchemeQuery(line)) {
+            Cerr << Colors.Yellow()
+                 << "\nDDL statements (CREATE, ALTER, DROP, etc.) cannot be executed inside an"
+                    " interactive transaction."
+                 << Colors.OldColor() << Endl;
+            Cerr << "COMMIT or ROLLBACK the transaction first, then run the DDL outside of a"
+                    " transaction."
+                 << Endl;
+            return;
+        }
+
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
         settings.ConcurrentResultSets(false);
@@ -336,23 +349,11 @@ public:
                 .TxControl = NQuery::TTxControl::Tx(*Transaction),
             });
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            const bool staleTx = IsStaleInteractiveTransactionError(error.GetStatus());
-            if (staleTx) {
-                InvalidateInteractiveTransaction();
-            }
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
-            if (staleTx) {
-                PrintBeginAgainHint();
-            }
+            InvalidateInteractiveTransactionAfterQueryError();
         } catch (std::exception& error) {
-            const bool staleTx = IsStaleInteractiveTransactionError(TStringBuf(error.what()));
-            if (staleTx) {
-                InvalidateInteractiveTransaction();
-            }
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(error.what()) << Endl;
-            if (staleTx) {
-                PrintBeginAgainHint();
-            }
+            InvalidateInteractiveTransactionAfterQueryError();
         }
     }
 
@@ -431,6 +432,11 @@ private:
             elements.emplace_back(CreateListItem(hbox({
                 keyword("ROLLBACK"), text(" | "), keyword("ROLLBACK TRANSACTION"),
                 text(": rollback the current transaction.")
+            })));
+            elements.emplace_back(CreateListItem(hbox({
+                text("DDL (CREATE, ALTER, DROP, ...) is not supported inside a transaction; a failed"
+                     " query ends the transaction on the server — the CLI clears local state"
+                     " automatically.")
             })));
         }
 
@@ -537,8 +543,29 @@ private:
              << Colors.OldColor() << Endl;
     }
 
+    void PrintTransactionAutoRolledBackNotice() const {
+        Cerr << Colors.Yellow()
+             << "Transaction was automatically rolled back after the error."
+             << Colors.OldColor() << Endl;
+        PrintBeginAgainHint();
+    }
+
     void InvalidateInteractiveTransaction() {
         ResetTransactionState();
+    }
+
+    void InvalidateInteractiveTransactionAfterQueryError() {
+        if (!IsInteractiveTransactionActive()) {
+            return;
+        }
+        InvalidateInteractiveTransaction();
+        PrintTransactionAutoRolledBackNotice();
+    }
+
+    void UpdateSchemeQueryCompletionMode() {
+        if (LineReader && EnableInteractiveTransactions) {
+            LineReader->SetExcludeSchemeQueryCompletion(IsInteractiveTransactionActive());
+        }
     }
 
     void PrintTcError(TStringBuf prefix, TStringBuf details) {
@@ -564,6 +591,7 @@ private:
         Session.reset();
         QueryClient.reset();
         ResetTransactionPrompt();
+        UpdateSchemeQueryCompletionMode();
     }
 
     // Rollback any transaction left open at shutdown. Errors are swallowed.

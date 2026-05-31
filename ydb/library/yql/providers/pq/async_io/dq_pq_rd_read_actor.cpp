@@ -844,6 +844,8 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         Partitions[readyBatch.PartitionKey].Offset = readyBatch.NextOffset;
     }
 
+    SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space " << (freeSpace - usedSpace) << ", result size " << usedSpace);
+
     ReadyBufferSizeBytes -= usedSpace;
     if (!ReadyBuffer.empty()) {
         NotifyCA();
@@ -857,18 +859,19 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
         MaybeSchedulePartitionIdlenessCheck(now);
     }
 
-    SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space " << (freeSpace - usedSpace) << ", result size " << usedSpace);
+    if (freeSpace == 0) {
+        Y_DEBUG_ABORT_UNLESS(usedSpace == 0);
+        return usedSpace;
+    }
 
-    if (freeSpace > 0) {
-        for (auto& clusterState : Clusters) {
-            auto child = clusterState.Child;
-            if (child == nullptr) {
-                continue;
-            }
-            for (auto& [rowDispatcherActorId, sessionInfo] : child->Sessions) {
-                // all actors are on same mailbox, safe to call
-                child->TrySendGetNextBatch(sessionInfo);
-            }
+    for (auto& clusterState : Clusters) {
+        auto child = clusterState.Child;
+        if (child == nullptr) {
+            continue;
+        }
+        for (auto& [rowDispatcherActorId, sessionInfo] : child->Sessions) {
+            // all actors are on same mailbox, safe to call
+            child->TrySendGetNextBatch(sessionInfo);
         }
     }
 

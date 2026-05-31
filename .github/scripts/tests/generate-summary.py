@@ -14,7 +14,6 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
     is_not_launched_issue,
-    is_possible_oom_issue,
     is_timeout_issue,
     is_xfailed_issue,
     source_has_tag,
@@ -631,7 +630,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             et = test.error_type
             test.is_sanitizer_issue = source_has_tag(et, "SANITIZER")
             test.is_verify_issue = source_has_tag(et, "VERIFY")
-            test.is_possible_oom = is_possible_oom_issue(et)
+            test.is_possible_oom = source_has_tag(et, "POSSIBLE_OOM")
 
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

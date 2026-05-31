@@ -190,16 +190,6 @@ def failure_row_from_ydb(row: Dict[str, Any]) -> FailureRow:
     )
 
 
-def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
-    return FailureRow(
-        status=status_str,
-        status_description=getattr(test, "status_description", None),
-        source_error_type=getattr(test, "error_type", None),
-        stderr_url=getattr(test, "stderr_url", None),
-        log_url=getattr(test, "log_url", None),
-    )
-
-
 def _link_url_from_report(links, *keys):
     for key in keys:
         vals = links.get(key)
@@ -221,8 +211,10 @@ def failure_row_from_report_result(result: Dict[str, Any], status_str: str) -> F
 
 def _failure_status_str_for_report(result: Dict[str, Any]) -> Optional[str]:
     status = _normalize_text(result.get("status")).upper()
-    if status in ("FAILED", "ERROR"):
+    if status == "FAILED":
         return "failure"
+    if status == "ERROR":
+        return "error"
     if status == "MUTE":
         return "mute"
     return None

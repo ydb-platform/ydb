@@ -1047,8 +1047,6 @@ auto session = topicClient.CreateWriteSession(settings);
 
 If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
-<<<<<<< HEAD
-=======
 - Go
 
   In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
@@ -1057,7 +1055,6 @@ If, on other hand, you want to ensure deduplication is enabled, you can specify 
 
   This functionality is not currently supported.
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ### Using message metadata feature {#messagemeta}

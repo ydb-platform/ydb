@@ -1632,7 +1632,7 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
         settings.RetrySettings_,
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
-    if (!retrySettings.MaxRetries_ == 0 || GetInRetryOperationContext()) {
+    if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
         return Impl_->BulkUpsert(table, std::move(rows), settings);
     }
 
@@ -1654,6 +1654,9 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataF
         settings.RetrySettings_,
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
+    if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
+        return Impl_->BulkUpsert(table, format, data, schema, settings);
+    }
 
     return NRetry::RunUnaryWithRetry(*this, retrySettings,
         [this, table, format, data, schema, settings](TDuration timeout) {
@@ -1673,6 +1676,9 @@ TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& r
         settings.RetrySettings_,
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
+    if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
+        return Impl_->ReadRows(table, std::move(rows), columns, settings);
+    }
     const TValue keysCopy = rows;
 
     return NRetry::RunUnaryWithRetry(*this, retrySettings,

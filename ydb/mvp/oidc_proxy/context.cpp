@@ -43,12 +43,13 @@ TString TContext::GetRequestedAddress() const {
 }
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
+    const TString cookieValue = GenerateCookie(secret);
     if (cookieValue.size() > TOpenIdConnectSettings::MAX_AUTH_FLOW_COOKIE_VALUE_SIZE) {
         return {};
     }
 
     return TStringBuilder()
-        << TOpenIdConnectSettings::YDB_OIDC_COOKIE << "=" << GenerateCookie(secret) << "; "
+        << TOpenIdConnectSettings::YDB_OIDC_COOKIE << "=" << cookieValue << "; "
         << "Path=" << GetAuthCallbackUrl() << "; "
         << "Max-Age=" << TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME.Seconds() << "; "
         << "Secure; "

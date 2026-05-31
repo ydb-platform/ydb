@@ -13,6 +13,9 @@ if TESTS_DIR not in sys.path:
 from error_type_utils import (  # noqa: E402
     DEFAULT_PREFETCH_MAX_WORKERS,
     DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH,
+    BACKFILL_FETCH_TIMEOUT_SEC,
+    BACKFILL_FETCH_MAX_ATTEMPTS,
+    BACKFILL_PREFETCH_RETRY_PASSES,
     build_error_type_csv_for_storage,
     failure_row_from_ydb,
     get_debug_texts_from_cache,
@@ -127,6 +130,9 @@ def get_missed_data_for_upload(
     fetch_cache = prefetch_text_cache_for_failure_rows(
         [fr for _, fr in row_pairs],
         max_workers=prefetch_max_workers,
+        fetch_timeout=BACKFILL_FETCH_TIMEOUT_SEC,
+        fetch_attempts=BACKFILL_FETCH_MAX_ATTEMPTS,
+        retry_passes=BACKFILL_PREFETCH_RETRY_PASSES,
     )
 
     # Classify failure rows and write error_type back into the row dict in-place

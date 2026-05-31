@@ -535,6 +535,8 @@ struct TEvPrivate {
     };
 };
 
+const int ReconciliationLogSize = 40;
+
 class TNodeState {
 public:
     TNodeState(NActors::TActorSystem* actorSystem, ui32 nodeId, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
@@ -586,8 +588,10 @@ public:
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
-    void StartReconciliation(bool major);
-    void DoReconciliation();
+    void StartReconciliation(bool major, char logSymbol);
+    void DoReconciliation(char logSymbol);
+    void AddReconciliationLog(char logSymbol);
+    TString GetReconciliationLog();
     void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
 
     NActors::TActorId NodeActorId;
@@ -643,6 +647,7 @@ public:
     std::atomic<TInstant> LastActivity;
     std::atomic<bool> Terminating = false;
     std::atomic<bool> ResendAsked = false;
+    std::deque<char> ReconciliationLog;
 };
 
 class TDebugNodeState : public TNodeState {

@@ -698,6 +698,9 @@ TNode SerializeParametersForInsertRows(
     if (options.RequireSyncReplica_) {
         result["require_sync_replica"] = *options.RequireSyncReplica_;
     }
+    if (options.LockType_) {
+        result["lock_type"] = ToString(*options.LockType_);
+    }
     return result;
 }
 

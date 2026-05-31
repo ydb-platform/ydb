@@ -21,6 +21,19 @@ _LONG_QUERY_SETTINGS = (
     .with_timeout(3600)             # 1h gRPC deadline
 )
 
+# Preserve Table Service semantics: return raw integers/bytes instead of
+# Python datetime/str so downstream scripts (e.g. get_test_history.py)
+# don't break. Table Service had native_*_in_result_sets=False by default;
+# Query Service flips them all to True by default.
+_QUERY_CLIENT_SETTINGS = (
+    ydb.QueryClientSettings()
+    .with_native_date_in_result_sets(False)
+    .with_native_datetime_in_result_sets(False)
+    .with_native_timestamp_in_result_sets(False)
+    .with_native_interval_in_result_sets(False)
+    .with_native_json_in_result_sets(False)
+)
+
 
 class YDBWrapper:
     """Wrapper for YDB with statistics logging.
@@ -272,7 +285,7 @@ class YDBWrapper:
             return self._cluster_version
 
         try:
-            with ydb.QuerySessionPool(driver) as pool:
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
                 result_sets = pool.execute_with_retries("SELECT Version() as version")
             for result_set in result_sets:
                 if result_set.rows:
@@ -342,7 +355,7 @@ class YDBWrapper:
                 credentials=ydb.credentials_from_env_variables()
             )
             driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
-            with ydb.QuerySessionPool(driver) as pool:
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
                 pool.execute_with_retries("SELECT 1 as test")
             self._stats_driver = driver
             return True
@@ -508,7 +521,7 @@ class YDBWrapper:
                 batch_count = 0
                 scan_start = time.time()
 
-                with ydb.QuerySessionPool(driver) as pool:
+                with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
                     with pool.checkout() as session:
                         for result_set in session.execute(query, settings=_LONG_QUERY_SETTINGS):
                             batch_count += 1
@@ -635,7 +648,7 @@ class YDBWrapper:
             column_types = None
             scan_start = time.time()
 
-            with ydb.QuerySessionPool(driver) as pool:
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
                 with pool.checkout() as session:
                     for result_set in session.execute(query, settings=_LONG_QUERY_SETTINGS):
                         if column_types is None:
@@ -781,7 +794,7 @@ class YDBWrapper:
         def operation(driver):
             # Use Query Service API because Table Service DML does not support
             # modifications for column shard tables.
-            with ydb.QuerySessionPool(driver) as pool:
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
                 pool.execute_with_retries(query=query, parameters=parameters or {})
                 return 1  # Successful execution
         

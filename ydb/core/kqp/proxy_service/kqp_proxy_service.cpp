@@ -1975,7 +1975,10 @@ private:
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            streamingQueries.GetExternalStorage(),
+            NFq::TRowDispatcherSettings(
+                streamingQueries.GetExternalStorage(),
+                FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+            ),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,

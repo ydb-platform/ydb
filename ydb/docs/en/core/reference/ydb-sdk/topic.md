@@ -995,8 +995,6 @@ Only connections with matching [producer and message group](../../concepts/topic
         });
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   Asynchronous writing of a message to a topic. If the internal buffer overflows, it waits for the buffer to be released before resending.
@@ -1014,7 +1012,6 @@ Only connections with matching [producer and message group](../../concepts/topic
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 - JavaScript
 
   All messages are written to an internal buffer. There are three mechanisms they reach the server: two automatic and one manual. The manual path is calling `writer.flush`, which returns the last seqNo persisted on the server. Automatic flushes happen when:
@@ -1313,9 +1310,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
   })
   ```
 
-<<<<<<< HEAD
-- Java (sync)
-=======
 - Python
 
   To write to a topic within a transaction, create a transactional writer by calling `topic_client.tx_writer` with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
@@ -1365,7 +1359,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
   ```
 
 - Java
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 
   {% list tabs %}
 
@@ -1650,7 +1643,6 @@ Topic can have several Consumers and for each of them server stores its own read
 
   {% endlist %}
 
-<<<<<<< HEAD
   For async reader, `ReadEventHandlersSettings` also have to be provided with an implementation of `ReadEventHandler`.
   It describes how events should be handled during reading.
 
@@ -1693,7 +1685,6 @@ Topic can have several Consumers and for each of them server stores its own read
               logger.error("Init failed with ex: ", ex);
               return null;
           });
-=======
 - C#
 
   ```c#
@@ -1702,7 +1693,6 @@ Topic can have several Consumers and for each of them server stores its own read
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
   }.Build();
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
   ```
 
 - JavaScript
@@ -2142,8 +2132,6 @@ If a commit fails with an error, the application should log it and continue; it 
 
   - Asynchronous API
 
-<<<<<<< HEAD
-=======
     In `onMessages`, commit the whole batch in `DataReceivedEvent`:
 
     ```java
@@ -2196,7 +2184,6 @@ If a commit fails with an error, the application should log it and continue; it 
   }
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 - JavaScript
 
   ```javascript
@@ -2451,9 +2438,6 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   }
   ```
 
-<<<<<<< HEAD
-- Java (sync)
-=======
 - Python
 
   To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
@@ -2494,8 +2478,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   {% endlist %}
 
-- Java
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
+- Java (sync)
 
   {% list tabs %}
 

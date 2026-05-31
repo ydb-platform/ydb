@@ -41,7 +41,6 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
      - A smaller value also increases the likelihood of false positives, where a living leader might terminate itself as a precaution, uncertain if this period has concluded on a potential new leader.
      - This value must be strictly greater than `SelfCheckPeriod`.
 
-<<<<<<< HEAD
 - JavaScript
 
   ```javascript
@@ -51,7 +50,6 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
   await client.createNode("/path/to/mynode", {});
   ```
 
-=======
 - Java
 
   ```java
@@ -85,7 +83,6 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
   You can also use `alterNode` (change configuration), `dropNode` (delete the node), and `describeNode` (read the current configuration).
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 - Python
 
   {% list tabs %}
@@ -150,7 +147,6 @@ To start working with coordination nodes, a client must establish a session with
    - `OnStopped` - called when the session stops attempting to restore the connection with the service, which can be useful for establishing a new connection.
    - `Timeout` - the maximum timeout during which the session can be restored after losing connection with the service.
 
-<<<<<<< HEAD
 - JavaScript
 
   ```javascript
@@ -160,7 +156,6 @@ To start working with coordination nodes, a client must establish a session with
   await using session = await client.createSession("/path/to/mynode", {}, signal);
   ```
 
-=======
 - Java
 
   A session (see [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) is created with `createSession`; call `connect()` to establish the bidirectional gRPC stream with the node (asynchronous, returns `CompletableFuture<Status>`). Retry behavior and connect timeout are configured in [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
@@ -179,7 +174,6 @@ To start working with coordination nodes, a client must establish a session with
 
   Typical flow: after a successful `connect()`, run semaphore operations for your scenario (locking, leadership, and so on), then close the session. Using try-with-resources is convenient so that `close()` stops the stream to the node when you are done.
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 - Python
 
   {% list tabs %}
@@ -224,8 +218,6 @@ It's important for the client application to monitor the session state, as it ca
 
   In the C++ SDK, an active session continuously maintains and automatically re-establishes the connection with the {{ ydb-short-name }} cluster in the background.
 
-<<<<<<< HEAD
-=======
 - Python
 
   In the Python SDK, the session automatically restores the connection to the {{ ydb-short-name }} cluster after failures. Use a context manager (`with` or `async with`) to ensure the session is closed when leaving the block. When working with semaphores through a context manager (`with session.semaphore(name)` or `async with session.semaphore(name)`), the semaphore is released automatically when leaving the block, and the session is closed when the context exits.
@@ -234,7 +226,6 @@ It's important for the client application to monitor the session state, as it ca
 
   Call `close()` when your scenario is finished; this explicitly releases the connection to the node. Until the session is closed, the SDK retries the connection on network failures according to `CoordinationSessionSettings`. Hold a semaphore only while solving your business task and release it with `SemaphoreLease.release()` when the resource is no longer needed.
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 - JavaScript
 
   In the JavaScript SDK, you can use `session.signal` to monitor session lifetime: it is aborted when the session is closed or expires. The SDK handles transport-level errors and reconnects to the service, attempting to restore the session when possible. This means the client only needs to watch the session signal and avoid any operations once the session is closed or expired.
@@ -329,8 +320,6 @@ When creating a semaphore, you can specify its limit. The limit determines the m
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -351,7 +340,6 @@ When creating a semaphore, you can specify its limit. The limit determines the m
       .expectSuccess("create semaphore failed");
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ### Acquiring a semaphore {#acquire-semaphore}
@@ -454,8 +442,6 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -487,7 +473,6 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
   The API documentation states that a session can hold **only one** semaphore at a time; repeated calls for the same name **replace** the previous operation (for example, to reduce `count` or change the timeout).
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 The taken value of an acquired semaphore can be decreased (but not increased) by calling the `AcquireSemaphore` method again with a smaller value.
@@ -557,8 +542,6 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   ```java
@@ -577,7 +560,6 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
   });
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 This call doesn't require acquiring the semaphore and doesn't lead to it. If you need only one specific client to update the data, this must be explicitly ensured, for example, by acquiring the semaphore, updating the data, and releasing the semaphore back.
@@ -673,8 +655,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   The `describeSemaphore` method takes a semaphore name and a [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): data only, with owners list, with waiters list, or both.
@@ -703,7 +683,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
   });
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ### Releasing a semaphore {#release-semaphore}
@@ -771,8 +750,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   Release via [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (asynchronous, `CompletableFuture<Status>`).
@@ -789,7 +766,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
   await lease.release();
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ## Important implementation details

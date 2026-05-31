@@ -107,8 +107,6 @@ Therefore, while distributed locking through such mechanisms cannot guarantee th
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -159,5 +157,4 @@ Therefore, while distributed locking through such mechanisms cannot guarantee th
   }
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}

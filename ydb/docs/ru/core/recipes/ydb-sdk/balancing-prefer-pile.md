@@ -32,9 +32,6 @@
 
 - Python
 
-<<<<<<< HEAD
-  Функциональность на данный момент не поддерживается.
-=======
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - C#
@@ -48,7 +45,6 @@
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
 - Java
 

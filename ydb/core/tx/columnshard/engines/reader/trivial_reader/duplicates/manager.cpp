@@ -109,9 +109,9 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         auto evCopy = ev;
         HandleFilterRequestImpl(evCopy);
     } else {
-        PendingFilterRequests.emplace_back(ev);
         LOCAL_LOG_TRACE("event", "TEvRequestFilter")
         ("type", "queued")("portion_id", ev->Get()->GetPortionId())("pending_count", PendingFilterRequests.size());
+        PendingFilterRequests.emplace_back(ev);
     }
 }
 

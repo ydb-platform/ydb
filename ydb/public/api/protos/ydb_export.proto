@@ -156,16 +156,16 @@ message ExportToS3Settings {
     // - Object is excluded from export operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
 
-    message CsvSettings {
+    message YdbDumpFormat {
     }
 
-    message ParquetSettings {
+    message ParquetFormat {
         uint32 row_group_size = 1;
     }
 
     oneof format {
-        CsvSettings csv_format = 18;
-        ParquetSettings parquet_format = 19;
+        YdbDumpFormat ydb_dump = 18;
+        ParquetFormat parquet = 19;
     }
 }
 

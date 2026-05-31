@@ -430,8 +430,8 @@ private:
                 text("]: commit the current transaction.")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("ROLLBACK"), text(" | "), keyword("ROLLBACK TRANSACTION"),
-                text(": rollback the current transaction.")
+                keyword("ROLLBACK"), text(" ["), keyword("TRANSACTION"),
+                text("]: rollback the current transaction.")
             })));
             elements.emplace_back(CreateListItem(hbox({
                 text("DDL (CREATE, ALTER, DROP, ...) is not supported inside a transaction; a failed"

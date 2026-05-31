@@ -1335,7 +1335,7 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
         child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
 
     def _wait_for_tx_prompt(self, child):
-        child.expect(r"YQL\033\\[22;39m>\* ", timeout=self.PROMPT_TIMEOUT)
+        child.expect("YQL\033\\[22;39m>\\* ", timeout=self.PROMPT_TIMEOUT)
 
     def _send_line(self, child, line: str):
         child.send(line)

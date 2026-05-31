@@ -92,6 +92,29 @@ TString ToUpperAscii(TStringBuf text) {
     return result;
 }
 
+TStringBuf StripOuterWhitespace(TStringBuf text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) {
+        text.Skip(1);
+    }
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
+        text.Chop(1);
+    }
+    return text;
+}
+
+bool LooksLikeSchemeQueryStatement(TStringBuf statement) {
+    statement = StripOuterWhitespace(statement);
+    if (statement.empty()) {
+        return false;
+    }
+    const auto tokens = TokenizeUpper(statement);
+    const size_t i = SkipExplainPrefix(tokens);
+    if (i >= tokens.size()) {
+        return false;
+    }
+    return SchemeQueryLeadingKeywords().contains(tokens[i]);
+}
+
 } // anonymous namespace
 
 TStringBuf GetCurrentStatementPrefix(TStringBuf textBeforeCursor) {
@@ -103,12 +126,19 @@ TStringBuf GetCurrentStatementPrefix(TStringBuf textBeforeCursor) {
 }
 
 bool LooksLikeSchemeQuery(TStringBuf line) {
-    const auto tokens = TokenizeUpper(line);
-    const size_t i = SkipExplainPrefix(tokens);
-    if (i >= tokens.size()) {
-        return false;
+    TStringBuf rest = line;
+    while (true) {
+        const size_t semi = rest.find(';');
+        const TStringBuf segment = semi == TStringBuf::npos ? rest : rest.SubStr(0, semi);
+        if (LooksLikeSchemeQueryStatement(segment)) {
+            return true;
+        }
+        if (semi == TStringBuf::npos) {
+            break;
+        }
+        rest = rest.SubStr(semi + 1);
     }
-    return SchemeQueryLeadingKeywords().contains(tokens[i]);
+    return false;
 }
 
 bool IsSchemeQueryCompletionContext(TStringBuf textBeforeCursor) {

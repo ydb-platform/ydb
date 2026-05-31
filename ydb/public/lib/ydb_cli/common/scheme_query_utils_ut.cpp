@@ -28,6 +28,12 @@ Y_UNIT_TEST_SUITE(SchemeQueryUtils) {
         UNIT_ASSERT(!LooksLikeSchemeQuery("EXPLAIN SELECT 1;"));
     }
 
+    Y_UNIT_TEST(MultiStatementWithDdl) {
+        UNIT_ASSERT(LooksLikeSchemeQuery(
+            "SELECT 1; CREATE TABLE t (id Uint64, PRIMARY KEY (id))"));
+        UNIT_ASSERT(!LooksLikeSchemeQuery("SELECT 1; SELECT 2"));
+    }
+
     Y_UNIT_TEST(CompletionContextAndKeywords) {
         UNIT_ASSERT_VALUES_EQUAL(GetCurrentStatementPrefix("SELECT 1; CRE"), " CRE");
         UNIT_ASSERT(IsSchemeQueryCompletionContext("ALTER "));

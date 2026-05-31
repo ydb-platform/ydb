@@ -10,6 +10,7 @@
 #include <ydb/public/lib/ydb_cli/common/tx_mode_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/folder/path.h>
 #include <util/generic/scope.h>
@@ -19,6 +20,26 @@
 namespace NYdb::NConsoleClient {
 
 namespace {
+
+constexpr NYdb::NIssue::TIssueCode KikimrTransactionNotFoundIssueCode = 2015;
+
+bool IsStaleInteractiveTransactionError(const TStatus& status) {
+    if (NStatusHelpers::StatusContainsIssueWithCode(status, KikimrTransactionNotFoundIssueCode)) {
+        return true;
+    }
+    if (status.GetStatus() == EStatus::NOT_FOUND) {
+        for (const auto& issue : status.GetIssues()) {
+            if (issue.GetMessage().contains("Transaction not found")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool IsStaleInteractiveTransactionError(TStringBuf text) {
+    return text.find("Transaction not found") != TStringBuf::npos;
+}
 
 class TSqlSessionRunner final : public TSessionRunnerBase, public TInterruptableCommand {
     using TBase = TSessionRunnerBase;
@@ -236,6 +257,7 @@ public:
             auto beginResult = Session->BeginTransaction(*txSettings).GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(beginResult);
             Transaction = beginResult.GetTransaction();
+            InteractiveTxActive = true;
             UpdateTransactionPrompt();
             Cout << "BEGIN" << Endl;
         } catch (NStatusHelpers::TYdbErrorException& error) {
@@ -253,17 +275,22 @@ public:
             return;
         }
 
+        Y_DEFER { ResetTransactionState(); };
+
         try {
             auto commitResult = Transaction->Commit().GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(commitResult);
             Cout << "COMMIT" << Endl;
-            ResetTransactionState();
         } catch (NStatusHelpers::TYdbErrorException& error) {
             PrintTcError("Failed to commit transaction", ToString(error));
-            // Keep the transaction state so the user can retry the COMMIT or
-            // explicitly ROLLBACK. The destructor rolls it back if needed.
+            if (IsStaleInteractiveTransactionError(error.GetStatus())) {
+                PrintBeginAgainHint();
+            }
         } catch (std::exception& error) {
             PrintTcError("Failed to commit transaction", error.what());
+            if (IsStaleInteractiveTransactionError(TStringBuf(error.what()))) {
+                PrintBeginAgainHint();
+            }
         }
     }
 
@@ -273,15 +300,22 @@ public:
             return;
         }
 
+        Y_DEFER { ResetTransactionState(); };
+
         try {
             auto rollbackResult = Transaction->Rollback().GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(rollbackResult);
             Cout << "ROLLBACK" << Endl;
-            ResetTransactionState();
         } catch (NStatusHelpers::TYdbErrorException& error) {
             PrintTcError("Failed to rollback transaction", ToString(error));
+            if (IsStaleInteractiveTransactionError(error.GetStatus())) {
+                PrintBeginAgainHint();
+            }
         } catch (std::exception& error) {
             PrintTcError("Failed to rollback transaction", error.what());
+            if (IsStaleInteractiveTransactionError(TStringBuf(error.what()))) {
+                PrintBeginAgainHint();
+            }
         }
     }
 
@@ -302,9 +336,23 @@ public:
                 .TxControl = NQuery::TTxControl::Tx(*Transaction),
             });
         } catch (NStatusHelpers::TYdbErrorException& error) {
+            const bool staleTx = IsStaleInteractiveTransactionError(error.GetStatus());
+            if (staleTx) {
+                InvalidateInteractiveTransaction();
+            }
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
+            if (staleTx) {
+                PrintBeginAgainHint();
+            }
         } catch (std::exception& error) {
+            const bool staleTx = IsStaleInteractiveTransactionError(TStringBuf(error.what()));
+            if (staleTx) {
+                InvalidateInteractiveTransaction();
+            }
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(error.what()) << Endl;
+            if (staleTx) {
+                PrintBeginAgainHint();
+            }
         }
     }
 
@@ -368,8 +416,8 @@ private:
 
         if (enableInteractiveTransactions) {
             elements.emplace_back(CreateListItem(hbox({
-                keyword("BEGIN"), text(" ["), keyword("TRANSACTION"), text(" | "),
-                keyword("WORK"), text("] ["), CreateEntityName("MODE"),
+                keyword("BEGIN"), text(" ["), keyword("TRANSACTION"), text("] ["),
+                CreateEntityName("MODE"),
                 text("]: start an interactive transaction (Query service session).")
             })));
             elements.emplace_back(CreateListItem(hbox({
@@ -382,12 +430,12 @@ private:
             })));
             elements.emplace_back(CreateListItem(hbox({
                 keyword("COMMIT"), text(" | "), keyword("COMMIT TRANSACTION"), text(" | "),
-                keyword("COMMIT WORK"), text(" | "), keyword("END"), text(" | "),
+                keyword("END"), text(" | "),
                 keyword("END TRANSACTION"), text(": commit the current transaction.")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("ROLLBACK"), text(" | "), keyword("ROLLBACK TRANSACTION"), text(" | "),
-                keyword("ROLLBACK WORK"), text(": rollback the current transaction.")
+                keyword("ROLLBACK"), text(" | "), keyword("ROLLBACK TRANSACTION"),
+                text(": rollback the current transaction.")
             })));
         }
 
@@ -485,7 +533,17 @@ private:
     }
 
     bool IsInteractiveTransactionActive() const {
-        return EnableInteractiveTransactions && Transaction && Transaction->IsActive();
+        return EnableInteractiveTransactions && InteractiveTxActive;
+    }
+
+    void PrintBeginAgainHint() const {
+        Cerr << Colors.Yellow()
+             << "No open interactive transaction. Issue BEGIN to start a new one."
+             << Colors.OldColor() << Endl;
+    }
+
+    void InvalidateInteractiveTransaction() {
+        ResetTransactionState();
     }
 
     void PrintTcError(TStringBuf prefix, TStringBuf details) {
@@ -506,6 +564,7 @@ private:
     }
 
     void ResetTransactionState() {
+        InteractiveTxActive = false;
         Transaction.reset();
         Session.reset();
         QueryClient.reset();
@@ -514,15 +573,17 @@ private:
 
     // Rollback any transaction left open at shutdown. Errors are swallowed.
     void RollbackOpenTransaction(bool silent) {
-        if (!Transaction || !Transaction->IsActive()) {
+        if (!InteractiveTxActive) {
             ResetTransactionState();
             return;
         }
-        try {
-            Transaction->Rollback().GetValueSync();
-        } catch (...) {
-            if (!silent) {
-                throw;
+        if (Transaction) {
+            try {
+                Transaction->Rollback().GetValueSync();
+            } catch (...) {
+                if (!silent) {
+                    throw;
+                }
             }
         }
         ResetTransactionState();
@@ -540,6 +601,7 @@ private:
     std::optional<NQuery::TQueryClient> QueryClient;
     std::optional<NQuery::TSession> Session;
     std::optional<NQuery::TTransaction> Transaction;
+    bool InteractiveTxActive = false;
 };
 
 } // anonymous namespace

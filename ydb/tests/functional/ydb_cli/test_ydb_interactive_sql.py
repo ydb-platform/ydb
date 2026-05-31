@@ -996,16 +996,6 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert "BEGIN" in result.stdout
         assert "COMMIT" in result.stdout
 
-    def test_begin_work_commit(self):
-        result = self.run_interactive_session(
-            ["BEGIN WORK", "SELECT 5;", "COMMIT WORK", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-        assert "5" in result.stdout
-
     def test_start_transaction(self):
         result = self.run_interactive_session(
             ["START TRANSACTION", "SELECT 6;", "COMMIT", "exit"],
@@ -1053,14 +1043,6 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
     def test_rollback_transaction(self):
         result = self.run_interactive_session(
             ["BEGIN", "SELECT 41;", "ROLLBACK TRANSACTION", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "ROLLBACK" in result.stdout
-
-    def test_rollback_work(self):
-        result = self.run_interactive_session(
-            ["BEGIN", "SELECT 42;", "ROLLBACK WORK", "exit"],
             self.tmp_path,
         )
         assert result.exit_code == 0
@@ -1256,6 +1238,18 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert result.exit_code == 0
         assert "ROLLBACK" in result.stdout
         assert marker_name not in result.stdout
+
+    def test_select_after_rollback_runs_outside_transaction(self):
+        """After ROLLBACK the REPL must not reuse the closed transaction id."""
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "ROLLBACK", "SELECT 2;", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "Transaction not found" not in combined
+        assert "ROLLBACK" in result.stdout
+        assert "2" in result.stdout
 
     def test_commit_actually_persists_dml(self):
         """COMMIT after UPSERT must persist the row."""

@@ -67,7 +67,6 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
         UNIT_ASSERT(ParseBeginTransactionIsolation("BEGIN"));
         UNIT_ASSERT(ParseBeginTransactionIsolation("begin"));
         UNIT_ASSERT(ParseBeginTransactionIsolation("BEGIN TRANSACTION"));
-        UNIT_ASSERT(ParseBeginTransactionIsolation("BEGIN WORK"));
         UNIT_ASSERT(ParseBeginTransactionIsolation("START TRANSACTION"));
     }
 
@@ -141,7 +140,7 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
     Y_UNIT_TEST(IsBeginCommand) {
         UNIT_ASSERT(IsBeginCommand("BEGIN"));
         UNIT_ASSERT(IsBeginCommand("begin transaction"));
-        UNIT_ASSERT(IsBeginCommand("Begin Work serializable-rw"));
+        UNIT_ASSERT(IsBeginCommand("Begin Transaction serializable-rw"));
         UNIT_ASSERT(IsBeginCommand("START TRANSACTION"));
         UNIT_ASSERT(IsBeginCommand("BEGIN;"));
         UNIT_ASSERT(!IsBeginCommand(""));
@@ -153,7 +152,7 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
     Y_UNIT_TEST(IsCommitCommand) {
         UNIT_ASSERT(IsCommitCommand("COMMIT"));
         UNIT_ASSERT(IsCommitCommand("commit transaction"));
-        UNIT_ASSERT(IsCommitCommand("COMMIT WORK;"));
+        UNIT_ASSERT(!IsCommitCommand("COMMIT WORK"));
         UNIT_ASSERT(IsCommitCommand("END"));
         UNIT_ASSERT(IsCommitCommand("END TRANSACTION"));
         UNIT_ASSERT(!IsCommitCommand("COMMIT FOO"));
@@ -162,7 +161,7 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
 
     Y_UNIT_TEST(IsRollbackCommand) {
         UNIT_ASSERT(IsRollbackCommand("ROLLBACK"));
-        UNIT_ASSERT(IsRollbackCommand("rollback work"));
+        UNIT_ASSERT(!IsRollbackCommand("rollback work"));
         UNIT_ASSERT(IsRollbackCommand("ROLLBACK TRANSACTION;"));
         UNIT_ASSERT(!IsRollbackCommand("ROLLBACK FOO"));
     }

@@ -38,10 +38,9 @@ std::optional<NQuery::TTxSettings> ParseTxModeName(TStringBuf mode);
 //
 // Accepted forms (case-insensitive, trailing semicolon allowed):
 //   BEGIN
-//   BEGIN WORK
 //   BEGIN TRANSACTION
 //   START TRANSACTION
-//   BEGIN [TRANSACTION | WORK] <mode>
+//   BEGIN [TRANSACTION] <mode>
 //   START TRANSACTION <mode>
 //
 // Returns:

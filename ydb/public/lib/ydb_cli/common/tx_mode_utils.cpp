@@ -68,9 +68,6 @@ size_t MatchBeginPrefix(const TVector<TString>& tokens) {
     if (TokensStartWith(tokens, {"BEGIN", "TRANSACTION"})) {
         return 2;
     }
-    if (TokensStartWith(tokens, {"BEGIN", "WORK"})) {
-        return 2;
-    }
     if (tokens.front() == "BEGIN") {
         return 1;
     }
@@ -136,7 +133,6 @@ TVector<TString> GetTransactionControlCompletions() {
     static constexpr TStringBuf kBeginPrefixes[] = {
         "BEGIN",
         "BEGIN TRANSACTION",
-        "BEGIN WORK",
         "START TRANSACTION",
     };
     const auto modes = GetSupportedTxModeNames();
@@ -150,7 +146,6 @@ TVector<TString> GetTransactionControlCompletions() {
     static constexpr TStringBuf kCommitForms[] = {
         "COMMIT",
         "COMMIT TRANSACTION",
-        "COMMIT WORK",
         "END",
         "END TRANSACTION",
     };
@@ -161,7 +156,6 @@ TVector<TString> GetTransactionControlCompletions() {
     static constexpr TStringBuf kRollbackForms[] = {
         "ROLLBACK",
         "ROLLBACK TRANSACTION",
-        "ROLLBACK WORK",
     };
     for (auto form : kRollbackForms) {
         result.emplace_back(form);
@@ -218,7 +212,6 @@ bool IsCommitCommand(TStringBuf line) {
     const auto tokens = TokenizeUpper(line);
     return MatchExactCommand(tokens, {"COMMIT"})
         || MatchExactCommand(tokens, {"COMMIT", "TRANSACTION"})
-        || MatchExactCommand(tokens, {"COMMIT", "WORK"})
         || MatchExactCommand(tokens, {"END"})
         || MatchExactCommand(tokens, {"END", "TRANSACTION"});
 }
@@ -226,8 +219,7 @@ bool IsCommitCommand(TStringBuf line) {
 bool IsRollbackCommand(TStringBuf line) {
     const auto tokens = TokenizeUpper(line);
     return MatchExactCommand(tokens, {"ROLLBACK"})
-        || MatchExactCommand(tokens, {"ROLLBACK", "TRANSACTION"})
-        || MatchExactCommand(tokens, {"ROLLBACK", "WORK"});
+        || MatchExactCommand(tokens, {"ROLLBACK", "TRANSACTION"});
 }
 
 } // namespace NYdb::NConsoleClient

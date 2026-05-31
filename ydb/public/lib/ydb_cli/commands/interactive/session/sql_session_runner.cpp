@@ -421,17 +421,12 @@ private:
                 text("]: start an interactive transaction (Query service session).")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("START TRANSACTION"), text(" ["), CreateEntityName("MODE"),
-                text("]: alias of BEGIN TRANSACTION.")
-            })));
-            elements.emplace_back(CreateListItem(hbox({
                 text("  "), CreateEntityName("MODE"), text(": "), CreateEntityName(GetTxModeNamesForHelp()),
                 text(" (default: "), CreateEntityName(TString(kTxModeSerializableRw)), text(").")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("COMMIT"), text(" | "), keyword("COMMIT TRANSACTION"), text(" | "),
-                keyword("END"), text(" | "),
-                keyword("END TRANSACTION"), text(": commit the current transaction.")
+                keyword("COMMIT"), text(" ["), keyword("TRANSACTION"),
+                text("]: commit the current transaction.")
             })));
             elements.emplace_back(CreateListItem(hbox({
                 keyword("ROLLBACK"), text(" | "), keyword("ROLLBACK TRANSACTION"),

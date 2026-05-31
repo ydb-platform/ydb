@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
         UNIT_ASSERT(ParseBeginTransactionIsolation("BEGIN"));
         UNIT_ASSERT(ParseBeginTransactionIsolation("begin"));
         UNIT_ASSERT(ParseBeginTransactionIsolation("BEGIN TRANSACTION"));
-        UNIT_ASSERT(ParseBeginTransactionIsolation("START TRANSACTION"));
+        UNIT_ASSERT(!ParseBeginTransactionIsolation("START TRANSACTION"));
     }
 
     Y_UNIT_TEST(BeginAllowsTrailingSemicolon) {
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
     Y_UNIT_TEST(BeginParsesMode) {
         UNIT_ASSERT(ParseBeginTransactionIsolation("BEGIN serializable-rw"));
         UNIT_ASSERT(ParseBeginTransactionIsolation("BEGIN TRANSACTION snapshot-ro"));
-        UNIT_ASSERT(ParseBeginTransactionIsolation("START TRANSACTION read-committed-rw"));
+        UNIT_ASSERT(!ParseBeginTransactionIsolation("START TRANSACTION read-committed-rw"));
     }
 
     Y_UNIT_TEST(BeginRejectsOneShotModes) {
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
         UNIT_ASSERT_VALUES_EQUAL(*ExtractBeginModeToken("BEGIN online-ro"), "online-ro");
         UNIT_ASSERT_VALUES_EQUAL(*ExtractBeginModeToken("begin Stale-RO"), "stale-ro");
         UNIT_ASSERT_VALUES_EQUAL(*ExtractBeginModeToken("BEGIN TRANSACTION snapshot-ro"), "snapshot-ro");
-        UNIT_ASSERT_VALUES_EQUAL(*ExtractBeginModeToken("START TRANSACTION serializable-rw"), "serializable-rw");
+        UNIT_ASSERT(!ExtractBeginModeToken("START TRANSACTION serializable-rw"));
         UNIT_ASSERT(!ExtractBeginModeToken("BEGIN"));
         UNIT_ASSERT(!ExtractBeginModeToken("BEGIN TRANSACTION"));
         UNIT_ASSERT(!ExtractBeginModeToken("SELECT 1"));
@@ -141,22 +141,21 @@ Y_UNIT_TEST_SUITE(TxModeUtils) {
         UNIT_ASSERT(IsBeginCommand("BEGIN"));
         UNIT_ASSERT(IsBeginCommand("begin transaction"));
         UNIT_ASSERT(IsBeginCommand("Begin Transaction serializable-rw"));
-        UNIT_ASSERT(IsBeginCommand("START TRANSACTION"));
+        UNIT_ASSERT(!IsBeginCommand("START TRANSACTION"));
         UNIT_ASSERT(IsBeginCommand("BEGIN;"));
         UNIT_ASSERT(!IsBeginCommand(""));
         UNIT_ASSERT(!IsBeginCommand("SELECT 1"));
         UNIT_ASSERT(!IsBeginCommand("BEGINNING"));
-        UNIT_ASSERT(!IsBeginCommand("START "));  // START alone is not BEGIN
+        UNIT_ASSERT(!IsBeginCommand("START"));
     }
 
     Y_UNIT_TEST(IsCommitCommand) {
         UNIT_ASSERT(IsCommitCommand("COMMIT"));
         UNIT_ASSERT(IsCommitCommand("commit transaction"));
         UNIT_ASSERT(!IsCommitCommand("COMMIT WORK"));
-        UNIT_ASSERT(IsCommitCommand("END"));
-        UNIT_ASSERT(IsCommitCommand("END TRANSACTION"));
+        UNIT_ASSERT(!IsCommitCommand("END"));
+        UNIT_ASSERT(!IsCommitCommand("END TRANSACTION"));
         UNIT_ASSERT(!IsCommitCommand("COMMIT FOO"));
-        UNIT_ASSERT(!IsCommitCommand("END WORK"));  // END WORK is not a thing
     }
 
     Y_UNIT_TEST(IsRollbackCommand) {

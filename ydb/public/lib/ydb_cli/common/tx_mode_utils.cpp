@@ -56,14 +56,11 @@ bool TokensStartWith(const TVector<TString>& tokens, std::initializer_list<TStri
     return true;
 }
 
-// How many leading tokens form the BEGIN/START preamble. Returns 0 if the
-// line does not start with a BEGIN-style preamble.
+// How many leading tokens form the BEGIN preamble. Returns 0 if the line does
+// not start with a BEGIN-style preamble.
 size_t MatchBeginPrefix(const TVector<TString>& tokens) {
     if (tokens.empty()) {
         return 0;
-    }
-    if (TokensStartWith(tokens, {"START", "TRANSACTION"})) {
-        return 2;
     }
     if (TokensStartWith(tokens, {"BEGIN", "TRANSACTION"})) {
         return 2;
@@ -129,11 +126,10 @@ TString GetTxModeNamesForHelp() {
 TVector<TString> GetTransactionControlCompletions() {
     TVector<TString> result;
 
-    // Every BEGIN / START prefix can optionally be followed by a tx mode.
+    // Every BEGIN prefix can optionally be followed by a tx mode.
     static constexpr TStringBuf kBeginPrefixes[] = {
         "BEGIN",
         "BEGIN TRANSACTION",
-        "START TRANSACTION",
     };
     const auto modes = GetSupportedTxModeNames();
     for (auto prefix : kBeginPrefixes) {
@@ -146,8 +142,6 @@ TVector<TString> GetTransactionControlCompletions() {
     static constexpr TStringBuf kCommitForms[] = {
         "COMMIT",
         "COMMIT TRANSACTION",
-        "END",
-        "END TRANSACTION",
     };
     for (auto form : kCommitForms) {
         result.emplace_back(form);
@@ -171,7 +165,7 @@ std::optional<NQuery::TTxSettings> ParseBeginTransactionIsolation(TStringBuf lin
         return {};
     }
 
-    // Bare BEGIN/START TRANSACTION/etc. defaults to SerializableRW.
+    // Bare BEGIN/BEGIN TRANSACTION defaults to SerializableRW.
     if (skip == tokens.size()) {
         return NQuery::TTxSettings::SerializableRW();
     }
@@ -211,9 +205,7 @@ bool IsBeginCommand(TStringBuf line) {
 bool IsCommitCommand(TStringBuf line) {
     const auto tokens = TokenizeUpper(line);
     return MatchExactCommand(tokens, {"COMMIT"})
-        || MatchExactCommand(tokens, {"COMMIT", "TRANSACTION"})
-        || MatchExactCommand(tokens, {"END"})
-        || MatchExactCommand(tokens, {"END", "TRANSACTION"});
+        || MatchExactCommand(tokens, {"COMMIT", "TRANSACTION"});
 }
 
 bool IsRollbackCommand(TStringBuf line) {

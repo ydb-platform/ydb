@@ -131,7 +131,7 @@ namespace {
     // interactive transaction control line.
     static const std::vector<TString>& TclKeywords() {
         static const std::vector<TString> kKeywords = {
-            "BEGIN", "START", "COMMIT", "END", "ROLLBACK",
+            "BEGIN", "COMMIT", "ROLLBACK",
         };
         return kKeywords;
     }

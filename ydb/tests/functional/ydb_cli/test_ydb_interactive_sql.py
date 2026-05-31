@@ -996,41 +996,6 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert "BEGIN" in result.stdout
         assert "COMMIT" in result.stdout
 
-    def test_start_transaction(self):
-        result = self.run_interactive_session(
-            ["START TRANSACTION", "SELECT 6;", "COMMIT", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-
-    def test_start_transaction_with_mode(self):
-        result = self.run_interactive_session(
-            ["START TRANSACTION snapshot-ro", "SELECT 7;", "COMMIT", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-
-    def test_end_aliases_commit(self):
-        result = self.run_interactive_session(
-            ["BEGIN", "SELECT 8;", "END", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-
-    def test_end_transaction_aliases_commit(self):
-        result = self.run_interactive_session(
-            ["BEGIN", "SELECT 9;", "END TRANSACTION", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "COMMIT" in result.stdout
-
     def test_rollback(self):
         result = self.run_interactive_session(
             ["BEGIN", "SELECT 4;", "ROLLBACK", "exit"],
@@ -1374,19 +1339,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             # Single expect: avoid false positives on "Server" in the welcome
             # banner (s.*e.*r matches) and require the full candidate list.
             self._expect_s_prefixed_tx_modes(child, "BEGIN s")
-        finally:
-            self._discard_and_exit(child)
-            child.close()
-
-    def test_tab_after_start_transaction_proposes_modes(self):
-        """`START TRANSACTION s<TAB>` proposes s-prefixed modes (no phrase repetition)."""
-        child = self.spawn_interactive()
-        try:
-            child.expect("Welcome to YDB CLI", timeout=15)
-            self._wait_for_prompt(child)
-            child.send("START TRANSACTION s")
-            child.send("\t")
-            self._expect_s_prefixed_tx_modes(child, "START TRANSACTION s")
         finally:
             self._discard_and_exit(child)
             child.close()

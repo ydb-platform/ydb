@@ -51,11 +51,9 @@ Syntax (case-insensitive, trailing semicolon allowed):
 ```sql
 -- Begin a transaction. Default mode: serializable-rw.
 BEGIN [TRANSACTION] [<mode>]
-START TRANSACTION   [<mode>]
 
 -- Commit / rollback:
 COMMIT [TRANSACTION]
-END    [TRANSACTION]
 ROLLBACK [TRANSACTION]
 ```
 

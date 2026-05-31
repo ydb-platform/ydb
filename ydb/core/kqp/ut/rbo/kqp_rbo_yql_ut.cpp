@@ -2147,8 +2147,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
             const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
             const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
 
-            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
+            q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
 
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -2167,7 +2168,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 7, 11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 7, 11, 13, 15, 18, 19, 21, 22, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                       50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82, 83,
                                                                       84, 85, 88, 90, 91, 92, 96, 99},
                            /*rbo never finish*/{5}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
@@ -4263,8 +4264,6 @@ PRAGMA ydb.OptShuffleElimination = "true";
                 JoinType(e f g Shuffle)
                 JoinType(e f g h Shuffle)
                 JoinType(a b c i d e f g h Shuffle)
-                Rows(a b c i d # 10000000)
-                Bytes(a b c i d # 10000000)
                 JoinOrder(((((a b) c) i) d) (((e f) g) h))
             ';
 

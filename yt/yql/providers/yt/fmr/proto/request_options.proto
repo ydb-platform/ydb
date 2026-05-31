@@ -252,6 +252,7 @@ message TMapOperationParams {
     repeated TFmrTableRef Output = 2;
     bytes SerializedMapJobState = 3;
     EFmrJobType MapJobType = 4;
+    bool ForceSingleTask = 5;
 }
 
 message TMapTaskParams {

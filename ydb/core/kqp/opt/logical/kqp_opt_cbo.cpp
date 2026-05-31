@@ -160,9 +160,6 @@ void TKqpProviderContext::SetConstants(const TKikimrConfiguration::TPtr& config)
     CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsRightSideByteSizeFactor.Get().GetOrElse(CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
     CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsOutputSideByteSizeFactor.Get().GetOrElse(CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR);
 
-    CONSTS_INTERACTION_MULT = config->OptCBOConstsInteractionsMult.Get().GetOrElse(CONSTS_INTERACTION_MULT);
-    CONSTS_INTERACTION_POW = config->OptCBOConstsInteractionsPow.Get().GetOrElse(CONSTS_INTERACTION_POW);
-
     CONSTS_MAPJOIN_LEFT_SIDE_MULT = config->OptCBOConstsMapJoinLeftSideMult.Get().GetOrElse(CONSTS_MAPJOIN_LEFT_SIDE_MULT);
     CONSTS_MAPJOIN_LEFT_SIDE_POW = config->OptCBOConstsMapJoinLeftSidePow.Get().GetOrElse(CONSTS_MAPJOIN_LEFT_SIDE_POW);
     CONSTS_MAPJOIN_RIGHT_SIDE_MULT = config->OptCBOConstsMapJoinRightSideMult.Get().GetOrElse(CONSTS_MAPJOIN_RIGHT_SIDE_MULT);
@@ -214,7 +211,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
 
 double WeightedRowSize(const double rows, const double bytes, const double factor
 ) {
-    double avgRowSize = rows ? (bytes / rows) : 0.0;
+    double avgRowSize = rows ? (bytes / std::max(rows, 1.0)) : 0.0;
     double rowSize = 1.0 + avgRowSize * factor;
     return rowSize;
 }
@@ -226,8 +223,6 @@ double TKqpProviderContext::ComputeJoinCost(
     const double outputByteSize,
     EJoinAlgoType joinAlgo
 ) const {
-    // double interactionPenalty = CONSTS_INTERACTION_MULT * std::pow(leftStats.ByteSize * rightStats.ByteSize, CONSTS_INTERACTION_POW);
-
     double leftSideByteSize = leftStats.Nrows * WeightedRowSize(leftStats.Nrows, leftStats.ByteSize, CONSTS_LEFT_SIDE_BYTESIZE_FACTOR);
     double rightSideByteSize = rightStats.Nrows * WeightedRowSize(rightStats.Nrows, rightStats.ByteSize, CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
     double estimatedOutputByteSize = outputRows * WeightedRowSize(outputRows, outputByteSize, CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR);
@@ -262,7 +257,6 @@ double TKqpProviderContext::ComputeJoinCost(
         }
         default:
             return leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputByteSize;
-            // return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);
     }
 }
 
@@ -310,7 +304,7 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStatsV2(
 }
 
 bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joinKeys) {
-    if (!stats.KeyColumns) {
+    if (!stats.KeyColumns || stats.KeyColumns->Data.empty()) {
         return false;
     }
 
@@ -330,6 +324,7 @@ TMaybe<double> ComputeSelectivityCorrection(
     const TVector<TJoinColumn>& rightJoinKeys
 ) {
     if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
+        // composite join keys are violated
         auto lhs = leftJoinKeys[0].AttributeName;
         auto rhs = rightJoinKeys[0].AttributeName;
 
@@ -353,8 +348,8 @@ TMaybe<double> ComputeSelectivityCorrection(
                 YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
             } else {
                 // correction = total PK / overlapping PK
-                auto selectivityCorrection = leftStats.Nrows / static_cast<double>(overlapCard.GetRef());
-                return selectivityCorrection;
+                auto selectivityCorrection = overlapCard.GetRef() / std::max(leftStats.Nrows, 1.0);
+                return std::min(selectivityCorrection, 1.0);
             }
         }
     }
@@ -397,11 +392,11 @@ double TKqpProviderContext::ComputeBothSidesByteSize(
     const TOptimizerStatistics& rightStats,
     ui32 commonRightJoinKeys
 ) const {
-    double lhsRowBytes = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) : 0;
-    double rhsRowBytes = rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) : 0;
+    double lhsRowBytes = leftStats.Nrows ? (leftStats.ByteSize / std::max(leftStats.Nrows, 1.0)) : 0.0;
+    double rhsRowBytes = rightStats.Nrows ? (rightStats.ByteSize / std::max(rightStats.Nrows, 1.0)) : 0.0;
 
     /* columns with duplicate names are removed */
-    double rhsColBytes = rightStats.Ncols ? (rhsRowBytes / rightStats.Ncols) : 0;
+    double rhsColBytes = rightStats.Ncols ? (rhsRowBytes / std::max<double>(rightStats.Ncols, 1.0)) : 0.0;
     double duplicateWidth = commonRightJoinKeys * rhsColBytes;
 
     double rowWidth = CONSTS_BYTESIZE_MULT * std::max(0.0, lhsRowBytes + rhsRowBytes - duplicateWidth);
@@ -412,7 +407,7 @@ double TKqpProviderContext::ComputeOneSideByteSize(
     double newCardinality,
     const TOptimizerStatistics& stats
 ) const {
-    double rowWidth = stats.Nrows ? CONSTS_BYTESIZE_MULT * (stats.ByteSize / stats.Nrows) : 0;
+    double rowWidth = stats.Nrows ? CONSTS_BYTESIZE_MULT * (stats.ByteSize / std::max(stats.Nrows, 1.0)) : 0.0;
     return rowWidth * newCardinality;
 }
 
@@ -543,17 +538,17 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
         double effectiveRight = rightStats.Nrows * rightStats.Selectivity;
 
         if (lhsUniqueVals.Defined() && rhsUniqueVals.Defined()) {
-            newCard = effectiveLeft * effectiveRight / std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef());
+            newCard = effectiveLeft * effectiveRight / std::max(std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef()), 1.0);
         } else if (lhsUniqueVals.Defined()) {
-            newCard = effectiveRight * (effectiveLeft / lhsUniqueVals.GetRef());
+            newCard = effectiveRight * (effectiveLeft / std::max(lhsUniqueVals.GetRef(), 1.0));
         } else if (rhsUniqueVals.Defined()) {
-            newCard = effectiveLeft * (effectiveRight / rhsUniqueVals.GetRef());
+            newCard = effectiveLeft * (effectiveRight / std::max(rhsUniqueVals.GetRef(), 1.0));
         } else {
             /* for example, join predicate between a column and a scalar aggregate */
             newCard = 0.2 * effectiveLeft * effectiveRight;
         }
 
-        selectivity = std::min(1.0, newCard / (leftStats.Nrows * rightStats.Nrows));
+        selectivity = std::min(1.0, newCard / std::max((leftStats.Nrows * rightStats.Nrows), 1.0));
 
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
@@ -574,8 +569,6 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
         /* in case of cross join we broadcast the right part to the left */
         double crossJoin = rightStats.Nrows * WeightedRowSize(rightStats.Nrows, rightStats.ByteSize, CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
         cost += CONSTS_CROSSJOIN_MULT * std::pow(crossJoin, CONSTS_CROSSJOIN_POW);
-        // cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
-        // cost += rightStats.Nrows * rightStats.Selectivity;
     }
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
@@ -584,8 +577,8 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
     result.JoinDepth = std::max(leftStats.JoinDepth, rightStats.JoinDepth) + 1;
 
     /*
-        - to avoid selectivity underflow and stop over-propagation
-        - prevent exponential collapse
+        - avoid selectivity underflow and stop over-propagation,
+        - prevent exponential collapse,
         - avoid keeping early joins from dominating plan choice
     */
     const ui32 MAX_DEPTH = CONSTS_MAX_DEPTH;

@@ -3,11 +3,12 @@ import http.client
 import logging
 import multiprocessing
 import os
-import sys
 import socket
+import sys
 import time
 from collections import deque
-from typing import Dict, Any, Optional, Tuple, Callable
+from collections.abc import Callable
+from typing import Any
 
 import certifi
 import lz4.frame
@@ -16,8 +17,8 @@ import zstandard
 from urllib3.poolmanager import PoolManager, ProxyManager
 from urllib3.response import HTTPResponse
 
-from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError
 from clickhouse_connect import common
+from clickhouse_connect.driver.exceptions import OperationalError, ProgrammingError
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Increase this number just to be safe when ClickHouse is returning progress headers
-http.client._MAXHEADERS = 10000  # pylint: disable=protected-access
+http.client._MAXHEADERS = 10000
 
 DEFAULT_KEEP_INTERVAL = 30
 DEFAULT_KEEP_COUNT = 3
@@ -37,10 +38,10 @@ core_socket_options = [
     (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
     (SOCKET_TCP, socket.TCP_NODELAY, 1),
     (socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 256),
-    (socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 256)
+    (socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 256),
 ]
 
-logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 _proxy_managers = {}
 all_managers = {}
 
@@ -51,67 +52,72 @@ def close_managers():
         manager.clear()
 
 
-# pylint: disable=no-member,too-many-arguments,too-many-branches
-def get_pool_manager_options(keep_interval: int = DEFAULT_KEEP_INTERVAL,
-                             keep_count: int = DEFAULT_KEEP_COUNT,
-                             keep_idle: int = DEFAULT_KEEP_IDLE,
-                             ca_cert: Optional[str] = None,
-                             verify: bool = True,
-                             client_cert: Optional[str] = None,
-                             client_cert_key: Optional[str] = None,
-                             **options) -> Dict[str, Any]:
+def get_pool_manager_options(
+    keep_interval: int = DEFAULT_KEEP_INTERVAL,
+    keep_count: int = DEFAULT_KEEP_COUNT,
+    keep_idle: int = DEFAULT_KEEP_IDLE,
+    ca_cert: str | None = None,
+    verify: bool = True,
+    client_cert: str | None = None,
+    client_cert_key: str | None = None,
+    **options,
+) -> dict[str, Any]:
     socket_options = core_socket_options.copy()
-    if getattr(socket, 'TCP_KEEPINTVL', None) is not None:
+    if getattr(socket, "TCP_KEEPINTVL", None) is not None:
         socket_options.append((SOCKET_TCP, socket.TCP_KEEPINTVL, keep_interval))
-    if getattr(socket, 'TCP_KEEPCNT', None) is not None:
+    if getattr(socket, "TCP_KEEPCNT", None) is not None:
         socket_options.append((SOCKET_TCP, socket.TCP_KEEPCNT, keep_count))
-    if getattr(socket, 'TCP_KEEPIDLE', None) is not None:
+    if getattr(socket, "TCP_KEEPIDLE", None) is not None:
         socket_options.append((SOCKET_TCP, socket.TCP_KEEPIDLE, keep_idle))
-    if sys.platform == 'darwin':
-        socket_options.append((SOCKET_TCP, getattr(socket, 'TCP_KEEPALIVE', 0x10), keep_interval))
-    options['maxsize'] = options.get('maxsize', 8)
-    options['retries'] = options.get('retries', 1)
-    if ca_cert == 'certifi':
+    if sys.platform == "darwin":
+        socket_options.append((SOCKET_TCP, getattr(socket, "TCP_KEEPALIVE", 0x10), keep_interval))
+    options["maxsize"] = options.get("maxsize", 8)
+    options["retries"] = options.get("retries", 1)
+    if ca_cert == "certifi":
         ca_cert = certifi.where()
-    options['cert_reqs'] = 'CERT_REQUIRED' if verify else 'CERT_NONE'
+    options["cert_reqs"] = "CERT_REQUIRED" if verify else "CERT_NONE"
     if ca_cert:
-        options['ca_certs'] = ca_cert
+        options["ca_certs"] = ca_cert
     if client_cert:
-        options['cert_file'] = client_cert
+        options["cert_file"] = client_cert
     if client_cert_key:
-        options['key_file'] = client_cert_key
-    options['socket_options'] = socket_options
-    options['block'] = options.get('block', False)
+        options["key_file"] = client_cert_key
+    options["socket_options"] = socket_options
+    options["block"] = options.get("block", False)
     return options
 
 
-def get_pool_manager(keep_interval: int = DEFAULT_KEEP_INTERVAL,
-                     keep_count: int = DEFAULT_KEEP_COUNT,
-                     keep_idle: int = DEFAULT_KEEP_IDLE,
-                     ca_cert: Optional[str] = None,
-                     verify: bool = True,
-                     client_cert: Optional[str] = None,
-                     client_cert_key: Optional[str] = None,
-                     http_proxy: Optional[str] = None,
-                     https_proxy: Optional[str] = None,
-                     **options):
-    options = get_pool_manager_options(keep_interval,
-                                       keep_count,
-                                       keep_idle,
-                                       ca_cert,
-                                       verify,
-                                       client_cert,
-                                       client_cert_key,
-                                       **options)
+def get_pool_manager(
+    keep_interval: int = DEFAULT_KEEP_INTERVAL,
+    keep_count: int = DEFAULT_KEEP_COUNT,
+    keep_idle: int = DEFAULT_KEEP_IDLE,
+    ca_cert: str | None = None,
+    verify: bool = True,
+    client_cert: str | None = None,
+    client_cert_key: str | None = None,
+    http_proxy: str | None = None,
+    https_proxy: str | None = None,
+    **options,
+):
+    options = get_pool_manager_options(
+        keep_interval,
+        keep_count,
+        keep_idle,
+        ca_cert,
+        verify,
+        client_cert,
+        client_cert_key,
+        **options,
+    )
     if http_proxy:
         if https_proxy:
-            raise ProgrammingError('Only one of http_proxy or https_proxy should be specified')
-        if not http_proxy.startswith('http'):
-            http_proxy = f'http://{http_proxy}'
+            raise ProgrammingError("Only one of http_proxy or https_proxy should be specified")
+        if not http_proxy.startswith("http"):
+            http_proxy = f"http://{http_proxy}"
         manager = ProxyManager(http_proxy, **options)
     elif https_proxy:
-        if not https_proxy.startswith('http'):
-            https_proxy = f'https://{https_proxy}'
+        if not https_proxy.startswith("http"):
+            https_proxy = f"https://{https_proxy}"
         manager = ProxyManager(https_proxy, **options)
     else:
         manager = PoolManager(**options)
@@ -120,18 +126,18 @@ def get_pool_manager(keep_interval: int = DEFAULT_KEEP_INTERVAL,
 
 
 def check_conn_expiration(manager: PoolManager):
-    reset_seconds = common.get_setting('max_connection_age')
+    reset_seconds = common.get_setting("max_connection_age")
     if reset_seconds:
         last_reset = all_managers.get(manager, 0)
         now = int(time.time())
         if last_reset < now - reset_seconds:
-            logger.debug('connection expiration')
+            logger.debug("connection expiration")
             manager.clear()
             all_managers[manager] = now
 
 
 def get_proxy_manager(host: str, http_proxy):
-    key = f'{host}__{http_proxy}'
+    key = f"{host}__{http_proxy}"
     if key in _proxy_managers:
         return _proxy_managers[key]
     proxy_manager = get_pool_manager(http_proxy=http_proxy)
@@ -140,41 +146,41 @@ def get_proxy_manager(host: str, http_proxy):
 
 
 def get_response_data(response: HTTPResponse) -> bytes:
-    encoding = response.headers.get('content-encoding', None)
-    if encoding == 'zstd':
+    encoding = response.headers.get("content-encoding", None)
+    if encoding == "zstd":
         try:
             zstd_decom = zstandard.ZstdDecompressor()
             return zstd_decom.stream_reader(response.data).read()
         except zstandard.ZstdError:
             pass
-    if encoding == 'lz4':
+    if encoding == "lz4":
         lz4_decom = lz4.frame.LZ4FrameDecompressor()
         return lz4_decom.decompress(response.data, len(response.data))
     return response.data
 
 
-def check_env_proxy(scheme: str, host: str, port: int) -> Optional[str]:
-    env_var = f'{scheme}_proxy'.lower()
+def check_env_proxy(scheme: str, host: str, port: int) -> str | None:
+    env_var = f"{scheme}_proxy".lower()
     proxy = os.environ.get(env_var)
     if not proxy:
         proxy = os.environ.get(env_var.upper())
         if not proxy:
             return None
-    no_proxy = os.environ.get('no_proxy')
+    no_proxy = os.environ.get("no_proxy")
     if not no_proxy:
-        no_proxy = os.environ.get('NO_PROXY')
+        no_proxy = os.environ.get("NO_PROXY")
         if not no_proxy:
             return proxy
-    if no_proxy == '*':
+    if no_proxy == "*":
         return None  # Wildcard no proxy means don't actually proxy anything
     host = host.lower()
-    for name in no_proxy.split(','):
+    for name in no_proxy.split(","):
         name = name.strip()
         if name:
-            name = name.lstrip('.').lower()
-            if name in (host, f'{host}:{port}'):
+            name = name.lstrip(".").lower()
+            if name in (host, f"{host}:{port}"):
                 return None  # Host or host/port matches
-            if host.endswith('.' + name):
+            if host.endswith("." + name):
                 return None  # Domain matches
     return proxy
 
@@ -183,31 +189,30 @@ _default_pool_manager = get_pool_manager()
 
 
 def default_pool_manager():
-    if multiprocessing.current_process().name == 'MainProcess':
+    if multiprocessing.current_process().name == "MainProcess":
         return _default_pool_manager
     #  PoolManagers don't seem to be safe for some multiprocessing environments, always return a new one
     return get_pool_manager()
 
 
-# pylint: disable=too-many-statements
 class ResponseSource:
-    def __init__(self, response: HTTPResponse, chunk_size: int = 1024 * 1024, exception_tag: Optional[str] = None):
+    def __init__(self, response: HTTPResponse, chunk_size: int = 1024 * 1024, exception_tag: str | None = None):
         self.response = response
         self.exception_tag = exception_tag
-        compression = response.headers.get('content-encoding')
-        decompress:Optional[Callable] = None
-        if compression == 'zstd':
+        compression = response.headers.get("content-encoding")
+        decompress: Callable | None = None
+        if compression == "zstd":
             zstd_decom = zstandard.ZstdDecompressor().decompressobj()
 
-            def zstd_decompress(c: deque) -> Tuple[bytes, int]:
+            def zstd_decompress(c: deque) -> tuple[bytes, int]:
                 chunk = c.popleft()
                 return zstd_decom.decompress(chunk), len(chunk)
 
             decompress = zstd_decompress
-        elif compression == 'lz4':
+        elif compression == "lz4":
             lz4_decom = lz4.frame.LZ4FrameDecompressor()
 
-            def lz_decompress(c: deque) -> Tuple[Optional[bytes], int]:
+            def lz_decompress(c: deque) -> tuple[bytes | None, int]:
                 read_amt = 0
                 data = c.popleft()
                 read_amt += len(data)
@@ -221,7 +226,7 @@ class ResponseSource:
 
             decompress = lz_decompress
 
-        buffer_size = common.get_setting('http_buffer_size')
+        buffer_size = common.get_setting("http_buffer_size")
 
         def buffered():
             chunks = deque()
@@ -234,11 +239,11 @@ class ResponseSource:
                 while not done:
                     chunk = None
                     try:
-                        chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
-                    except Exception as ex: # pylint: disable=broad-except
+                        chunk = next(read_gen, None)  # Always try to read at least one chunk if there are any left
+                    except Exception as ex:
                         # Store the exception for potential re-raising if no data was received
                         read_error = ex
-                        logger.warning('unexpected failure to read next chunk', exc_info=True)
+                        logger.warning("unexpected failure to read next chunk", exc_info=True)
                     if not chunk:
                         done = True
                         break

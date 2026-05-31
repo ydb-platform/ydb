@@ -86,10 +86,6 @@ def is_not_launched_issue(source_error_type, status_name=None):
     return _normalize_text(status_name).upper() in ("SKIP", "SKIPPED", "MUTE")
 
 
-def is_possible_oom_issue(source_error_type):
-    return source_has_tag(source_error_type, "POSSIBLE_OOM")
-
-
 def _is_verify_issue(text):
     text = _normalize_text(text)
     return bool(text and re.search(r'\bVERIFY\s+failed\b', text, re.IGNORECASE))

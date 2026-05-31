@@ -22,7 +22,7 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
-constexpr NYdb::NIssue::TIssueCode KikimrTransactionNotFoundIssueCode = 2015;
+constexpr NYdb::NIssue::TIssueCode KikimrTransactionNotFoundIssueCode = 2015; // NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND
 
 bool IsStaleInteractiveTransactionError(const TStatus& status) {
     if (NStatusHelpers::StatusContainsIssueWithCode(status, KikimrTransactionNotFoundIssueCode)) {

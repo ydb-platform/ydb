@@ -314,6 +314,10 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
         config.EnableAiInteractive = *Settings.EnableAiInteractive;
     }
 
+    if (Settings.EnableInteractiveTransactions) {
+        config.EnableInteractiveTransactions = *Settings.EnableInteractiveTransactions;
+    }
+
     config.BuildInfoProvider = Settings.BuildInfoProvider;
 
     SetCredentialsGetter(config);

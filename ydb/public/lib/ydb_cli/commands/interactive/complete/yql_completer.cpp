@@ -16,6 +16,10 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
 #include <util/charset/utf8.h>
+#include <util/generic/hash_set.h>
+
+#include <cctype>
+#include <vector>
 
 namespace NYdb::NConsoleClient {
 
@@ -123,58 +127,248 @@ namespace {
         TColorSchema Color;
     };
 
-    class TCompositeCommandCompleter final : public IYQLCompleter {
+    // TCL keywords that are allowed to appear as the very first token of an
+    // interactive transaction control line.
+    static const std::vector<TString>& TclKeywords() {
+        static const std::vector<TString> kKeywords = {
+            "BEGIN", "START", "COMMIT", "END", "ROLLBACK",
+        };
+        return kKeywords;
+    }
+
+    // Splits text into whitespace-separated tokens. The last "incomplete" token
+    // (without trailing whitespace) is returned as `partial`; everything before
+    // it as `complete`. The token offset (byte position) is preserved so the
+    // caller can compute contextLen as text.size() - partialOffset.
+    struct TTokenization {
+        std::vector<TStringBuf> Complete;
+        TStringBuf Partial;
+        size_t PartialOffset = 0;  // byte offset of the partial in the source
+    };
+
+    static TTokenization TokenizeForCompletion(TStringBuf text) {
+        TTokenization out;
+        out.PartialOffset = text.size();
+        size_t i = 0;
+        while (i < text.size()) {
+            while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
+                ++i;
+            }
+            if (i == text.size()) {
+                break;
+            }
+            const size_t s = i;
+            while (i < text.size() && !std::isspace(static_cast<unsigned char>(text[i]))) {
+                ++i;
+            }
+            TStringBuf token = text.SubStr(s, i - s);
+            if (i == text.size()) {
+                out.Partial = token;
+                out.PartialOffset = s;
+            } else {
+                out.Complete.push_back(token);
+            }
+        }
+        return out;
+    }
+
+    static bool IEquals(TStringBuf a, TStringBuf b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < a.size(); ++i) {
+            if (std::toupper(static_cast<unsigned char>(a[i]))
+                != std::toupper(static_cast<unsigned char>(b[i]))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool IStartsWith(TStringBuf s, TStringBuf prefix) {
+        if (s.size() < prefix.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < prefix.size(); ++i) {
+            if (std::toupper(static_cast<unsigned char>(s[i]))
+                != std::toupper(static_cast<unsigned char>(prefix[i]))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Context-aware completer for TCL command lines.
+    //
+    // Given the user's input split into completed tokens and a partial last
+    // token, the completer scans a precomputed list of "full TCL commands"
+    // (e.g. "BEGIN TRANSACTION online-ro INCONSISTENT READS") and for every
+    // match returns only the *next word* — never the whole tail. This produces
+    // the same UX as the YQL completer (e.g. typing `BEGIN T<TAB>` proposes
+    // `TRANSACTION`, not `TRANSACTION online-ro INCONSISTENT READS`).
+    class TTclCompleter {
     public:
-        TCompositeCommandCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig)
-            : Commands(commands)
-            , YQLCompleter(yqlCompleterConfig ? MakeYQLCompleter(*yqlCompleterConfig) : nullptr)
-        {}
-
-        TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) final {
-            if (RunCommandCompletion(text)) {
-                auto completions = GetCommandCompletions(text, contextLen);
-
-                TCompletions result;
-                result.reserve(completions.size());
-                for (auto& completion : completions) {
-                    result.emplace_back(std::move(completion));
+        explicit TTclCompleter(const std::vector<TString>& commands) {
+            FullCommands.reserve(commands.size());
+            for (const auto& cmd : commands) {
+                std::vector<TString> tokens;
+                size_t i = 0;
+                while (i < cmd.size()) {
+                    while (i < cmd.size() && std::isspace(static_cast<unsigned char>(cmd[i]))) {
+                        ++i;
+                    }
+                    if (i == cmd.size()) {
+                        break;
+                    }
+                    const size_t s = i;
+                    while (i < cmd.size() && !std::isspace(static_cast<unsigned char>(cmd[i]))) {
+                        ++i;
+                    }
+                    tokens.emplace_back(cmd.substr(s, i - s));
                 }
-
-                return result;
-            }
-
-            return YQLCompleter ? YQLCompleter->ApplyHeavy(text, prefix, contextLen) : TCompletions{};
-        }
-
-        THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) final {
-            if (RunCommandCompletion(text)) {
-                return GetCommandCompletions(text, contextLen);
-            }
-
-            return YQLCompleter ? YQLCompleter->ApplyLight(text, prefix, contextLen) : THints{};
-        }
-
-    private:
-        bool RunCommandCompletion(TStringBuf text) const {
-            return text.StartsWith('/');
-        }
-
-        THints GetCommandCompletions(TStringBuf text, int& contextLen) const {
-            THints result;
-            result.reserve(Commands.size());
-
-            for (const auto& command : Commands) {
-                if (command.StartsWith(text)) {
-                    result.push_back(command);
+                if (!tokens.empty()) {
+                    FullCommands.push_back(std::move(tokens));
                 }
             }
+        }
 
-            contextLen = text.size();
+        // Returns true if the input may be a TCL command (so that the YQL
+        // completer should not be queried in addition). The check is permissive
+        // by design: any input whose first token is a prefix of a TCL keyword
+        // is treated as a TCL context.
+        bool IsContext(const TTokenization& t) const {
+            if (FullCommands.empty()) {
+                return false;
+            }
+            const TStringBuf firstToken = t.Complete.empty() ? t.Partial : t.Complete.front();
+            if (firstToken.empty()) {
+                return false;
+            }
+            for (const auto& kw : TclKeywords()) {
+                if (t.Complete.empty()) {
+                    if (IStartsWith(kw, firstToken)) {
+                        return true;
+                    }
+                } else if (IEquals(firstToken, kw)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Returns next-word candidates for the given tokenization. If no
+        // candidates apply, returns an empty list and leaves contextLen
+        // untouched. Otherwise contextLen is the length (in bytes) of the
+        // partial token that should be replaced.
+        std::vector<TString> Complete(const TTokenization& t, int& contextLen) const {
+            std::vector<TString> result;
+            THashSet<TString> seen;
+            for (const auto& full : FullCommands) {
+                if (full.size() <= t.Complete.size()) {
+                    continue;
+                }
+                bool matched = true;
+                for (size_t i = 0; i < t.Complete.size(); ++i) {
+                    if (!IEquals(t.Complete[i], full[i])) {
+                        matched = false;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    continue;
+                }
+                const TString& nextWord = full[t.Complete.size()];
+                if (!IStartsWith(nextWord, t.Partial)) {
+                    continue;
+                }
+                if (seen.insert(nextWord).second) {
+                    result.push_back(nextWord);
+                }
+            }
+            if (!result.empty()) {
+                contextLen = t.Partial.size();
+            }
             return result;
         }
 
     private:
-        const std::vector<TString> Commands;
+        std::vector<std::vector<TString>> FullCommands;
+    };
+
+    class TCompositeCommandCompleter final : public IYQLCompleter {
+    public:
+        explicit TCompositeCommandCompleter(const TCompositeCompleterConfig& config)
+            : SlashCommands(config.SlashCommands)
+            , TclCompleter(config.TclCommands)
+            , HasTclCompleter(!config.TclCommands.empty())
+            , YQLCompleter(config.YqlCompleterConfig
+                ? MakeYQLCompleter(*config.YqlCompleterConfig)
+                : nullptr)
+        {}
+
+        TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) final {
+            const TStringBuf prefixView(prefix.data(), prefix.size());
+            if (prefixView.StartsWith('/')) {
+                return ToCompletions(MatchSlashCommands(prefixView, contextLen));
+            }
+            if (HasTclCompleter) {
+                // Replxx may pass only the current word as `prefix`; TCL completion
+                // needs the full input line (e.g. "BEGIN s", not just "s").
+                const TStringBuf lineView = !text.empty() ? text : prefixView;
+                const auto tokenization = TokenizeForCompletion(lineView);
+                if (TclCompleter.IsContext(tokenization)) {
+                    int tclCtx = 0;
+                    auto tclWords = TclCompleter.Complete(tokenization, tclCtx);
+                    contextLen = tclCtx;
+                    return ToCompletions(THints(tclWords.begin(), tclWords.end()));
+                }
+            }
+            return YQLCompleter ? YQLCompleter->ApplyHeavy(text, prefix, contextLen) : TCompletions{};
+        }
+
+        THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) final {
+            const TStringBuf prefixView(prefix.data(), prefix.size());
+            if (prefixView.StartsWith('/')) {
+                return MatchSlashCommands(prefixView, contextLen);
+            }
+            if (HasTclCompleter) {
+                const TStringBuf lineView = !text.empty() ? text : prefixView;
+                const auto tokenization = TokenizeForCompletion(lineView);
+                if (TclCompleter.IsContext(tokenization)) {
+                    int tclCtx = 0;
+                    auto tclWords = TclCompleter.Complete(tokenization, tclCtx);
+                    contextLen = tclCtx;
+                    return THints(tclWords.begin(), tclWords.end());
+                }
+            }
+            return YQLCompleter ? YQLCompleter->ApplyLight(text, prefix, contextLen) : THints{};
+        }
+
+    private:
+        THints MatchSlashCommands(TStringBuf prefix, int& contextLen) const {
+            THints result;
+            for (const auto& cmd : SlashCommands) {
+                if (cmd.StartsWith(prefix)) {
+                    result.push_back(cmd);
+                }
+            }
+            contextLen = prefix.size();
+            return result;
+        }
+
+        static TCompletions ToCompletions(THints hints) {
+            TCompletions out;
+            out.reserve(hints.size());
+            for (auto& h : hints) {
+                out.emplace_back(std::move(h));
+            }
+            return out;
+        }
+
+    private:
+        const std::vector<TString> SlashCommands;
+        const TTclCompleter TclCompleter;
+        const bool HasTclCompleter;
         const IYQLCompleter::TPtr YQLCompleter;
     };
 
@@ -244,8 +438,8 @@ namespace {
             std::move(settings.Color));
     }
 
-    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig) {
-        return MakeHolder<TCompositeCommandCompleter>(commands, yqlCompleterConfig);
+    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const TCompositeCompleterConfig& config) {
+        return MakeHolder<TCompositeCommandCompleter>(config);
     }
 
 } // namespace NYdb::NConsoleClient

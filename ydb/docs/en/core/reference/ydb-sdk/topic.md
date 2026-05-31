@@ -2890,18 +2890,6 @@ Most often, committing is conveniently done within the reader that has read the 
 
 {% list tabs group=lang %}
 
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
-{% endlist %}
-
-### Commit outside the reader {#commit-outside-the-reader}
-
-Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a separate process. In such cases, a method of committing outside the reader is necessary.
-
-{% list tabs group=lang %}
-
 - Go
 
   This functionality is not currently supported in the Go SDK.
@@ -2918,5 +2906,9 @@ Most often, committing is conveniently done within the reader that has read the 
       offset,
   )
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}

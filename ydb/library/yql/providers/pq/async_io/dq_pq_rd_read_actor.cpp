@@ -847,6 +847,9 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     }
 
     ReadyBufferSizeBytes -= usedSpace;
+    if (!ReadyBuffer.empty()) {
+        NotifyCA();
+    }
 
     if (WatermarkTracker) {
         if (const auto idleWatermark = WatermarkTracker->HandleIdleness(now)) {

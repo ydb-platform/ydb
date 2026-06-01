@@ -14,7 +14,13 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsRejected;
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsBulkAccepted;
     NMonitoring::TDynamicCounters::TCounterPtr MergeQueue;
+<<<<<<< HEAD
     
+=======
+    NMonitoring::TDynamicCounters::TCounterPtr MergeInflight;
+    NMonitoring::TDynamicCounters::TCounterPtr FetchInflight;
+
+>>>>>>> 629f11d7f3b (allocation guard has been fixed (#41774))
     NMonitoring::TDynamicCounters::TCounterPtr LeftBorders;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingBorders;
     NMonitoring::TDynamicCounters::TCounterPtr ReadyBorders;
@@ -88,6 +94,14 @@ public:
     
     void OnMergeQueue(i64 count = 1) const {
         MergeQueue->Add(count);
+    }
+
+    void OnMergeInflight(i64 count) const {
+        MergeInflight->Add(count);
+    }
+
+    void OnFetchInflight(i64 count) const {
+        FetchInflight->Add(count);
     }
 };
 

@@ -14,7 +14,7 @@ on:
         type: string
         default: ''
       test_size:
-        description: 'Test size: small, medium, large or comma-separated combos (default: small,medium)'
+        description: 'Test size: small, medium, large (default: small,medium)'
         required: false
         type: string
         default: small,medium
@@ -63,7 +63,7 @@ on:
         required: false
         default: ''
       test_size:
-        description: 'Test size: small, medium, large or comma-separated combos (default: small,medium)'
+        description: 'Test size: small, medium, large (default: small,medium)'
         required: false
         type: choice
         default: small,medium

@@ -330,7 +330,8 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const marker = '<!-- pr-check-safe-skip -->';
+            const headSha = context.payload.pull_request.head.sha;
+            const marker = `<!-- pr-check-safe-skip sha=${headSha} -->`;
             const body = `${marker}\nOnly safe paths were changed, so build and test jobs were skipped.`;
             const { data: comments } = await github.rest.issues.listComments({
               ...context.repo,

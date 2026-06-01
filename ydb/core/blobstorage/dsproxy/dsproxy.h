@@ -234,11 +234,11 @@ public:
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
                 parentTraceId.GetTimeToLive()), ParentSpan.GetName());
-            ParentSpan.Link(Span.GetTraceId());
-            Span.Attribute("GroupId", Info->GroupID.GetRawId());
-            Span.Attribute("RestartCounter", RestartCounter);
-            Span.Attribute("database", AppData()->TenantName);
-            Span.Attribute("storagePool", Info->GetStoragePoolName());
+            ParentSpan.GetWilsonSpanPtr()->Link(Span.GetTraceId());
+            Span.GetWilsonSpanPtr()->Attribute("GroupId", Info->GroupID.GetRawId());
+            Span.GetWilsonSpanPtr()->Attribute("RestartCounter", RestartCounter);
+            Span.GetWilsonSpanPtr()->Attribute("database", AppData()->TenantName);
+            Span.GetWilsonSpanPtr()->Attribute("storagePool", Info->GetStoragePoolName());
             params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
         } else if (ParentSpan.GetRetroSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();

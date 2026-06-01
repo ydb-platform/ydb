@@ -80,23 +80,30 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
 constexpr auto SimpleWideSortWithSpillingQuery = R"(
         --!syntax_v1
         PRAGMA ydb.EnableSpillingNodes="WideSort";
-        PRAGMA ydb.DisableBlockExecution;
-        select Key, Value
-        from `/Root/KeyValue`
-        order by Value
+        PRAGMA ydb.OptUseSortForPartitionsByKeys = "true";
+        SELECT Key, Value,
+            ROW_NUMBER() OVER (PARTITION BY Key ORDER BY Value) as rn
+        FROM `/Root/KeyValue`
+        ORDER BY Key, Value
     )";
 
-void FillTableWithManyRows(NQuery::TQueryClient& db, ui64 numRows=2000) {
-    const ui64 batchSize = 50;
+void FillTableWithManyRows(TKikimrRunner& kikimr, ui64 numRows=2000, ui64 valueSize=10000) {
+    auto client = kikimr.GetTableClient();
+    const ui64 batchSize = 500;
     for (ui64 batch = 0; batch < numRows; batch += batchSize) {
-        TStringBuilder query;
-        query << "--!syntax_v1" << Endl;
-        query << "REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES ";
+        auto rowsBuilder = NYdb::TValueBuilder();
+        rowsBuilder.BeginList();
         for (ui64 i = batch; i < batch + batchSize && i < numRows; ++i) {
-            if (i > batch) query << ", ";
-            query << "(" << i << ", \"" << TString(1000, 'a' + (i % 26)) << "\")";
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("Key")
+                    .OptionalUint64(i)
+                .AddMember("Value")
+                    .OptionalString(TString(valueSize, 'a' + (i % 26)))
+                .EndStruct();
         }
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        rowsBuilder.EndList();
+        auto result = client.BulkUpsert("/Root/KeyValue", rowsBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
@@ -325,7 +332,17 @@ Y_UNIT_TEST_TWIN(WideSortSpillingInRuntimeNodes, EnabledSpilling) {
 
     auto db = kikimr.GetQueryClient();
 
-    FillTableWithManyRows(db, 2000);
+    FillTableWithManyRows(kikimr, 2000);
+
+    {
+        auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+        auto planres = db.ExecuteQuery(SimpleWideSortWithSpillingQuery, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::SUCCESS, planres.GetIssues().ToString());
+        auto ast = planres.GetStats()->GetAst();
+        UNIT_ASSERT_C(ast, "AST is not available");
+        Cerr << "WideSort spilling AST: " << *ast << Endl;
+        UNIT_ASSERT_C(ast->find("WideSort") != std::string::npos, "WideSort node not found in AST");
+    }
 
     auto result = db.ExecuteQuery(SimpleWideSortWithSpillingQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

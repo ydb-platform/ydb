@@ -61,10 +61,6 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
     Y_ENSURE(static_cast<ui32>(MessageFormat) < (1u << MESSAGE_FORMAT_BITS));
 }
 
-ui32 TClientBlob::GetLogicalOffsetSpan() const {
-    return MessageCount;
-}
-
 
 ui16 TClientBlob::GetPartNo() const {
     return PartData ? PartData->PartNo : 0;
@@ -161,13 +157,13 @@ void TBatch::AddBlob(const TClientBlob &b) {
     ui32 i = Blobs.size();
 
     if (!b.PartData || b.PartData->PartNo == 0 || Blobs.empty()) {
-        offsetDelta += b.GetLogicalOffsetSpan();
+        offsetDelta += b.MessageCount;
     }
 
     Blobs.push_back(b);
     unpackedSize += b.GetSerializedSize();
     if (b.IsLastPart()) {
-        count += b.GetLogicalOffsetSpan();
+        count += b.MessageCount;
     } else {
         InternalPartsPos.push_back(i);
     }
@@ -278,11 +274,11 @@ TPosition TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
     ui64 curOffset = GetOffset();
     ui16 curPartNo = GetPartNo();
     for (size_t i = 0; i < Blobs.size(); ++i) {
-        if (curOffset <= offset && curOffset + Blobs[i].GetLogicalOffsetSpan() > offset && curPartNo == partNo) {
+        if (curOffset <= offset && curOffset + Blobs[i].MessageCount > offset && curPartNo == partNo) {
             return TPosition{static_cast<ui32>(i), curOffset, curPartNo};
         }
         if (Blobs[i].IsLastPart()) {
-            curOffset += Blobs[i].GetLogicalOffsetSpan();
+            curOffset += Blobs[i].MessageCount;
             curPartNo = 0;
         } else {
             ++curPartNo;
@@ -632,7 +628,7 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
     if (!Blobs.empty()) {
         for (const auto& blob : Blobs) {
             if (!blob.PartData || blob.PartData->PartNo == 0) {
-                offsetDelta += blob.GetLogicalOffsetSpan();
+                offsetDelta += blob.MessageCount;
             }
         }
     }
@@ -674,8 +670,22 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
             InternalPartsCount,
             keyOffsetDelta);
     } else {
-        tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, keyOffsetDelta);
-        dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, keyOffsetDelta);
+        tmpKey = TKey::ForBody(
+            TKeyPrefix::TypeTmpData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            keyOffsetDelta);
+        dataKey = TKey::ForBody(
+            TKeyPrefix::TypeData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            keyOffsetDelta);
     }
 
     StartOffset = Offset;

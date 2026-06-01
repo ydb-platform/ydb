@@ -138,7 +138,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                 << " NewHead: " << CompactionBlobEncoder.NewHead
         );
 
-        curOffset += p.Msg.GetOffsetsCount();
+        curOffset += p.Msg.MessageCount;
         CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
 
@@ -291,7 +291,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             ui16 partNo = blob.GetPartNo();
             const auto offsetPartNo = std::make_pair(offset, partNo);
             if (blob.IsLastPart()) {
-                offset += blob.GetLogicalOffsetSpan();
+                offset += blob.MessageCount;
             }
 
             if (FirstCompactionPart && (offsetPartNo <= *FirstCompactionPart)) {

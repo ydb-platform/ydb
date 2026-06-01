@@ -59,8 +59,6 @@ struct TClientBlob {
         const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey,
         ui32 messageCount = 1, EMessageFormat messageFormat = EMessageFormat::STANDARD);
 
-    ui32 GetLogicalOffsetSpan() const;
-
     ui32 GetSerializedSize() const;
     ui16 GetPartNo() const;
     ui16 GetTotalParts() const;

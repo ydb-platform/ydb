@@ -165,7 +165,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
         if (Batch.Blobs[i].IsLastPart()) {
             ++lastPartCount;
-            offsetSpan += Batch.Blobs[i].GetLogicalOffsetSpan();
+            offsetSpan += Batch.Blobs[i].MessageCount;
         }
         ++reorderMap[TStringBuf(Batch.Blobs[i].SourceId)];
     }

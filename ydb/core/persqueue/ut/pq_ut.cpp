@@ -22,6 +22,13 @@ const static TString TOPIC_NAME = "/Root/LbCommunal/account/topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 
+void SetEnableTopicMessagesBatching(TTestContext& tc) {
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicMessagesBatching(true);
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    }
+}
+
 TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
 {
     TAutoPtr<IEventHandle> handle;
@@ -119,7 +126,7 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    SetEnableTopicMessagesBatching(tc);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -134,7 +141,7 @@ Y_UNIT_TEST(BatchedMessagesWriteWithInconsistentMaxSeqNoFails) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    SetEnableTopicMessagesBatching(tc);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -151,7 +158,7 @@ Y_UNIT_TEST(BatchedMessagesWriteWithInvalidBatchFieldsFails) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+    SetEnableTopicMessagesBatching(tc);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -168,8 +175,7 @@ Y_UNIT_TEST(BatchedMessagesWriteRead) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    SetEnableTopicMessagesBatching(tc);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -208,8 +214,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    SetEnableTopicMessagesBatching(tc);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -256,8 +261,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    SetEnableTopicMessagesBatching(tc);
 
     // Make the written data blobs smaller than the low watermark so forced compaction reads
     // and rewrites them instead of just renaming already compacted blobs.
@@ -318,8 +322,7 @@ Y_UNIT_TEST(BatchedMessagesFullDuplicateIsNotPartialOverlap) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    SetEnableTopicMessagesBatching(tc);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -337,8 +340,7 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    SetEnableTopicMessagesBatching(tc);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -383,7 +385,9 @@ Y_UNIT_TEST(OffsetDeltaInKeysCanBeDisabledAfterWrites) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    }
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -398,7 +402,9 @@ Y_UNIT_TEST(OffsetDeltaInKeysCanBeDisabledAfterWrites) {
     PQTabletRestart(tc);
     PQGetPartInfo(0, 2, tc);
 
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(false);
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(false);
+    }
     PQTabletRestart(tc);
 
     CmdWrite(0, sourceId, {{3, TString(dataSize, 'c')}}, tc, false, {}, false, "", -1, 2);

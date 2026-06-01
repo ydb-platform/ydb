@@ -4,6 +4,16 @@
 #include "partition_util.h"
 
 namespace NKikimr::NPQ {
+static EMessageFormat FromProtoMessageFormat(NKikimrClient::EMessageFormat format) {
+    switch (format) {
+        case NKikimrClient::STANDARD:
+            return EMessageFormat::STANDARD;
+        case NKikimrClient::KAFKA_BATCH:
+            return EMessageFormat::KAFKA_BATCH;
+    }
+    Y_ABORT("Unknown NKikimrClient::EMessageFormat");
+}
+
 std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequestCookie, ui64 startOffset, ui64 lastOffset, TMaybe<ui64> nextPartNo = Nothing()) {
     auto evRead = std::make_unique<TEvPQ::TEvRead>(
         nextRequestCookie,
@@ -455,7 +465,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
                          res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()),
                          res.HasMessageCount() ? res.GetMessageCount() : 1,
-                         res.HasMessageFormat() ? static_cast<EMessageFormat>(res.GetMessageFormat()) : EMessageFormat::STANDARD);
+                         res.HasMessageFormat() ? FromProtoMessageFormat(res.GetMessageFormat()) : EMessageFormat::STANDARD);
 
         if (res.HasTotalParts()) {
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};

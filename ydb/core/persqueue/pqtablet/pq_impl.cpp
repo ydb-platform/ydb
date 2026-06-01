@@ -56,6 +56,15 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
+static EMessageFormat FromProtoMessageFormat(NKikimrClient::EMessageFormat format) {
+    switch (format) {
+        case NKikimrClient::STANDARD:
+            return EMessageFormat::STANDARD;
+        case NKikimrClient::KAFKA_BATCH:
+            return EMessageFormat::KAFKA_BATCH;
+    }
+    Y_ABORT("Unknown NKikimrClient::EMessageFormat");
+}
 
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
@@ -1877,7 +1886,7 @@ void TPersQueue::FillBatchInfo(
         msg.MessageCount = static_cast<ui32>(cmd.GetMessageCount());
     }
     if (cmd.HasMessageFormat()) {
-        msg.MessageFormat = static_cast<EMessageFormat>(cmd.GetMessageFormat());
+        msg.MessageFormat = FromProtoMessageFormat(cmd.GetMessageFormat());
     }
     if (cmd.GetPartNo() > 0) {
         return;
@@ -1974,7 +1983,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
             errorStr = "MaxSeqNo must be >= 0";
         } else if (cmd.HasMessageCount() && (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT)) {
-            errorStr = "MessageCount must be >= 1 and <= MAX_MESSAGE_COUNT";
+            errorStr = TStringBuilder() << "MessageCount must be >= 1 and <= " << MAX_MESSAGE_COUNT;
         } else if (cmd.HasMessageFormat() && (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS))) {
             errorStr = "MessageFormat must be >= 0 and < 8";
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {

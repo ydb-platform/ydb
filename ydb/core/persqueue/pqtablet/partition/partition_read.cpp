@@ -338,6 +338,15 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
 
     ProcessTxsAndUserActs(ctx);
 }
+static NKikimrClient::EMessageFormat ToProtoMessageFormat(EMessageFormat format) {
+    switch (format) {
+        case EMessageFormat::STANDARD:
+            return NKikimrClient::STANDARD;
+        case EMessageFormat::KAFKA_BATCH:
+            return NKikimrClient::KAFKA_BATCH;
+    }
+    Y_ABORT("Unknown EMessageFormat");
+}
 
 template <typename T> // TCmdReadResult
 static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
@@ -360,7 +369,7 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
     }
 
     cc->SetMessageCount(blob.MessageCount);
-    cc->SetMessageFormat(static_cast<NKikimrClient::EMessageFormat>(blob.MessageFormat));
+    cc->SetMessageFormat(ToProtoMessageFormat(blob.MessageFormat));
 }
 
 template <typename T>
@@ -489,11 +498,11 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 batchStartIdx = 0;
             } else {
                 const ui64 trueSearchOffset = Offset - blobs[blobIdx].Key.GetOffset() + firstHeaderOffset;
-                const auto& cursor = batch.FindPos(trueSearchOffset, PartNo);
-                batchStartIdx = cursor.BlobIdx;
+                const auto& position = batch.FindPos(trueSearchOffset, PartNo);
+                batchStartIdx = position.BlobIdx;
                 if (batchStartIdx != Max<ui32>()) {
-                    Offset = cursor.Offset;
-                    PartNo = cursor.PartNo;
+                    Offset = position.Offset;
+                    PartNo = position.PartNo;
                 }
             }
             offset += header.GetCount();
@@ -522,7 +531,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
                 if (res.IsLastPart()) {
                     PartNo = 0;
-                    Offset += res.GetLogicalOffsetSpan();
+                    Offset += res.MessageCount;
                     if (ReachedLastOffset()) {
                         needStop = true;
                         break;
@@ -658,7 +667,7 @@ TReadAnswer TReadInfo::FormAnswer(
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
                 PartNo = 0;
-                Offset += writeBlob.GetLogicalOffsetSpan();
+                Offset += writeBlob.MessageCount;
             } else {
                 ++PartNo;
             }

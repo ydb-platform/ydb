@@ -159,14 +159,14 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             ui64 curOffset = offset;
 
             AFL_ENSURE(pno == blobs[i].GetPartNo());
-            bool skip = (offset + blobs[i].GetLogicalOffsetSpan() <= startOffset)
+            bool skip = (offset + blobs[i].MessageCount <= startOffset)
                 || (offset == startOffset && blobs[i].GetPartNo() < partNo);
 
             if (0 < lastOffset && lastOffset <= offset) {
                 break;
             }
             if (blobs[i].IsLastPart()) {
-                offset += blobs[i].GetLogicalOffsetSpan();
+                offset += blobs[i].MessageCount;
                 pno = 0;
             } else {
                 ++pno;

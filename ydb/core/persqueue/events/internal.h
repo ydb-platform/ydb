@@ -304,11 +304,6 @@ struct TEvPQ {
             ui32 MessageCount = 1;
             NPQ::EMessageFormat MessageFormat = NPQ::EMessageFormat::STANDARD;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
-
-            // Number of logical offsets occupied by this message on the partition.
-            ui32 GetOffsetsCount() const {
-                return MessageCount;
-            }
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)

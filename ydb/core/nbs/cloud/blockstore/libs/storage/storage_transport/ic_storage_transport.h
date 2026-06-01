@@ -39,8 +39,7 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
-    NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
-    WriteToManyPBuffers(
+    void WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,
@@ -48,7 +47,8 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
-        NWilson::TSpan* span) override;
+        std::shared_ptr<NWilson::TSpan> span,
+        TWriteToManyPBuffersCallback callback) override;
 
     NThreading::TFuture<TEvWriteResult> WriteToDDisk(
         const THostConnection& connection,

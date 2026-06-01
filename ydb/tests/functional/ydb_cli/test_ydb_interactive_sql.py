@@ -960,6 +960,44 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
             exit_code=execution.exit_code,
         )
 
+    @staticmethod
+    def _combined_output(result: "BaseInteractiveTest.ExecutionResult") -> str:
+        return result.stdout + result.stderr
+
+    @classmethod
+    def _combined_lower(cls, result: "BaseInteractiveTest.ExecutionResult") -> str:
+        return cls._combined_output(result).lower()
+
+    def _assert_show_create_table_ran(self, result: "BaseInteractiveTest.ExecutionResult") -> None:
+        """SHOW CREATE TABLE returned DDL for the fixture table (see create_table)."""
+        combined = self._combined_lower(result)
+        assert "cannot be executed inside an interactive transaction" not in combined
+        assert "create table" in combined
+        assert "`id`" in combined
+        assert "`name`" in combined
+        assert "primary key" in combined
+        assert self.tmp_path.name.lower() in combined
+
+    @staticmethod
+    def _assert_stdout_contains(result: "BaseInteractiveTest.ExecutionResult", *values: str) -> None:
+        for value in values:
+            assert value in result.stdout
+
+    @staticmethod
+    def _assert_combined_has_error(combined_lower: str) -> None:
+        """YDB/CLI errors are wording-dependent; match a small stable set."""
+        assert any(
+            marker in combined_lower
+            for marker in (
+                "error",
+                "failed",
+                "not found",
+                "does not exist",
+                "path not found",
+                "unknown",
+            )
+        )
+
     # ------------------------------------------------------------------
     # Happy path: BEGIN / COMMIT / ROLLBACK forms
     # ------------------------------------------------------------------
@@ -1077,7 +1115,7 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         # "unknown mode" path (which would imply the user mistyped).
         assert "online-ro" in combined
         assert "--tx-mode" in combined
-        assert "COMMIT" not in result.stdout
+        assert "BEGIN" not in result.stdout
 
     def test_stale_ro_rejected_as_interactive_mode(self):
         """stale-ro is one-shot only; BEGIN must reject it client-side with a hint."""
@@ -1089,7 +1127,7 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         combined = result.stdout + result.stderr
         assert "stale-ro" in combined
         assert "--tx-mode" in combined
-        assert "COMMIT" not in result.stdout
+        assert "BEGIN" not in result.stdout
 
     def test_begin_rejects_trailing_tokens(self):
         """Extra tokens after a supported mode must not open a transaction."""
@@ -1098,10 +1136,10 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
             self.tmp_path,
         )
         assert result.exit_code == 0
-        combined = result.stdout + result.stderr
-        assert "unknown" in combined.lower() or "malformed" in combined.lower()
-        assert "COMMIT" not in result.stdout
-        assert "Supported modes:" in combined
+        combined = self._combined_lower(result)
+        assert "unknown" in combined or "malformed" in combined
+        assert "BEGIN" not in result.stdout
+        assert "Supported modes:" in self._combined_output(result)
 
     # ------------------------------------------------------------------
     # Negative parsing: rejected forms
@@ -1113,8 +1151,9 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
             self.tmp_path,
         )
         assert result.exit_code == 0
-        combined = result.stdout + result.stderr
-        assert "unknown" in combined.lower() or "malformed" in combined.lower()
+        combined = self._combined_lower(result)
+        assert "unknown" in combined or "malformed" in combined
+        assert "BEGIN" not in result.stdout
 
     def test_psql_isolation_level_syntax_rejected(self):
         """The PostgreSQL-style "ISOLATION LEVEL READ COMMITTED" form is not supported.
@@ -1130,10 +1169,9 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
             self.tmp_path,
         )
         assert result.exit_code == 0
-        combined = result.stdout + result.stderr
-        assert "unknown" in combined.lower() or "malformed" in combined.lower()
-        # Nothing actually got committed.
-        assert "COMMIT" not in result.stdout
+        combined = self._combined_lower(result)
+        assert "unknown" in combined or "malformed" in combined
+        assert "BEGIN" not in result.stdout
 
     def test_draft_tcl_keywords_from_pr_41859_not_supported(self):
         """Legacy TCL from the draft PR must not open or commit interactive transactions."""
@@ -1296,6 +1334,7 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert result.stdout.count("BEGIN") >= 3
         assert result.stdout.count("COMMIT") >= 2
         assert result.stdout.count("ROLLBACK") >= 1
+        self._assert_stdout_contains(result, "51", "52", "53")
 
     def test_ddl_rejected_inside_transaction(self):
         """CREATE TABLE must not be sent to the server while a transaction is open."""
@@ -1311,9 +1350,11 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
             self.tmp_path,
         )
         assert result.exit_code == 0
-        combined = (result.stdout + result.stderr).lower()
+        combined = self._combined_lower(result)
         assert "cannot be executed inside an interactive transaction" in combined
         assert "ROLLBACK" in result.stdout
+        # CREATE was blocked; the table must not exist for the post-ROLLBACK scan.
+        self._assert_combined_has_error(combined)
 
     def test_show_create_allowed_inside_transaction(self):
         """SHOW CREATE TABLE is read-only DDL and must pass through inside a transaction."""
@@ -1327,8 +1368,7 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
             self.tmp_path,
         )
         assert result.exit_code == 0
-        combined = (result.stdout + result.stderr).lower()
-        assert "cannot be executed inside an interactive transaction" not in combined
+        self._assert_show_create_table_ran(result)
         assert "ROLLBACK" in result.stdout
 
     def test_failed_query_invalidates_transaction(self):

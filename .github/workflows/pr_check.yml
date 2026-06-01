@@ -247,10 +247,19 @@ jobs:
               return 'true';
             }
 
-            const nonSafeFiles = files.filter((file) => !isSafeFile(file));
-            const hasNonSafeChanges = nonSafeFiles.length > 0;
+            let hasNonSafeChanges = false;
+            let firstNonSafeFile = '';
+            for (const file of files) {
+              if (!isSafeFile(file)) {
+                hasNonSafeChanges = true;
+                firstNonSafeFile = file;
+                break;
+              }
+            }
             core.info(`changed_files=${JSON.stringify(files)}`);
-            core.info(`non_safe_files=${JSON.stringify(nonSafeFiles)}`);
+            if (hasNonSafeChanges) {
+              core.info(`first_non_safe_file=${firstNonSafeFile}`);
+            }
             core.info(`tests_required=${hasNonSafeChanges}`);
             core.setOutput('tests_required', hasNonSafeChanges ? 'true' : 'false');
             return hasNonSafeChanges ? 'true' : 'false';

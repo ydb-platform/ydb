@@ -335,7 +335,7 @@ namespace NDiscoveryPrivate {
 
         void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle",
-                {"#_ev->Get()->ToString()", ev->Get()->ToString()});
+                {"event", ev->Get()->ToString()});
             if (!AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                 return;
             }
@@ -663,8 +663,8 @@ public:
         auto info = entry.DomainInfo;
         if (NeedResolveResources(info)) {
             YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Resolve resources domain : domain, resources domain",
-                {"key", info->DomainKey},
-                {"#_key", info->ResourcesDomainKey});
+                {"domain_key", info->DomainKey},
+                {"resources_domain_key", info->ResourcesDomainKey});
 
             Navigate(info->ResourcesDomainKey);
             ResolveResources = true;

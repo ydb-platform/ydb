@@ -7,21 +7,18 @@ namespace NKikimr::NDDisk {
 
 namespace {
 
-// Helper: build an allocator with one chunk of given size (sectors).
 TPersistentBufferSpaceAllocator MakeAllocator(ui32 sectorsInChunk = 1024, ui32 chunkIdx = 0) {
     TPersistentBufferSpaceAllocator alloc(sectorsInChunk);
     alloc.AddNewChunk(chunkIdx);
     return alloc;
 }
 
-// Helper: build a manager already initialized.
 TPersistentBufferBarriersManager MakeManager() {
     TPersistentBufferBarriersManager mgr;
     mgr.Initialize(/*uniqueId=*/1, /*nodeId=*/1, /*pdiskId=*/1, /*slotId=*/1);
     return mgr;
 }
 
-// Helper: produce a fake sector info.
 TPersistentBufferSectorInfo MakeSector(ui32 chunkIdx, ui32 sectorIdx) {
     TPersistentBufferSectorInfo s{};
     s.ChunkIdx = chunkIdx;
@@ -29,27 +26,20 @@ TPersistentBufferSectorInfo MakeSector(ui32 chunkIdx, ui32 sectorIdx) {
     return s;
 }
 
-// ErasesBufferSize = 3832 bytes.
-// Raw format stores each LSN as 8 bytes, so max raw LSNs = 3832/8 = 479.
-// Compact (LEB128 delta) format is triggered when total LSNs > 479.
 static constexpr ui32 MaxRawLsns = TPersistentBufferHeader::ErasesBufferSize / sizeof(ui64);
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
-    // -----------------------------------------------------------------------
-    // Compact: IS_ERASE_COMPACT is NOT set when LSN count fits in raw storage
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(CompactDoesNotSetFlagWhenFitsRaw) {
         auto mgr = MakeManager();
 
         // Use exactly MaxRawLsns LSNs split across old and new – fits raw.
-        std::unordered_set<ui64> oldLsns;
-        std::unordered_set<ui64> newLsns;
-        for (ui64 i = 1; i <= 200; i++) oldLsns.insert(i * 10);
-        for (ui64 i = 201; i <= MaxRawLsns; i++) newLsns.insert(i * 10);
+        std::vector<ui64> oldLsns;
+        std::vector<ui64> newLsns;
+        for (ui64 i = 1; i <= 200; i++) oldLsns.push_back(i * 10);
+        for (ui64 i = 201; i <= MaxRawLsns; i++) newLsns.push_back(i * 10);
 
         TPersistentBufferHeader header{};
         bool ok = mgr.Compact(oldLsns, newLsns, header);
@@ -61,18 +51,14 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             "IS_ERASE_COMPACT must not be set when data fits in raw storage");
     }
 
-    // -----------------------------------------------------------------------
-    // Compact: IS_ERASE_COMPACT IS set when LSN count exceeds raw capacity
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(CompactSetsFlagWhenExceedsRaw) {
         auto mgr = MakeManager();
 
         // Use MaxRawLsns + 1 LSNs total – forces LEB128 delta encoding.
-        std::unordered_set<ui64> oldLsns;
-        std::unordered_set<ui64> newLsns;
-        for (ui64 i = 1; i <= 300; i++) oldLsns.insert(i);
-        for (ui64 i = 301; i <= MaxRawLsns + 1; i++) newLsns.insert(i);
+        std::vector<ui64> oldLsns;
+        std::vector<ui64> newLsns;
+        for (ui64 i = 1; i <= 300; i++) oldLsns.push_back(i);
+        for (ui64 i = 301; i <= MaxRawLsns + 1; i++) newLsns.push_back(i);
 
         TPersistentBufferHeader header{};
         bool ok = mgr.Compact(oldLsns, newLsns, header);
@@ -84,18 +70,14 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             "IS_ERASE_COMPACT must be set when data requires delta encoding");
     }
 
-    // -----------------------------------------------------------------------
-    // Compact / Uncompact round-trip WITH IS_ERASE_COMPACT
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(CompactUncompactRoundTripWithFlag) {
         auto mgr = MakeManager();
 
         // Build a set large enough to require LEB128 encoding.
-        std::unordered_set<ui64> oldLsns;
-        std::unordered_set<ui64> newLsns;
-        for (ui64 i = 1; i <= 300; i++) oldLsns.insert(i);
-        for (ui64 i = 301; i <= MaxRawLsns + 1; i++) newLsns.insert(i);
+        std::vector<ui64> oldLsns;
+        std::vector<ui64> newLsns;
+        for (ui64 i = 1; i <= 300; i++) oldLsns.push_back(i);
+        for (ui64 i = 301; i <= MaxRawLsns + 1; i++) newLsns.push_back(i);
 
         TPersistentBufferHeader header{};
         bool ok = mgr.Compact(oldLsns, newLsns, header);
@@ -108,20 +90,16 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 expectedCount = MaxRawLsns + 1;
         UNIT_ASSERT_VALUES_EQUAL(recovered.size(), expectedCount);
         for (ui64 i = 1; i <= expectedCount; i++) {
-            UNIT_ASSERT_C(recovered.count(i), "LSN " << i << " missing after Uncompact");
+            UNIT_ASSERT_C(recovered[i - 1] == i, "LSN " << i << " missing after Uncompact");
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Compact / Uncompact round-trip WITHOUT IS_ERASE_COMPACT
-    // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(CompactUncompactRoundTripNoFlag) {
         auto mgr = MakeManager();
 
         // Use a small set that fits in raw storage (no delta encoding).
-        std::unordered_set<ui64> oldLsns = {5, 15};
-        std::unordered_set<ui64> newLsns = {25, 35};
+        std::vector<ui64> oldLsns = {5, 15};
+        std::vector<ui64> newLsns = {25, 35};
 
         TPersistentBufferHeader header{};
         bool ok = mgr.Compact(oldLsns, newLsns, header);
@@ -130,24 +108,17 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         bool isCompact = (header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT) != 0;
         auto recovered = mgr.Uncompact(header.Erase.CompactLsns, isCompact);
+        std::vector<ui64> expected = {5ULL, 15ULL, 25ULL, 35ULL};
+        UNIT_ASSERT_VALUES_EQUAL(recovered, expected);
 
-        // All four LSNs must survive the round-trip.
-        for (ui64 lsn : {5ULL, 15ULL, 25ULL, 35ULL}) {
-            UNIT_ASSERT_C(recovered.count(lsn), "LSN " << lsn << " missing after Uncompact");
-        }
-        UNIT_ASSERT_VALUES_EQUAL(recovered.size(), 4u);
     }
-
-    // -----------------------------------------------------------------------
-    // Erase: basic call succeeds and IS_ERASE flag is set
-    // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(EraseBasicSucceeds) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator();
 
         const ui64 tabletId = 100;
-        std::unordered_set<ui64> lsns = {10, 20};
+        std::vector<ui64> lsns = {10, 20};
 
         auto result = mgr.Erase(tabletId, lsns, alloc);
         UNIT_ASSERT(result.has_value());
@@ -159,12 +130,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 2u);
     }
 
-    // -----------------------------------------------------------------------
-    // Erase/AddErase round-trip with compact data.
-    // When Compact() chooses delta encoding, it sets IS_ERASE_COMPACT; Erase() then adds IS_ERASE on top,
-    // so the persisted header may carry both flags and AddErase() relies on IS_ERASE_COMPACT to decode.
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(EraseAddEraseRoundTripWithCompactData) {
         auto mgr = MakeManager();
         // Need enough free space for multiple Erase calls.
@@ -173,37 +138,27 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 200;
 
         // First batch: 240 LSNs (fits raw).
-        std::unordered_set<ui64> firstBatch;
-        for (ui64 i = 1; i <= 240; i++) firstBatch.insert(i);
+        std::vector<ui64> firstBatch;
+        for (ui64 i = 1; i <= 240; i++) firstBatch.push_back(i);
         auto r1 = mgr.Erase(tabletId, firstBatch, alloc);
         UNIT_ASSERT(r1.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 240u);
 
-        // Second batch: add enough LSNs so old(240) + new(300) = 540 > MaxRawLsns(479).
-        // Compact() will use LEB128 and set IS_ERASE_COMPACT in the header it fills.
-        // Erase() then overwrites header.Flags = IS_ERASE, so the returned header
-        // has only IS_ERASE.  But the CompactLsns buffer is encoded compactly.
-        std::unordered_set<ui64> secondBatch;
-        for (ui64 i = 241; i <= 540; i++) secondBatch.insert(i);
+        std::vector<ui64> secondBatch;
+        for (ui64 i = 241; i <= 540; i++) secondBatch.push_back(i);
         auto r2 = mgr.Erase(tabletId, secondBatch, alloc);
         UNIT_ASSERT(r2.has_value());
         UNIT_ASSERT(r2->Header.Flags & TPersistentBufferHeader::IS_ERASE);
 
-        // All 540 LSNs must be tracked in the manager.
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 540u);
 
-        // Simulate recovery: build a fresh manager and feed the header back via
-        // AddErase.  The header must carry IS_ERASE_COMPACT so Uncompact decodes
-        // correctly.  We set it explicitly here because Erase() cleared it, but
-        // in production the persisted header is the one written by Compact() before
-        // Erase() overwrites Flags.  This test documents the expected contract.
         TPersistentBufferBarriersManager mgr2;
         mgr2.Initialize(1, 1, 1, 1);
 
         // Build a header that correctly reflects what Compact() produced.
-        std::unordered_set<ui64> allLsns;
-        for (ui64 i = 1; i <= 540; i++) allLsns.insert(i);
-        std::unordered_set<ui64> emptyOld;
+        std::vector<ui64> allLsns;
+        for (ui64 i = 1; i <= 540; i++) allLsns.push_back(i);
+        std::vector<ui64> emptyOld;
         TPersistentBufferHeader compactHeader{};
         bool ok = mgr2.Compact(emptyOld, allLsns, compactHeader);
         UNIT_ASSERT(ok);
@@ -218,18 +173,14 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(mgr2.GetErasesCount(tabletId), 540u);
     }
 
-    // -----------------------------------------------------------------------
-    // AddErase with IS_ERASE_COMPACT flag decodes correctly
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(AddEraseCompact) {
         auto mgr = MakeManager();
 
         // Build a compact header via Compact().
-        std::unordered_set<ui64> oldLsns;
-        std::unordered_set<ui64> newLsns;
-        for (ui64 i = 1; i <= 300; i++) oldLsns.insert(i);
-        for (ui64 i = 301; i <= MaxRawLsns + 1; i++) newLsns.insert(i);
+        std::vector<ui64> oldLsns;
+        std::vector<ui64> newLsns;
+        for (ui64 i = 1; i <= 300; i++) oldLsns.push_back(i);
+        for (ui64 i = 301; i <= MaxRawLsns + 1; i++) newLsns.push_back(i);
 
         TPersistentBufferHeader header{};
         memset(&header, 0, sizeof(header));
@@ -237,7 +188,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT(ok);
         UNIT_ASSERT(header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT);
 
-        // AddErase requires IS_ERASE to be set (Compact only sets IS_ERASE_COMPACT).
         header.Flags |= TPersistentBufferHeader::IS_ERASE;
         header.RecordLsn = 1;
         header.Erase.TabletId = 2000;
@@ -246,11 +196,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT(added);
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(2000), MaxRawLsns + 1);
     }
-
-    // -----------------------------------------------------------------------
-    // AddErase without IS_ERASE_COMPACT (non-compact, two LSNs)
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(AddEraseNonCompact) {
         auto mgr = MakeManager();
 
@@ -260,7 +205,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         header.RecordLsn = 1;
         header.Erase.TabletId = 1000;
 
-        // Write two raw LSNs into CompactLsns (non-compact format).
         ui64 lsn1 = 111, lsn2 = 222;
         memcpy(header.Erase.CompactLsns, &lsn1, 8);
         memcpy(header.Erase.CompactLsns + 8, &lsn2, 8);
@@ -270,10 +214,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(1000), 2u);
     }
 
-    // -----------------------------------------------------------------------
-    // MoveBarrier cleans up LSNs from Erase that are <= new barrier LSN
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(MoveBarrierCleansEraseLsns) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
@@ -281,7 +221,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 300;
 
         // Register some erased LSNs: 10, 20, 30, 40, 50.
-        std::unordered_set<ui64> erasedLsns = {10, 20, 30, 40, 50};
+        std::vector<ui64> erasedLsns = {10, 20, 30, 40, 50};
         auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 5u);
@@ -294,17 +234,13 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 2u);
     }
 
-    // -----------------------------------------------------------------------
-    // MoveBarrier removes ALL erase LSNs when barrier advances past all of them
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(MoveBarrierClearsAllEraseLsns) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
 
         const ui64 tabletId = 400;
 
-        std::unordered_set<ui64> erasedLsns = {5, 15, 25};
+        std::vector<ui64> erasedLsns = {5, 15, 25};
         auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 3u);
@@ -316,17 +252,13 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 0u);
     }
 
-    // -----------------------------------------------------------------------
-    // MoveBarrier keeps LSNs that are strictly greater than the barrier
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(MoveBarrierKeepsLsnsAboveBarrier) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
 
         const ui64 tabletId = 500;
 
-        std::unordered_set<ui64> erasedLsns = {10, 20, 30, 40, 50};
+        std::vector<ui64> erasedLsns = {10, 20, 30, 40, 50};
         auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
 
@@ -336,10 +268,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 4u);
     }
-
-    // -----------------------------------------------------------------------
-    // MoveBarrier on a tablet with no Erase record does not crash
-    // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(MoveBarrierNoEraseRecord) {
         auto mgr = MakeManager();
@@ -354,17 +282,13 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 50u);
     }
 
-    // -----------------------------------------------------------------------
-    // Multiple MoveBarrier calls progressively clean erase LSNs
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(MoveBarrierProgressivelyCleansEraseLsns) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
 
         const ui64 tabletId = 700;
 
-        std::unordered_set<ui64> erasedLsns = {10, 20, 30, 40, 50, 60, 70, 80};
+        std::vector<ui64> erasedLsns = {10, 20, 30, 40, 50, 60, 70, 80};
         auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 8u);
@@ -385,10 +309,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 0u);
     }
 
-    // -----------------------------------------------------------------------
-    // Erase returns nullopt when allocator has no free space
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(EraseReturnsNulloptWhenNoFreeSpace) {
         auto mgr = MakeManager();
         // Allocator with only 1 sector – Erase requires >= 2 free sectors.
@@ -396,32 +316,22 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         alloc.AddNewChunk(0);
 
         const ui64 tabletId = 800;
-        std::unordered_set<ui64> lsns = {1, 2};
+        std::vector<ui64> lsns = {1, 2};
 
         auto result = mgr.Erase(tabletId, lsns, alloc);
         UNIT_ASSERT(!result.has_value());
     }
-
-    // -----------------------------------------------------------------------
-    // Erase returns nullopt when lsns set has fewer than 2 elements
-    // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(EraseReturnsNulloptWhenTooFewLsns) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
 
         const ui64 tabletId = 900;
-        std::unordered_set<ui64> lsns = {42};  // only 1 LSN
+        std::vector<ui64> lsns = {42};  // only 1 LSN
 
         auto result = mgr.Erase(tabletId, lsns, alloc);
         UNIT_ASSERT(!result.has_value());
     }
-
-    // -----------------------------------------------------------------------
-    // RestoreErases: LSNs <= barrier are removed from erase.Lsns and NOT
-    // applied to persistentBuffers (barrier already covers them).
-    // LSNs > barrier remain in erase.Lsns and ARE applied.
-    // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(RestoreErasesFiltersLsnsBehindBarrier) {
         auto mgr = MakeManager();
@@ -488,11 +398,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             "Tablet must be removed: records 40 and 50 were erased by RestoreErases");
     }
 
-    // -----------------------------------------------------------------------
-    // RestoreErases: barrier covers ALL erase LSNs — nothing is applied,
-    // erase entry is kept (tablet still has records above barrier)
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(RestoreErasesBarrierCoversAllEraseLsns) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
@@ -552,10 +457,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_C(pbIt->second.Records.count(200), "Record 200 must remain untouched");
     }
 
-    // -----------------------------------------------------------------------
-    // RestoreErases: no barrier — all erase LSNs are applied
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(RestoreErasesNoBarrierAppliesAllLsns) {
         auto mgr = MakeManager();
 
@@ -600,17 +501,12 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_C(records.count(35),  "LSN 35 must remain");
     }
 
-    // -----------------------------------------------------------------------
-    // Compact raw path: duplicates between oldLsns and newLsns are skipped
-    // (no double-write), Uncompact returns the correct unique set
-    // -----------------------------------------------------------------------
-
     Y_UNIT_TEST(CompactRawPathSkipsDuplicates) {
         auto mgr = MakeManager();
 
         // oldLsns and newLsns share LSNs 20 and 30.
-        std::unordered_set<ui64> oldLsns = {10, 20, 30};
-        std::unordered_set<ui64> newLsns = {20, 30, 40};
+        std::vector<ui64> oldLsns = {10, 20, 30};
+        std::vector<ui64> newLsns = {20, 30, 40};
 
         TPersistentBufferHeader header{};
         memset(&header, 0, sizeof(header));
@@ -624,24 +520,15 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         bool isCompact = (header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT) != 0;
         auto recovered = mgr.Uncompact(header.Erase.CompactLsns, isCompact);
-
-        // Must recover exactly {10, 20, 30, 40}.
-        UNIT_ASSERT_VALUES_EQUAL_C(recovered.size(), 4u,
-            "Exactly 4 unique LSNs must be recovered, got " << recovered.size());
-        for (ui64 lsn : {10ULL, 20ULL, 30ULL, 40ULL}) {
-            UNIT_ASSERT_C(recovered.count(lsn), "LSN " << lsn << " missing after Uncompact");
-        }
+        std::vector<ui64> expected = {10ULL, 20ULL, 30ULL, 40ULL};
+        UNIT_ASSERT_VALUES_EQUAL(recovered, expected);
     }
-
-    // -----------------------------------------------------------------------
-    // Compact raw path: oldLsns == newLsns entirely — only unique ones written
-    // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(CompactRawPathAllDuplicates) {
         auto mgr = MakeManager();
 
-        std::unordered_set<ui64> oldLsns = {5, 15, 25, 35};
-        std::unordered_set<ui64> newLsns = {5, 15, 25, 35};
+        std::vector<ui64> oldLsns = {5, 15, 25, 35};
+        std::vector<ui64> newLsns = oldLsns;
 
         TPersistentBufferHeader header{};
         memset(&header, 0, sizeof(header));
@@ -654,26 +541,18 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         bool isCompact = (header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT) != 0;
         auto recovered = mgr.Uncompact(header.Erase.CompactLsns, isCompact);
-        UNIT_ASSERT_VALUES_EQUAL_C(recovered.size(), 4u,
-            "Exactly 4 unique LSNs must be recovered, got " << recovered.size());
-        for (ui64 lsn : {5ULL, 15ULL, 25ULL, 35ULL}) {
-            UNIT_ASSERT_C(recovered.count(lsn), "LSN " << lsn << " missing after Uncompact");
-        }
+        UNIT_ASSERT_VALUES_EQUAL(recovered, newLsns);
     }
-
-    // -----------------------------------------------------------------------
-    // Compact LEB128 path: duplicates between oldLsns and newLsns are skipped
-    // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(CompactLeb128PathSkipsDuplicates) {
         auto mgr = MakeManager();
 
         // oldLsns: 1..300, newLsns: 250..550 — overlap at 250..300 (51 duplicates).
         // Unique count = 550, sum = 601 > MaxRawLsns(479) → forces LEB128 path.
-        std::unordered_set<ui64> oldLsns;
-        std::unordered_set<ui64> newLsns;
-        for (ui64 i = 1; i <= 300; i++) oldLsns.insert(i);
-        for (ui64 i = 250; i <= 550; i++) newLsns.insert(i);
+        std::vector<ui64> oldLsns;
+        std::vector<ui64> newLsns;
+        for (ui64 i = 1; i <= 300; i++) oldLsns.push_back(i);
+        for (ui64 i = 250; i <= 550; i++) newLsns.push_back(i);
 
         TPersistentBufferHeader header{};
         memset(&header, 0, sizeof(header));
@@ -690,7 +569,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(recovered.size(), 550u,
             "Exactly 550 unique LSNs must be recovered, got " << recovered.size());
         for (ui64 i = 1; i <= 550; i++) {
-            UNIT_ASSERT_C(recovered.count(i), "LSN " << i << " missing after Uncompact");
+            UNIT_ASSERT_C(recovered[i - 1] == i, "LSN " << i << " missing after Uncompact");
         }
     }
 

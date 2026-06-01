@@ -1214,8 +1214,8 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
 
         std::vector<std::tuple<ui64, ui32>> erases;
-        std::unordered_set<ui64> fastErases;
-
+        std::vector<ui64> fastErases;
+        fastErases.reserve(record.ErasesSize());
         for (auto& e : record.GetErases()) {
             auto lsn = e.GetLsn();
             auto generation = e.GetGeneration();
@@ -1223,7 +1223,7 @@ namespace NKikimr::NDDisk {
             if (it != PersistentBuffers.end() && it->second.Records.find(lsn) != it->second.Records.end()) {
                 erases.emplace_back(lsn, generation);
                 if (PersistentBufferFormat.EnableFastErases) {
-                    fastErases.insert(lsn);
+                    fastErases.push_back(lsn);
                 }
             }
         }

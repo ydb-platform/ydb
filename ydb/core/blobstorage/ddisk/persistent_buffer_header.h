@@ -1,47 +1,12 @@
 #pragma once
 
+#include "ddisk.h"
 #include "persistent_buffer.h"
 
 namespace NKikimr::NDDisk {
-    struct TPersistentBufferHeader {
+
+    struct TPersistentBufferHeaderBase {
         static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
-        static constexpr ui32 HeaderChecksumOffset = 24;
-        static constexpr ui32 HeaderChecksumSize = 8;
-        static constexpr ui32 MaxBarriersPerHeader = 240;
-        static constexpr ui32 ErasesBufferSize = 3832;
-
-        // Heuristic based on ErasesBufferSize, means that it's better to fallback on zeroing erases
-        // If lsns count exeed this number - barrier was not moved for a long time and fast erases is not efficient in this case.
-        // It is better to fall back to zeroing erases a little bit earlier,
-        // than continue every erase call Compact method to check erase sector overfill.
-        static constexpr ui32 ErasesBufferLsnCount = 3800;
-        static constexpr ui32 MaxSectorsPerBufferRecord = 128;
-
-        struct TRecord {
-            ui64 TabletId;
-            ui32 Generation;
-            ui64 VChunkIndex;
-            ui32 OffsetInBytes;
-            ui32 Size;
-            ui64 Lsn;
-            TPersistentBufferSectorInfo Locations[MaxSectorsPerBufferRecord];
-        };
-
-        struct TBarrier {
-            struct TBarrierRecord {
-                ui64 TabletId;
-                ui64 Lsn;
-            };
-
-            ui32 BarrierIdx;
-            TBarrierRecord Barriers[MaxBarriersPerHeader];
-        };
-
-        struct TErase {
-            ui64 TabletId;
-            ui32 EraseIdx;
-            char CompactLsns[ErasesBufferSize];
-        };
 
         enum EFlags : ui64 {
             NONE = 0,
@@ -59,6 +24,54 @@ namespace NKikimr::NDDisk {
         ui32 NodeId;
         ui32 PDiskId;
         ui32 SlotId;
+        ui32 Reserved[45];
+    };
+
+    struct TPersistentBufferHeaderRecordBase {
+        ui64 TabletId;
+        ui32 Generation;
+        ui64 VChunkIndex;
+        ui32 OffsetInBytes;
+        ui32 Size;
+        ui64 Lsn;
+    };
+
+    struct TPersistentBufferHeaderBarrierRecord {
+        ui64 TabletId;
+        ui64 Lsn;
+    };
+
+    struct TPersistentBufferHeaderBarrierBase {
+        ui32 BarrierIdx;
+    };
+
+    struct TPersistentBufferHeaderEraseBase {
+        ui64 TabletId;
+        ui32 EraseIdx;
+    };
+
+    struct TPersistentBufferHeader : public TPersistentBufferHeaderBase {
+        static constexpr ui32 MaxBarriersPerHeader = (DataAlignment - sizeof(TPersistentBufferHeaderBase) - sizeof(TPersistentBufferHeaderBarrierBase)) / sizeof(TPersistentBufferHeaderBarrierRecord);
+        static constexpr ui32 ErasesBufferSize = (DataAlignment - sizeof(TPersistentBufferHeaderBase) - sizeof(TPersistentBufferHeaderEraseBase)) / sizeof(char);
+
+        // Heuristic based on ErasesBufferSize, means that it's better to fallback on zeroing erases
+        // If lsns count exeed this number - barrier was not moved for a long time and fast erases is not efficient in this case.
+        // It is better to fall back to zeroing erases a little bit earlier,
+        // than continue every erase call Compact method to check erase sector overfill.
+        static constexpr ui32 ErasesBufferLsnCount = ErasesBufferSize - 32;
+        static constexpr ui32 MaxSectorsPerBufferRecord = 128;
+
+        struct TRecord : public TPersistentBufferHeaderRecordBase {
+            TPersistentBufferSectorInfo Locations[MaxSectorsPerBufferRecord];
+        };
+
+        struct TBarrier : public TPersistentBufferHeaderBarrierBase {
+            TPersistentBufferHeaderBarrierRecord Barriers[MaxBarriersPerHeader];
+        };
+
+        struct TErase : public TPersistentBufferHeaderEraseBase {
+            char CompactLsns[ErasesBufferSize];
+        };
 
         union {
             TRecord Record;
@@ -66,7 +79,6 @@ namespace NKikimr::NDDisk {
             TErase Erase;
         };
 
-        ui32 Reserved[45];
     };
 
     static_assert(sizeof(TPersistentBufferHeader) == 4096);

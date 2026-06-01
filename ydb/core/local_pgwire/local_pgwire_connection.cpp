@@ -82,7 +82,7 @@ public:
             TBase::Become(&TPgYdbConnection::StateSchedule);
             ConnectionEvent.Destroy(); // don't need it anymore
         } else {
-            YDB_LOG_WARN("Failed to create",
+            YDB_LOG_WARN("Failed to create session",
                 {"session", record.ShortDebugString()});
             auto response = MakeHolder<NPG::TEvPGEvents::TEvFinishHandshake>();
             // TODO: report actuall error

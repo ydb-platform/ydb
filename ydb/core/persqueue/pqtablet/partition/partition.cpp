@@ -2101,6 +2101,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_GAPS_COUNT, gapsCount, METRIC_MAX_GAPS_COUNT);
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
@@ -2127,14 +2128,27 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
     PQ_ENSURE(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
 
+    ui64 bytesThrottledMicroseconds = 0;
+    ui64 messagesThrottledMicroseconds = 0;
+    bool hasWriteQuotaUsage = false;
+
     if (TotalPartitionWriteSpeed) {
-        ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, quotaUsage);
+        const ui64 avgQuotaBytes = AvgQuotaBytes[1].GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE, avgQuotaBytes);
+        bytesThrottledMicroseconds = avgQuotaBytes * 1000000 / TotalPartitionWriteSpeed / 60;
+        hasWriteQuotaUsage = true;
     }
 
     if (TotalPartitionWriteSpeedInMessages) {
-        ui64 quotaUsage = ui64(AvgQuotaMessages.GetValue()) * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, quotaUsage);
+        const ui64 avgQuotaMessages = AvgQuotaMessages.GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, avgQuotaMessages);
+        messagesThrottledMicroseconds = avgQuotaMessages * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
+        hasWriteQuotaUsage = true;
+    }
+
+    if (hasWriteQuotaUsage) {
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE,
+            Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
     }
 
     ui64 storageSize = StorageSize(ctx);

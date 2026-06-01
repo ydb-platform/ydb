@@ -77,6 +77,29 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
         order by t1.Value
     )";
 
+constexpr auto SimpleWideSortWithSpillingQuery = R"(
+        --!syntax_v1
+        PRAGMA ydb.EnableSpillingNodes="WideSort";
+        PRAGMA ydb.DisableBlockExecution;
+        select Key, Value
+        from `/Root/KeyValue`
+        order by Value
+    )";
+
+void FillTableWithManyRows(NQuery::TQueryClient& db, ui64 numRows=2000) {
+    const ui64 batchSize = 50;
+    for (ui64 batch = 0; batch < numRows; batch += batchSize) {
+        TStringBuilder query;
+        query << "--!syntax_v1" << Endl;
+        query << "REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES ";
+        for (ui64 i = batch; i < batch + batchSize && i < numRows; ++i) {
+            if (i > batch) query << ", ";
+            query << "(" << i << ", \"" << TString(1000, 'a' + (i % 26)) << "\")";
+        }
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+}
 
 } // anonymous namespace
 
@@ -263,6 +286,58 @@ Y_UNIT_TEST(SelfJoin) {
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
     UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() + counters.ChannelSpilling.WriteBlobs->Val() > 0);
     UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() + counters.ChannelSpilling.ReadBlobs->Val() > 0);
+}
+
+Y_UNIT_TEST(WideSortSpillingPragmaParsed) {
+    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
+    TKikimrRunner kikimr(AppCfg());
+
+    auto db = kikimr.GetQueryClient();
+
+    // Verify that the WideSort pragma is accepted without errors
+    auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+    auto planres = db.ExecuteQuery(SimpleWideSortWithSpillingQuery, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::SUCCESS, planres.GetIssues().ToString());
+}
+
+Y_UNIT_TEST(WideSortSpillingPragmaParseError) {
+    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
+    TKikimrRunner kikimr(AppCfg());
+
+    auto db = kikimr.GetQueryClient();
+    auto query = R"(
+        --!syntax_v1
+        PRAGMA ydb.EnableSpillingNodes="WideSort1";
+        select Key, Value
+        from `/Root/KeyValue`
+        order by Value
+    )";
+
+    auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+    auto planres = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::GENERIC_ERROR, planres.GetIssues().ToString());
+}
+
+Y_UNIT_TEST_TWIN(WideSortSpillingInRuntimeNodes, EnabledSpilling) {
+    double reasonableTreshold = EnabledSpilling ? 0.01 : 100;
+    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
+    TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
+
+    auto db = kikimr.GetQueryClient();
+
+    FillTableWithManyRows(db, 2000);
+
+    auto result = db.ExecuteQuery(SimpleWideSortWithSpillingQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+    if (EnabledSpilling) {
+        UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() > 0);
+        UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() > 0);
+    } else {
+        UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() == 0);
+        UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() == 0);
+    }
 }
 
 } // suite

@@ -60,6 +60,7 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
 
     def wait_index_ready(self, mode):
         logger.info("Waiting for index to be ready")
+
         def predicate():
             try:
                 self.select_from_index_without_roll(mode=mode)

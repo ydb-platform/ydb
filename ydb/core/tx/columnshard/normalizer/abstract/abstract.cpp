@@ -39,10 +39,10 @@ bool TNormalizationController::SwitchNormalizer() {
     Normalizers.pop_front();
     Counters.pop_front();
     if (Normalizers.size()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_switched")("description", Normalizers.front()->DebugString())(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_switched")("description", Normalizers.front()->DebugString())(
             "id", Normalizers.front()->GetEnumSequentialId());
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_finished");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_finished");
     }
     return !IsNormalizationFinished();
 }

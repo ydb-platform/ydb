@@ -157,10 +157,12 @@ void TColumnShardScan::TryDispatchStepContinuation(const ui64 sourceId) {
     if (it == PendingStepContinuations.end()) {
         return;
     }
+
     auto& pending = it->second;
     if (!pending.HasContinuation || !pending.Suspended || !pending.Source || !pending.Cursor) {
         return;
     }
+
     auto task = std::make_shared<NCommon::TStepAction>(std::move(pending.Source), std::move(*pending.Cursor), ScanActorId, false);
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, pending.ConveyorProcessId);
     PendingStepContinuations.erase(it);

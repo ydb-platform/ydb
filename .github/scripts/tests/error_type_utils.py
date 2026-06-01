@@ -193,7 +193,6 @@ def get_debug_texts_from_cache(fr: FailureRow, fetch_cache: Dict[str, Any]) -> T
     return _resolve(se), _resolve(lg)
 
 
-
 def _fetch_text_slice(url: str, byte_range: Optional[str], max_bytes: int) -> str:
     req = urllib_request.Request(url)
     if byte_range:

@@ -30,13 +30,14 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/bitmap.h>
-#include <util/generic/hash_set.h>
 #include <util/random/fast.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
@@ -283,8 +284,8 @@ struct TPerDbgState {
     // TDDiskId -> k in [0..kHostsPerDbgMax).
     THashMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui32, TDDiskIdHash, TDDiskIdEqual> PbIndexById;
 
-    THashMap<ui64, TWriteInfo> Lsns;
-    THashSet<ui64> ReadyToErase;
+    absl::flat_hash_map<ui64, TWriteInfo> Lsns;
+    absl::flat_hash_set<ui64> ReadyToErase;
 
     // FIFO work queues so DoFlush/DoErase touch only actionable LSNs (O(batch))
     // instead of scanning all of Lsns / ReadyToErase on every completion.
@@ -1639,6 +1640,18 @@ void TNbsDbgLikeLoadTablet::PopulateDbgState(ui32 dbgIdx) {
         DbgStates.resize(Dbgs.size());
     }
     auto& dst = DbgStates[dbgIdx];
+    // Reserve the expected per-DBG share of in-flight LSNs up front so the flat
+    // hash tables avoid rehashing (and copying the large TWriteInfo slots) on
+    // the steady-state path. reserve() only grows capacity, so the repeated
+    // PopulateDbgState calls on reconnects are harmless.
+    {
+        const ui64 maxInflight = TabletConfig.GetMaxInflightLsns();
+        const size_t perDbg = Dbgs.empty()
+            ? static_cast<size_t>(maxInflight)
+            : static_cast<size_t>(maxInflight / Dbgs.size() + 1);
+        dst.Lsns.reserve(perDbg);
+        dst.ReadyToErase.reserve(perDbg);
+    }
     LOG_D("PopulateDbgState dbg# " << dbgIdx
         << " PBConnected_before# " << dst.PBConnected.count()
         << " DDConnected_before# " << dst.DDConnected.count());
@@ -2531,6 +2544,17 @@ void TNbsDbgLikeLoadTablet::HandleSyncResult(
             }
         } else {
             info.FlushRequested.reset(k);
+            // Reopen this host's flush and requeue so DoFlush retries it. The
+            // LSN was moved to PBufferFlushing and popped from PendingFlush when
+            // fully requested; move it back to PBufferWritten so DoFlush (which
+            // only processes PBufferWritten) picks it up again. The guard makes
+            // repeated per-host failures idempotent.
+            if (info.State == EPBufferState::PBufferFlushing) {
+                EnterState(dbg, EPBufferState::PBufferFlushing, /*delta=*/-1);
+                info.State = EPBufferState::PBufferWritten;
+                EnterState(dbg, EPBufferState::PBufferWritten, /*delta=*/+1);
+            }
+            dbg.PendingFlush.push_back(lsn);
             if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Flush)]; c.Retries) {
                 c.Retries->Inc();
             }

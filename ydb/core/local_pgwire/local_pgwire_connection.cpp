@@ -182,7 +182,7 @@ public:
                 break;
             default:
                 YDB_LOG_ERROR("Unknown close type",
-                    {"#_static_cast<char>(closeData.Type)", static_cast<char>(closeData.Type)});
+                    {"CloseType", static_cast<char>(closeData.Type)});
                 break;
         }
         auto closeComplete = ev->Get()->Reply();

@@ -42,7 +42,7 @@ public:
 
     void Handle(NPG::TEvPGEvents::TEvAuth::TPtr& ev) {
         YDB_LOG_DEBUG( "TEvAuth cookie",
-            {"#_ev->Get()->InitialMessage->Dump()", ev->Get()->InitialMessage->Dump()},
+            {"InitialMessageDump", ev->Get()->InitialMessage->Dump()},
             {"Cookie", ev->Cookie});
         std::unordered_map<TString, TString> clientParams = ev->Get()->InitialMessage->GetClientParams();
         TPgWireAuthData pgWireAuthData;

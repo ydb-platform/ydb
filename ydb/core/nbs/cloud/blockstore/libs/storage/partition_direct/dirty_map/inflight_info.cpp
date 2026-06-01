@@ -148,7 +148,7 @@ THostIndex TInflightInfo::RequestFlush(
         return InvalidHostIndex;
     }
 
-    if (WriteConfirmed.Get(destination) && !disabledHosts.Get(destination)) {
+    if (WriteConfirmed.Get(destination)) {
         State = EState::PBufferFlushing;
         FlushRequested.Set(destination);
         return destination;

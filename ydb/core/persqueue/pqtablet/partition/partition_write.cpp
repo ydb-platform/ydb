@@ -1192,7 +1192,7 @@ bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg&
         return true;
     }
 
-    if (!AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) {
+    if (!AppData()->FeatureFlags.GetEnableTopicMessagesBatching() || !AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()) {
         CancelOneWriteOnWrite(ctx,
                               TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
                               p,

@@ -106,7 +106,7 @@ void TVChunkConfig::DisableHost(THostIndex hostIndex)
     EnabledHosts.Reset(hostIndex);
 }
 
-TString TVChunkConfig::TurnOffHost(THostIndex hostIndex)
+TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
 {
     DisableHost(hostIndex);
 

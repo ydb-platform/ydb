@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             5,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
-        updated.TurnOffHost(0);
+        updated.EvacuateHost(0);
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)

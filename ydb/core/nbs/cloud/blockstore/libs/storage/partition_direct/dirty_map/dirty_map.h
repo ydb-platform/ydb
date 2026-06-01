@@ -135,7 +135,11 @@ public:
                  // from the blocks below the OperationalBlockCount.
     };
 
+    // Enables the use of DDisk. If the operational blocks count less then total
+    // block count, then the DDisk is only partially filled (fresh).
     void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
+
+    // Completely disables DDisk usage.
     void SwitchOffline();
 
     [[nodiscard]] EState GetState() const;

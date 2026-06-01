@@ -863,7 +863,7 @@ TVChunkConfig TVChunk::PrepareNewConfig(
             break;
         }
         case EHostState::Offline: {
-            const TString message = newConfig.TurnOffHost(hostIndex);
+            const TString message = newConfig.EvacuateHost(hostIndex);
             if (!message.empty()) {
                 LOG_WARN(
                     *ActorSystem,

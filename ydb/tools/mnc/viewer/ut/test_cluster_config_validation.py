@@ -425,6 +425,28 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Install", output)
         self.assertIn("failed step", output)
 
+    def test_operation_result_renderable_shows_successful_steps(self):
+        app = Viewer()
+        result = progress.TaskResult(
+            level=progress.TaskResultLevel.OK,
+            step_title="Uninstall",
+            subresults=[
+                progress.TaskResult(level=progress.TaskResultLevel.OK, step_title="Check agents"),
+                progress.TaskResult(level=progress.TaskResultLevel.OK, step_title="Stop hosts"),
+                progress.TaskResult(level=progress.TaskResultLevel.OK, step_title="Uninstall multinode"),
+            ],
+        )
+
+        renderable = app._operation_result_renderable(result)
+        console = rich.console.Console(record=True)
+        console.print(renderable)
+        output = console.export_text()
+
+        self.assertIn("DONE:", output)
+        self.assertIn("Check agents", output)
+        self.assertIn("Stop hosts", output)
+        self.assertIn("Uninstall multinode", output)
+
     async def test_settings_save_deploy_flags_from_checkboxes(self):
         app = Viewer()
         app._mnc_config = {"git_ydb_root": "/repo", "deploy_flags": []}

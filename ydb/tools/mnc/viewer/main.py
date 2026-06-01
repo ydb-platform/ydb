@@ -670,7 +670,7 @@ class Viewer(App):
         to_rich_panel = getattr(result, "to_rich_panel", None)
         if not callable(to_rich_panel):
             return None
-        return to_rich_panel()
+        return to_rich_panel(show_all=True)
 
     def _operation_result_message(self, result: object, output: str, ok: bool, has_result_renderable: bool) -> str:
         if has_result_renderable:

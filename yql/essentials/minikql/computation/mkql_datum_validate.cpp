@@ -196,6 +196,7 @@ protected:
 
 struct TValidatorTraits {
     using TResult = TDatumValidatorBase;
+    using TVariant = TUnimplementedValidator;
 
     template <bool Nullable>
     using TTuple = TTupleValidator<Nullable>;

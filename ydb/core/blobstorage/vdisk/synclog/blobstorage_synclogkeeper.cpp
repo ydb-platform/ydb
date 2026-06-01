@@ -283,11 +283,11 @@ namespace NKikimr {
 
             void Handle(TEvPhantomFlagStorageCommitData::TPtr ev) {
                 KeepState.UpdatePhantomFlagStorageData(std::move(ev->Get()->Data));
+                KeepState.RetireExtractedChunks(ev->Get()->RetiredChunks);
             }
 
             void UpdateCounters() {
                 KeepState.UpdateMetrics();
-                KeepState.FlushPhantomFlagStorageWriteBufferIfNeeded();
                 Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
             }
 

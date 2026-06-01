@@ -791,6 +791,7 @@ struct TEvBlobStorage {
         EvVDiskOperationToken,
         EvReleaseVDiskOperationToken,
         EvStartupDataSyncDone,
+        EvPhantomFlagExtractedFromChunk,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

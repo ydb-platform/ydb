@@ -82,8 +82,8 @@ public:
             TBase::Become(&TPgYdbConnection::StateSchedule);
             ConnectionEvent.Destroy(); // don't need it anymore
         } else {
-            YDB_LOG_CTX_WARN(*NActors::TlsActivationContext, "Failed to create",
-                {"session", record.ShortDebugString()});
+            YDB_LOG_CTX_WARN(*NActors::TlsActivationContext, "Failed to create session",
+                {"ShortDebugString", record.ShortDebugString()});
             auto response = MakeHolder<NPG::TEvPGEvents::TEvFinishHandshake>();
             // TODO: report actuall error
             response->ErrorFields.push_back({'E', "ERROR"});

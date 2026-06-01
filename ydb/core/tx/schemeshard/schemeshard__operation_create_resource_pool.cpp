@@ -122,22 +122,6 @@ class TCreateResourcePool : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) {
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-    }
-
-    TPathElement::TPtr CreateResourcePoolPathElement(const TPath& dstPath) const {
-        TPathElement::TPtr resourcePool = dstPath.Base();
-
-        resourcePool->CreateTxId = OperationId.GetTxId();
-        resourcePool->PathType = TPathElement::EPathType::EPathTypeResourcePool;
-        resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
-        resourcePool->LastTxId  = OperationId.GetTxId();
-
-        return resourcePool;
-    }
-
 public:
     using TSubOperation::TSubOperation;
 

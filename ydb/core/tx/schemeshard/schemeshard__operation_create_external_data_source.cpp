@@ -154,23 +154,6 @@ class TCreateExternalDataSource : public TSubOperation {
         return true;
     }
 
-    static void AddPathInSchemeShard(
-        const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) {
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-    }
-
-    TPathElement::TPtr CreateExternalDataSourcePathElement(const TPath& dstPath) const {
-        TPathElement::TPtr externalDataSource = dstPath.Base();
-
-        externalDataSource->CreateTxId = OperationId.GetTxId();
-        externalDataSource->PathType = TPathElement::EPathType::EPathTypeExternalDataSource;
-        externalDataSource->PathState = TPathElement::EPathState::EPathStateCreate;
-        externalDataSource->LastTxId  = OperationId.GetTxId();
-
-        return externalDataSource;
-    }
-
     void RegisterParentPathDependencies(const TOperationContext& context,
                                         const TPath& parentPath) const {
         if (parentPath.Base()->HasActiveChanges()) {

@@ -214,22 +214,6 @@ private:
         return true;
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse> &result,
-                                     TPath &dstPath, const TString &owner) {
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-    }
-
-    TPathElement::TPtr CreateExternalTablePathElement(const TPath& dstPath) const {
-        TPathElement::TPtr externalTable = dstPath.Base();
-        externalTable->CreateTxId        = OperationId.GetTxId();
-        externalTable->PathType  = TPathElement::EPathType::EPathTypeExternalTable;
-        externalTable->PathState = TPathElement::EPathState::EPathStateCreate;
-        externalTable->LastTxId  = OperationId.GetTxId();
-
-        return externalTable;
-    }
-
     void RegisterParentPathDependencies(const TOperationContext& context,
                                         const TPath& parentPath) const {
         if (parentPath.Base()->HasActiveChanges()) {

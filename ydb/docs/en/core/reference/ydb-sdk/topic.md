@@ -1819,9 +1819,6 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   {% endlist %}
 
-<<<<<<< HEAD
-- Java (sync)
-=======
 - JavaScript
 
   ```javascript
@@ -1830,7 +1827,6 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   ```
 
 - Java
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 
   {% list tabs %}
 

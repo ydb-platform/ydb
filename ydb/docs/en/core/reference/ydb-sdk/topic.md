@@ -1826,7 +1826,7 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   }
   ```
 
-- Java (sync)
+- Java
 
   {% list tabs %}
 

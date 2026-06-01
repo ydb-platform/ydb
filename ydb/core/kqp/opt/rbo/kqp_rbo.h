@@ -27,7 +27,7 @@ enum ERuleProperties: ui32 {
 class IRule {
   public:
     IRule(TString name) : RuleName(name) {}
-    IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
+    IRule(TString name, ui32 props, bool logRule = true) : RuleName(name), Props(props), LogRule(logRule) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -45,7 +45,7 @@ class IRule {
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
-    ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
+    ISimplifiedRule(TString name, ui32 props, bool logRule = true) : IRule(name, props, logRule) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 

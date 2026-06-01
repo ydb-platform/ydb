@@ -36,7 +36,7 @@
     The ``tests/examplefiles`` contains a few test files with data to be
     parsed by these lexers.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -390,7 +390,7 @@ class PostgresExplainLexer(RegexLexer):
 
     tokens = {
         'root': [
-            (r'(:|\(|\)|ms|kB|->|\.\.|\,|\/)', Punctuation),
+            (r'(:|\(|\)|ms|kB|->|\.\.|\,|\/|=|%)', Punctuation),
             (r'(\s+)', Whitespace),
 
             # This match estimated cost and effectively measured counters with ANALYZE
@@ -399,9 +399,11 @@ class PostgresExplainLexer(RegexLexer):
             (r'(actual)( )(=?)', bygroups(Name.Class, Whitespace, Punctuation), 'instrumentation'),
 
             # Misc keywords
-            (words(('actual', 'Memory Usage', 'Disk Usage', 'Memory', 'Buckets', 'Batches',
-                    'originally', 'row', 'rows', 'Hits', 'Misses',
-                    'Evictions', 'Overflows', 'Planned Partitions'), suffix=r'\b'),
+            (words(('actual', 'Memory Usage', 'Disk Usage', 'Memory', 'Buckets',
+                    'Batches', 'originally', 'row', 'rows', 'Hits', 'Misses',
+                    'Evictions', 'Overflows', 'Planned Partitions', 'Estimates',
+                    'capacity', 'distinct keys', 'lookups', 'hit percent',
+                    'Index Searches', 'Storage', 'Disk Maximum Storage'), suffix=r'\b'),
              Comment.Single),
 
             (r'(hit|read|dirtied|written|write|time|calls)(=)', bygroups(Comment.Single, Operator)),
@@ -421,7 +423,7 @@ class PostgresExplainLexer(RegexLexer):
                     'TID Cond', 'Run Condition', 'Order By', 'Function Call',
                     'Table Function Call', 'Inner Unique', 'Params Evaluated',
                     'Single Copy', 'Sampling', 'One-Time Filter', 'Output',
-                    'Relations', 'Remote SQL'), suffix=r'\b'),
+                    'Relations', 'Remote SQL', 'Disabled'), suffix=r'\b'),
              Comment.Preproc, 'predicate'),
 
             # Special keyword to handle ON CONFLICT

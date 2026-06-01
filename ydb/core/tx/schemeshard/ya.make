@@ -226,6 +226,7 @@ SRCS(
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
     schemeshard__tenant_shred_manager.cpp
@@ -322,6 +323,8 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_impl.h)
 
 GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
 

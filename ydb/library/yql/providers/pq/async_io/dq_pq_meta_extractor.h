@@ -15,7 +15,7 @@ class TTypeEnvironment;
 }
 
 namespace NYql::NDq {
-using TPqMetaExtractorLambda = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage&)>;
+using TPqMetaExtractorLambda = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage&, const TString& /*cluster*/)>;
 
 TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
     const TString& columnName,

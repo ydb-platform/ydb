@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -86,8 +87,7 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
@@ -95,7 +95,8 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) override;
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
@@ -157,7 +158,7 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
             response,
         THostIndex coordinatorHostIndex,
-        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
+        TWriteBlocksToManyPBuffersCallback callback,
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(

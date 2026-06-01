@@ -286,6 +286,7 @@ public:
         const auto& record = ev->Record;
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdiskId), "incorrect VDiskId# %s", vdiskId.ToString().data());
         const TVDiskIdShort shortId(vdiskId);
         ui32 index = Info->GetOrderNumber(shortId);
         Y_ABORT_UNLESS(index < VDiskWorkers.size());

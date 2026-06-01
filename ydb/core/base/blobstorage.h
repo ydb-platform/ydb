@@ -787,6 +787,11 @@ struct TEvBlobStorage {
         EvPhantomFlagStorageCommitData,
         EvPhantomFlagStorageDrop,
         EvSyncerFullSyncDiskCancelled,
+        EvAcquireVDiskOperationToken,
+        EvVDiskOperationToken,
+        EvReleaseVDiskOperationToken,
+        EvStartupDataSyncDone,
+        EvPhantomFlagExtractedFromChunk,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -976,6 +981,8 @@ struct TEvBlobStorage {
         EvInterpilePutResult,
         EvNodeWardenListLocalDDisks,
         EvNodeWardenListLocalDDisksResult,
+        EvNodeWardenAcquireBlobDepotS3Router,
+        EvNodeWardenReleaseBlobDepotS3Router,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

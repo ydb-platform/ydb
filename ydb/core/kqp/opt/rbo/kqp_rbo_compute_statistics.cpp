@@ -5,6 +5,10 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
+
 /***
  * All the methods to compute metadata and statistics are collected in this file
  */
@@ -14,6 +18,7 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
+using namespace NYql::NNodes;
 using namespace NYql::NDq;
 
 void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusivePtr<IOperator>& right, TVector<TString>& leftAliases,
@@ -73,13 +78,7 @@ TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
         return concatKeys;
     }
 }
-}
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NYql::NNodes;
+} // anonymous namespace
 
 /**
  * Default metadata computation for unary operators
@@ -614,5 +613,4 @@ void TOpRoot::ComputePlanStatistics(TRBOContext& ctx) {
     }
 }
 
-}
-}
+} // namespace NKikimr::NKqp

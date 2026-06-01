@@ -22,7 +22,7 @@ namespace graphql
 /**
   The GraphQL document being executed.
   <p>
-  The value may be sanitized to exclude sensitive information.
+  If instrumentation can reliably identify and redact sensitive information it SHOULD do it.
  */
 static constexpr const char *kGraphqlDocument = "graphql.document";
 

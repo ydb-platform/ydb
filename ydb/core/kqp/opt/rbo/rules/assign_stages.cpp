@@ -1,7 +1,10 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+namespace NKikimr::NKqp {
 
 namespace {
+
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
@@ -29,7 +32,7 @@ void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
 // TODO: We can also push to row storage stage, but it requires an implementation on physical plan generation.
 void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPlanProps& props) {
     const auto readStageId = *read->Props.StageId;
-    if (!op->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
+    if (!read->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
         const auto newStageId = props.StageGraph.AddStage();
         op->Props.StageId = newStageId;
         props.StageGraph.Connect(readStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(readStageId)));
@@ -37,10 +40,8 @@ void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPl
         op->Props.StageId = readStageId;
     }
 }
-} // namespace
 
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 /**
  * Assign stages and build stage graph in the process
@@ -213,5 +214,5 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
     return true;
 }
-}
-}
+
+} // namespace NKikimr::NKqp

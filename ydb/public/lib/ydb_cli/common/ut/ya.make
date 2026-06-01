@@ -11,6 +11,7 @@ SRCS(
     print_utils_ut.cpp
     recursive_remove_ut.cpp
     tabbed_table_ut.cpp
+    tx_mode_utils_ut.cpp
 )
 
 END()

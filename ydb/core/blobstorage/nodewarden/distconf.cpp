@@ -505,6 +505,12 @@ namespace NKikimr::NStorage {
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
         }
+
+        if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
+            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
+                this, std::placeholders::_1));
+        }
+
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
             UpdateQuorums();
             IssueNextBindRequest();
@@ -512,10 +518,6 @@ namespace NKikimr::NStorage {
         }
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();
-        }
-        if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
-            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
-                this, std::placeholders::_1));
         }
         ConsistencyCheck();
     }

@@ -698,18 +698,22 @@ TYqlRowSpecInfo::TPtr TYtTableBaseInfo::GetRowSpec(TExprBase node) {
 }
 
 TYtTableStatInfo::TPtr TYtTableBaseInfo::GetStat(NNodes::TExprBase node) {
-    TExprNode::TPtr statNode;
+    TMaybeNode<TExprBase> stat;
     if (node.Maybe<TYtOutTable>()) {
-        statNode = node.Cast<TYtOutTable>().Stat().Ptr();
+        stat = node.Cast<TYtOutTable>().Stat();
     } else if (node.Maybe<TYtTable>()) {
-        statNode = node.Cast<TYtTable>().Stat().Ptr();
+        stat = node.Cast<TYtTable>().Stat();
     } else if (node.Maybe<TYtOutput>()) {
         auto tableWithCluster = GetOutTableWithCluster(node);
-        statNode = tableWithCluster.first.Cast<TYtOutTable>().Stat().Ptr();
+        stat = tableWithCluster.first.Cast<TYtOutTable>().Stat();
     } else {
         ythrow yexception() << "Not a table node " << (node.Raw() ? TString{node.Ref().Content()}.Quote() : TStringBuf("\"null\""));
     }
-    return MakeIntrusive<TYtTableStatInfo>(statNode);
+
+    if (stat.Maybe<TCoVoid>()) {
+        return {};
+    }
+    return MakeIntrusive<TYtTableStatInfo>(stat.Cast());
 }
 
 TStringBuf TYtTableBaseInfo::GetTableName(NNodes::TExprBase node) {

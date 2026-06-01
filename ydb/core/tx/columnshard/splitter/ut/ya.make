@@ -4,6 +4,8 @@ SIZE(SMALL)
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/core/formats/arrow/accessor/dictionary
+    ydb/core/formats/arrow/accessor/plain
     ydb/core/kqp/common
     ydb/core/kqp/session_actor
     ydb/core/mind

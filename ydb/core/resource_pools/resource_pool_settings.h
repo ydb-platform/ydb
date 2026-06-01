@@ -42,7 +42,8 @@ struct TPoolSettings : public TSettingsBase {
     i32 ConcurrentQueryLimit = -1;  // -1 = disabled
     i32 QueueSize = -1;  // -1 = disabled
     TDuration QueryCancelAfter = TDuration::Zero();  // 0 = disabled
-    TPercent QueryMemoryLimitPercentPerNode = -1;  // Percent from node memory capacity, -1 = disabled
+    TPercent QueryMemoryLimitPercentPerNode = -1;  // RESERVED for future per-query enforcement, currently ignored
+    TPercent TotalMemoryLimitPercentPerNode = -1;  // Percent from node memory capacity for all pool queries combined, -1 = disabled
     TPercent DatabaseLoadCpuThreshold = -1;  // -1 = disabled
     TPercent TotalCpuLimitPercentPerNode = -1;  // -1 = disabled
     TPercent QueryCpuLimitPercentPerNode = -1; // -1 = disabled;

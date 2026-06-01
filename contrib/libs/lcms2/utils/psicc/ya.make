@@ -6,7 +6,7 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.19)
+VERSION(2.19.1)
 
 PEERDIR(
     contrib/libs/lcms2

@@ -165,4 +165,6 @@ constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
 
 const ui64 DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE = 32_KB;
 
+constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = false;
+
 } // NYql

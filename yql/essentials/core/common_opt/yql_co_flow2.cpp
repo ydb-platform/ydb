@@ -2812,10 +2812,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         if (self.Input().Maybe<TCoPartitionByKeyBase>()) {
-            if (self.Input().Maybe<TCoPartitionsByKeys>() && !CanApplyExtractMembersToPartitionsByKeys(optCtx.Types)) {
-                return node;
-            }
-
             if (auto res = ApplyExtractMembersToPartitionByKey(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
@@ -2901,6 +2897,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         if (const auto narrow = self.Input().Maybe<TCoNarrowFlatMap>()) {
             if (auto res = ApplyExtractMembersToNarrowMap(self.Input().Ptr(), self.Members().Ptr(), ETypeAnnotationKind::Optional != narrow.Cast().Lambda().Body().Ref().GetTypeAnn()->GetKind(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (const auto tableSource = self.Input().Maybe<TCoTableSource>()) {
+            if (auto res = ApplyExtractMembersToTableSource(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
             return node;

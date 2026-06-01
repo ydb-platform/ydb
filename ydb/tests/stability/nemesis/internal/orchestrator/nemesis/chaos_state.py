@@ -6,7 +6,7 @@ Create one instance per app and pass it to OrchestratorNemesisSchedule / wire fr
 from __future__ import annotations
 
 import threading
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import build_all_planners
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import build_all_planners, build_planner
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
@@ -15,6 +15,20 @@ class ChaosOrchestratorStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._planners: dict[str, NemesisPlannerBase] = build_all_planners()
+
+    def rebuild_planner(self, nemesis_type: str, params: dict | None = None) -> bool:
+        """Re-create a planner for ``nemesis_type`` with the supplied ``params``.
+
+        Used when the UI starts a scheduled run with custom parameters. Returns
+        ``True`` if the planner was rebuilt, ``False`` if the type is unknown
+        or planner construction failed.
+        """
+        with self._lock:
+            try:
+                self._planners[nemesis_type] = build_planner(nemesis_type, params)
+                return True
+            except Exception:
+                return False
 
     def plan_scheduled_tick(self, nemesis_type: str, hosts: list[str]) -> list[DispatchCommand]:
         planner = self._planners.get(nemesis_type)

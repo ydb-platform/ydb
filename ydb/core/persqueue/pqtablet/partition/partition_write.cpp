@@ -186,7 +186,7 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
             continue;
         }
         if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
-            ReplyError(ctx, cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest from dead ownership session");
+            ReplyError(ctx, cookie, NPersQueue::NErrorCode::WRONG_COOKIE, "ReserveRequest from dead ownership session");
             ReserveRequests.pop_front();
             continue;
         }
@@ -232,7 +232,7 @@ void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& c
 
     auto it = Owners.find(owner);
     if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
-        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest from dead ownership session");
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::WRONG_COOKIE, "ReserveRequest from dead ownership session");
         return;
     }
 
@@ -567,6 +567,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAvgWriteBytes(WriteNewSize, now);
     UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
 
+    AvgQuotaMessages.Update(MessagesQuotaSize, now);
+
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
         avg.Update(WriteNewSizeFromSupportivePartitions, now);
@@ -588,6 +590,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    BlobQuotaSize = 0;
+    MessagesQuotaSize = 0;
     WriteNewSizeFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
 

@@ -822,6 +822,14 @@ public:
         return NotConsumedLinear_;
     }
 
+    bool GetFlushingMode() const override {
+        return Ctx->FlushingMode;
+    }
+
+    void SetFlushingMode(bool value) override {
+        Ctx->FlushingMode = value;
+    }
+
 private:
     const TPatternNodes::TPtr PatternNodes;
     const TIntrusivePtr<TMemoryUsageInfo> MemInfo;

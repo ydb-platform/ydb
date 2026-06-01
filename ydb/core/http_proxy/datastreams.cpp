@@ -142,8 +142,6 @@ namespace NKikimr::NHttpProxy {
             void SendYdbDriverRequest(const TActorContext& ctx) {
                 Y_ABORT_UNLESS(HttpContext.Driver);
 
-                RequestState = TProcessorBase::TRequestState::StateAuthorization;
-
                 auto request = MakeHolder<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
                 request->DatabasePath = HttpContext.DatabasePath;
 
@@ -151,7 +149,6 @@ namespace NKikimr::NHttpProxy {
             }
 
             void CreateClient(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateListEndpoints;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "create client to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
@@ -180,7 +177,6 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
@@ -208,7 +204,6 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequest(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
@@ -308,7 +303,7 @@ namespace NKikimr::NHttpProxy {
                          });
 
                 ReplyToHttpContext({
-                    .HttpCode = exception.second,
+                    .HttpCode = static_cast<ui32>(exception.second),
                     .ContentType = HttpContext.ContentType,
                     .Message = exception.first,
                     .Body = NDataStreams::Serialize(HttpContext.ContentType, {
@@ -506,10 +501,8 @@ namespace NKikimr::NHttpProxy {
 
         private:
             TInstant StartTime;
-            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
-            ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             THolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>> Future;
@@ -576,7 +569,7 @@ namespace NKikimr::NHttpProxy {
         THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
             const auto exception = MapToException(Status, "", issueCode);
             return {
-                .HttpCode = exception.second,
+                .HttpCode = static_cast<ui32>(exception.second),
                 .ContentType = contentType,
                 .Message = exception.first,
                 .Body = NDataStreams::Serialize(contentType, NDataStreams::TErrorResponse{

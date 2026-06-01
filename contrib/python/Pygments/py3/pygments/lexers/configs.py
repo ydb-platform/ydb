@@ -4,7 +4,7 @@
 
     Lexers for configuration file formats.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -1127,7 +1127,7 @@ class TOMLLexer(RegexLexer):
     # Based on the TOML spec: https://toml.io/en/v1.0.0
 
     # The following is adapted from CPython's tomllib:
-    _time = r"\d\d:\d\d:\d\d(\.\d+)?"
+    _time = r"\d\d:\d\d(:\d\d(\.\d+)?)?"
     _datetime = rf"""(?x)
                   \d\d\d\d-\d\d-\d\d # date, e.g., 1988-10-27
                 (
@@ -1238,9 +1238,9 @@ class TOMLLexer(RegexLexer):
             default('value'),
         ],
         'inline-table': [
-            # Note that unlike inline arrays, inline tables do not
-            # allow newlines or comments.
-            (r'[ \t]+', Whitespace),
+            # Whitespace (since TOML 1.1.0, same as in array)
+            (r'\s+', Whitespace),
+            (r'#.*', Comment.Single),
 
             # Keys
             include('key'),
@@ -1275,7 +1275,7 @@ class TOMLLexer(RegexLexer):
             (r"'", String.Single),
         ],
         'escapes': [
-            (r'\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}', String.Escape),
+            (r'\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}', String.Escape),
             (r'\\.', String.Escape),
         ],
     }

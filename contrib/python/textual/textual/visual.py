@@ -218,8 +218,8 @@ class Visual(ABC):
 
         selection = widget.text_selection
         if selection is not None:
-            selection_style: Style | None = Style.from_rich_style(
-                widget.screen.get_component_rich_style("screen--selection")
+            selection_style = Style.from_styles(
+                widget.screen.get_component_styles("screen--selection")
             )
         else:
             selection_style = None
@@ -235,7 +235,13 @@ class Visual(ABC):
                 selection_style,
             ),
         )
-        strips = [strip._apply_link_style(widget.link_style) for strip in strips]
+        if (
+            widget.auto_links
+            and not widget.is_container
+            and not widget.screen._selecting
+        ):
+            link_style = widget.link_style
+            strips = [strip._apply_link_style(link_style) for strip in strips]
 
         if height is None:
             height = len(strips)

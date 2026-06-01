@@ -1,18 +1,19 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
-
-#include <yql/essentials/core/yql_expr_optimize.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -1132,7 +1133,7 @@ private:
     TAutoPtr<IGraphTransformer> DataTxTransformer;
 };
 
-} // namespace
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx,

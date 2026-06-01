@@ -127,6 +127,7 @@ struct TOptimizerStatistics {
     double ByteSize = 0;
     double Cost = 0;
     double Selectivity = 1.0;
+    ui32 JoinDepth = 1;
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
 

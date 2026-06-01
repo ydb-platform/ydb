@@ -85,12 +85,14 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
         ListPBufferEntriesRequests);
 
-    for (auto& [id, request]: WriteToManyPBuffersRequests) {
+    for (auto& [id, requestInfo]: WriteToManyPBuffersRequests) {
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             DestroyErrorMessage,
-            request->PersistentBufferIds);
-        request->Promise.SetValue(std::move(response->Record));
+            requestInfo.Request->PersistentBufferIds);
+        if (requestInfo.Request->Callback) {
+            requestInfo.Request->Callback(std::move(response->Record));
+        }
     }
 }
 
@@ -248,8 +250,19 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        WriteToManyPBuffersRequests.emplace(requestId, ev->Release().Release());
+    TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> waitingReplies;
+    for (const auto& diskId: msg->PersistentBufferIds) {
+        waitingReplies.emplace(diskId);
+    }
+
+    auto [it, inserted] = WriteToManyPBuffersRequests.emplace(
+        requestId,
+        TWriteToManyPBuffersReqInfo{
+            .Request =
+                std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>(
+                    ev->Release().Release()),
+            .WaitingReplies = std::move(waitingReplies),
+        });
     Y_ABORT_UNLESS(inserted);
 
     LOG_DEBUG(
@@ -320,13 +333,23 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         requestId);
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
-        auto& request = **r;
-        request.Promise.SetValue(std::move(ev->Get()->Record));
-        WriteToManyPBuffersRequests.erase(requestId);
+        auto& requestInfo = *r;
+        auto& request = *requestInfo.Request;
+        auto& waitingReplies = requestInfo.WaitingReplies;
+
+        Y_ABORT_UNLESS(request.Callback);
+        request.Callback(ev->Get()->Record);
+        request.NumberOfCallbackCalls++;
+
+        for (const auto& singlePBufferResponse: ev->Get()->Record.GetResult()) {
+            waitingReplies.erase(singlePBufferResponse.GetPersistentBufferId());
+        }
+
+        if (waitingReplies.empty()) {
+            WriteToManyPBuffersRequests.erase(requestId);
+        }
     } else {
-        // That means that request is already completed
-        // TODO handle this case in writeRequests through weak_ptr with erase
-        LOG_DEBUG(
+        LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "

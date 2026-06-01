@@ -19,7 +19,7 @@ TPhantomFlagStorageState::TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> sl
 
 void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& data,
         TActorId syncLogKeeperId, TActorId chunkKeeperId, ui32 appendBlockSize) {
-    IsPersistent = true;
+    Persistent = true;
 
     NActors::IActor* processorActor = CreatePhantomFlagStorageProcessor(std::move(data),
             TPhantomFlagStorageProcessorContext{
@@ -51,6 +51,7 @@ void TPhantomFlagStorageState::StartBuilding() {
 }
 
 void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit) {
+    Y_DEBUG_ABORT_UNLESS(!Persistent);
     AdjustSize(sizeLimit);
     if (!Active) {
         return;
@@ -58,17 +59,13 @@ void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* 
 
     if (blobRec->Ingress.IsDoNotKeep(GType) &&
             (Building || Thresholds.IsBehindThresholdOnUnsynced(blobRec->LogoBlobID(), SyncedMask))) {
-        YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
-            {"Marker", "BSPFS09"},
-            {"BlobId", blobRec->LogoBlobID().ToString()},
-            {"Building", Building},
-            {"SyncedMask", SyncedMask.to_ullong()},
-            {"Thresholds", Thresholds.ToString()});
-        if (IsPersistent) {
-            AddItemToWriteBuffer(TPhantomFlagStorageItem::CreateFlag(blobRec));
-        } else {
-            AddFlag(*blobRec);
-        }
+        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS09,
+                VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
+                (BlobId, blobRec->LogoBlobID().ToString()),
+                (Building, Building),
+                (SyncedMask, SyncedMask.to_ullong()),
+                (Thresholds, Thresholds.ToString()));
+        AddFlag(*blobRec);
     }
 }
 
@@ -92,15 +89,22 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
         return;
     }
 
-    if (IsPersistent) {
+    if (Persistent) {
+        std::vector<TPhantomFlagStorageItem> items;
+        items.reserve(flags.size() + thresholds.GetList().size());
         for (const TLogoBlobRec& rec : flags) {
-            AddItemToWriteBuffer(TPhantomFlagStorageItem::CreateFlag(&rec));
+            items.push_back(TPhantomFlagStorageItem::CreateFlag(&rec));
         }
         std::vector<TPhantomFlagThresholds::TThreshold> thresholdList = thresholds.GetList();
         for (const auto [tabletId, channel, generation, step, orderNumber] : thresholdList) {
-            AddItemToWriteBuffer(TPhantomFlagStorageItem::CreateThreshold(orderNumber,
+            items.push_back(TPhantomFlagStorageItem::CreateThreshold(orderNumber,
                     tabletId, channel, generation, step));
         }
+        if (!items.empty()) {
+            TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{},
+                    new TEvPhantomFlagStorageWriteItems(std::move(items))));
+        }
+        Thresholds.Merge(std::move(thresholds));
     } else {
         AdjustSize(sizeLimit);
         ui64 flagsAdded = 0;
@@ -135,17 +139,15 @@ void TPhantomFlagStorageState::Deactivate() {
     Thresholds.Clear();
     Active = false;
     Building = false;
-    if (IsPersistent) {
+    if (Persistent) {
         TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, new TEvPhantomFlagStorageDrop));
-        WriteBuffer.clear();
-        WriteBufferSize = 0;
     } else {
         StoredFlags.clear();
     }
 }
 
 void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr ev) const {
-    if (IsPersistent) {
+    if (Persistent) {
         TActivationContext::Send(ev->Forward(ProcessorId));
     } else {
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
@@ -158,6 +160,18 @@ void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot:
 
 bool TPhantomFlagStorageState::IsActive() const {
     return Active;
+}
+
+bool TPhantomFlagStorageState::IsPersistent() const {
+    return Persistent;
+}
+
+TActorId TPhantomFlagStorageState::GetProcessorId() const {
+    return ProcessorId;
+}
+
+TPhantomFlagThresholds TPhantomFlagStorageState::GetThresholdsCopy() {
+    return Thresholds;
 }
 
 void TPhantomFlagStorageState::ProcessLocalSyncData(ui32 orderNumber, const TString& data) {
@@ -246,34 +260,6 @@ void TPhantomFlagStorageState::UpdateMetrics() {
     SlCtx->PhantomFlagStorageGroup.ThresholdsMemoryConsumption() = Thresholds.EstimatedMemoryConsumption();
 }
 
-void TPhantomFlagStorageState::AddItemToWriteBuffer(const TPhantomFlagStorageItem& item) {
-    if (WriteBufferSize + item.SerializedSize() > WriteBufferSizeLimit) {
-        FlushWriteBuffer();
-    }
-    WriteBuffer.push_back(item);
-    WriteBufferSize += item.SerializedSize();
-}
-
-void TPhantomFlagStorageState::FlushWriteBuffer() {
-    if (!WriteBuffer.empty()) {
-        auto ev = std::make_unique<TEvPhantomFlagStorageWriteItems>(std::move(WriteBuffer));
-        TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, ev.release()));
-        WriteBufferSize = 0;
-        WriteBufferFlushTimestamp = TActivationContext::Monotonic();
-    }
-}
-
-void TPhantomFlagStorageState::FlushWriteBufferIfNeeded() {
-    TMonotonic now = TActivationContext::Monotonic();
-    if (now - WriteBufferFlushTimestamp > WriteBufferFlushPeriod) {
-        FlushWriteBuffer();
-    }
-}
-
-void TPhantomFlagStorageState::SyncLogIsCut() {
-    FlushWriteBuffer();
-}
-
 std::optional<TPhantomFlagStorageData> TPhantomFlagStorageState::GetPersistentData() const {
     return PersistentData;
 }
@@ -285,8 +271,6 @@ void TPhantomFlagStorageState::UpdatePersistentData(std::optional<TPhantomFlagSt
 void TPhantomFlagStorageState::Terminate() {
     if (ProcessorId != TActorId{}) {
         TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, new TEvents::TEvPoisonPill));
-        WriteBuffer.clear();
-        WriteBufferSize = 0;
     }
 }
 

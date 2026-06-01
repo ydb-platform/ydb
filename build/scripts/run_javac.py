@@ -65,6 +65,25 @@ def main():
 
     if opts.kotlin:
         input_files = [i for i in input_files if i.endswith('.kt')]
+        # When ijar is active, compilation classpaths contain X-interface.jar instead of X.jar.
+        # Rewrite -Xfriend-paths=X.jar -> -Xfriend-paths=X-interface.jar when the interface
+        # jar exists, so that Kotlin grants 'internal' access from the correct classpath entry.
+
+        def _remap_friend_paths(arg):
+            prefix = '-Xfriend-paths='
+            if not arg.startswith(prefix):
+                return arg
+            parts = re.split(r'([:,])', arg[len(prefix) :])
+            remapped = []
+            for p in parts:
+                if p.endswith('.jar') and not p.endswith('-interface.jar'):
+                    ijar_path = p[: -len('.jar')] + '-interface.jar'
+                    if os.path.exists(ijar_path):
+                        p = ijar_path
+                remapped.append(p)
+            return prefix + ''.join(remapped)
+
+        cmd = [_remap_friend_paths(a) for a in cmd]
 
     if not input_files:
         if opts.verbose:

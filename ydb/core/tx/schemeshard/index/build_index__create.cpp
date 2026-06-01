@@ -292,6 +292,9 @@ private:
                 ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
                 const bool isPrefixed = index.index_columns().size() > 1;
                 NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
+                if (isPrefixed) {
+                    vectorIndexKmeansTreeDescription.MutableSettings()->set_adaptive_clusters(true);
+                }
             }
 
             const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();
@@ -305,6 +308,7 @@ private:
             buildInfo.KMeans.K = kmSettings.clusters();
             buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + kmSettings.levels();
             buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
+            buildInfo.KMeans.Adaptive = kmSettings.adaptive_clusters() && buildInfo.IsBuildPrefixedVectorIndex();
             buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
             buildInfo.KMeans.OverlapClusters = kmSettings.overlap_clusters()
                 ? kmSettings.overlap_clusters()

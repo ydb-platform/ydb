@@ -16,7 +16,7 @@ TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
 
 TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
 {
-    Y_ABORT_UNLESS(Promise.IsReady());
+    Y_ABORT_UNLESS(NumberOfCallbackCalls);
 }
 
 TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()

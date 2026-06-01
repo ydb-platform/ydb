@@ -71,6 +71,7 @@ class Selection(NamedTuple):
 class Input(ScrollView):
     """A text input widget."""
 
+    BINDING_GROUP_TITLE = "Input"
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("left", "cursor_left", "Move cursor left", show=False),
         Binding(
@@ -127,7 +128,7 @@ class Input(ScrollView):
         ),
         Binding("ctrl+k", "delete_right_all", "Delete all to the right", show=False),
         Binding("ctrl+x", "cut", "Cut selected text", show=False),
-        Binding("ctrl+c", "copy", "Copy selected text", show=False),
+        Binding("ctrl+c,super+c", "copy", "Copy selected text", show=False),
         Binding("ctrl+v", "paste", "Paste text from the clipboard", show=False),
     ]
     """
@@ -182,6 +183,7 @@ class Input(ScrollView):
         width: 100%;
         height: 3;
         scrollbar-size-horizontal: 0;
+        pointer: text;
 
         &.-textual-compact {
             border: none !important;
@@ -203,6 +205,7 @@ class Input(ScrollView):
         }
         &>.input--selection {
             background: $input-selection-background;
+            color: $input-selection-foreground;
         }
         &>.input--placeholder, &>.input--suggestion {
             color: $text-disabled;

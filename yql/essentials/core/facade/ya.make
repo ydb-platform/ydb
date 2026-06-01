@@ -41,7 +41,6 @@ PEERDIR(
     yql/essentials/providers/common/gateways_utils
     yql/essentials/providers/config
     yql/essentials/providers/result/provider
-    yql/essentials/minikql/runtime_settings
 )
 
 YQL_LAST_ABI_VERSION()

@@ -71,7 +71,7 @@ Y_UNIT_TEST(HostSettingActivation50Percent) {
     constexpr int Iterations = 10000;
     int activatedCount = 0;
     for (int i = 0; i < Iterations; ++i) {
-        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext());
+        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext(), {});
         if (config->DatumValidation.Get()) {
             ++activatedCount;
         }
@@ -93,7 +93,7 @@ Y_UNIT_TEST(UdfSettingActivation50Percent) {
     constexpr int Iterations = 10000;
     int activatedCount = 0;
     for (int i = 0; i < Iterations; ++i) {
-        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext());
+        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext(), {});
         if (!config->GetUdfSetting("MyModule", "Key").empty()) {
             ++activatedCount;
         }
@@ -124,14 +124,14 @@ Y_UNIT_TEST(ActivationStatePreservedAfterQContextRoundTrip) {
 
         auto writer = qStorage->MakeWriter("op", {});
         auto capturedConfig = CreateRuntimeSettingsFromProto(
-            proto, TString{}, nullptr, TQContext(writer));
+            proto, TString{}, nullptr, TQContext(writer), {});
         writer->Commit().GetValueSync();
 
         const bool capturedHostActivated = capturedConfig->TestHostSetting.Get();
         const bool capturedUdfActivated = !capturedConfig->GetUdfSetting("MyModule", "Key").empty();
 
         auto replayedConfig = CreateRuntimeSettingsFromProto(
-            proto, TString{}, nullptr, TQContext(qStorage->MakeReader("op", {})));
+            proto, TString{}, nullptr, TQContext(qStorage->MakeReader("op", {})), {});
 
         UNIT_ASSERT_VALUES_EQUAL(capturedHostActivated, replayedConfig->TestHostSetting.Get());
         UNIT_ASSERT_VALUES_EQUAL(capturedUdfActivated, !replayedConfig->GetUdfSetting("MyModule", "Key").empty());

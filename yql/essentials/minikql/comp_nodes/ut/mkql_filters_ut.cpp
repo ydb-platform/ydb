@@ -1,8 +1,10 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -12,158 +14,144 @@ Y_UNIT_TEST_LLVM(TestSkipNullMembers) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto structType = pb.NewStructType({{"Key", dataType}, {"Payload", dataType}});
+    using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TMaybe<i32>>,
+                                      NTest::TStructMember<"Payload", TMaybe<i32>>>;
 
-    const auto data1 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(1))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-    const auto data2 = pb.NewStruct(structType, {{"Key", pb.NewEmptyOptional(dataType)}, {"Payload", pb.NewOptional(pb.NewDataLiteral<i32>(2))}});
-    const auto data3 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(3))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-
-    const auto list = pb.NewList(structType, {data1, data2, data3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{1}, {}}},
+                                                               {{{}, {2}}},
+                                                               {{{3}, {}}},
+                                                           });
 
     const auto pgmReturn = pb.SkipNullMembers(list, {"Payload"});
-
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+
+    using TOutRow = std::tuple<TMaybe<i32>, i32>;
+
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                                      {TMaybe<i32>{}, 2},
+                                                                  });
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembers) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto structType = pb.NewStructType({{"Key", dataType}, {"Payload", dataType}});
+    using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TMaybe<i32>>,
+                                      NTest::TStructMember<"Payload", TMaybe<i32>>>;
 
-    const auto data1 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(1))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-    const auto data2 = pb.NewStruct(structType, {{"Key", pb.NewEmptyOptional(dataType)}, {"Payload", pb.NewOptional(pb.NewDataLiteral<i32>(2))}});
-    const auto data3 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(3))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-
-    const auto list = pb.NewList(structType, {data1, data2, data3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{1}, {}}},
+                                                               {{{}, {2}}},
+                                                               {{{3}, {}}},
+                                                           });
 
     const auto pgmReturn = pb.FilterNullMembers(list, {"Payload"});
-
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+
+    using TOutRow = std::tuple<TMaybe<i32>, i32>;
+
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                                      {TMaybe<i32>{}, 2},
+                                                                  });
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptional) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id)));
-    const auto structType = pb.NewStructType({{"Key", dataType}, {"Payload", dataType}});
     const auto justNothing = pb.NewOptional(pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i32>::Id));
 
-    const auto data1 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewOptional(pb.NewDataLiteral<i32>(1)))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-    const auto data2 = pb.NewStruct(structType, {{"Key", pb.NewEmptyOptional(dataType)}, {"Payload", pb.NewOptional(pb.NewOptional(pb.NewDataLiteral<i32>(2)))}});
-    const auto data3 = pb.NewStruct(structType, {{"Key", justNothing}, {"Payload", justNothing}});
+    using TOpt = TMaybe<TMaybe<i32>>;
+    using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TOpt>,
+                                      NTest::TStructMember<"Payload", TOpt>>;
 
-    const auto list = pb.NewList(structType, {data1, data2, data3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{{TMaybe<i32>{1}}}, {}}},
+                                                               {{{}, {{TMaybe<i32>{2}}}}},
+                                                               {{{{TMaybe<i32>{}}}, {{TMaybe<i32>{}}}}}});
 
     const auto pgmReturn = pb.FilterNullMembers(list, {"Payload"});
-
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+
+    using TOutRow = std::tuple<TOpt, TMaybe<i32>>;
+
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                                      {TOpt{}, TMaybe<i32>{2}},
+                                                                      {TOpt{TMaybe<i32>{}}, TMaybe<i32>{}},
+                                                                  });
 }
 
 Y_UNIT_TEST_LLVM(TestSkipNullMembersOverFlow) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto structType = pb.NewStructType({{"Key", dataType}, {"Payload", dataType}});
+    using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TMaybe<i32>>,
+                                      NTest::TStructMember<"Payload", TMaybe<i32>>>;
 
-    const auto data1 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(1))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-    const auto data2 = pb.NewStruct(structType, {{"Key", pb.NewEmptyOptional(dataType)}, {"Payload", pb.NewOptional(pb.NewDataLiteral<i32>(2))}});
-    const auto data3 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(3))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-
-    const auto list = pb.NewList(structType, {data1, data2, data3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{1}, {}}},
+                                                               {{{}, {2}}},
+                                                               {{{3}, {}}},
+                                                           });
 
     const auto pgmReturn = pb.FromFlow(pb.SkipNullMembers(pb.ToFlow(list), {"Payload"}));
-
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+
+    using TOutRow = std::tuple<TMaybe<i32>, i32>;
+
+    const TVector<TOutRow> expected{{TMaybe<i32>{}, 2}};
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembersOverFlow) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto structType = pb.NewStructType({{"Key", dataType}, {"Payload", dataType}});
+    using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TMaybe<i32>>,
+                                      NTest::TStructMember<"Payload", TMaybe<i32>>>;
 
-    const auto data1 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(1))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-    const auto data2 = pb.NewStruct(structType, {{"Key", pb.NewEmptyOptional(dataType)}, {"Payload", pb.NewOptional(pb.NewDataLiteral<i32>(2))}});
-    const auto data3 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewDataLiteral<i32>(3))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-
-    const auto list = pb.NewList(structType, {data1, data2, data3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{1}, {}}},
+                                                               {{{}, {2}}},
+                                                               {{{3}, {}}},
+                                                           });
 
     const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list), {"Payload"}));
-
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+
+    using TOutRow = std::tuple<TMaybe<i32>, i32>;
+
+    const TVector<TOutRow> expected{{TMaybe<i32>{}, 2}};
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptionalOverFlow) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id)));
-    const auto structType = pb.NewStructType({{"Key", dataType}, {"Payload", dataType}});
-    const auto justNothing = pb.NewOptional(pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i32>::Id));
+    using TOpt = TMaybe<TMaybe<i32>>;
+    using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TOpt>,
+                                      NTest::TStructMember<"Payload", TOpt>>;
 
-    const auto data1 = pb.NewStruct(structType, {{"Key", pb.NewOptional(pb.NewOptional(pb.NewDataLiteral<i32>(1)))}, {"Payload", pb.NewEmptyOptional(dataType)}});
-    const auto data2 = pb.NewStruct(structType, {{"Key", pb.NewEmptyOptional(dataType)}, {"Payload", pb.NewOptional(pb.NewOptional(pb.NewDataLiteral<i32>(2)))}});
-    const auto data3 = pb.NewStruct(structType, {{"Key", justNothing}, {"Payload", justNothing}});
-
-    const auto list = pb.NewList(structType, {data1, data2, data3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{{TMaybe<i32>{1}}}, {}}},
+                                                               {{{}, {{TMaybe<i32>{2}}}}},
+                                                               {{{{TMaybe<i32>{}}}, {{TMaybe<i32>{}}}}}});
 
     const auto pgmReturn = pb.FromFlow(pb.FilterNullMembers(pb.ToFlow(list), {"Payload"}));
-
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT(item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+
+    using TOutRow = std::tuple<TOpt, TMaybe<i32>>;
+
+    const TVector<TOutRow> expected{
+        {{}, TMaybe<i32>{2}},
+        {{TMaybe<i32>{}}, TMaybe<i32>{}},
+    };
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(TestSkipNullElements) {

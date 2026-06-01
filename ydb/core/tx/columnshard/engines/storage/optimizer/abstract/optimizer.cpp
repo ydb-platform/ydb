@@ -12,6 +12,18 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> IOptimizerPlanner::GetOptimiz
     return DoGetOptimizationTasks(granule, dataLocksManager);
 }
 
+std::shared_ptr<TColumnEngineChanges> IOptimizerPlanner::GetNextOptimizationTask(
+    std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+    return DoGetNextOptimizationTask(granule, dataLocksManager);
+}
+
+std::shared_ptr<TColumnEngineChanges> IOptimizerPlanner::DoGetNextOptimizationTask(
+    std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+    const auto tasks = DoGetOptimizationTasks(granule, dataLocksManager);
+    return tasks.empty() ? nullptr : tasks.front();
+}
+
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
     AddPortions.emplace_back(portion);
     return *this;

@@ -956,18 +956,21 @@ namespace {
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
 
+            // The warmup actor spawns two concurrent actors that both query .sys/compile_cache_queries,
+            // generating TEvListQueryCacheQueriesRequest: TFetchCacheActor and TFetchTruncatedCountActor.
+            // Intercept them both.
             std::atomic<ui32> sysviewRequestCount{0};
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-                    if (sysviewRequestCount++ == 0) {
-                        auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-                        response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-                        NYql::TIssue issue("Compile cache is not available");
-                        NYql::TIssues issues;
-                        issues.AddIssue(std::move(issue));
-                        NYql::IssuesToMessage(issues, response->Record.MutableIssues());
-                        env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
-                    }
+                    sysviewRequestCount++;
+                    auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                    NYql::TIssue issue("Compile cache is not available");
+                    NYql::TIssues issues;
+                    issues.AddIssue(std::move(issue));
+                    NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+                    env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    ev.Reset();
                 });
 
             TKqpWarmupConfig warmupActorConfig;

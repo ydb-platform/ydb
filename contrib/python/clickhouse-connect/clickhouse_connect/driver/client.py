@@ -1,23 +1,16 @@
+from __future__ import annotations
+
 import io
 import logging
-import warnings
 from abc import ABC, abstractmethod
-from datetime import tzinfo
+from collections.abc import Generator, Iterable, Sequence
+from datetime import timezone, tzinfo
 from typing import (
     TYPE_CHECKING,
     Any,
     BinaryIO,
-    Dict,
-    Generator,
-    Iterable,
-    Literal,
-    Optional,
-    Sequence,
-    Union,
 )
-
-import pytz
-from pytz.exceptions import UnknownTimeZoneError
+from zoneinfo import ZoneInfoNotFoundError
 
 from clickhouse_connect import common
 from clickhouse_connect.common import version
@@ -51,15 +44,12 @@ from clickhouse_connect.driver.options import (
     check_polars,
 )
 from clickhouse_connect.driver.query import (
-    _APPLY_SERVER_TZ_TO_TZ_SOURCE,
-    _TZ_MODE_TO_UTC_TZ_AWARE,
+    _VALID_TZ_MODES,
     _VALID_TZ_SOURCES,
     QueryContext,
     QueryResult,
     TzMode,
     TzSource,
-    _resolve_tz_mode,
-    _resolve_tz_source,
     arrow_buffer,
     to_arrow,
     to_arrow_batches,
@@ -69,22 +59,23 @@ from clickhouse_connect.driver.summary import QuerySummary
 if TYPE_CHECKING:
     import numpy
     import pandas
+    import polars
     import pyarrow
 
 io.DEFAULT_BUFFER_SIZE = 1024 * 256
 logger = logging.getLogger(__name__)
-arrow_str_setting = 'output_format_arrow_string_as_string'
+arrow_str_setting = "output_format_arrow_string_as_string"
 
 
-def _strip_utc_timezone_from_arrow(table: "arrow.Table") -> "arrow.Table":
+def _strip_utc_timezone_from_arrow(table: pyarrow.Table) -> pyarrow.Table:
     """Strip UTC timezone from timestamp columns in Arrow table.
 
     This ensures naive datetimes are returned when the server timezone is UTC
-    and utc_tz_aware is False (the default).
+    and tz_mode is 'naive_utc' (the default).
 
     Only UTC-equivalent timezones (UTC, Etc/UTC, GMT, etc.) are stripped.
     Non-UTC timezones carry important offset information and are always
-    preserved regardless of utc_tz_aware setting.
+    preserved regardless of tz_mode setting.
     """
     new_fields = []
     needs_cast = False
@@ -99,7 +90,7 @@ def _strip_utc_timezone_from_arrow(table: "arrow.Table") -> "arrow.Table":
     return table
 
 
-def _apply_arrow_tz_policy(table: "options.arrow.Table", tz_mode: str) -> "options.arrow.Table":
+def _apply_arrow_tz_policy(table: pyarrow.Table, tz_mode: str) -> pyarrow.Table:
     """Apply the tz_mode policy to an Arrow table before conversion.
 
     Handles UTC stripping when tz_mode is "naive_utc" and warns when
@@ -118,14 +109,13 @@ def _apply_arrow_tz_policy(table: "options.arrow.Table", tz_mode: str) -> "optio
     return table
 
 
-# pylint: disable=too-many-lines
-# pylint: disable=too-many-public-methods,too-many-arguments,too-many-positional-arguments,too-many-instance-attributes
 class Client(ABC):
     """
     Base ClickHouse Connect client
     """
-    compression: str = None
-    write_compression: str = None
+
+    compression: str | None = None
+    write_compression: str | None = None
     protocol_version = 0
     valid_transport_settings = set()
     optional_transport_settings = set()
@@ -143,63 +133,25 @@ class Client(ABC):
     @tz_source.setter
     def tz_source(self, value: TzSource):
         if value not in _VALID_TZ_SOURCES:
-            raise ProgrammingError(
-                f'tz_source must be "auto", "server", or "local", got "{value}"'
-            )
+            raise ProgrammingError(f'tz_source must be "auto", "server", or "local", got "{value}"')
         self._tz_source = value
         if value == "auto":
             self._apply_server_tz = self._dst_safe
         else:
             self._apply_server_tz = value == "server"
 
-    @property
-    def apply_server_timezone(self) -> bool:
-        """Deprecated: use tz_source instead."""
-        warnings.warn(
-            "apply_server_timezone is deprecated and will be removed in 1.0. "
-            "Use tz_source instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._apply_server_tz
-
-    @apply_server_timezone.setter
-    def apply_server_timezone(self, value: Union[bool, str]):
-        """Deprecated: use tz_source instead."""
-        warnings.warn(
-            "apply_server_timezone is deprecated and will be removed in 1.0. "
-            "Use tz_source instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        if value not in _APPLY_SERVER_TZ_TO_TZ_SOURCE:
-            raise ProgrammingError(
-                f"apply_server_timezone must be True, False, or 'always', got \"{value}\""
-            )
-        self.tz_source = _APPLY_SERVER_TZ_TO_TZ_SOURCE[value]
-
-    @property
-    def utc_tz_aware(self) -> Union[bool, Literal["schema"]]:
-        """Deprecated: use tz_mode instead."""
-        warnings.warn(
-            "utc_tz_aware is deprecated and will be removed in 1.0. "
-            "Use tz_mode instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return _TZ_MODE_TO_UTC_TZ_AWARE[self.tz_mode]
-
-    def __init__(self,
-                 database: str,
-                 query_limit: int,
-                 uri: str,
-                 query_retries: int,
-                 server_host_name: Optional[str],
-                 tz_source: Optional[TzSource] = None,
-                 tz_mode: Optional[TzMode] = None,
-                 show_clickhouse_errors: Optional[bool] = None,
-                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-                 apply_server_timezone: Optional[Union[str, bool]] = None):
+    def __init__(
+        self,
+        database: str | None,
+        query_limit: int,
+        uri: str,
+        query_retries: int,
+        server_host_name: str | None,
+        tz_source: TzSource | None = None,
+        tz_mode: TzMode | None = None,
+        show_clickhouse_errors: bool | None = None,
+        autoconnect: bool = True,
+    ):
         """
         Shared initialization of ClickHouse Connect client
         :param database: database name
@@ -212,82 +164,103 @@ class Client(ABC):
           naive UTC timestamps.  "aware" forces timezone-aware UTC datetimes.  "schema" returns datetimes that
           match the server's column definition which means timezone-aware when the column defines a timezone and naive
           for bare DateTime columns.
-        :param utc_tz_aware: Deprecated. Use tz_mode instead.
-        :param apply_server_timezone: Deprecated. Use tz_source instead.
+        :param autoconnect: If True, immediately connect to server and fetch settings. If False,
+          defer connection to _connect() method. Used by async clients to avoid blocking I/O in __init__.
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
-        if database and not database == '__default__':
+        if database and not database == "__default__":
             self.database = database
         if show_clickhouse_errors is not None:
             self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
         self.server_host_name = server_host_name
         self.uri = uri
-        self.tz_mode = _resolve_tz_mode(tz_mode, utc_tz_aware)
-        resolved_tz_source = _resolve_tz_source(tz_source, apply_server_timezone)
+        self.tz_mode = tz_mode if tz_mode is not None else "naive_utc"
+        if self.tz_mode not in _VALID_TZ_MODES:
+            raise ProgrammingError(f'tz_mode must be "naive_utc", "aware", or "schema", got "{self.tz_mode}"')
+        resolved_tz_source = tz_source if tz_source is not None else "auto"
+        if resolved_tz_source not in _VALID_TZ_SOURCES:
+            raise ProgrammingError(f'tz_source must be "auto", "server", or "local", got "{resolved_tz_source}"')
         self._tz_source = resolved_tz_source
-        self._init_common_settings(resolved_tz_source)
+
+        # Initialize attributes that will be set during connection
+        self.server_version = None
+        self.server_tz = timezone.utc
+        self.server_settings = {}
+
+        if autoconnect:
+            self._init_common_settings(resolved_tz_source)
+        else:
+            # Store for deferred async initialization
+            self._deferred_tz_source = resolved_tz_source
 
     def _init_common_settings(self, tz_source: TzSource):
-        self.server_tz, self._dst_safe = pytz.UTC, True
-        self.server_version, server_tz = \
-            tuple(self.command('SELECT version(), timezone()', use_database=False))
+        self.server_tz, self._dst_safe = timezone.utc, True
+        self.server_version, server_tz = tuple(self.command("SELECT version(), timezone()", use_database=False))
         try:
-            server_tz = pytz.timezone(server_tz)
-            server_tz, self._dst_safe = tzutil.normalize_timezone(server_tz)
-            if tz_source == "auto":
-                self._apply_server_tz = self._dst_safe
-            else:
-                self._apply_server_tz = tz_source == "server"
-            self.server_tz = server_tz
-        except UnknownTimeZoneError:
-            logger.warning('Warning, server is using an unrecognized timezone %s, will use UTC default', server_tz)
+            server_tz_info = tzutil.resolve_zone(server_tz)
+            server_tz_info, self._dst_safe = tzutil.normalize_timezone(server_tz_info)
+            self.server_tz = server_tz_info
+        except ZoneInfoNotFoundError:
+            logger.warning(
+                "Server timezone %s could not be resolved, falling back to UTC; %s",
+                server_tz,
+                tzutil.TZDATA_HINT,
+            )
+        if tz_source == "auto":
+            self._apply_server_tz = self._dst_safe
+        else:
+            self._apply_server_tz = tz_source == "server"
 
         if not self._apply_server_tz and not tzutil.local_tz_dst_safe:
-            logger.warning('local timezone %s may return unexpected times due to Daylight Savings Time/' +
-                           'Summer Time differences', tzutil.local_tz.tzname(None))
-        readonly = 'readonly'
-        if not self.min_version('19.17'):
-            readonly = common.get_setting('readonly')
-        server_settings = self.query(f'SELECT name, value, {readonly} as readonly FROM system.settings LIMIT 10000')
-        self.server_settings = {row['name']: SettingDef(**row) for row in server_settings.named_results()}
+            logger.warning(
+                "local timezone %s may return unexpected times due to Daylight Savings Time/" + "Summer Time differences",
+                tzutil.local_tz.tzname(None),
+            )
+        readonly = "readonly"
+        if not self.min_version("19.17"):
+            readonly = common.get_setting("readonly")
+        server_settings = self.query(f"SELECT name, value, {readonly} as readonly FROM system.settings LIMIT 10000")
+        self.server_settings = {row["name"]: SettingDef(**row) for row in server_settings.named_results()}
 
-        if self.min_version(CH_VERSION_WITH_PROTOCOL) and common.get_setting('use_protocol_version'):
+        if self.min_version(CH_VERSION_WITH_PROTOCOL) and common.get_setting("use_protocol_version"):
             #  Unfortunately we have to validate that the client protocol version is actually used by ClickHouse
             #  since the query parameter could be stripped off (in particular, by CHProxy)
-            test_data = self.raw_query('SELECT 1 AS check', fmt='Native', settings={
-                'client_protocol_version': PROTOCOL_VERSION_WITH_LOW_CARD
-            })
-            if test_data[8:16] == b'\x01\x01\x05check':
+            test_data = self.raw_query(
+                "SELECT 1 AS check", fmt="Native", settings={"client_protocol_version": PROTOCOL_VERSION_WITH_LOW_CARD}
+            )
+            if test_data[8:16] == b"\x01\x01\x05check":
                 self.protocol_version = PROTOCOL_VERSION_WITH_LOW_CARD
-        if self._setting_status('date_time_input_format').is_writable:
-            self.set_client_setting('date_time_input_format', 'best_effort')
-        if self._setting_status('allow_experimental_json_type').is_set and \
-                self._setting_status('cast_string_to_dynamic_use_inference').is_writable:
-            self.set_client_setting('cast_string_to_dynamic_use_inference', '1')
-        if self.min_version('24.8') and not self.min_version('24.10'):
+        if self._setting_status("date_time_input_format").is_writable:
+            self.set_client_setting("date_time_input_format", "best_effort")
+        if (
+            self._setting_status("allow_experimental_json_type").is_set
+            and self._setting_status("cast_string_to_dynamic_use_inference").is_writable
+        ):
+            self.set_client_setting("cast_string_to_dynamic_use_inference", "1")
+        if self.min_version("24.8") and not self.min_version("24.10"):
             dynamic_module.json_serialization_format = 0
 
-    def _validate_settings(self, settings: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    def _validate_settings(self, settings: dict[str, Any] | None) -> dict[str, str]:
         """
         This strips any ClickHouse settings that are not recognized or are read only.
         :param settings:  Dictionary of setting name and values
         :return: A filtered dictionary of settings with values rendered as strings
         """
         validated = {}
-        invalid_action = common.get_setting('invalid_setting_action')
+        invalid_action = common.get_setting("invalid_setting_action")
         for key, value in settings.items():
             str_value = self._validate_setting(key, value, invalid_action)
             if str_value is not None:
                 validated[key] = value
         return validated
 
-    def _validate_setting(self, key: str, value: Any, invalid_action: str) -> Optional[str]:
+    def _validate_setting(self, key: str, value: Any, invalid_action: str) -> str | None:
         str_value = str(value)
         if value is True:
-            str_value = '1'
+            str_value = "1"
         elif value is False:
-            str_value = '0'
+            str_value = "0"
         if key not in self.valid_transport_settings:
             setting_def = self.server_settings.get(key)
             current_setting = self.get_client_setting(key)
@@ -299,37 +272,41 @@ class Client(ABC):
             if setting_def is None or setting_def.readonly:
                 if key in self.optional_transport_settings:
                     return None
-                if invalid_action == 'send':
-                    logger.warning('Attempting to send unrecognized or readonly setting %s', key)
-                elif invalid_action == 'drop':
-                    logger.warning('Dropping unrecognized or readonly settings %s', key)
+                if invalid_action == "send":
+                    logger.warning("Attempting to send unrecognized or readonly setting %s", key)
+                elif invalid_action == "drop":
+                    logger.warning("Dropping unrecognized or readonly settings %s", key)
                     return None
                 else:
-                    raise ProgrammingError(f'Setting {key} is unknown or readonly') from None
+                    raise ProgrammingError(f"Setting {key} is unknown or readonly") from None
         return str_value
 
     def _setting_status(self, key: str) -> SettingStatus:
         comp_setting = self.server_settings.get(key)
         if not comp_setting:
             return SettingStatus(False, False)
-        return SettingStatus(comp_setting.value != '0', comp_setting.readonly != 1)
+        return SettingStatus(comp_setting.value != "0", comp_setting.readonly != 1)
 
     def _prep_query(self, context: QueryContext):
         if context.is_select and not context.has_limit and self.query_limit:
-            limit = f'\n LIMIT {self.query_limit}'
+            limit = f"\n LIMIT {self.query_limit}"
             if isinstance(context.query, bytes):
                 return context.final_query + limit.encode()
             return context.final_query + limit
         return context.final_query
 
-    def _check_tz_change(self, new_tz) -> Optional[tzinfo]:
+    def _check_tz_change(self, new_tz) -> tzinfo | None:
         if new_tz:
             try:
-                new_tzinfo = pytz.timezone(new_tz)
+                new_tzinfo = tzutil.resolve_zone(new_tz)
                 if new_tzinfo != self.server_tz:
                     return new_tzinfo
-            except UnknownTimeZoneError:
-                logger.warning('Unrecognized timezone %s received from ClickHouse', new_tz)
+            except ZoneInfoNotFoundError:
+                logger.warning(
+                    "Unrecognized timezone %s received from ClickHouse; %s",
+                    new_tz,
+                    tzutil.TZDATA_HINT,
+                )
         return None
 
     @abstractmethod
@@ -347,7 +324,7 @@ class Client(ABC):
         """
 
     @abstractmethod
-    def get_client_setting(self, key: str) -> Optional[str]:
+    def get_client_setting(self, key: str) -> str | None:
         """
         :param key: The setting key
         :return: The string value of the setting, if it exists, or None
@@ -360,62 +337,66 @@ class Client(ABC):
         :param access_token: Access token string
         """
 
-    # pylint: disable=unused-argument,too-many-locals
-    def query(self,
-              query: Optional[str] = None,
-              parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-              settings: Optional[Dict[str, Any]] = None,
-              query_formats: Optional[Dict[str, str]] = None,
-              column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-              encoding: Optional[str] = None,
-              use_none: Optional[bool] = None,
-              column_oriented: Optional[bool] = None,
-              use_numpy: Optional[bool] = None,
-              max_str_len: Optional[int] = None,
-              context: QueryContext = None,
-              query_tz: Optional[Union[str, tzinfo]] = None,
-              column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-              utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-              external_data: Optional[ExternalData] = None,
-              transport_settings: Optional[Dict[str, str]] = None,
-              tz_mode: Optional[TzMode] = None) -> QueryResult:
+    def query(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        column_oriented: bool | None = None,
+        use_numpy: bool | None = None,
+        max_str_len: int | None = None,
+        context: QueryContext = None,
+        query_tz: str | tzinfo | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> QueryResult:
         """
         Main query method for SELECT, DESCRIBE and other SQL statements that return a result matrix.  For
         parameters, see the create_query_context method
         :return: QueryResult -- data and metadata from response
         """
-        if query and query.lower().strip().startswith('select __connect_version__'):
-            return QueryResult([[f'ClickHouse Connect v.{version()}  ⓒ ClickHouse Inc.']], None,
-                               ('connect_version',), (get_from_name('String'),))
+        if query and query.lower().strip().startswith("select __connect_version__"):
+            return QueryResult(
+                [[f"ClickHouse Connect v.{version()}  ⓒ ClickHouse Inc."]], None, ("connect_version",), (get_from_name("String"),)
+            )
         kwargs = locals().copy()
-        del kwargs['self']
+        del kwargs["self"]
         query_context = self.create_query_context(**kwargs)
         if query_context.is_command:
-            response = self.command(query,
-                                    parameters=query_context.parameters,
-                                    settings=query_context.settings,
-                                    external_data=query_context.external_data,
-                                    transport_settings=query_context.transport_settings)
+            response = self.command(
+                query,
+                parameters=query_context.parameters,
+                settings=query_context.settings,
+                external_data=query_context.external_data,
+                transport_settings=query_context.transport_settings,
+            )
             if isinstance(response, QuerySummary):
                 return response.as_query_result()
             return QueryResult([response] if isinstance(response, list) else [[response]])
         return self._query_with_context(query_context)
 
-    def query_column_block_stream(self,
-                                  query: Optional[str] = None,
-                                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                                  settings: Optional[Dict[str, Any]] = None,
-                                  query_formats: Optional[Dict[str, str]] = None,
-                                  column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                                  encoding: Optional[str] = None,
-                                  use_none: Optional[bool] = None,
-                                  context: QueryContext = None,
-                                  query_tz: Optional[Union[str, tzinfo]] = None,
-                                  column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                                  utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-                                  external_data: Optional[ExternalData] = None,
-                                  transport_settings: Optional[Dict[str, str]] = None,
-                                  tz_mode: Optional[TzMode] = None) -> StreamContext:
+    def query_column_block_stream(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        context: QueryContext = None,
+        query_tz: str | tzinfo | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> StreamContext:
         """
         Variation of main query method that returns a stream of column oriented blocks. For
         parameters, see the create_query_context method.
@@ -423,21 +404,22 @@ class Client(ABC):
         """
         return self._context_query(locals(), use_numpy=False, streaming=True).column_block_stream
 
-    def query_row_block_stream(self,
-                               query: Optional[str] = None,
-                               parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                               settings: Optional[Dict[str, Any]] = None,
-                               query_formats: Optional[Dict[str, str]] = None,
-                               column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                               encoding: Optional[str] = None,
-                               use_none: Optional[bool] = None,
-                               context: QueryContext = None,
-                               query_tz: Optional[Union[str, tzinfo]] = None,
-                               column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                               utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-                               external_data: Optional[ExternalData] = None,
-                               transport_settings: Optional[Dict[str, str]] = None,
-                               tz_mode: Optional[TzMode] = None) -> StreamContext:
+    def query_row_block_stream(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        context: QueryContext = None,
+        query_tz: str | tzinfo | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> StreamContext:
         """
         Variation of main query method that returns a stream of row oriented blocks. For
         parameters, see the create_query_context method.
@@ -445,21 +427,22 @@ class Client(ABC):
         """
         return self._context_query(locals(), use_numpy=False, streaming=True).row_block_stream
 
-    def query_rows_stream(self,
-                          query: Optional[str] = None,
-                          parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                          settings: Optional[Dict[str, Any]] = None,
-                          query_formats: Optional[Dict[str, str]] = None,
-                          column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                          encoding: Optional[str] = None,
-                          use_none: Optional[bool] = None,
-                          context: QueryContext = None,
-                          query_tz: Optional[Union[str, tzinfo]] = None,
-                          column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                          utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-                          external_data: Optional[ExternalData] = None,
-                          transport_settings: Optional[Dict[str, str]] = None,
-                          tz_mode: Optional[TzMode] = None) -> StreamContext:
+    def query_rows_stream(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        context: QueryContext = None,
+        query_tz: str | tzinfo | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> StreamContext:
         """
         Variation of main query method that returns a stream of row oriented blocks. For
         parameters, see the create_query_context method.
@@ -468,13 +451,16 @@ class Client(ABC):
         return self._context_query(locals(), use_numpy=False, streaming=True).rows_stream
 
     @abstractmethod
-    def raw_query(self, query: str,
-                  parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                  settings: Optional[Dict[str, Any]] = None,
-                  fmt: str = None,
-                  use_database: bool = True,
-                  external_data: Optional[ExternalData] = None,
-                  transport_settings: Optional[Dict[str, str]] = None) -> bytes:
+    def raw_query(
+        self,
+        query: str,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        fmt: str = None,
+        use_database: bool = True,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> bytes:
         """
         Query method that simply returns the raw ClickHouse format bytes
         :param query: Query statement/format string
@@ -489,39 +475,43 @@ class Client(ABC):
         """
 
     @abstractmethod
-    def raw_stream(self, query: str,
-                   parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                   settings: Optional[Dict[str, Any]] = None,
-                   fmt: str = None,
-                   use_database: bool = True,
-                   external_data: Optional[ExternalData] = None,
-                   transport_settings: Optional[Dict[str, str]] = None) -> io.IOBase:
+    def raw_stream(
+        self,
+        query: str,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        fmt: str = None,
+        use_database: bool = True,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> io.IOBase | StreamContext:
         """
-       Query method that returns the result as an io.IOBase iterator
-       :param query: Query statement/format string
-       :param parameters: Optional dictionary used to format the query
-       :param settings: Optional dictionary of ClickHouse settings (key/string values)
-       :param fmt: ClickHouse output format
-       :param use_database  Send the database parameter to ClickHouse so the command will be executed in the client
-        database context.
-       :param external_data: External data to send with the query.
-       :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
-       :return: io.IOBase stream/iterator for the result
-       """
+        Query method that returns the result as a stream iterator.
+        :param query: Query statement/format string
+        :param parameters: Optional dictionary used to format the query
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param fmt: ClickHouse output format
+        :param use_database  Send the database parameter to ClickHouse so the command will be executed in the client
+         database context.
+        :param external_data: External data to send with the query.
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :return: io.IOBase (sync) or StreamContext (async) - both support iteration over raw bytes
+        """
 
-    # pylint: disable=duplicate-code,unused-argument
-    def query_np(self,
-                 query: Optional[str] = None,
-                 parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                 settings: Optional[Dict[str, Any]] = None,
-                 query_formats: Optional[Dict[str, str]] = None,
-                 column_formats: Optional[Dict[str, str]] = None,
-                 encoding: Optional[str] = None,
-                 use_none: Optional[bool] = None,
-                 max_str_len: Optional[int] = None,
-                 context: QueryContext = None,
-                 external_data: Optional[ExternalData] = None,
-                 transport_settings: Optional[Dict[str, str]] = None) -> 'numpy.ndarray':
+    def query_np(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        max_str_len: int | None = None,
+        context: QueryContext = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> numpy.ndarray:
         """
         Query method that returns the results as a numpy array.  For parameter values, see the
         create_query_context method
@@ -531,19 +521,20 @@ class Client(ABC):
         self._add_integration_tag("numpy")
         return self._context_query(locals(), use_numpy=True).np_result
 
-    # pylint: disable=duplicate-code,too-many-arguments,unused-argument
-    def query_np_stream(self,
-                        query: Optional[str] = None,
-                        parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                        settings: Optional[Dict[str, Any]] = None,
-                        query_formats: Optional[Dict[str, str]] = None,
-                        column_formats: Optional[Dict[str, str]] = None,
-                        encoding: Optional[str] = None,
-                        use_none: Optional[bool] = None,
-                        max_str_len: Optional[int] = None,
-                        context: QueryContext = None,
-                        external_data: Optional[ExternalData] = None,
-                        transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
+    def query_np_stream(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        max_str_len: int | None = None,
+        context: QueryContext = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> StreamContext:
         """
         Query method that returns the results as a stream of numpy arrays.  For parameter values, see the
         create_query_context method
@@ -553,25 +544,25 @@ class Client(ABC):
         self._add_integration_tag("numpy")
         return self._context_query(locals(), use_numpy=True, streaming=True).np_stream
 
-    # pylint: disable=duplicate-code,unused-argument
-    def query_df(self,
-                 query: Optional[str] = None,
-                 parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                 settings: Optional[Dict[str, Any]] = None,
-                 query_formats: Optional[Dict[str, str]] = None,
-                 column_formats: Optional[Dict[str, str]] = None,
-                 encoding: Optional[str] = None,
-                 use_none: Optional[bool] = None,
-                 max_str_len: Optional[int] = None,
-                 use_na_values: Optional[bool] = None,
-                 query_tz: Optional[str] = None,
-                 column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-                 context: QueryContext = None,
-                 external_data: Optional[ExternalData] = None,
-                 use_extended_dtypes: Optional[bool] = None,
-                 transport_settings: Optional[Dict[str, str]] = None,
-                 tz_mode: Optional[TzMode] = None) -> 'pandas.DataFrame':
+    def query_df(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        max_str_len: int | None = None,
+        use_na_values: bool | None = None,
+        query_tz: str | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        context: QueryContext = None,
+        external_data: ExternalData | None = None,
+        use_extended_dtypes: bool | None = None,
+        transport_settings: dict[str, str] | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> pandas.DataFrame:
         """
         Query method that results the results as a pandas dataframe.  For parameter values, see the
         create_query_context method
@@ -581,25 +572,25 @@ class Client(ABC):
         self._add_integration_tag("pandas")
         return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
 
-    # pylint: disable=duplicate-code,unused-argument
-    def query_df_stream(self,
-                        query: Optional[str] = None,
-                        parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                        settings: Optional[Dict[str, Any]] = None,
-                        query_formats: Optional[Dict[str, str]] = None,
-                        column_formats: Optional[Dict[str, str]] = None,
-                        encoding: Optional[str] = None,
-                        use_none: Optional[bool] = None,
-                        max_str_len: Optional[int] = None,
-                        use_na_values: Optional[bool] = None,
-                        query_tz: Optional[str] = None,
-                        column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                        utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-                        context: QueryContext = None,
-                        external_data: Optional[ExternalData] = None,
-                        use_extended_dtypes: Optional[bool] = None,
-                        transport_settings: Optional[Dict[str, str]] = None,
-                        tz_mode: Optional[TzMode] = None) -> StreamContext:
+    def query_df_stream(
+        self,
+        query: str | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        max_str_len: int | None = None,
+        use_na_values: bool | None = None,
+        query_tz: str | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        context: QueryContext = None,
+        external_data: ExternalData | None = None,
+        use_extended_dtypes: bool | None = None,
+        transport_settings: dict[str, str] | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> StreamContext:
         """
         Query method that returns the results as a StreamContext.  For parameter values, see the
         create_query_context method
@@ -607,32 +598,31 @@ class Client(ABC):
         """
         check_pandas()
         self._add_integration_tag("pandas")
-        return self._context_query(locals(), use_numpy=True,
-                                   as_pandas=True,
-                                   streaming=True).df_stream
+        return self._context_query(locals(), use_numpy=True, as_pandas=True, streaming=True).df_stream
 
-    def create_query_context(self,
-                             query: Optional[Union[str, bytes]] = None,
-                             parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                             settings: Optional[Dict[str, Any]] = None,
-                             query_formats: Optional[Dict[str, str]] = None,
-                             column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                             encoding: Optional[str] = None,
-                             use_none: Optional[bool] = None,
-                             column_oriented: Optional[bool] = None,
-                             use_numpy: Optional[bool] = False,
-                             max_str_len: Optional[int] = 0,
-                             context: Optional[QueryContext] = None,
-                             query_tz: Optional[Union[str, tzinfo]] = None,
-                             column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                             utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
-                             use_na_values: Optional[bool] = None,
-                             streaming: bool = False,
-                             as_pandas: bool = False,
-                             external_data: Optional[ExternalData] = None,
-                             use_extended_dtypes: Optional[bool] = None,
-                             transport_settings: Optional[Dict[str, str]] = None,
-                             tz_mode: Optional[TzMode] = None) -> QueryContext:
+    def create_query_context(
+        self,
+        query: str | bytes | None = None,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        encoding: str | None = None,
+        use_none: bool | None = None,
+        column_oriented: bool | None = None,
+        use_numpy: bool | None = False,
+        max_str_len: int | None = 0,
+        context: QueryContext | None = None,
+        query_tz: str | tzinfo | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        use_na_values: bool | None = None,
+        streaming: bool = False,
+        as_pandas: bool = False,
+        external_data: ExternalData | None = None,
+        use_extended_dtypes: bool | None = None,
+        transport_settings: dict[str, str] | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> QueryContext:
         """
         Creates or updates a reusable QueryContext object
         :param query: Query statement/format string
@@ -650,7 +640,7 @@ class Client(ABC):
           structured array even with ClickHouse variable length String columns.  If 0, Numpy arrays for
           String columns will always be object arrays
         :param context: An existing QueryContext to be updated with any provided parameter values
-        :param query_tz: Either a string or a pytz tzinfo object.  (Strings will be converted to tzinfo objects).
+        :param query_tz: Either a string IANA timezone name or a tzinfo object (strings are resolved via zoneinfo).
           Values for any DateTime or DateTime64 column in the query will be converted to Python datetime.datetime
           objects with the selected timezone.
         :param column_tzs: A dictionary of column names to tzinfo objects (or strings that will be converted to
@@ -658,7 +648,6 @@ class Client(ABC):
         :param tz_mode: Override the client default for handling UTC results.  "aware" forces timezone-aware
           UTC datetimes, "naive_utc" returns naive UTC datetimes, and "schema" returns datetimes matching the
           server's column definition.
-        :param utc_tz_aware: Deprecated. Use tz_mode instead.
         :param use_na_values: Deprecated alias for use_advanced_dtypes
         :param as_pandas Return the result columns as pandas.Series objects
         :param streaming Marker used to correctly configure streaming queries
@@ -669,64 +658,67 @@ class Client(ABC):
         :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: Reusable QueryContext
         """
-        if tz_mode is not None or utc_tz_aware is not None:
-            resolved_tz_mode = _resolve_tz_mode(tz_mode, utc_tz_aware)
-        else:
-            resolved_tz_mode = self.tz_mode
+        resolved_tz_mode = tz_mode if tz_mode is not None else self.tz_mode
         if context:
-            return context.updated_copy(query=query,
-                                        parameters=parameters,
-                                        settings=settings,
-                                        query_formats=query_formats,
-                                        column_formats=column_formats,
-                                        encoding=encoding,
-                                        server_tz=self.server_tz,
-                                        use_none=use_none,
-                                        column_oriented=column_oriented,
-                                        use_numpy=use_numpy,
-                                        max_str_len=max_str_len,
-                                        query_tz=query_tz,
-                                        column_tzs=column_tzs,
-                                        tz_mode=resolved_tz_mode,
-                                        as_pandas=as_pandas,
-                                        use_extended_dtypes=use_extended_dtypes,
-                                        streaming=streaming,
-                                        external_data=external_data,
-                                        transport_settings=transport_settings)
+            return context.updated_copy(
+                query=query,
+                parameters=parameters,
+                settings=settings,
+                query_formats=query_formats,
+                column_formats=column_formats,
+                encoding=encoding,
+                server_tz=self.server_tz,
+                use_none=use_none,
+                column_oriented=column_oriented,
+                use_numpy=use_numpy,
+                max_str_len=max_str_len,
+                query_tz=query_tz,
+                column_tzs=column_tzs,
+                tz_mode=resolved_tz_mode,
+                as_pandas=as_pandas,
+                use_extended_dtypes=use_extended_dtypes,
+                streaming=streaming,
+                external_data=external_data,
+                transport_settings=transport_settings,
+            )
         if use_numpy and max_str_len is None:
             max_str_len = 0
         if use_extended_dtypes is None:
             use_extended_dtypes = use_na_values
         if as_pandas and use_extended_dtypes is None:
             use_extended_dtypes = True
-        return QueryContext(query=query,
-                            parameters=parameters,
-                            settings=settings,
-                            query_formats=query_formats,
-                            column_formats=column_formats,
-                            encoding=encoding,
-                            server_tz=self.server_tz,
-                            use_none=use_none,
-                            column_oriented=column_oriented,
-                            use_numpy=use_numpy,
-                            max_str_len=max_str_len,
-                            query_tz=query_tz,
-                            column_tzs=column_tzs,
-                            tz_mode=resolved_tz_mode,
-                            use_extended_dtypes=use_extended_dtypes,
-                            as_pandas=as_pandas,
-                            streaming=streaming,
-                            apply_server_tz=self._apply_server_tz,
-                            external_data=external_data,
-                            transport_settings=transport_settings)
+        return QueryContext(
+            query=query,
+            parameters=parameters,
+            settings=settings,
+            query_formats=query_formats,
+            column_formats=column_formats,
+            encoding=encoding,
+            server_tz=self.server_tz,
+            use_none=use_none,
+            column_oriented=column_oriented,
+            use_numpy=use_numpy,
+            max_str_len=max_str_len,
+            query_tz=query_tz,
+            column_tzs=column_tzs,
+            tz_mode=resolved_tz_mode,
+            use_extended_dtypes=use_extended_dtypes,
+            as_pandas=as_pandas,
+            streaming=streaming,
+            apply_server_tz=self._apply_server_tz,
+            external_data=external_data,
+            transport_settings=transport_settings,
+        )
 
-    def query_arrow(self,
-                    query: str,
-                    parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                    settings: Optional[Dict[str, Any]] = None,
-                    use_strings: Optional[bool] = None,
-                    external_data: Optional[ExternalData] = None,
-                    transport_settings: Optional[Dict[str, str]] = None) -> 'pyarrow.Table':
+    def query_arrow(
+        self,
+        query: str,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        use_strings: bool | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> pyarrow.Table:
         """
         Query method using the ClickHouse Arrow format to return a PyArrow table
         :param query: Query statement/format string
@@ -740,20 +732,26 @@ class Client(ABC):
         check_arrow()
         self._add_integration_tag("arrow")
         settings = self._update_arrow_settings(settings, use_strings)
-        return to_arrow(self.raw_query(query,
-                                       parameters,
-                                       settings,
-                                       fmt='Arrow',
-                                       external_data=external_data,
-                                       transport_settings=transport_settings))
+        return to_arrow(
+            self.raw_query(
+                query,
+                parameters,
+                settings,
+                fmt="Arrow",
+                external_data=external_data,
+                transport_settings=transport_settings,
+            )
+        )
 
-    def query_arrow_stream(self,
-                           query: str,
-                           parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                           settings: Optional[Dict[str, Any]] = None,
-                           use_strings: Optional[bool] = None,
-                           external_data: Optional[ExternalData] = None,
-                           transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
+    def query_arrow_stream(
+        self,
+        query: str,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        use_strings: bool | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> StreamContext:
         """
         Query method that returns the results as a stream of Arrow tables
         :param query: Query statement/format string
@@ -767,22 +765,27 @@ class Client(ABC):
         check_arrow()
         self._add_integration_tag("arrow")
         settings = self._update_arrow_settings(settings, use_strings)
-        return to_arrow_batches(self.raw_stream(query,
-                                                parameters,
-                                                settings,
-                                                fmt='ArrowStream',
-                                                external_data=external_data,
-                                                transport_settings=transport_settings))
+        return to_arrow_batches(
+            self.raw_stream(
+                query,
+                parameters,
+                settings,
+                fmt="ArrowStream",
+                external_data=external_data,
+                transport_settings=transport_settings,
+            )
+        )
 
-    def query_df_arrow(self,
-                       query: str,
-                       parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                       settings: Optional[Dict[str, Any]] = None,
-                       use_strings: Optional[bool] = None,
-                       external_data: Optional[ExternalData] = None,
-                       transport_settings: Optional[Dict[str, str]] = None,
-                       dataframe_library: str = "pandas"
-                       ) -> Union["pd.DataFrame", "pl.DataFrame"]:
+    def query_df_arrow(
+        self,
+        query: str,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        use_strings: bool | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        dataframe_library: str = "pandas",
+    ) -> pandas.DataFrame | polars.DataFrame:
         """
         Query method using the ClickHouse Arrow format to return a DataFrame
         with PyArrow dtype backend. This provides better performance and memory efficiency
@@ -802,10 +805,8 @@ class Client(ABC):
         if dataframe_library == "pandas":
             check_pandas()
             self._add_integration_tag("pandas")
-            if not options.IS_PANDAS_2:
-                raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
 
-            def converter(table: options.arrow.Table) -> options.pd.DataFrame:
+            def converter(table: pyarrow.Table) -> pandas.DataFrame:
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
                 return table.to_pandas(types_mapper=options.pd.ArrowDtype, safe=False)
 
@@ -813,7 +814,7 @@ class Client(ABC):
             check_polars()
             self._add_integration_tag("polars")
 
-            def converter(table: options.arrow.Table) -> options.pl.DataFrame:
+            def converter(table: pyarrow.Table) -> polars.DataFrame:
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
                 return options.pl.from_arrow(table)
 
@@ -831,14 +832,16 @@ class Client(ABC):
 
         return converter(arrow_table)
 
-    def query_df_arrow_stream(self,
-                             query: str,
-                             parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                             settings: Optional[Dict[str, Any]] = None,
-                             use_strings: Optional[bool] = None,
-                             external_data: Optional[ExternalData] = None,
-                             transport_settings: Optional[Dict[str, str]] = None,
-                             dataframe_library: str = "pandas") -> StreamContext:
+    def query_df_arrow_stream(
+        self,
+        query: str,
+        parameters: Sequence | dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        use_strings: bool | None = None,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        dataframe_library: str = "pandas",
+    ) -> StreamContext:
         """
         Query method that returns the results as a stream of DataFrames with PyArrow dtype backend.
         Each DataFrame represents a block from the ClickHouse response.
@@ -856,17 +859,15 @@ class Client(ABC):
         if dataframe_library == "pandas":
             check_pandas()
             self._add_integration_tag("pandas")
-            if not options.IS_PANDAS_2:
-                raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
 
-            def converter(table: "options.arrow.Table") -> "options.pd.DataFrame":
+            def converter(table: pyarrow.Table) -> pandas.DataFrame:
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
                 return table.to_pandas(types_mapper=options.pd.ArrowDtype, safe=False)
         elif dataframe_library == "polars":
             check_polars()
             self._add_integration_tag("polars")
 
-            def converter(table: options.arrow.Table) -> options.pl.DataFrame:
+            def converter(table: pyarrow.Table) -> polars.DataFrame:
                 table = _apply_arrow_tz_policy(table, self.tz_mode)
                 return options.pl.from_arrow(table)
         else:
@@ -883,31 +884,31 @@ class Client(ABC):
 
         return StreamContext(raw_stream, df_generator())
 
-    def _update_arrow_settings(self,
-                               settings: Optional[Dict[str, Any]],
-                               use_strings: Optional[bool]) -> Dict[str, Any]:
+    def _update_arrow_settings(self, settings: dict[str, Any] | None, use_strings: bool | None) -> dict[str, Any]:
         settings = dict_copy(settings)
         if self.database:
-            settings['database'] = self.database
+            settings["database"] = self.database
         str_status = self._setting_status(arrow_str_setting)
         if use_strings is None:
             if str_status.is_writable and not str_status.is_set:
-                settings[arrow_str_setting] = '1'  # Default to returning strings if possible
+                settings[arrow_str_setting] = "1"  # Default to returning strings if possible
         elif use_strings != str_status.is_set:
             if not str_status.is_writable:
-                raise OperationalError(f'Cannot change readonly {arrow_str_setting} to {use_strings}')
-            settings[arrow_str_setting] = '1' if use_strings else '0'
+                raise OperationalError(f"Cannot change readonly {arrow_str_setting} to {use_strings}")
+            settings[arrow_str_setting] = "1" if use_strings else "0"
         return settings
 
     @abstractmethod
-    def command(self,
-                cmd: str,
-                parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
-                data: Union[str, bytes] = None,
-                settings: Dict[str, Any] = None,
-                use_database: bool = True,
-                external_data: Optional[ExternalData] = None,
-                transport_settings: Optional[Dict[str, str]] = None) -> Union[str, int, Sequence[str], QuerySummary]:
+    def command(
+        self,
+        cmd: str,
+        parameters: Sequence | dict[str, Any] | None = None,
+        data: str | bytes = None,
+        settings: dict[str, Any] = None,
+        use_database: bool = True,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> str | int | Sequence[str] | QuerySummary:
         """
         Client method that returns a single value instead of a result set
         :param cmd: ClickHouse query/command as a python format string
@@ -930,17 +931,19 @@ class Client(ABC):
         :return: ClickHouse server is up and reachable
         """
 
-    def insert(self,
-               table: Optional[str] = None,
-               data: Sequence[Sequence[Any]] = None,
-               column_names: Union[str, Iterable[str]] = '*',
-               database: Optional[str] = None,
-               column_types: Sequence[ClickHouseType] = None,
-               column_type_names: Sequence[str] = None,
-               column_oriented: bool = False,
-               settings: Optional[Dict[str, Any]] = None,
-               context: InsertContext = None,
-               transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
+    def insert(
+        self,
+        table: str | None = None,
+        data: Sequence[Sequence[Any]] = None,
+        column_names: str | Iterable[str] = "*",
+        database: str | None = None,
+        column_types: Sequence[ClickHouseType] = None,
+        column_type_names: Sequence[str] = None,
+        column_oriented: bool = False,
+        settings: dict[str, Any] | None = None,
+        context: InsertContext = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> QuerySummary:
         """
         Method to insert multiple rows/data matrix of native Python objects.  If context is specified arguments
         other than data are ignored
@@ -961,31 +964,36 @@ class Client(ABC):
         :return: QuerySummary with summary information, throws exception if insert fails
         """
         if (context is None or context.empty) and data is None:
-            raise ProgrammingError('No data specified for insert') from None
+            raise ProgrammingError("No data specified for insert") from None
         if context is None:
-            context = self.create_insert_context(table,
-                                                 column_names,
-                                                 database,
-                                                 column_types,
-                                                 column_type_names,
-                                                 column_oriented,
-                                                 settings,
-                                                 transport_settings=transport_settings)
+            context = self.create_insert_context(
+                table,
+                column_names,
+                database,
+                column_types,
+                column_type_names,
+                column_oriented,
+                settings,
+                transport_settings=transport_settings,
+            )
         if data is not None:
             if not context.empty:
-                raise ProgrammingError('Attempting to insert new data with non-empty insert context') from None
+                raise ProgrammingError("Attempting to insert new data with non-empty insert context") from None
             context.data = data
         return self.data_insert(context)
 
-    def insert_df(self, table: str = None,
-                  df=None,
-                  database: Optional[str] = None,
-                  settings: Optional[Dict] = None,
-                  column_names: Optional[Sequence[str]] = None,
-                  column_types: Sequence[ClickHouseType] = None,
-                  column_type_names: Sequence[str] = None,
-                  context: InsertContext = None,
-                  transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
+    def insert_df(
+        self,
+        table: str = None,
+        df=None,
+        database: str | None = None,
+        settings: dict | None = None,
+        column_names: Sequence[str] | None = None,
+        column_types: Sequence[ClickHouseType] = None,
+        column_type_names: Sequence[str] = None,
+        context: InsertContext = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> QuerySummary:
         """
         Insert a pandas DataFrame into ClickHouse.  If context is specified arguments other than df are ignored
         :param table: ClickHouse table
@@ -1009,22 +1017,27 @@ class Client(ABC):
             if column_names is None:
                 column_names = df.columns
             elif len(column_names) != len(df.columns):
-                raise ProgrammingError('DataFrame column count does not match insert_columns') from None
-        return self.insert(table,
-                           df,
-                           column_names,
-                           database,
-                           column_types=column_types,
-                           column_type_names=column_type_names,
-                           settings=settings,
-                           transport_settings=transport_settings,
-                           context=context)
+                raise ProgrammingError("DataFrame column count does not match insert_columns") from None
+        return self.insert(
+            table,
+            df,
+            column_names,
+            database,
+            column_types=column_types,
+            column_type_names=column_type_names,
+            settings=settings,
+            transport_settings=transport_settings,
+            context=context,
+        )
 
-    def insert_arrow(self, table: str,
-                     arrow_table,
-                     database: str = None,
-                     settings: Optional[Dict] = None,
-                     transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
+    def insert_arrow(
+        self,
+        table: str,
+        arrow_table,
+        database: str = None,
+        settings: dict | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> QuerySummary:
         """
         Insert a PyArrow table DataFrame into ClickHouse using raw Arrow format
         :param table: ClickHouse table
@@ -1035,25 +1048,27 @@ class Client(ABC):
         """
         check_arrow()
         self._add_integration_tag("arrow")
-        full_table = table if '.' in table or not database else f'{database}.{table}'
-        compression = self.write_compression if self.write_compression in ('zstd', 'lz4') else None
+        full_table = table if "." in table or not database else f"{database}.{table}"
+        compression = self.write_compression if self.write_compression in ("zstd", "lz4") else None
         column_names, insert_block = arrow_buffer(arrow_table, compression)
-        return self.raw_insert(full_table, column_names, insert_block, settings, 'Arrow', transport_settings)
+        return self.raw_insert(full_table, column_names, insert_block, settings, "Arrow", transport_settings)
 
-    def insert_df_arrow(self,
-                        table: str,
-                        df: Union["pd.DataFrame", "pl.DataFrame"],
-                        database: Optional[str] = None,
-                        settings: Optional[Dict] = None,
-                        transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
+    def insert_df_arrow(
+        self,
+        table: str,
+        df: pandas.DataFrame | polars.DataFrame,
+        database: str | None = None,
+        settings: dict | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> QuerySummary:
         """
         Insert a pandas DataFrame with PyArrow backend or a polars DataFrame into ClickHouse using Arrow format.
         This method is optimized for DataFrames that already use Arrow format, providing
         better performance than the standard insert_df method.
-        
+
         Validation is performed and an exception will be raised if this requirement is not met.
         Polars DataFrames are natively Arrow-based and don't require additional validation.
-        
+
         :param table: ClickHouse table name
         :param df: Pandas DataFrame with PyArrow dtype backend or Polars DataFrame
         :param database: Optional ClickHouse database name
@@ -1073,9 +1088,6 @@ class Client(ABC):
             raise TypeError(f"df must be either a pandas DataFrame or polars DataFrame, got {type(df).__name__}")
 
         if df_lib == "pandas":
-            if not options.IS_PANDAS_2:
-                raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
-
             non_arrow_cols = [col for col, dtype in df.dtypes.items() if not isinstance(dtype, options.pd.ArrowDtype)]
             if non_arrow_cols:
                 raise ProgrammingError(
@@ -1100,16 +1112,18 @@ class Client(ABC):
             transport_settings=transport_settings,
         )
 
-    def create_insert_context(self,
-                              table: str,
-                              column_names: Optional[Union[str, Sequence[str]]] = None,
-                              database: Optional[str] = None,
-                              column_types: Sequence[ClickHouseType] = None,
-                              column_type_names: Sequence[str] = None,
-                              column_oriented: bool = False,
-                              settings: Optional[Dict[str, Any]] = None,
-                              data: Optional[Sequence[Sequence[Any]]] = None,
-                              transport_settings: Optional[Dict[str, str]] = None) -> InsertContext:
+    def create_insert_context(
+        self,
+        table: str,
+        column_names: str | Sequence[str] | None = None,
+        database: str | None = None,
+        column_types: Sequence[ClickHouseType] = None,
+        column_type_names: Sequence[str] = None,
+        column_oriented: bool = False,
+        settings: dict[str, Any] | None = None,
+        data: Sequence[Sequence[Any]] | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> InsertContext:
         """
         Builds a reusable insert context to hold state for a duration of an insert
         :param table: Target table
@@ -1127,23 +1141,24 @@ class Client(ABC):
         :return: Reusable insert context
         """
         full_table = table
-        if '.' not in table:
+        if "." not in table:
             if database:
-                full_table = f'{quote_identifier(database)}.{quote_identifier(table)}'
+                full_table = f"{quote_identifier(database)}.{quote_identifier(table)}"
             else:
                 full_table = quote_identifier(table)
         column_defs = []
         if column_types is None and column_type_names is None:
-            describe_result = self.query(f'DESCRIBE TABLE {full_table}', settings=settings)
-            column_defs = [ColumnDef(**row) for row in describe_result.named_results()
-                           if row['default_type'] not in ('ALIAS', 'MATERIALIZED')]
-        if column_names is None or isinstance(column_names, str) and column_names == '*':
+            describe_result = self.query(f"DESCRIBE TABLE {full_table}", settings=settings)
+            column_defs = [
+                ColumnDef(**row) for row in describe_result.named_results() if row["default_type"] not in ("ALIAS", "MATERIALIZED")
+            ]
+        if column_names is None or isinstance(column_names, str) and column_names == "*":
             column_names = [cd.name for cd in column_defs]
             column_types = [cd.ch_type for cd in column_defs]
         elif isinstance(column_names, str):
             column_names = [column_names]
         if len(column_names) == 0:
-            raise ValueError('Column names must be specified for insert')
+            raise ValueError("Column names must be specified for insert")
         if not column_types:
             if column_type_names:
                 column_types = [get_from_name(name) for name in column_type_names]
@@ -1152,16 +1167,18 @@ class Client(ABC):
                 try:
                     column_types = [column_map[name].ch_type for name in column_names]
                 except KeyError as ex:
-                    raise ProgrammingError(f'Unrecognized column {ex} in table {table}') from None
+                    raise ProgrammingError(f"Unrecognized column {ex} in table {table}") from None
         if len(column_names) != len(column_types):
-            raise ProgrammingError('Column names do not match column types') from None
-        return InsertContext(full_table,
-                             column_names,
-                             column_types,
-                             column_oriented=column_oriented,
-                             settings=settings,
-                             transport_settings=transport_settings,
-                             data=data)
+            raise ProgrammingError("Column names do not match column types") from None
+        return InsertContext(
+            full_table,
+            column_names,
+            column_types,
+            column_oriented=column_oriented,
+            settings=settings,
+            transport_settings=transport_settings,
+            data=data,
+        )
 
     def min_version(self, version_str: str) -> bool:
         """
@@ -1172,13 +1189,14 @@ class Client(ABC):
         :return: True if version_str is greater than the server_version, False if less than
         """
         try:
-            server_parts = [int(x) for x in self.server_version.split('.') if x.isnumeric()]
+            server_parts = [int(x) for x in self.server_version.split(".") if x.isnumeric()]
             server_parts.extend([0] * (4 - len(server_parts)))
-            version_parts = [int(x) for x in version_str.split('.')]
+            version_parts = [int(x) for x in version_str.split(".")]
             version_parts.extend([0] * (4 - len(version_parts)))
         except ValueError:
-            logger.warning('Server %s or requested version %s does not match format of numbers separated by dots',
-                           self.server_version, version_str)
+            logger.warning(
+                "Server %s or requested version %s does not match format of numbers separated by dots", self.server_version, version_str
+            )
             return False
         for x, y in zip(server_parts, version_parts):
             if x > y:
@@ -1187,7 +1205,6 @@ class Client(ABC):
                 return False
         return True
 
-    # pylint: disable=no-self-use
     def _add_integration_tag(self, name: str) -> None:
         """Transport hook to surface 3rd party lib integration info (default: no-op)."""
         return
@@ -1201,13 +1218,16 @@ class Client(ABC):
         """
 
     @abstractmethod
-    def raw_insert(self, table: str,
-                   column_names: Optional[Sequence[str]] = None,
-                   insert_block: Union[str, bytes, Generator[bytes, None, None], BinaryIO] = None,
-                   settings: Optional[Dict] = None,
-                   fmt: Optional[str] = None,
-                   compression: Optional[str] = None,
-                   transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
+    def raw_insert(
+        self,
+        table: str,
+        column_names: Sequence[str] | None = None,
+        insert_block: str | bytes | Generator[bytes, None, None] | BinaryIO = None,
+        settings: dict | None = None,
+        fmt: str | None = None,
+        compression: str | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ) -> QuerySummary:
         """
         Insert data already formatted in a bytes object
         :param table: Table name (whether qualified with the database name or not)
@@ -1233,11 +1253,11 @@ class Client(ABC):
 
     def _context_query(self, lcls: dict, **overrides):
         kwargs = lcls.copy()
-        kwargs.pop('self')
+        kwargs.pop("self")
         kwargs.update(overrides)
-        return self._query_with_context((self.create_query_context(**kwargs)))
+        return self._query_with_context(self.create_query_context(**kwargs))
 
-    def __enter__(self) -> 'Client':
+    def __enter__(self) -> Client:
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback) -> None:

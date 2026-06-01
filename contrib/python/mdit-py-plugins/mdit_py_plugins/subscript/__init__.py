@@ -10,7 +10,6 @@ Originally ported during implementation of https://github.com/hasgeek/funnel/blo
 from __future__ import annotations
 
 from collections.abc import Sequence
-import re
 
 from markdown_it import MarkdownIt
 from markdown_it.renderer import RendererHTML
@@ -18,12 +17,11 @@ from markdown_it.rules_inline import StateInline
 from markdown_it.token import Token
 from markdown_it.utils import EnvType, OptionsDict
 
+from mdit_py_plugins.utils import UNESCAPE_RE, WHITESPACE_RE
+
 __all__ = ["sub_plugin"]
 
 TILDE_CHAR = "~"
-
-WHITESPACE_RE = re.compile(r"(^|[^\\])(\\\\)*\s")
-UNESCAPE_RE = re.compile(r'\\([ \\!"#$%&\'()*+,.\/:;<=>?@[\]^_`{|}~-])')
 
 
 def tokenize(state: StateInline, silent: bool) -> bool:

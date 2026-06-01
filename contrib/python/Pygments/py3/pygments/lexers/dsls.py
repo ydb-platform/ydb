@@ -4,7 +4,7 @@
 
     Lexers for various domain-specific languages.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -67,7 +67,7 @@ class ProtoBufLexer(RegexLexer):
             (r'[a-zA-Z_][\w.]*', Name),
         ],
         'package': [
-            (r'[a-zA-Z_]\w*', Name.Namespace, '#pop'),
+            (r'[a-zA-Z_][\w\.]*', Name.Namespace, '#pop'),
             default('#pop'),
         ],
         'message': [

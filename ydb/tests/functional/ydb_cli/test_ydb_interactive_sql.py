@@ -1271,6 +1271,22 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert "cannot be executed inside an interactive transaction" in combined
         assert "ROLLBACK" in result.stdout
 
+    def test_show_create_allowed_inside_transaction(self):
+        """SHOW CREATE TABLE is read-only DDL and must pass through inside a transaction."""
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                "SHOW CREATE TABLE `{}`;".format(self.table_path),
+                "ROLLBACK",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = (result.stdout + result.stderr).lower()
+        assert "cannot be executed inside an interactive transaction" not in combined
+        assert "ROLLBACK" in result.stdout
+
     def test_failed_query_invalidates_transaction(self):
         """After a failed in-tx query the CLI must drop local tx state (server auto-rollback)."""
         result = self.run_interactive_session(
@@ -1354,22 +1370,27 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
         child.send("\r")
 
     def test_no_ddl_completion_inside_transaction(self):
-        """Inside a transaction TAB must hide destructive DDL but keep SHOW CREATE."""
+        """Inside a transaction, hints hide destructive DDL but keep SHOW CREATE.
+
+        TAB completion lists are not rendered reliably in a pty (replxx may use
+        inline completion only), so we use the same hint-based checks as
+        test_hints_showed_for_ambiguous_prefix. Check CRE before S so that a
+        prior SHOW CREATE hint does not pollute the negative assertion.
+        """
         child = self.spawn_interactive()
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_prompt(child)
             self._send_line(child, "BEGIN")
             self._wait_for_ready_after_begin(child)
-            child.send("S")
-            child.send("\t")
-            # Replxx may split rendered keywords with ANSI escapes (ELECT ... S ... HOW CREATE).
-            self._expect_keyword(child, "ELECT")
-            self._expect_keyword(child, "HOW CREATE")
-            child.sendcontrol("u")
+
             child.send("CRE")
-            child.send("\t")
-            self._expect_no_keyword(child, "CREATE")
+            self._expect_no_keyword(child, "CREATE", timeout=2)
+
+            child.sendcontrol("u")
+            child.send("S")
+            child.expect("SELECT", timeout=self.COMPLETION_TIMEOUT)
+            child.expect("SHOW CREATE", timeout=self.COMPLETION_TIMEOUT)
         finally:
             self._discard_and_exit(child)
             child.close()

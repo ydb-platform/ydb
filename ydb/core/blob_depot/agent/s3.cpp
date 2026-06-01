@@ -6,7 +6,6 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
@@ -106,9 +105,14 @@ namespace NKikimr::NBlobDepot {
 
                 if (IsSlowDown(error)) {
                     ++*Agent.S3GetsSlowDown;
-                    BDEV(BDEV43, "S3_get_slow_down", (VG, Agent.VirtualGroupId), (BDT, Agent.TabletId),
-                        (G, Agent.BlobDepotGeneration), (ReadId, Read.ReadId), (Key, Read.Key),
-                        (Retry, Read.SlowDownRetries));
+                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "S3_get_slow_down",
+                        {"Marker", "BDEV43"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"ReadId", Read.ReadId},
+                        {"Key", Read.Key},
+                        {"Retry", Read.SlowDownRetries});
 
                     Agent.NotifyS3GetSlowDown();
                     Agent.OnS3GetCompleted(/*success=*/false, 0);
@@ -193,8 +197,13 @@ namespace NKikimr::NBlobDepot {
             {"CurrentMaxS3GetsInFlight", CurrentMaxS3GetsInFlight},
             {"S3GetsInFlight", S3GetsInFlight},
             {"QueueSize", PendingS3Reads.size()});
-        BDEV(BDEV44, "S3_get_throttled", (VG, VirtualGroupId), (BDT, TabletId), (G, BlobDepotGeneration),
-            (DelayMs, delay.MilliSeconds()), (QueueSize, PendingS3Reads.size()));
+        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "S3_get_throttled",
+            {"Marker", "BDEV44"},
+            {"VG", VirtualGroupId},
+            {"BDT", TabletId},
+            {"G", BlobDepotGeneration},
+            {"DelayMs", delay.MilliSeconds()},
+            {"QueueSize", PendingS3Reads.size()});
 
         if (!S3GetWakeupScheduled) {
             TActivationContext::Schedule(S3GetThrottleUntil, new IEventHandle(TEvPrivate::EvS3GetThrottleWakeup,
@@ -280,7 +289,14 @@ namespace NKikimr::NBlobDepot {
                     InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
                         auto& Agent = Query->Agent;
                         const auto& QueryId = Query->QueryId;
-                        BDEV_QUERY(BDEV37, "written_to_S3", (BlobId, Id), (Locator, Locator));
+                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "written_to_S3",
+                            {"Marker", "BDEV37"},
+                            {"VG", Agent.VirtualGroupId},
+                            {"BDT", Agent.TabletId},
+                            {"G", Agent.BlobDepotGeneration},
+                            {"Q", QueryId},
+                            {"BlobId", Id},
+                            {"Locator", Locator});
                         Query->OnPutS3ObjectResponse(std::move(error), slowDown);
                     });
                 }
@@ -300,7 +316,14 @@ namespace NKikimr::NBlobDepot {
 
         const TActorId writerActorId = Agent.RegisterWithSameMailbox(new TWriteActor(LifetimeToken, this, id, locator));
 
-        BDEV_QUERY(BDEV38, "issue_S3_write", (BlobId, id), (Locator, locator));
+        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "issue_S3_write",
+            {"Marker", "BDEV38"},
+            {"VG", Agent.VirtualGroupId},
+            {"BDT", Agent.TabletId},
+            {"G", Agent.BlobDepotGeneration},
+            {"Q", QueryId},
+            {"BlobId", id},
+            {"Locator", locator});
 
         TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, writerActorId,
             new NWrappers::TEvExternalStorage::TEvPutObjectRequest(

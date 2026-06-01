@@ -48,8 +48,17 @@ namespace NKikimr::NBlobDepot {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Request.QuerySize; ++i) {
                         const auto& q = Request.Queries[i];
-                        BDEV_QUERY(BDEV19, "TEvGet_new", (U.BlobId, q.Id), (U.Shift, q.Shift), (U.Size, q.Size),
-                            (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IsIndexOnly, Request.IsIndexOnly));
+                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGet_new",
+                            {"Marker", "BDEV19"},
+                            {"VG", Agent.VirtualGroupId},
+                            {"BDT", Agent.TabletId},
+                            {"G", Agent.BlobDepotGeneration},
+                            {"Q", QueryId},
+                            {"U.BlobId", q.Id},
+                            {"U.Shift", q.Shift},
+                            {"U.Size", q.Size},
+                            {"U.MustRestoreFirst", Request.MustRestoreFirst},
+                            {"U.IsIndexOnly", Request.IsIndexOnly});
                     }
                 }
 
@@ -190,9 +199,17 @@ namespace NKikimr::NBlobDepot {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Response->ResponseSz; ++i) {
                         const auto& r = Response->Responses[i];
-                        BDEV_QUERY(BDEV20, "TEvGet_end", (BlobId, r.Id), (Shift, r.Shift),
-                            (RequestedSize, r.RequestedSize), (Status, status.value_or(r.Status)),
-                            (Buffer.size, r.Buffer.size()));
+                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGet_end",
+                            {"Marker", "BDEV20"},
+                            {"VG", Agent.VirtualGroupId},
+                            {"BDT", Agent.TabletId},
+                            {"G", Agent.BlobDepotGeneration},
+                            {"Q", QueryId},
+                            {"BlobId", r.Id},
+                            {"Shift", r.Shift},
+                            {"RequestedSize", r.RequestedSize},
+                            {"Status", status.value_or(r.Status)},
+                            {"Buffer.size", r.Buffer.size()});
                     }
                 }
             }

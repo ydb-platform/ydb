@@ -213,8 +213,12 @@ namespace NKikimr::NBlobDepot {
                             {"Useful", useful},
                             {"Allow", allow},
                             {"Error", error});
-                        BDEV(BDEV35, "scan_S3_found_key", (BDT, Self->TabletID()), (Locator, *locator), (Useful, useful),
-                            (Allow, allow));
+                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "scan_S3_found_key",
+                            {"Marker", "BDEV35"},
+                            {"BDT", Self->TabletID()},
+                            {"Locator", *locator},
+                            {"Useful", useful},
+                            {"Allow", allow});
                         if (!useful && allow) {
                             trash.insert(*locator);
                         }

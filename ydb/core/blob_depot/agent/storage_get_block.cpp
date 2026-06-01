@@ -34,12 +34,27 @@ namespace NKikimr::NBlobDepot {
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                BDEV_QUERY(BDEV23, "TEvGetBlock_end", (Status, status), (ErrorReason, errorReason));
+                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
+                    {"Marker", "BDEV23"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"Status", status},
+                    {"ErrorReason", errorReason});
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess(std::unique_ptr<TEvBlobStorage::TEvGetBlockResult> result) {
-                BDEV_QUERY(BDEV24, "TEvGetBlock_end", (Status, NKikimrProto::OK), (TabletId, Request.TabletId), (Generation, BlockedGeneration));
+                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
+                    {"Marker", "BDEV24"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"Status", NKikimrProto::OK},
+                    {"TabletId", Request.TabletId},
+                    {"Generation", BlockedGeneration});
                 TBlobStorageQuery::EndWithSuccess(std::move(result));
             }
 

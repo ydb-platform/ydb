@@ -242,7 +242,11 @@ namespace NKikimr::NBlobDepot {
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
 
-                BDEV(BDEV27, "delete_S3", (BDT, Self->TabletID()), (Key, key), (Locator, locator));
+                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "delete_S3",
+                    {"Marker", "BDEV27"},
+                    {"BDT", Self->TabletID()},
+                    {"Key", key},
+                    {"Locator", locator});
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -290,7 +294,11 @@ namespace NKikimr::NBlobDepot {
                             });
                             return locators;
                         };
-                        BDEV(BDEV28, "change_key", (BDT, Self->TabletID()), (Key, key), (Locators, makeLocators()));
+                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "change_key",
+                            {"Marker", "BDEV28"},
+                            {"BDT", Self->TabletID()},
+                            {"Key", key},
+                            {"Locators", makeLocators()});
                     }
                     row.template Update<Schema::Data::Value>(value.SerializeToString());
                     if (inserted || uncertainWriteBefore != value.UncertainWrite) {

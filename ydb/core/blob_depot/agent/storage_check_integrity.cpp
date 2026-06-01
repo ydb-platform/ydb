@@ -16,7 +16,13 @@ namespace NKikimr::NBlobDepot {
 
             void Initiate() override {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
-                    BDEV_QUERY(BDEV25, "TEvCheckIntegrity_new", (U.BlobId, Request.Id));
+                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_new",
+                        {"Marker", "BDEV25"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"U.BlobId", Request.Id});
                 }
 
                 TString blobId = Request.Id.AsBinaryString();
@@ -76,7 +82,14 @@ namespace NKikimr::NBlobDepot {
 
             void TraceResponse(NKikimrProto::EReplyStatus status) {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
-                    BDEV_QUERY(BDEV26, "TEvCheckIntegrity_end", (BlobId, Request.Id), (Status, status));
+                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_end",
+                        {"Marker", "BDEV26"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"BlobId", Request.Id},
+                        {"Status", status});
                 }
             }
 

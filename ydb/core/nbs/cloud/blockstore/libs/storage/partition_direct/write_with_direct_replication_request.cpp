@@ -82,7 +82,7 @@ void TWriteWithDirectReplicationRequestExecutor::
             "TWriteWithDirectReplicationRequestExecutor. Send write request to "
             "handoff host %u since we "
             "have %lu completed writes",
-            static_cast<ui32>(host),
+            PrintHostIndex(host).c_str(),
             CompletedWrites.Count());
 
         SendWriteRequest(host);

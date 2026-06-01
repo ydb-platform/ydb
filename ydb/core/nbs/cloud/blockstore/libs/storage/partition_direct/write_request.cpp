@@ -149,7 +149,7 @@ void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
         NKikimrServices::NBS_PARTITION,
         "%s SendWriteRequest. HostIndex: %u",
         LogTitle.GetWithTime().c_str(),
-        static_cast<ui32>(host));
+        PrintHostIndex(host).c_str());
 
     auto span =
         DirectBlockGroup->CreateChildSpan(TraceId, "TBaseWriteRequestExecutor");
@@ -184,7 +184,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
         NKikimrServices::NBS_PARTITION,
         "%s OnWriteResponse. HostIndex: %u, Error: %s",
         LogTitle.GetWithTime().c_str(),
-        static_cast<ui32>(host),
+        PrintHostIndex(host).c_str(),
         FormatError(response.Error).c_str());
 
     if (!HasError(response.Error)) {

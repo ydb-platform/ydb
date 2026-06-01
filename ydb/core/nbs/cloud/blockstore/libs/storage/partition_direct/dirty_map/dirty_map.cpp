@@ -821,7 +821,7 @@ TString TBlocksDirtyMap::DebugPrintDDiskState() const
 {
     TStringBuilder result;
     for (THostIndex h = 0; h < DDiskStates.size(); ++h) {
-        result << "H" << static_cast<ui32>(h);
+        result << PrintHostIndex(h);
 
         const bool disabled = DisabledHosts.Get(h);
         const bool desired = DesiredDDisks.Get(h);

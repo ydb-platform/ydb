@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TOracle)
             UNIT_ASSERT_C(
                 count + tolerance >= expected && count <= expected + tolerance,
                 TStringBuilder()
-                    << "host " << static_cast<ui32>(hostIndex) << " was picked "
+                    << "host " << PrintHostIndex(hostIndex) << " was picked "
                     << count << " times, expected ~" << expected);
         }
     }

@@ -944,7 +944,7 @@ void TVChunk::OnCopyComplete(
         NKikimrServices::NBS_PARTITION,
         "%s CopyDDisk %d finished: %s",
         LogTitle.GetWithTime().c_str(),
-        static_cast<int>(hostIndex),
+        PrintHostIndex(hostIndex).c_str(),
         ToString(result).c_str());
 
     auto prepare = [weakSelf = weak_from_this(), hostIndex]()

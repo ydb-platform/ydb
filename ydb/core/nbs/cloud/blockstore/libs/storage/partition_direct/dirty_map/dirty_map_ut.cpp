@@ -143,9 +143,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldSwitchOffline)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        TString error;
         // Offline H1
-        vchunkConfig.TurnOffline(1, &error);
+        vchunkConfig.TurnOffHost(1);
 
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
@@ -161,7 +160,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Offline H0
-        vchunkConfig.TurnOffline(0, &error);
+        vchunkConfig.TurnOffHost(0);
         dirtyMap.UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
@@ -172,7 +171,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Can't switch H2 offline
-        vchunkConfig.TurnOffline(2, &error);
+        vchunkConfig.TurnOffHost(2);
         dirtyMap.UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
@@ -183,7 +182,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Offline H3
-        vchunkConfig.TurnOffline(3, &error);
+        vchunkConfig.TurnOffHost(3);
         dirtyMap.UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
@@ -194,7 +193,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Offline H4
-        vchunkConfig.TurnOffline(4, &error);
+        vchunkConfig.TurnOffHost(4);
         dirtyMap.UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
@@ -260,7 +259,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Can't switch H2 offline
-        vchunkConfig.TurnOffline(2, &error);
+        vchunkConfig.TurnOffHost(2);
         dirtyMap.UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,0,0};"
@@ -621,7 +620,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Host 0 disabled, hosts 1,2,3 primary, host 4 hand-off.
         vchunkConfig.PromoteHost(3);
         TString error;
-        vchunkConfig.TurnOffline(0, &error);
+        vchunkConfig.TurnOffHost(0);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
@@ -673,9 +672,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Hosts 0,1 disabled; hosts 2,3,4 are primary.
         TString error;
-        vchunkConfig.TurnOffline(0, &error);
+        vchunkConfig.TurnOffHost(0);
         UNIT_ASSERT_VALUES_EQUAL("", error);
-        vchunkConfig.TurnOffline(1, &error);
+        vchunkConfig.TurnOffHost(1);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
         vchunkConfig.SetWatermark(4, DefaultBlockSize * 1024);
@@ -733,10 +732,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
-        TString error;
-        vchunkConfig.TurnOffline(0, &error);
+        vchunkConfig.TurnOffHost(0);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
-        UNIT_ASSERT_VALUES_EQUAL("", error);
 
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,

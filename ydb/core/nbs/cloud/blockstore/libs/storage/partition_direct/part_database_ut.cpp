@@ -226,8 +226,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             5,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
-        TString error;
-        updated.TurnOffline(0, &error);
+        updated.TurnOffHost(0);
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)

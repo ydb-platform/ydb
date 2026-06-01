@@ -25,9 +25,18 @@ public:
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
+    // Enables the host to work. Does not change the ddisk status for the host.
     void EnableHost(THostIndex hostIndex);
+    // Temporarily disables the host. Does not change the ddisk status for the
+    // host.
     void DisableHost(THostIndex hostIndex);
-    THostIndex TurnOffline(THostIndex from, TString* error);
+    // Disables the host and deletes ddisk on that host. If possible, adds ddisk
+    // on the new host. Returns the text of the error or message to be logged.
+    TString TurnOffHost(THostIndex hostIndex);
+    // Removes ddisk from the host. Returns error message or empty string when
+    // demote executed successfully.
+    TString DemoteHost(THostIndex hostIndex);
+    // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;

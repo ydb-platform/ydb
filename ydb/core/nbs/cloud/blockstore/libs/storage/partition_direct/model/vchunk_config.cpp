@@ -106,41 +106,47 @@ void TVChunkConfig::DisableHost(THostIndex hostIndex)
     EnabledHosts.Reset(hostIndex);
 }
 
-THostIndex TVChunkConfig::TurnOffline(THostIndex from, TString* error)
+TString TVChunkConfig::TurnOffHost(THostIndex hostIndex)
 {
-    DisableHost(from);
-    if (DDiskHosts.GetRole(from) == EHostRole::None ||
-        DDiskHosts.GetRole(from) == EHostRole::HandOff)
+    DisableHost(hostIndex);
+
+    if (DDiskHosts.GetRole(hostIndex) == EHostRole::None ||
+        DDiskHosts.GetRole(hostIndex) == EHostRole::HandOff)
     {
-        DisableHost(from);
-        return InvalidHostIndex;
+        return {};
     }
 
-    const auto fullDDisks = GetFullDDisks();
-    if (fullDDisks.Count() == 1 && fullDDisks.Get(from)) {
-        *error = TStringBuilder()
-                 << "Can't reset last healthy ddisk " << PrintHostIndex(from);
-        return InvalidHostIndex;
+    TString error = DemoteHost(hostIndex);
+    if (!error.empty()) {
+        return error;
     }
-
-    DDiskHosts.SetRole(from, EHostRole::None);
-    PBufferHosts.SetRole(from, EHostRole::HandOff);
-    Watermarks[from] = std::nullopt;
 
     const THostIndex to = GetPrimaryCandidate(DDiskHosts, EnabledHosts);
     if (to == InvalidHostIndex) {
-        *error = TStringBuilder() << "Can't find new primary candidate for "
-                                  << PrintHostIndex(from);
-        return InvalidHostIndex;
+        return TStringBuilder() << "Can't find new primary candidate for "
+                                << PrintHostIndex(hostIndex);
     }
 
-    DDiskHosts.SetRole(to, EHostRole::Primary);
-    PBufferHosts.SetRole(to, EHostRole::Primary);
-    Watermarks[to] = 0;
-
+    PromoteHost(to);
     Y_ABORT_UNLESS(EnabledHosts.Get(to) == true);
 
-    return to;
+    return TStringBuilder()
+           << "Host " << PrintHostIndex(hostIndex) << " demoted, host "
+           << PrintHostIndex(to) << " promoted";
+}
+
+TString TVChunkConfig::DemoteHost(THostIndex hostIndex)
+{
+    const auto fullDDisks = GetFullDDisks();
+    if (fullDDisks.Count() == 1 && fullDDisks.Get(hostIndex)) {
+        return TStringBuilder() << "Can't demote last healthy ddisk "
+                                << PrintHostIndex(hostIndex);
+    }
+
+    DDiskHosts.SetRole(hostIndex, EHostRole::None);
+    PBufferHosts.SetRole(hostIndex, EHostRole::HandOff);
+    Watermarks[hostIndex] = std::nullopt;
+    return {};
 }
 
 void TVChunkConfig::PromoteHost(THostIndex hostIndex)

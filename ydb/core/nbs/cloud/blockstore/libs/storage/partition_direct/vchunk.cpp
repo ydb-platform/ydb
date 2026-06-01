@@ -863,32 +863,14 @@ TVChunkConfig TVChunk::PrepareNewConfig(
             break;
         }
         case EHostState::Offline: {
-            TString error;
-            THostIndex to = newConfig.TurnOffline(hostIndex, &error);
-            if (to == InvalidHostIndex) {
-                if (error.empty()) {
-                    LOG_INFO(
-                        *ActorSystem,
-                        NKikimrServices::NBS_PARTITION,
-                        "%s Switch host to offline %s",
-                        LogTitle.GetWithTime().c_str(),
-                        PrintHostIndex(hostIndex).c_str());
-                } else {
-                    LOG_ERROR(
-                        *ActorSystem,
-                        NKikimrServices::NBS_PARTITION,
-                        "%s TransferDDisk error. %s",
-                        LogTitle.GetWithTime().c_str(),
-                        error.c_str());
-                }
-            } else {
-                LOG_INFO(
+            const TString message = newConfig.TurnOffHost(hostIndex);
+            if (!message.empty()) {
+                LOG_WARN(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "%s TransferDDisk from %d to %d",
+                    "%s %s",
                     LogTitle.GetWithTime().c_str(),
-                    PrintHostIndex(hostIndex).c_str(),
-                    PrintHostIndex(to).c_str());
+                    message.c_str());
             }
 
             break;
@@ -907,21 +889,26 @@ void TVChunk::ApplyConfig()
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
          ++hostIndex)
     {
-        if (VChunkConfig.GetWatermark(hostIndex) != std::nullopt) {
+        const auto watermark = VChunkConfig.GetWatermark(hostIndex);
+        const bool needCopier = watermark != std::nullopt;
+        const auto* copier = Copiers.FindPtr(hostIndex);
+        if (needCopier || !copier) {
             continue;
         }
-        if (auto* copier = Copiers.FindPtr(hostIndex)) {
-            (*copier)->Stop();
-            Copiers.erase(hostIndex);
-        }
+
+        (*copier)->Stop();
+        Copiers.erase(hostIndex);
     }
 
     // Add new copiers
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
          ++hostIndex)
     {
-        auto watermark = VChunkConfig.GetWatermark(hostIndex);
-        if (watermark == std::nullopt || Copiers.contains(hostIndex)) {
+        const auto watermark = VChunkConfig.GetWatermark(hostIndex);
+        const bool needCopier = watermark != std::nullopt;
+        const auto* copier = Copiers.FindPtr(hostIndex);
+
+        if (!needCopier || copier) {
             continue;
         }
 

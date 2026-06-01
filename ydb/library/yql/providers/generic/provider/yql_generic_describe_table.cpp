@@ -98,13 +98,15 @@ void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescri
         return;
     }
 
-    // 2. Client provided service account creds that must be converted into IAM-token
-    Y_ENSURE(State_->CredentialsFactory, "CredentialsFactory is not initialized");
-    auto structuredTokenJSON = TStructuredTokenBuilder()
-                                   .SetServiceAccountIdAuth(clusterConfig.GetServiceAccountId(),
-                                                            clusterConfig.GetServiceAccountIdSignature())
-                                   .ToJson();
-    Y_ENSURE(structuredTokenJSON, "empty structured token");
+    // 2. Client provided other creds (service account, iam delegated cloud auth,...) that must be converted into IAM-token
+    const auto tokenIt = State_->Configuration->Tokens.find(clusterConfig.name());
+    Y_ENSURE(
+            tokenIt != State_->Configuration->Tokens.end(),
+            TStringBuilder() << "missing structured token for cluster `" << clusterConfig.name() << "`");
+    const auto& structuredTokenJSON = tokenIt->second;
+    Y_ENSURE(
+            !structuredTokenJSON.empty(),
+            TStringBuilder() << "empty structured token for cluster `" << clusterConfig.name() << "`");
 
     // Create provider or get existing one.
     // It's crucial to reuse providers because their construction implies synchronous IO.

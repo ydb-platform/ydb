@@ -380,13 +380,6 @@ static void AddResultDebugInfo(const TEvPQ::TEvBlobResponse* response, T* readRe
         readResult->SetBlobsFromDisk(diskBlobs);
 }
 
-ui64 GetFirstHeaderOffset(const TKey& key, const TString& blob)
-{
-    TBlobIterator it(key, blob);
-    AFL_ENSURE(it.IsValid());
-    return it.GetBatch().GetOffset();
-}
-
 bool TReadInfo::UpdateUsage(const TClientBlob& blob,
                             ui32& cnt, ui32& size, ui32& lastBlobSize) const
 {

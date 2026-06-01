@@ -9,8 +9,78 @@
 namespace NKikimr {
 namespace NPQ {
 
-namespace {
+//
+// TPackedBatchData
+//
 
+TPackedBatchDataOwner::TPackedBatchDataOwner(TString&& data)
+    : Data(std::move(data))
+{
+}
+
+TPackedBatchData::TPackedBatchData(const char* data, size_t size)
+    : Buffer(data, size)
+{
+}
+
+TPackedBatchData::TPackedBatchData(TBuffer&& data)
+    : Buffer(std::move(data))
+{
+}
+
+TPackedBatchData::TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 offset, ui32 size)
+    : Owner(std::move(owner))
+    , Offset(offset)
+    , Size_(size)
+{
+    AFL_ENSURE(Owner);
+    AFL_ENSURE(static_cast<size_t>(Offset) + Size_ <= Owner->Data.size())
+        ("offset", Offset)
+        ("size", Size_)
+        ("ownerSize", Owner->Data.size());
+}
+
+const char* TPackedBatchData::data() const noexcept
+{
+    return Owner ? Owner->Data.data() + Offset : Buffer.data();
+}
+
+size_t TPackedBatchData::size() const noexcept
+{
+    return Size();
+}
+
+size_t TPackedBatchData::Size() const noexcept
+{
+    return Owner ? Size_ : Buffer.Size();
+}
+
+size_t TPackedBatchData::Capacity() const noexcept
+{
+    return Owner ? Size_ : Buffer.Capacity();
+}
+
+bool TPackedBatchData::Empty() const noexcept
+{
+    return Size() == 0;
+}
+
+bool TPackedBatchData::IsShared() const noexcept
+{
+    return static_cast<bool>(Owner);
+}
+
+const TPackedBatchDataOwner* TPackedBatchData::SharedOwner() const noexcept
+{
+    return Owner.Get();
+}
+
+void TPackedBatchData::Reset()
+{
+    Owner.Reset();
+    Offset = 0;
+    Size_ = 0;
+    TBuffer().Swap(Buffer);
 }
 
 //
@@ -103,7 +173,6 @@ TString TClientBlob::DebugString() const {
 TBatch::TBatch()
     : Packed(false)
 {
-    PackedData.Reserve(8_MB);
 }
 
 TBatch::TBatch(const ui64 offset, const ui16 partNo)
@@ -120,6 +189,13 @@ TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
     : Packed(true)
     , Header(header)
     , PackedData(data, header.GetPayloadSize())
+{
+}
+
+TBatch::TBatch(const NKikimrPQ::TBatchHeader& header, TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 payloadOffset)
+    : Packed(true)
+    , Header(header)
+    , PackedData(std::move(owner), payloadOffset, header.GetPayloadSize())
 {
 }
 
@@ -241,6 +317,11 @@ ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
 
 void THead::AddBatch(const TBatch& batch) {
     auto& b = Batches.emplace_back(batch);
+    InternalPartsCount += b.GetInternalPartsCount();
+}
+
+void THead::AddBatch(TBatch&& batch) {
+    auto& b = Batches.emplace_back(std::move(batch));
     InternalPartsCount += b.GetInternalPartsCount();
 }
 
@@ -623,13 +704,25 @@ bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, con
 
 
 TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
+    : TBlobIterator(key, blob, EDataOwnership::Borrowed)
+{
+}
+
+TBlobIterator::TBlobIterator(const TKey& key, const TString& blob, EDataOwnership ownership)
     : Key(key)
-    , Data(blob.c_str())
-    , End(Data + blob.size())
     , Offset(key.GetOffset())
     , Count(0)
     , InternalPartsCount(0)
 {
+    if (ownership == EDataOwnership::Shared) {
+        Owner = MakeIntrusive<TPackedBatchDataOwner>(TString(blob));
+        Data = Owner->Data.data();
+        End = Data + Owner->Data.size();
+    } else {
+        Data = blob.data();
+        End = Data + blob.size();
+    }
+
     AFL_ENSURE(Data != End)("Key", Key.ToString())("blob.size", blob.size());
     ParseBatch();
     AFL_ENSURE(Header.GetPartNo() == Key.GetPartNo());
@@ -668,7 +761,15 @@ TBatch TBlobIterator::GetBatch()
 {
     AFL_ENSURE(IsValid());
 
-    return TBatch(Header, Data + sizeof(ui16) + Header.ByteSize());
+    const char* payload = Data + sizeof(ui16) + Header.ByteSize();
+    if (Owner) {
+        const auto offset = payload - Owner->Data.data();
+        AFL_ENSURE(offset >= 0);
+        AFL_ENSURE(static_cast<ui64>(offset) <= Max<ui32>());
+        return TBatch(Header, Owner, static_cast<ui32>(offset));
+    }
+
+    return TBatch(Header, payload);
 }
 
 TVector<TBatch> GetUnpackedBatches(const TKey& key, const TString& blob)

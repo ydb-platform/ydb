@@ -2,8 +2,10 @@
 #include <ydb/core/persqueue/common/key.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/buffer.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
 #include <deque>
@@ -60,6 +62,37 @@ struct TClientBlob {
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
 
+struct TPackedBatchDataOwner final: public TSimpleRefCount<TPackedBatchDataOwner> {
+    explicit TPackedBatchDataOwner(TString&& data);
+
+    TString Data;
+};
+
+class TPackedBatchData {
+public:
+    TPackedBatchData() = default;
+    TPackedBatchData(const char* data, size_t size);
+    explicit TPackedBatchData(TBuffer&& data);
+    TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 offset, ui32 size);
+
+    const char* data() const noexcept;
+
+    size_t size() const noexcept;
+    size_t Size() const noexcept;
+    size_t Capacity() const noexcept;
+    bool Empty() const noexcept;
+    bool IsShared() const noexcept;
+    const TPackedBatchDataOwner* SharedOwner() const noexcept;
+
+    void Reset();
+
+private:
+    TBuffer Buffer;
+    TIntrusivePtr<TPackedBatchDataOwner> Owner;
+    ui32 Offset = 0;
+    ui32 Size_ = 0;
+};
+
 //TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs)
 //or packed(PackedData)
 //on disk representation:
@@ -74,12 +107,13 @@ struct TBatch {
     TVector<TClientBlob> Blobs;
     TVector<ui32> InternalPartsPos;
     NKikimrPQ::TBatchHeader Header;
-    TBuffer PackedData;
+    TPackedBatchData PackedData;
     TInstant EndWriteTimestamp;
 
     TBatch();
     TBatch(const ui64 offset, const ui16 partNo);
     TBatch(const NKikimrPQ::TBatchHeader &header, const char* data);
+    TBatch(const NKikimrPQ::TBatchHeader& header, TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 payloadOffset);
 
     static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs);
 
@@ -112,7 +146,13 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size);
 
 class TBlobIterator {
 public:
+    enum class EDataOwnership {
+        Borrowed,
+        Shared,
+    };
+
     TBlobIterator(const TKey& key, const TString& blob);
+    TBlobIterator(const TKey& key, const TString& blob, EDataOwnership ownership);
 
     //return true is there is batch
     bool IsValid();
@@ -126,6 +166,7 @@ private:
     NKikimrPQ::TBatchHeader Header;
 
     const TKey& Key;
+    TIntrusivePtr<TPackedBatchDataOwner> Owner;
     const char *Data;
     const char *End;
 
@@ -183,6 +224,7 @@ public:
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 
     void AddBatch(const TBatch& batch);
+    void AddBatch(TBatch&& batch);
     void ClearBatches();
     const std::deque<TBatch>& GetBatches() const;
     const TBatch& GetBatch(ui32 idx) const;

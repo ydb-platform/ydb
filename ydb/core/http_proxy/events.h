@@ -48,11 +48,11 @@ namespace NKikimr::NHttpProxy {
         };
 
         // Used in serverless proxy. Do not remove it.
-	    struct TEvUpdateDatabasesEvent : public TEventLocal<TEvUpdateDatabasesEvent, EvUpdateDatabasesEvent> {
+        struct TEvUpdateDatabasesEvent : public TEventLocal<TEvUpdateDatabasesEvent, EvUpdateDatabasesEvent> {
             std::vector<TDatabase> Databases;
             std::unique_ptr<NYdbGrpc::TGrpcStatus> Status;
         };
-        
+
         struct TEvDiscoverDatabaseEndpointRequest : public TEventLocal<TEvDiscoverDatabaseEndpointRequest, EvDiscoverDatabaseEndpointRequest> {
             TString DatabasePath;
             TString DatabaseId; // Used in serverless proxy. Do not remove it.

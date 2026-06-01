@@ -163,6 +163,11 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         TString AcceptFormat;
         ui32 Offset = 0;
         ui32 Limit = 0;
+<<<<<<< HEAD
+=======
+        bool IsTabletListFragment = false; // true for mode=tablet_list (returns fragment only)
+        TString ResultsUuid; // optional mode=results filter
+>>>>>>> 8a2d89622ae (EXT-2103: load actor page for single uuid (#41697))
     };
 
     struct TNodeFinishedTestInfo {
@@ -773,16 +778,26 @@ public:
         LOG_N("handle http GET request, mode: " << mode << " LoadActors.size(): " << LoadActors.size());
 
         if (mode == "results") {
+            info.ResultsUuid = params.Has("uuid") ? params.Get("uuid") : "";
+
             if (IsJsonContentType(info.AcceptFormat)) {
                 GenerateJsonInfoRes(id);
                 return;
             }
 
             // send messages to subactors
+            info.HttpInfoResPending = 0;
             for (const auto& [tag, actorId] : LoadActors) {
-                Send(actorId, new NMon::TEvHttpInfo(request, id));
-                info.ActorMap[actorId].Tag = tag;
                 auto reqIt = RequestsInProcessing.find(UuidByTag.at(tag));
+                if (info.ResultsUuid) {
+                    if (reqIt == RequestsInProcessing.end() || reqIt->second.GetUuid() != info.ResultsUuid) {
+                        continue;
+                    }
+                }
+
+                Send(actorId, new NMon::TEvHttpInfo(request, id));
+                ++info.HttpInfoResPending;
+                info.ActorMap[actorId].Tag = tag;
                 if (reqIt != RequestsInProcessing.end()) {
                     const TEvLoadTestRequest& req = reqIt->second;
                     info.ActorMap[actorId].Uuid = req.GetUuid();
@@ -791,7 +806,6 @@ public:
             }
 
             // record number of responses pending
-            info.HttpInfoResPending = LoadActors.size();
             if (!info.HttpInfoResPending) {
                 GenerateHttpInfoRes(mode, id);
             }
@@ -1003,6 +1017,9 @@ public:
         for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
             NJson::TJsonValue value;
             const TFinishedTestInfo& testInfo = *it;
+            if (info.ResultsUuid && testInfo.Uuid != info.ResultsUuid) {
+                continue;
+            }
             value["uuid"] = testInfo.Uuid;
             value["tag"] = testInfo.Tag;
 
@@ -1179,10 +1196,19 @@ public:
                 auto printUuidTag = [&str](const TString& uuid, ui64 tag) {
                     str << "UUID# " << uuid << " (node tag# " << tag << ")";
                 };
+<<<<<<< HEAD
+=======
+
+                bool printed = false;
+>>>>>>> 8a2d89622ae (EXT-2103: load actor page for single uuid (#41697))
                 for (auto it = info.ActorMap.rbegin(); it != info.ActorMap.rend(); ++it) {
                     const TActorInfo& perActorInfo = it->second;
                     auto uuidIter = UuidByTag.find(perActorInfo.Tag);
                     const TString uuid = uuidIter != UuidByTag.end() ? uuidIter->second : "";
+                    if (info.ResultsUuid && uuid != info.ResultsUuid) {
+                        continue;
+                    }
+                    printed = true;
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             printUuidTag(uuid, perActorInfo.Tag);
@@ -1195,6 +1221,10 @@ public:
 
                 for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
                     const TFinishedTestInfo& testInfo = *it;
+                    if (info.ResultsUuid && testInfo.Uuid != info.ResultsUuid) {
+                        continue;
+                    }
+                    printed = true;
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             printUuidTag(testInfo.Uuid, testInfo.Tag);
@@ -1206,6 +1236,13 @@ public:
                                 str << "Finish time# " << nodeInfo.Finish.ToStringUpToSeconds() << "<br/>";
                                 str << nodeInfo.LastHtmlPage;
                             }
+                        }
+                    }
+                }
+                if (info.ResultsUuid && !printed) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-body") {
+                            str << "No load actor result found for requested UUID";
                         }
                     }
                 }

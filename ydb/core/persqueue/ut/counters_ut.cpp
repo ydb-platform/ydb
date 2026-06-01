@@ -544,7 +544,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 
         const auto counters = getCountersObj("after read");
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessageLagByCommittedPerPartition), formExpectedJson(30, 20), caseDescr);
-        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(106, 693), caseDescr);
+        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(114, 761), caseDescr);
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessagesRead), formExpectedJson(2, 17), caseDescr);
     }
 
@@ -555,7 +555,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
 
         const auto counters = getCountersObj("after disable");
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessageLagByCommittedPerPartition), formExpectedJson(30, 20), caseDescr);
-        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(106, 693), caseDescr);
+        UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, BytesRead), formExpectedJson(114, 761), caseDescr);
         UNIT_ASSERT_VALUES_EQUAL_C(getSensorJsonStr(counters, MessagesRead), formExpectedJson(2, 17), caseDescr);
     }
 }

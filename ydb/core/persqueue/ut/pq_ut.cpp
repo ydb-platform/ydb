@@ -29,6 +29,85 @@ void SetEnableTopicMessagesBatching(TTestContext& tc) {
     }
 }
 
+void CmdWriteBatchedPart(
+    const ui32 partition,
+    const TString& sourceId,
+    ui64 seqNo,
+    const TString& data,
+    ui32 messageCount,
+    ui16 partNo,
+    ui16 totalParts,
+    ui32 totalSize,
+    TTestContext& tc,
+    i64 offset = -1,
+    NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK)
+{
+    TAutoPtr<IEventHandle> handle;
+    TEvPersQueue::TEvResponse* result = nullptr;
+    ui32& msgSeqNo = tc.MsgSeqNoMap[partition];
+    TString& cookie = tc.OwnerCookieMap[partition];
+
+    for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
+        try {
+            THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+            tc.Runtime->ResetScheduledCount();
+            auto* req = request->Record.MutablePartitionRequest();
+            req->SetPartition(partition);
+            req->SetOwnerCookie(cookie);
+            req->SetMessageNo(msgSeqNo);
+            if (offset >= 0) {
+                req->SetCmdWriteOffset(offset);
+            }
+
+            auto* write = req->AddCmdWrite();
+            write->SetSourceId(sourceId);
+            write->SetSeqNo(seqNo);
+            write->SetData(data);
+            write->SetPartNo(partNo);
+            write->SetTotalParts(totalParts);
+            if (partNo == 0) {
+                write->SetTotalSize(totalSize);
+            }
+            write->SetMessageCount(messageCount);
+            write->SetMaxSeqNo(seqNo + messageCount - 1);
+
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+                [](const TEvPersQueue::TEvResponse& ev) {
+                    return ev.Record.HasPartitionResponse()
+                        && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0
+                        || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+                });
+
+            UNIT_ASSERT(result);
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();
+                retriesLeft = 3;
+                continue;
+            }
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
+                cookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition).first;
+                msgSeqNo = 0;
+                retriesLeft = 3;
+                continue;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                static_cast<ui32>(result->Record.GetErrorCode()),
+                static_cast<ui32>(expectedError),
+                result->Record.DebugString());
+            if (expectedError == NPersQueue::NErrorCode::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1u);
+            }
+            retriesLeft = 0;
+        } catch (NActors::TSchedulingLimitReachedException) {
+            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
+            retriesLeft = 3;
+        }
+    }
+    ++msgSeqNo;
+}
+
 TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
 {
     TAutoPtr<IEventHandle> handle;
@@ -226,6 +305,56 @@ Y_UNIT_TEST(BatchedMessagesWriteRead) {
     readSettings.PartitionSessionId = 1;
 
     CmdReadAndAssertBatched(readSettings, tc, writes, dataSize);
+}
+
+Y_UNIT_TEST(BatchedMessageWithMultiplePartsWriteRead) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_batch_multipart";
+    const TString part0 = "hello ";
+    const TString part1 = "world";
+    constexpr ui32 messageCount = 5;
+    const ui32 totalSize = part0.size() + part1.size();
+
+    CmdWriteBatchedPart(0, sourceId, 1, part0, messageCount, 0, 2, totalSize, tc, 0);
+    CmdWriteBatchedPart(0, sourceId, 1, part1, messageCount, 1, 2, totalSize, tc);
+
+    PQGetPartInfo(0, messageCount, tc);
+
+    TPQCmdSettings sessionSettings{0, "user1", "session_batch_multipart"};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    TPQCmdReadSettings readSettings{"session_batch_multipart", 0, 0, 1, 64_MB, 0};
+    readSettings.User = "user1";
+    readSettings.Pipe = pipe;
+    readSettings.PartitionSessionId = 1;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 1u);
+    const auto& msg = readResult.GetResult(0);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), messageCount);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), part0 + part1);
+
+    readSettings.Offset = 3;
+    const auto readFromMiddleResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readFromMiddleResult.ResultSize(), 1u);
+    const auto& middleMsg = readFromMiddleResult.GetResult(0);
+    UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetOffset(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetSeqNo(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetMessageCount(), messageCount);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(middleMsg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
+    UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetData(), part0 + part1);
 }
 
 Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {

@@ -1278,9 +1278,9 @@ public:
         ShowConfig(out, "DataCenterChangeReactionPeriod");
 
         out << "<div class='row' style='margin-top:40px'>";
-        bool allowedMetricsLocalOverrided = !Self->TabletTypeAllowedMetrics.empty();
+        bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'";
-        if (!allowedMetricsLocalOverrided) {
+        if (!allowedMetricsLocalOverridden) {
             out << " style='font-weight:normal'";
         }
         out << ">AllowedMetrics:</label></div>";
@@ -1325,7 +1325,7 @@ public:
         }
         out << "</table></div>";
         out << "<div class='col-sm-1' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='applyTab(this);' disabled='true'>Apply</button></div>";
-        out << "<div class='col-sm-1' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='resetTab(this);' " << (allowedMetricsLocalOverrided ? "" : "disabled='true'") << ">Reset</button></div>";
+        out << "<div class='col-sm-1' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='resetTab(this);' " << (allowedMetricsLocalOverridden ? "" : "disabled='true'") << ">Reset</button></div>";
         out << "</div>";
 
         out << "</div>";

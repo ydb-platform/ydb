@@ -8,6 +8,9 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/script_cursor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/step_action_events.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
 
@@ -63,12 +66,20 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
+            hFunc(NColumnShard::TEvContinueStepAction, HandleScan);
+            hFunc(NColumnShard::TEvStepActionSuspended, HandleScan);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
     void HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev);
+
+    void HandleScan(NColumnShard::TEvContinueStepAction::TPtr& ev);
+
+    void HandleScan(NColumnShard::TEvStepActionSuspended::TPtr& ev);
+
+    void TryDispatchStepContinuation(const ui64 sourceId);
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
 
@@ -220,6 +231,16 @@ private:
     TInstant StartWaitTime;
     TDuration WaitTime;
     TInstant LastSend = TInstant::Now();
+
+    struct TPendingStepContinuation {
+        std::shared_ptr<NCommon::IDataSource> Source;
+        std::optional<NCommon::TFetchingScriptCursor> Cursor;
+        ui64 ConveyorProcessId = 0;
+        bool HasContinuation = false;
+        bool Suspended = false;
+    };
+
+    THashMap<ui64, TPendingStepContinuation> PendingStepContinuations;
 };
 
 }   // namespace NKikimr::NOlap::NReader

@@ -3,6 +3,7 @@
 #include "fetch_steps.h"
 #include "fetching.h"
 #include "source.h"
+#include "step_action_events.h"
 #include "sub_columns_fetching.h"
 
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
@@ -19,6 +20,14 @@
 namespace NKikimr::NOlap::NReader::NCommon {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
+
+void ScheduleContinueStepAction(std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor) {
+    const auto sourceId = source->GetDeprecatedPortionId();
+    const auto& commonContext = *source->GetContext()->GetCommonContext();
+    NActors::TActivationContext::AsActorContext().Send(
+        commonContext.GetScanActorId(), std::make_unique<NColumnShard::TEvContinueStepAction>(
+                                            std::move(source), std::move(cursor), commonContext.GetConveyorProcessId(), sourceId));
+}
 
 bool TStepAction::DoApply(IDataReader& owner) {
     AFL_VERIFY(FinishedFlag);

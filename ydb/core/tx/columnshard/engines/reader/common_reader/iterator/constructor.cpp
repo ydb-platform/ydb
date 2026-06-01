@@ -2,8 +2,6 @@
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -11,8 +9,7 @@ void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSu
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("fbf"));
     Source->MutableStageData().AddBlobs(Source->DecodeBlobAddresses(ExtractBlobsData()));
     AFL_VERIFY(Step.Next());
-    auto task = std::make_shared<TStepAction>(std::move(Source), std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, Context->GetCommonContext()->GetConveyorProcessId());
+    ScheduleContinueStepAction(std::move(Source), std::move(Step));
 }
 
 bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
@@ -62,10 +59,8 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
         for (auto&& i : DataFetchers) {
             Source->MutableStageData().AddFetcher(i.second);
         }
-        auto convProcessId = Source->GetContext()->GetCommonContext()->GetConveyorProcessId();
-        auto task = std::make_shared<TStepAction>(
-            std::move(Source), std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcessId);
+
+        ScheduleContinueStepAction(std::move(Source), std::move(Cursor));
     } else {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("cf_next"));
         std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(

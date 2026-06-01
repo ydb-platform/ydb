@@ -110,8 +110,8 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
                 session_pool.execute_with_retries(query)
 
     def select_from_index(self):
-        queries = self._get_queries()
         for _ in self.roll():
+            queries = self._get_queries()
             self._do_queries(queries)
 
     def select_from_index_without_roll(self):

@@ -1065,6 +1065,7 @@ public:
         TDeque<TPathId> BlockStoreVolumesToClean;
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
+        TVector<ui64> FullBackupIds;
     };
 
     void SubscribeToTempTableOwners();
@@ -1761,6 +1762,50 @@ public:
     void Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext& ctx);
 
     void ResumeIncrementalBackups(const TVector<ui64>& incrementalBackupsIds, const TActorContext& ctx);
+
+    // Trackable full-backup control ops keyed by op id.
+    // Persisted in Schema::FullBackups (Table<136>) + Schema::FullBackupItems (Table<137>).
+    // Items are keyed by destination TPathId because CCT children are not 1-1 with user-visible items.
+    TMap<ui64, TFullBackupInfo::TPtr> FullBackups;
+
+    // Reverse index: backup-collection TPathId -> running control op id.
+    // Rebuilt at TTxInit from non-terminal rows; used by the control op's Propose
+    // to reject concurrent BACKUPs on the same collection without a new EPathState marker.
+    THashMap<TPathId, ui64> BCPathToFullBackup;
+
+    void PersistFullBackup(NIceDb::TNiceDb& db, ui64 id);
+    static void PersistFullBackup(NIceDb::TNiceDb& db, const TFullBackupInfo& info);
+    static void PersistRemoveFullBackup(NIceDb::TNiceDb& db, const TFullBackupInfo& info);
+    static void PersistFullBackupState(NIceDb::TNiceDb& db, const TFullBackupInfo& info);
+    static void PersistFullBackupItem(NIceDb::TNiceDb& db, ui64 backupId, const TFullBackupInfo::TItem& item);
+
+    // Fills the TFullBackup proto from in-memory info (shared by GET and LIST).
+    // Progress uses ExpectedItemCount, not Items.size(): items register lazily.
+    static void FillFullBackupProto(NKikimrBackup::TFullBackup& out, const TFullBackupInfo& info);
+
+    // Persists terminal state atomically with op completion (durable source of truth).
+    void FinalizeFullBackupOnOpComplete(NIceDb::TNiceDb& db, ui64 id, const TActorContext& ctx);
+
+    void ResumeFullBackups(const TVector<ui64>& ids, const TActorContext& ctx);
+
+    struct TFullBackup {
+        struct TTxProgress;
+        struct TTxGet;
+        struct TTxList;
+        struct TTxForget;
+    };
+
+    NTabletFlatExecutor::ITransaction* CreateTxFullBackupProgress(ui64 id);
+    NTabletFlatExecutor::ITransaction* CreateTxFullBackupProgress(TEvPrivate::TEvFullBackupItemDone::TPtr& ev);
+
+    NTabletFlatExecutor::ITransaction* CreateTxGetFullBackup(TEvBackup::TEvGetFullBackupRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxListFullBackups(TEvBackup::TEvListFullBackupsRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxForgetFullBackup(TEvBackup::TEvForgetFullBackupRequest::TPtr& ev);
+
+    void Handle(TEvPrivate::TEvFullBackupItemDone::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvGetFullBackupRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvListFullBackupsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvForgetFullBackupRequest::TPtr& ev, const TActorContext& ctx);
     // } // NBackup
 
     void FillTableSchemaVersion(ui64 schemaVersion, NKikimrSchemeOp::TTableDescription *tableDescr) const;

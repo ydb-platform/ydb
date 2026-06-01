@@ -83,6 +83,7 @@ bool IsCreate(ETxType t) {
         case TxCreateSysView:
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
+        case TxCreateFullBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
             return true; // IsCreate
@@ -266,6 +267,7 @@ bool IsDrop(ETxType t) {
         case TxCreateSysView:
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
+        case TxCreateFullBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
             return false; // IsDrop
@@ -360,6 +362,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropSysView:
         case TxCreateLongIncrementalRestoreOp:
         case TxCreateLongIncrementalBackupOp:
+        case TxCreateFullBackupOp:
         case TxDropStreamingQuery:
             return false; // CanDeleteParts
         case TxMkDir:
@@ -588,6 +591,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         // Fan out to TxChangePathState sub-ops; the wrapper type is never persisted.
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets: return TxChangePathState;
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets: return TxChangePathState;
+        case NKikimrSchemeOp::ESchemeOpCreateFullBackupOp: return TxCreateFullBackupOp;
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:

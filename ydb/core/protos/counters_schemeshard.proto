@@ -286,6 +286,8 @@ enum ESimpleCounters {
 
     COUNTER_FORMAT_SHARDIDX_TABLE_COUNT = 221 [(CounterOpts) = {Name: "TablesInFormatShardidx"}];
     COUNTER_FORMAT_POSITION_TABLE_COUNT = 222 [(CounterOpts) = {Name: "TablesInFormatPosition"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateFullBackupOp = 223 [(CounterOpts) = {Name: "InFlightOps/CreateFullBackupOp"}];
 }
 
 enum ECumulativeCounters {
@@ -474,6 +476,8 @@ enum ECumulativeCounters {
     COUNTER_SPLIT_MERGE_PARTITIONS_SKIPPED  = 141 [(CounterOpts) = {Name: "SplitMergePartitionsSkipped"}];
     // Partitions actually rewritten during split/merge (those at or after the split point).
     COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN = 142 [(CounterOpts) = {Name: "SplitMergePartitionsRewritten"}];
+
+    COUNTER_FINISHED_OPS_TxCreateFullBackupOp = 143 [(CounterOpts) = {Name: "FinishedOps/CreateFullBackupOp"}];
 }
 
 enum EPercentileCounters {
@@ -742,4 +746,9 @@ enum ETxTypes {
     TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWITCH = 117 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSwitch"}];
     TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWEEP_STEP = 118 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSweepStep"}];
     TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWEEP_AUTO_START = 119 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSweepAutoStart"}];
+
+    TXTYPE_GET_FULL_BACKUP = 120 [(TxTypeOpts) = {Name: "TxGetFullBackup"}];
+    TXTYPE_LIST_FULL_BACKUP = 121 [(TxTypeOpts) = {Name: "TxListFullBackup"}];
+    TXTYPE_FORGET_FULL_BACKUP = 122 [(TxTypeOpts) = {Name: "TxForgetFullBackup"}];
+    TXTYPE_PROGRESS_FULL_BACKUP = 123 [(TxTypeOpts) = {Name: "TxProgressFullBackup"}];
 }

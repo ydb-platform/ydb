@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/library/actors/core/log.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
@@ -38,6 +40,8 @@ public:
 template <class TPolicy>
 class ICallback {
 private:
+    mutable bool IsDone = false;
+
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
 
@@ -46,14 +50,22 @@ private:
     virtual bool DoIsAborted() const = 0;
 
 public:
-    virtual ~ICallback() = default;
+    virtual ~ICallback() {
+        AFL_VERIFY(IsDone);
+    }
 
     bool IsAborted() const {
-        return DoIsAborted();
+        if (DoIsAborted()) {
+            IsDone = true;
+            return true;
+        }
+        return false;
     }
     void OnResultReady(
         THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses, TErrorAddresses<TPolicy>&& errorAddresses) {
+        AFL_VERIFY(!IsDone);
         DoOnResultReady(std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses));
+        IsDone = true;
     }
 };
 

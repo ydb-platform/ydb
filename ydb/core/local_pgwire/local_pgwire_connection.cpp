@@ -82,7 +82,7 @@ public:
             TBase::Become(&TPgYdbConnection::StateSchedule);
             ConnectionEvent.Destroy(); // don't need it anymore
         } else {
-            YDB_LOG_CTX_WARN(*NActors::TlsActivationContext, "Failed to create",
+            YDB_LOG_WARN("Failed to create",
                 {"session", record.ShortDebugString()});
             auto response = MakeHolder<NPG::TEvPGEvents::TEvFinishHandshake>();
             // TODO: report actuall error
@@ -181,7 +181,7 @@ public:
                 Portals.erase(closeData.Name);
                 break;
             default:
-                YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Unknown close type",
+                YDB_LOG_ERROR("Unknown close type",
                     {"#_static_cast<char>(closeData.Type)", static_cast<char>(closeData.Type)});
                 break;
         }

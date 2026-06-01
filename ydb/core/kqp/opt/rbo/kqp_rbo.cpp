@@ -119,11 +119,11 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, rboCtx);
         if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
         }
         stage->RunStage(root, rboCtx);
         if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
         }
     }
 

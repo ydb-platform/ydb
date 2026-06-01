@@ -10,9 +10,9 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 
@@ -74,7 +74,6 @@ public:
         longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
         longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
         longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-        TestHelper->GetRuntime().GetAppData().FeatureFlags.SetEnableSnapshotsLocking(true);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);

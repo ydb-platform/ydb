@@ -247,7 +247,7 @@ void TSupportsMultisetAttributes::SetAttributes(
     Y_UNUSED(request);
     Y_UNUSED(response);
     Y_UNUSED(context);
-    ThrowMethodNotSupported("MultisetAttributes", TString("attributes"));
+    ThrowMethodNotSupported("MultisetAttributes", std::string("attributes"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1177,7 +1177,7 @@ const THashSet<TInternedAttributeKey>& TSystemBuiltinAttributeKeysCache::GetBuil
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const THashSet<TString>& TSystemCustomAttributeKeysCache::GetCustomAttributeKeys(
+const THashSet<std::string>& TSystemCustomAttributeKeysCache::GetCustomAttributeKeys(
     ISystemAttributeProvider* provider)
 {
     if (!Initialized_) {
@@ -1201,7 +1201,7 @@ const THashSet<TString>& TSystemCustomAttributeKeysCache::GetCustomAttributeKeys
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const THashSet<TString>& TOpaqueAttributeKeysCache::GetOpaqueAttributeKeys(
+const THashSet<std::string>& TOpaqueAttributeKeysCache::GetOpaqueAttributeKeys(
     ISystemAttributeProvider* provider)
 {
     if (!Initialized_) {
@@ -1277,10 +1277,10 @@ class TNodeSetter
 #define END_SETTER() \
     };
 
-BEGIN_SETTER(String, TString)
+BEGIN_SETTER(String, std::string)
     void OnMyStringScalar(TStringBuf value) override
     {
-        Node_->SetValue(TString(value));
+        Node_->SetValue(std::string(value));
     }
 END_SETTER()
 
@@ -1355,10 +1355,10 @@ private:
         YT_VERIFY(TreeBuilder_);
 
         TreeBuilder_->BeginTree();
-        Forward(TreeBuilder_, std::bind(&TNodeSetter::OnForwardingFinished, this, TString(key)));
+        Forward(TreeBuilder_, std::bind(&TNodeSetter::OnForwardingFinished, this, std::string(key)));
     }
 
-    void OnForwardingFinished(TString itemKey)
+    void OnForwardingFinished(std::string itemKey)
     {
         if (!Map_->AddChild(itemKey, TreeBuilder_->EndTree())) {
             THROW_ERROR_EXCEPTION("Duplicate key %Qv", itemKey);
@@ -1458,7 +1458,7 @@ private:
         AttributeWriter_.reset(new TBufferedBinaryYsonWriter(&AttributeStream_));
         Forward(
             AttributeWriter_.get(),
-            [this, key = TString(key)] {
+            [this, key = std::string(key)] {
                 AttributeWriter_->Flush();
                 AttributeWriter_.reset();
                 Attributes_->SetYson(key, TYsonString(AttributeStream_.Str()));

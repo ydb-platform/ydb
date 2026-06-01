@@ -613,42 +613,47 @@ namespace NKikimr {
             //       of log messages
 
             // handle commit msg differently
-            if (msg->FreshSegment) {
-                TStringStream dbg;
-                dbg << "{commiter# fresh"
-                    << " firstLsn# "<< msg->FreshSegment->GetFirstLsn()
-                    << " lastLsn# " << msg->FreshSegment->GetLastLsn()
-                    << "}";
+            if (msg->FreshCompaction) {
+                if (msg->Aborted) {
 
-                // update compacted lsn
-                const ui64 lastLsnFromFresh = msg->FreshSegment->GetLastLsn();
-                if (lastLsnFromFresh > 0)
-                    RTCtx->LevelIndex->UpdateCompactedLsn(lastLsnFromFresh);
-                // check huge blobs
-                if (Config->CheckHugeBlobs) {
-                    TDiskPartVec checkVec = THullOpUtil::FindRemovedHugeBlobsAfterFreshCompaction(
-                        HullDs->HullCtx->VCtx->VDiskLogPrefix, ctx, msg->FreshSegment, msg->SegVec);
-                    CheckRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, checkVec, false);
-                    LogRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, false);
+                } else {
+                    TStringStream dbg;
+                    dbg << "{commiter# fresh"
+                        << " firstLsn# "<< msg->FreshSegment->GetFirstLsn()
+                        << " lastLsn# " << msg->FreshSegment->GetLastLsn()
+                        << "}";
+
+                    // update compacted lsn
+                    const ui64 lastLsnFromFresh = msg->FreshSegment->GetLastLsn();
+                    if (lastLsnFromFresh > 0)
+                        RTCtx->LevelIndex->UpdateCompactedLsn(lastLsnFromFresh);
+                    // check huge blobs
+                    if (Config->CheckHugeBlobs) {
+                        TDiskPartVec checkVec = THullOpUtil::FindRemovedHugeBlobsAfterFreshCompaction(
+                            HullDs->HullCtx->VCtx->VDiskLogPrefix, ctx, msg->FreshSegment, msg->SegVec);
+                        CheckRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, checkVec, false);
+                        LogRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, false);
+                    }
+                    // remove fresh segment
+                    RTCtx->LevelIndex->FreshCompactionSstCreated(std::move(msg->FreshSegment));
+
+                    // put new sstable into zero level
+                    if (msg->SegVec.Get()) {
+                        for (auto &seg : msg->SegVec->Segments)
+                            RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
+                    }
+
+                    // run fresh committer
+                    auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
+                            ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
+                            std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId);
+                    auto aid = ctx.RegisterWithSameMailbox(committer.release());
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 }
-                // remove fresh segment
-                RTCtx->LevelIndex->FreshCompactionSstCreated(std::move(msg->FreshSegment));
-
-                // put new sstable into zero level
-                if (msg->SegVec.Get()) {
-                    for (auto &seg : msg->SegVec->Segments)
-                        RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
-                }
-
-                // run fresh committer
-                auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
-                        ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
-                        std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId);
-                auto aid = ctx.RegisterWithSameMailbox(committer.release());
-                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             } else {
                 Y_VERIFY_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompInProgress,
-                    HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    HullDs->HullCtx->VCtx->VDiskLogPrefix << "CompState# " <<
+                    TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState()));
 
                 // assign VolatileOrderId for any new SSTables at level 0 to allow merging them to level 0 below
                 if (const auto& cs = CompactionTask->CompactSsts; cs.TargetLevel == 0 && msg->SegVec.Get()) {

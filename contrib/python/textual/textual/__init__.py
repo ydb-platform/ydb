@@ -36,7 +36,7 @@ LogCallable: TypeAlias = "Callable"
 if TYPE_CHECKING:
     from importlib.metadata import version
 
-    from textual.app import App
+    from textual.app import App as _App
 
     __version__ = version("textual")
     """The version of Textual."""
@@ -65,7 +65,7 @@ class Logger:
         log_callable: LogCallable | None,
         group: LogGroup = LogGroup.INFO,
         verbosity: LogVerbosity = LogVerbosity.NORMAL,
-        app: App | None = None,
+        app: _App | None = None,
     ) -> None:
         self._log = log_callable
         self._group = group
@@ -73,7 +73,7 @@ class Logger:
         self._app = None if app is None else weakref.ref(app)
 
     @property
-    def app(self) -> App | None:
+    def app(self) -> _App | None:
         """The associated application, or `None` if there isn't one."""
         return None if self._app is None else self._app()
 
@@ -90,7 +90,7 @@ class Logger:
                 )
                 output = f"{output} {key_values}" if output else key_values
 
-            with open(constants.LOG_FILE, "a") as log_file:
+            with open(constants.LOG_FILE, "a", encoding="utf-8") as log_file:
                 print(output, file=log_file)
 
         app = self.app

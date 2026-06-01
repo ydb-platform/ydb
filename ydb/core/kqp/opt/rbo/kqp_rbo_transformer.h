@@ -1,70 +1,86 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/opt/kqp_opt.h>
+#include "kqp_rbo.h"
+
 #include <ydb/core/kqp/opt/kqp_column_statistics_utils.h>
-#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/core/kqp/host/kqp_transform.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NYql {
 
-using namespace NYql;
-using namespace NYql::NNodes;
-using namespace NOpt;
+struct TTypeAnnotationContext;
+struct TExprContext;
+class TKikimrTablesData;
 
-class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
-  public:
-    TKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx)
+} // namespace NYql
+
+namespace NMiniKQL {
+
+class IFunctionRegistry;
+
+} // namespace NMiniKQL
+
+namespace NKikimr::NKqp {
+
+struct TKqlTransformContext;
+class IOperator;
+class TExpression;
+class TOpRoot;
+struct TPhysicalOpProps;
+
+namespace NOpt {
+
+struct TKqpOptimizeContext;
+
+} // namespace NOpt
+
+class TKqpRewriteSelectTransformer : public NYql::TSyncTransformerBase {
+public:
+    TKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typeCtx)
         : TypeCtx(typeCtx), KqpCtx(*kqpCtx), UniqueSourceIdCounter(0) {}
 
     // Main method of the transformer
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) final;
+    IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
     void Rewind() override;
 
-  private:
-    TTypeAnnotationContext& TypeCtx;
-    const TKqpOptimizeContext& KqpCtx;
+private:
+    NYql::TTypeAnnotationContext& TypeCtx;
+    const NOpt::TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                                                             TTypeAnnotationContext &typeCtx);
+TAutoPtr<NYql::IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
+                                                             NYql::TTypeAnnotationContext& typeCtx);
 
-class TKqpNewRBOTransformer: public TGraphTransformerBase {
+class TKqpNewRBOTransformer : public NYql::TGraphTransformerBase {
 public:
-    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                          TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables, const TString& cluster, const TString& database,
-                          TActorSystem* actorSystem, const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx);
+    TKqpNewRBOTransformer(TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typeCtx, TAutoPtr<NYql::IGraphTransformer>&& rboTypeAnnTransformer,
+                          NYql::TKikimrTablesData& tables, const TString& cluster, const TString& database,
+                          NActors::TActorSystem* actorSystem, const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx);
     // Main method of the transformer
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
-    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final;
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    NYql::IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
+    NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode& input) final;
+    TStatus DoApplyAsyncChanges(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
     void AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan);
 
     void Rewind() override;
 
 private:
-    TStatus RequestColumnStatistics(TExprContext& ctx);
-    TStatus ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx);
+    TStatus RequestColumnStatistics(NYql::TExprContext& ctx);
+    TStatus ContinueOptimizations(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx);
     bool IsSuitableToRequestStatistics();
-    void CollectTablesAndColumnsNames(TExprContext& ctx);
+    void CollectTablesAndColumnsNames(NYql::TExprContext& ctx);
     void CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op);
     void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
     bool IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const;
     void ApplyColumnStatistics();
     void InitializeRBOOptimizationStages();
 
-    TTypeAnnotationContext& TypeCtx;
-    TKqpOptimizeContext& KqpCtx;
-    TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
+    NYql::TTypeAnnotationContext& TypeCtx;
+    NOpt::TKqpOptimizeContext& KqpCtx;
+    TAutoPtr<NYql::IGraphTransformer> RBOTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
 
@@ -72,10 +88,10 @@ private:
     std::optional<NJson::TJsonValue> PlanJson;
 
     // Special fields to request column statistics.
-    TKikimrTablesData& Tables;
+    NYql::TKikimrTablesData& Tables;
     TString Cluster;
     TString Database;
-    TActorSystem* ActorSystem;
+    NActors::TActorSystem* ActorSystem;
     std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
@@ -85,30 +101,28 @@ private:
     TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
-                                                       const TString& cluster, const TString& database, TActorSystem* actorSystem,
+TAutoPtr<NYql::IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typeCtx,
+                                                       TAutoPtr<NYql::IGraphTransformer>&& rboTypeAnnTransformer, NYql::TKikimrTablesData& tables,
+                                                       const TString& cluster, const TString& database, NActors::TActorSystem* actorSystem,
                                                        const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx);
 
-class TKqpRBOCleanupTransformer: public TSyncTransformerBase {
+class TKqpRBOCleanupTransformer : public NYql::TSyncTransformerBase {
 public:
-    TKqpRBOCleanupTransformer(TTypeAnnotationContext& typeCtx)
+    TKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx)
         : TypeCtx(typeCtx) {
     }
 
     // Main method of the transformer
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    NYql::IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
     void Rewind() override;
 
 private:
-    TTypeAnnotationContext& TypeCtx;
+    NYql::TTypeAnnotationContext& TypeCtx;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext& typeCtx);
+TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);
 
-TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+NYql::TExprNode::TPtr RewriteSelect(const NYql::TExprNode::TPtr& node, NYql::TExprContext& ctx, const NYql::TTypeAnnotationContext& typeCtx, const NOpt::TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, bool pgSyntax = false);
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

@@ -148,6 +148,13 @@ bool IsCompatibleKeyTypes(
     bool uniformTable,
     TString& explain);
 
+// Fulltext and JSON indexes require exactly one Int64/Int32/Uint64/Uint32 primary key column
+bool CheckSingleIntegerPrimaryKey(
+    const TTableColumns& baseTableColumns,
+    const TColumnTypes& baseColumnTypes,
+    TStringBuf indexKind,
+    TString& error);
+
 template <typename TTableDesc>
 bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
         const NSchemeShard::TSchemeLimits& schemeLimits, bool uniformTable,
@@ -215,26 +222,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-            // Fulltext index only supports tables with a single PK column of type Uint64
-            if (baseTableColumns.Keys.size() != 1) {
+            if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", error)) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder()
-                    << "Fulltext index requires exactly one primary key column of type 'Uint64'"
-                    << ", but table has " << baseTableColumns.Keys.size() << " primary key columns";
                 return false;
-            }
-
-            {
-                const TString& pkColumnName = baseTableColumns.Keys[0];
-                Y_ABORT_UNLESS(baseColumnTypes.contains(pkColumnName));
-                auto pkTypeInfo = baseColumnTypes.at(pkColumnName);
-                if (pkTypeInfo.GetTypeId() != NScheme::NTypeIds::Uint64) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    error = TStringBuilder()
-                        << "Fulltext index requires primary key column '" << pkColumnName
-                        << "' to be of type 'Uint64' but got " << NScheme::TypeName(pkTypeInfo);
-                    return false;
-                }
             }
 
             // Here we only check that fulltext index columns matches table description
@@ -258,43 +248,30 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJson: {
-            // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-            // JSON index currently only supports 1 column
-            if (indexKeys.KeyColumns.size() > 1) {
+            if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "JSON", error)) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder()
-                    << "JSON index supports only 1 key column, but " << indexKeys.KeyColumns.size() << " are requested";
                 return false;
             }
 
-            // JSON index only supports tables with a single PK column of type Uint64
-            if (baseTableColumns.Keys.size() != 1) {
+            if (indexKeys.KeyColumns.size() != 1) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder()
-                    << "JSON index requires exactly one primary key column of type 'Uint64'"
-                    << ", but table has " << baseTableColumns.Keys.size() << " primary key columns";
+                error = TStringBuilder() << "JSON index requires exactly one key column, but " << indexKeys.KeyColumns.size() << " are requested";
                 return false;
             }
 
-            {
-                const TString& pkColumnName = baseTableColumns.Keys[0];
-                Y_ABORT_UNLESS(baseColumnTypes.contains(pkColumnName));
-                auto pkTypeInfo = baseColumnTypes.at(pkColumnName);
-                if (pkTypeInfo.GetTypeId() != NScheme::NTypeIds::Uint64) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    error = TStringBuilder()
-                        << "JSON index requires primary key column '" << pkColumnName
-                        << "' to be of type 'Uint64' but got " << NScheme::TypeName(pkTypeInfo);
-                    return false;
-                }
+            if (!indexKeys.DataColumns.empty()) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << "JSON index does not support COVER columns";
+                return false;
             }
 
             for (const auto& column : indexKeys.KeyColumns) {
                 auto typeInfo = baseColumnTypes.at(column);
                 if (typeInfo.GetTypeId() != NScheme::NTypeIds::Json &&
-                    typeInfo.GetTypeId() != NScheme::NTypeIds::JsonDocument) {
+                    typeInfo.GetTypeId() != NScheme::NTypeIds::JsonDocument)
+                {
                     status = NKikimrScheme::EStatus::StatusInvalidParameter;
                     error = TStringBuilder() << "JSON column '" << column <<
                         "' must have type 'Json' or 'JsonDocument' but got " << NScheme::TypeName(typeInfo);

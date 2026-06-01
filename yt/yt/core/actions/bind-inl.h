@@ -533,7 +533,7 @@ public:
 #endif
     { }
 
-    NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
+    Y_FORCE_INLINE NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
     {
         return NConcurrency::TPropagatingStorageGuard(Storage_);
     }

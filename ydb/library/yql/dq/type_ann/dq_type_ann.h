@@ -1,11 +1,14 @@
 #pragma once
 
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/yql_type_annotation.h>
-
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
-namespace NYql::NDq {
+#include <yql/essentials/core/yql_graph_transformer.h>
+
+namespace NYql {
+
+class TVisitorTransformerBase;
+
+namespace NDq {
 
 IGraphTransformer::TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx);
@@ -29,8 +32,9 @@ IGraphTransformer::TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TEx
 IGraphTransformer::TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqTransform(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx);
 
-THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(NYql::TTypeAnnotationContext& typesCtx);
+THolder<TVisitorTransformerBase> CreateDqTypeAnnotationTransformer();
 
 bool IsTypeSupportedInMergeCn(EDataSlot type);
 bool IsTypeSupportedInMergeCn(const TDataExprType* dataType);
@@ -81,10 +85,11 @@ struct TDqStageSettings {
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
-
 const TTypeAnnotationNode* GetColumnType(const NNodes::TDqConnection& node, const TStructExprType& structType, TStringBuf name, TPositionHandle pos, TExprContext& ctx);
 const TTypeAnnotationNode* GetDqConnectionType(const NYql::NNodes::TDqConnection& node, TExprContext& ctx);
 
 TString PrintDqStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
 
-} // namespace NYql::NDq
+} // namespace NDq
+
+} // namespace NYql

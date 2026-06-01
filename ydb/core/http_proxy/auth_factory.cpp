@@ -1,16 +1,15 @@
-#include "auth_actors.h"
 #include "auth_factory.h"
 
+#include "auth_actors.h"
+#include "http_service.h"
+#include "metrics_actor.h"
+
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/http_proxy/http_service.h>
-#include <ydb/core/http_proxy/metrics_actor.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 
 namespace NKikimr::NHttpProxy {
-
 
 void TIamAuthFactory::InitTenantDiscovery(
     NActors::TActorSystemSetup::TLocalServices&,
@@ -23,7 +22,7 @@ void TIamAuthFactory::Initialize(
     NActors::TActorSystemSetup::TLocalServices& localServices,
     const TAppData& appData,
     const THttpConfig& httpConfig,
-    const  NKikimrConfig::TGRpcConfig& grpcConfig)
+    const NKikimrConfig::TGRpcConfig& grpcConfig)
 {
     if (!httpConfig.GetEnabled()) {
         return;
@@ -43,7 +42,7 @@ void TIamAuthFactory::Initialize(
     if (httpConfig.GetYandexCloudMode() && httpConfig.GetYandexCloudServiceRegion().empty()) {
         Cout << "HttpProxy: YandexCloudServiceRegion must not be empty" << Endl;
     }
-    IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(config);
+    NActors::IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(config);
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NKikimr::NHttpProxy::MakeAccessServiceID(),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));
@@ -56,7 +55,7 @@ void TIamAuthFactory::Initialize(
     const NYdb::TCredentialsProviderFactoryPtr credentialsProviderFactory = jwtFilename.empty()
         ? NYdb::CreateInsecureCredentialsProviderFactory()
         : NYdb::CreateIamJwtFileCredentialsProviderFactoryPrivate(
-            {{.Endpoint = iamExternalEndpoint}, jwtFilename} );
+            {{.Endpoint = iamExternalEndpoint}, jwtFilename});
 
     const std::shared_ptr<NYdb::ICoreFacility> coreFacility = jwtFilename.empty()
         ? nullptr
@@ -80,7 +79,6 @@ void TIamAuthFactory::Initialize(
     NKikimr::NHttpProxy::THttpProxyConfig httpProxyConfig;
     httpProxyConfig.Config = config;
     httpProxyConfig.CredentialsProvider = credentialsProvider;
-    httpProxyConfig.CoreFacility = coreFacility;
     httpProxyConfig.UseSDK = UseSDK();
 
     actor = NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig);
@@ -94,7 +92,7 @@ void TIamAuthFactory::Initialize(
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));
 }
 
-NActors::IActor* TIamAuthFactory::CreateAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const
+NActors::IActor* TIamAuthFactory::CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const
 {
     return CreateIamAuthActor(sender, context, std::move(signature));
 }

@@ -539,12 +539,6 @@ TExprNode::TPtr OptimizeExistsAndUnwrap(const TExprNode::TPtr& node, TExprContex
     return ctx.ChangeChildren(*node, std::move(newChildren));
 }
 
-bool IsExtractCommonPredicatesFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char OptName[] = "ExtractCommonPredicatesFromLogicalOps";
-    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-}
-
 size_t GetNodeId(const TExprNode* node, const TNodeMap<size_t>& node2id) {
     auto it = node2id.find(node);
     YQL_ENSURE(it != node2id.end());
@@ -739,10 +733,8 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOpt
         return opt;
     }
 
-    if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {
-        if (auto opt = ApplyAndAbsorption(node, ctx); opt != node) {
-            return opt;
-        }
+    if (auto opt = ApplyAndAbsorption(node, ctx); opt != node) {
+        return opt;
     }
 
     if (auto opt = OptimizeXNotXPairs(node, false, ctx); opt != node) {
@@ -895,13 +887,12 @@ TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
         return ctx.NewCallable(node->Pos(), "NoPush", { ctx.ChangeChildren(*node, std::move(children)) });
     }
 
-    if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {
-        if (auto opt = ApplyOrAbsorption(node, ctx); opt != node) {
-            return opt;
-        }
-        if (auto opt = ApplyOrDistributive(node, ctx); opt != node) {
-            return opt;
-        }
+    if (auto opt = ApplyOrAbsorption(node, ctx); opt != node) {
+        return opt;
+    }
+
+    if (auto opt = ApplyOrDistributive(node, ctx); opt != node) {
+        return opt;
     }
 
     if (auto opt = OptimizeXNotXPairs(node, true, ctx); opt != node) {

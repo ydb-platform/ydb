@@ -1171,7 +1171,7 @@ int ConvertToProtobufEnumValueUntyped(
             return value;
         }
         case NYTree::ENodeType::String: {
-            const TString& literal = node->AsString()->GetValue();
+            const auto& literal = node->AsString()->GetValue();
             auto value = type->FindValueByLiteral(literal);
             THROW_ERROR_EXCEPTION_UNLESS(value,
                 "Unknown value %Qv of enum %Qv",

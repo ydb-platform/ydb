@@ -310,7 +310,7 @@ private:
     TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
-    THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;
+    THashMap<NObjectClient::TCellId, NTransactionClient::TTransactionSignature> AdditionalParticipantCellIds_;
 
     TApiServiceProxy::TReqBatchModifyRowsPtr BatchModifyRowsRequest_;
     std::vector<TFuture<void>> BatchModifyRowsFutures_;
@@ -339,6 +339,8 @@ private:
     NApi::TTransactionStartOptions PatchTransactionId(const NApi::TTransactionStartOptions& options);
     template <class T>
     T PatchTransactionTimestamp(const T& options);
+
+    void SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req);
 };
 
 DEFINE_REFCOUNTED_TYPE(TTransaction)

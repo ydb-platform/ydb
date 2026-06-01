@@ -1,4 +1,5 @@
 """Tests for sequence-aware text wrapping functions."""
+
 # std imports
 import sys
 import platform
@@ -76,17 +77,14 @@ def _colorize(text):
     )
 
 
-EDGE_CASES = [
+@pytest.mark.parametrize('text,w,expected', [
     ('', 10, []),
     ('   ', 10, []),
     ('\u5973', 0, ['\u5973']),
     ('\u5973', 1, ['\u5973']),
     (ZWJ_FAMILY, 1, [ZWJ_FAMILY]),
     (HANGUL_GA, 1, [HANGUL_GA]),
-]
-
-
-@pytest.mark.parametrize('text,w,expected', EDGE_CASES)
+])
 def test_wrap_edge_cases(text, w, expected):
     assert wrap(text, w) == expected
 
@@ -95,28 +93,22 @@ def test_wrap_initial_indent():
     assert wrap('hello world', 10, initial_indent='> ') == ['> hello', 'world']
 
 
-LONG_WORD_CASES = [
+@pytest.mark.parametrize('text,w,break_long,expected', [
     ('abcdefghij', 3, True, ['abc', 'def', 'ghi', 'j']),
     ('abcdefghij', 3, False, ['abcdefghij']),
-]
-
-
-@pytest.mark.parametrize('text,w,break_long,expected', LONG_WORD_CASES)
+])
 def test_wrap_long_words(text, w, break_long, expected):
     assert wrap(text, w, break_long_words=break_long) == expected
 
 
-HYPHEN_LONG_WORD_CASES = [
+@pytest.mark.parametrize('text,w,break_hyphens,propagate,expected', [
     ('a-b-c-d', 3, True, True, ['a-', 'b-', 'c-d']),
     ('a-b-c-d', 3, False, True, ['a-b', '-c-', 'd']),
     ('---', 2, True, True, ['--', '-']),
     ('a---b', 2, True, True, ['a-', '--', 'b']),
     ('a-\x1b[31mb', 2, True, True, ['a-\x1b[31m\x1b[0m', '\x1b[31mb\x1b[0m']),
     ('a-\x1b[31mb', 2, True, False, ['a-\x1b[31m', 'b']),
-]
-
-
-@pytest.mark.parametrize('text,w,break_hyphens,propagate,expected', HYPHEN_LONG_WORD_CASES)
+])
 def test_wrap_hyphen_long_words(text, w, break_hyphens, propagate, expected):
     assert wrap(text, w, break_on_hyphens=break_hyphens, propagate_sgr=propagate) == expected
 
@@ -182,7 +174,7 @@ def test_wrap_multiline_matches_stdlib():
     assert wrap(given, 30) == textwrap.wrap(given, 30)
 
 
-UNICODE_CASES = [
+@pytest.mark.parametrize('text,w,expected', [
     # CJK (2 cells each)
     ('\u4e2d\u6587\u5b57\u7b26', 4, ['\u4e2d\u6587', '\u5b57\u7b26']),
     ('\u4e2d\u6587\u5b57', 5, ['\u4e2d\u6587', '\u5b57']),
@@ -192,18 +184,14 @@ UNICODE_CASES = [
     (f'{FAMILY_ZWJ} ab', 4, [FAMILY_ZWJ, 'ab']),
     (f'{SMILEY_VS16} ab', 3, [SMILEY_VS16, 'ab']),
     ('\U0001F469\U0001F467\U0001F466', 4, ['\U0001F469\U0001F467', '\U0001F466']),
-]
-
-
-@pytest.mark.parametrize('text,w,expected', UNICODE_CASES)
+])
 def test_wrap_unicode(benchmark, text, w, expected):
     kwargs = {'break_on_hyphens': False} if '-' in text else {}
     result = benchmark(wrap, text, w, **kwargs)
     assert result == expected
 
 
-# Escape sequence preservation (with propagate_sgr=True default)
-SEQUENCE_CASES = [
+@pytest.mark.parametrize('text,w,expected', [
     # SGR sequences propagated across lines
     (f'{SGR_RED}red{SGR_RESET} blue', 4, [f'{SGR_RED}red{SGR_RESET}', 'blue']),
     # SGR at end of line propagates to next line
@@ -221,43 +209,36 @@ SEQUENCE_CASES = [
     # Sequences in long word breaking - red starts after 'x', continues across lines
     ('x\x1b[31mabcdefghij\x1b[0m', 3,
      ['x\x1b[31mab\x1b[0m', '\x1b[31mcde\x1b[0m', '\x1b[31mfgh\x1b[0m', '\x1b[31mij\x1b[0m']),
-    # Lone ESC - not a valid SGR sequence, stays with preceding text
-    ('abc\x1bdefghij', 3, ['abc\x1b', 'def', 'ghi', 'j']),
-]
-
-SEQUENCE_CASES_NO_PROPAGATE = [
-    (f'hello{SGR_RED} world', 6, [f'hello{SGR_RED}', 'world']),
-    ('x\x1b[31mabcdefghij\x1b[0m', 3, ['x\x1b[31mab', 'cde', 'fgh', 'ij\x1b[0m']),
-]
-
-
-@pytest.mark.parametrize('text,w,expected', SEQUENCE_CASES)
+    # Fs sequence (ESC d) - zero-width, stays with preceding text
+    ('abc\x1bdefghij', 3, ['abc\x1bd', 'efg', 'hij']),
+])
 def test_wrap_sequences(benchmark, text, w, expected):
+    """Escape sequence preservation (with propagate_sgr=True default)"""
     assert benchmark(wrap, text, w) == expected
 
 
-@pytest.mark.parametrize('text,w,expected', SEQUENCE_CASES_NO_PROPAGATE)
+@pytest.mark.parametrize('text,w,expected', [
+    (f'hello{SGR_RED} world', 6, [f'hello{SGR_RED}', 'world']),
+    ('x\x1b[31mabcdefghij\x1b[0m', 3, ['x\x1b[31mab', 'cde', 'fgh', 'ij\x1b[0m']),
+]
+)
 def test_wrap_sequences_no_propagate(text, w, expected):
     result = wrap(text, w, propagate_sgr=False)
     assert result == expected
 
 
-# Mixed: sequences + unicode
-MIXED_CASES = [
+@pytest.mark.parametrize('text,w,expected', [
     (f'{SGR_RED}\u4e2d\u6587{SGR_RESET} ab', 5, [f'{SGR_RED}\u4e2d\u6587{SGR_RESET}', 'ab']),
     (f'{SGR_RED}{FAMILY_ZWJ}{SGR_RESET} ab', 4, [f'{SGR_RED}{FAMILY_ZWJ}{SGR_RESET}', 'ab']),
     (f'{SGR_BOLD}\u4e2d{SGR_RESET}y z', 4, [f'{SGR_BOLD}\u4e2d{SGR_RESET}y', 'z']),
-]
-
-
-@pytest.mark.parametrize('text,w,expected', MIXED_CASES)
+])
 def test_wrap_mixed(benchmark, text, w, expected):
+    """Test mixed sequences + unicode."""
     result = benchmark(wrap, text, w)
     assert result == expected
 
 
-# Tabsize with wide characters - tests column alignment with different cell widths
-TABSIZE_WIDE_CASES = [
+@pytest.mark.parametrize('text,w,tabsize,expected', [
     # CJK (2 cells) + tab: tabsize=4, '\u4e2d' is 2 cols, tab expands to col 4
     ('\u4e2d\ta b', 6, 4, ['\u4e2d   a', 'b']),
     # CJK + tab with tabsize=8: '\u4e2d' is 2 cols, tab expands to col 8
@@ -268,10 +249,7 @@ TABSIZE_WIDE_CASES = [
     ('\u4e2d\u6587\ta', 8, 4, ['\u4e2d\u6587  a']),
     # ASCII + tab + CJK: 'a' is 1 col, tab to 4 (3 spaces), CJK is 2 cols
     ('a\t\u4e2d b', 8, 4, ['a   \u4e2d b']),
-]
-
-
-@pytest.mark.parametrize('text,w,tabsize,expected', TABSIZE_WIDE_CASES)
+])
 @pytest.mark.skipif(
     platform.python_implementation() == 'PyPy' and sys.version_info < (3, 9),
     reason='PyPy 3.8 str.expandtabs() counts UTF-8 bytes instead of characters'
@@ -286,7 +264,8 @@ OSC_END_ST = '\x1b]8;;\x1b\\'
 OSC_START_BEL = '\x1b]8;;http://example.com\x07'
 OSC_END_BEL = '\x1b]8;;\x07'
 
-HYPERLINK_WORD_BOUNDARY_CASES = [
+
+@pytest.mark.parametrize('text,w,expected', [
     (   # standard, ST-variant,
         f'{OSC_START_ST}link{OSC_END_ST}more',
         5,
@@ -408,18 +387,14 @@ HYPERLINK_WORD_BOUNDARY_CASES = [
             '\x1b]8;foo=bar:id=mylink;http://example.com\x1b\\Click\x1b]8;;\x1b\\',
             '\x1b]8;foo=bar:id=mylink;http://example.com\x1b\\here\x1b]8;;\x1b\\',
         ],
-    ),
-]
-
-
-@pytest.mark.parametrize('text,w,expected', HYPERLINK_WORD_BOUNDARY_CASES)
+    ),])
 def test_wrap_hyperlink_word_boundary(text, w, expected):
     """OSC hyperlink sequences should act as word boundaries."""
     result = wrap(text, w)
     assert result == expected
 
 
-PLACEHOLDER_STDLIB_CASES = [
+@pytest.mark.parametrize('text,kwargs', [
     ('The quick brown fox jumps over the lazy dog',
      {'width': 10, 'max_lines': 3, 'placeholder': '...'}),
     ('1234567890 1234567890 extra',
@@ -444,10 +419,7 @@ PLACEHOLDER_STDLIB_CASES = [
      {'width': 10, 'subsequent_indent': '  ', 'max_lines': 2, 'placeholder': '...'}),
     ('hello world foo bar',
      {'width': 10, 'initial_indent': '> ', 'max_lines': 2, 'placeholder': '...'}),
-]
-
-
-@pytest.mark.parametrize('text,kwargs', PLACEHOLDER_STDLIB_CASES)
+])
 def test_wrap_max_lines_matches_stdlib(text, kwargs):
     expected = _adjust_stdlib_result(textwrap.wrap(text, **kwargs), kwargs)
     assert wrap(text, **kwargs) == expected
@@ -460,7 +432,7 @@ def test_wrap_placeholder_too_large():
         textwrap.wrap('fox', width=1, max_lines=3, placeholder='...')
 
 
-MAX_LINES_SEQUENCE_CASES = [
+@pytest.mark.parametrize('text,w,ml,ph,expected', [
     (f'{SGR_RED}hello world foo bar{SGR_RESET}',
      8, 2, '...', [f'{SGR_RED}hello{SGR_RESET}', f'{SGR_RED}world...{SGR_RESET}']),
     (f'{SGR_RED}hello{SGR_RESET} world foo',
@@ -470,10 +442,7 @@ MAX_LINES_SEQUENCE_CASES = [
     ('\u4e2d\u6587 \u5b57\u7b26 hello', 5, 1, '~', ['\u4e2d\u6587~']),
     ('\u4e2d\u6587 \u5b57\u7b26 hello world', 5, 2, '~', ['\u4e2d\u6587', '\u5b57\u7b26~']),
     ('\u4e2d\u6587\u5b57\u7b26 hello', 12, 1, '...', ['\u4e2d\u6587\u5b57\u7b26...']),
-]
-
-
-@pytest.mark.parametrize('text,w,ml,ph,expected', MAX_LINES_SEQUENCE_CASES)
+])
 def test_wrap_max_lines_sequences(text, w, ml, ph, expected):
     assert wrap(text, w, max_lines=ml, placeholder=ph) == expected
 
@@ -494,19 +463,14 @@ def test_wrap_max_lines_hyperlink_close_on_prev_line():
     assert result == [f'{OSC_START_ST}ab{OSC_END_ST}...']
 
 
-# -- expand_tabs, replace_whitespace, fix_sentence_endings --
-
-STDLIB_PARAM_CASES = [
+@pytest.mark.parametrize('text,kwargs', [
     ('hello\tworld', {'width': 20, 'expand_tabs': False, 'replace_whitespace': False}),
     ('hello\tworld foo\tbar baz', {'width': 12, 'expand_tabs': False, 'tabsize': 8}),
     ('hello\nworld', {'width': 20, 'replace_whitespace': False}),
     ('a\t b\n c', {'width': 20, 'replace_whitespace': False}),
     ('Hello world. This is a test.  More text.', {'width': 20, 'fix_sentence_endings': True}),
     ('Dr. Smith went to Washington. He left.', {'width': 20, 'fix_sentence_endings': True}),
-]
-
-
-@pytest.mark.parametrize('text,kwargs', STDLIB_PARAM_CASES)
+])
 def test_wrap_stdlib_params(text, kwargs):
     assert wrap(text, **kwargs) == textwrap.wrap(text, **kwargs)
 
@@ -521,3 +485,9 @@ def test_wrap_replace_whitespace_false_newlines_zero_width():
     """Newlines have zero display width, so more text fits per line than stdlib."""
     assert wrap('hello\nworld foo\nbar', 10, replace_whitespace=False) == [
         'hello\nworld', 'foo\nbar']
+
+
+def test_wrap_bare_esc():
+    """Bare ESC not part of a recognized sequence is treated as zero-width."""
+    assert wrap('ab\x1bcd ef', 5) == ['ab\x1bcd', 'ef']
+    assert wrap('ab\x1b\x00cdef', 3) == ['ab\x1b\x00c', 'def']

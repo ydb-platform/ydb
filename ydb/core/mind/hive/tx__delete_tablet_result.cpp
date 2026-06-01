@@ -30,7 +30,11 @@ public:
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Metrics>().Key(tablet->Id, 0).Delete();
                 for (const TTabletChannelInfo& channelInfo : tablet->TabletStorageInfo->Channels) {
+                    auto& pool = Self->GetStoragePool(channelInfo.StoragePool);
                     for (const TTabletChannelInfo::THistoryEntry& historyInfo : channelInfo.History) {
+                        if (pool.RemainingHistory.erase({TabletId, channelInfo.Channel, historyInfo.FromGeneration})) {
+                            Self->CheckRemainingHistory(pool);
+                        }
                         db.Table<Schema::TabletChannelGen>().Key(tablet->Id, channelInfo.Channel, historyInfo.FromGeneration).Delete();
                     }
                     db.Table<Schema::TabletChannel>().Key(tablet->Id, channelInfo.Channel).Delete();

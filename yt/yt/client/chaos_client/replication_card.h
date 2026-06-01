@@ -20,12 +20,16 @@ struct TReplicationProgress
         NTransactionClient::TTimestamp Timestamp;
 
         void Persist(const TStreamPersistenceContext& context);
+
+        bool operator==(const TSegment& other) const;
     };
 
     std::vector<TSegment> Segments;
     NTableClient::TUnversionedOwningRow UpperKey;
 
     void Persist(const TStreamPersistenceContext& context);
+
+    bool operator==(const TReplicationProgress& other) const = default;
 };
 
 struct TReplicaHistoryItem
@@ -37,6 +41,8 @@ struct TReplicaHistoryItem
 
     bool IsSync() const;
     void Persist(const TStreamPersistenceContext& context);
+
+    bool operator==(const TReplicaHistoryItem& other) const = default;
 };
 
 struct TReplicaInfo
@@ -53,6 +59,8 @@ struct TReplicaInfo
     //! Returns index of history item corresponding to timestamp, -1 if none.
     int FindHistoryItemIndex(NTransactionClient::TTimestamp timestamp) const;
 };
+
+bool operator==(const TReplicaInfo& lhs, const TReplicaInfo& rhs);
 
 struct TReplicationProgressProjection
 {

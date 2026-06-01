@@ -292,6 +292,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return "CHANGE PATH STATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
+        return "INCREMENTAL RESTORE LOCK TARGETS";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
+        return "INCREMENTAL RESTORE UNLOCK TARGETS";
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return "RESTORE INCREMENTAL FINALIZE";
     // secret
@@ -685,6 +689,15 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
+        for (const auto& dst : tx.GetIncrementalRestoreLockTargets().GetDstPaths()) {
+            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), dst}));
+        }
+        for (const auto& src : tx.GetIncrementalRestoreLockTargets().GetSrcPaths()) {
+            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), src}));
+        }
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         // For incremental restore finalization, we don't have a specific path in the message

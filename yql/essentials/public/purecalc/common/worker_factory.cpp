@@ -202,7 +202,6 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
 
     if (BlockEngineMode_ != EBlockEngineMode::Disable) {
         typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
-        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverCollect")));
         typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));
     }
 
@@ -258,6 +257,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
         settings.Flags = GetSqlFlags(BlockEngineMode_);
+        settings.AllowTablesFunction = true;
         for (const auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {

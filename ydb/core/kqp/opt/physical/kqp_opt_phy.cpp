@@ -3,18 +3,18 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/effects/kqp_opt_phy_effects_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
 #include <yql/essentials/core/yql_aggregate_expander.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -22,17 +22,18 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
 using TStatus = IGraphTransformer::TStatus;
 
-auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSortBase::Match(node); };
+const auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSortBase::Match(node); };
 
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
-    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer)
+    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
         : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
-        , TypeAnnTransformer(std::move(typeAnnTransformer))
     {
 #define HNDL(name) "KqpPhysical-"#name, Hndl(&TKqpPhysicalOptTransformer::name)
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
@@ -112,6 +113,7 @@ public:
         AddHandler(0, &TCoAggregateMergeFinalize::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateMergeManyFinalize::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateFinalize::Match, HNDL(ExpandAggregatePhase));
+        AddHandler(0, &TDqPhyWatermarkGenerator::Match, HNDL(PushWatermarkGeneratorToStage));
 
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
@@ -309,7 +311,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> PushOlapFilter(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx, *TypeAnnTransformer.Get());
+        TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapFilter", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -624,6 +626,14 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> PushWatermarkGeneratorToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        TMaybeNode<TExprBase> output = DqPushWatermarkGeneratorToStage(node, ctx, optCtx, *getParents());
+        if (output) {
+            DumpAppliedRule("PushWatermarkGeneratorToStage", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
+        return output;
+    }
+
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -820,14 +830,12 @@ protected:
 private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
-    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    NYql::TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer)
-{
-    Y_UNUSED(config);
-    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx, std::move(typeAnnTransformer)));
+} // anonymous namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typesCtx) {
+    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx));
 }
 
 } // namespace NKikimr::NKqp::NOpt

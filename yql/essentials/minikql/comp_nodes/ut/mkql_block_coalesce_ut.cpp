@@ -17,6 +17,8 @@
 
 namespace NKikimr::NMiniKQL {
 
+using namespace NTest;
+
 namespace {
 
 #define UNIT_TEST_WITH_INTEGER(TestName)                                          \

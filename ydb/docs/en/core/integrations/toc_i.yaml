@@ -34,3 +34,5 @@ items:
   include:
     mode: link
     path: vectorsearch/toc-vectorsearch.yaml
+- name: SQL Dialect Converter to YQL
+  href: sql-dialect-converter.md

@@ -5,6 +5,7 @@
 #include "match_recognize.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/charset/ci_string.h>
@@ -181,12 +182,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (IsInlineScalar_ &&
-            !ctx.EnsureBackwardCompatibleFeatureAvailable(
-                Source_->GetPos(),
-                "Inline subquery",
-                MakeLangVersion(2025, 04)))
-        {
+        if (IsInlineScalar_ && !ctx.EnsureAvailable(Source_->GetPos(), NYql::NFeature::InlineSubquery)) {
             return false;
         }
 
@@ -218,7 +214,10 @@ public:
                     return false;
                 }
             }
-            src->AddDependentSource(Source_);
+
+            if (!IsInlineScalar_ && !CheckExist_) {
+                src->AddDependentSource(Source_);
+            }
         }
 
         TTableList tableList;
@@ -237,11 +236,14 @@ public:
             return false;
         }
 
-        if (!CheckExist_) {
+        const bool areInlineScalarReadsRequired = IsInlineScalar_ && !tableList.empty();
+        if (!CheckExist_ && !areInlineScalarReadsRequired) {
             return true;
         }
 
-        TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
+        const bool isInSubquery = areInlineScalarReadsRequired ? false : IsSubquery();
+
+        TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, isInSubquery, ctx.Scoped));
         if (!inputTables->Init(ctx, Source_.Get())) {
             return false;
         }
@@ -3762,6 +3764,44 @@ TSourcePtr BuildCombine(TPosition pos, TSourcePtr leftSource, TVector<TSortSpeci
     const auto rightInput = BuildCombineInput(pos, std::move(rightSource), std::move(rightPresort));
     return new TCombineSource(pos, std::move(leftInput), std::move(rightInput),
                               std::move(combineKeyExpr), udf, std::move(args), settings);
+}
+
+class TWatermarkSource: public IProxySource {
+public:
+    TWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda)
+        : IProxySource(pos, src.Get())
+        , SourcePtr_(src)
+        , WatermarkLambda_(std::move(watermarkLambda))
+    {
+    }
+
+    TNodePtr Build(TContext& ctx) final {
+        return Y("WatermarkGenerator", SourcePtr_->Build(ctx), WatermarkLambda_);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!SourcePtr_->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!WatermarkLambda_->Init(ctx, this)) {
+            return false;
+        }
+
+        return IProxySource::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return MakeIntrusive<TWatermarkSource>(Pos_, SourcePtr_->CloneSource(), WatermarkLambda_->Clone());
+    }
+
+private:
+    TSourcePtr SourcePtr_;
+    TNodePtr WatermarkLambda_;
+};
+
+TSourcePtr BuildWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda) {
+    return MakeIntrusive<TWatermarkSource>(pos, std::move(src), std::move(watermarkLambda));
 }
 
 } // namespace NSQLTranslationV1

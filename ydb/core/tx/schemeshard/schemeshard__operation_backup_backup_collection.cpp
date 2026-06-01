@@ -25,7 +25,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 template <>
 bool Rewrite(TTag, TTxTransaction& tx) {
     auto now = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now());
-    tx.MutableBackupBackupCollection()->SetTargetDir(now + "_full");
+    tx.MutableBackupBackupCollection()->SetTargetDir(NBackup::FullBackupDirName(now));
     return true;
 }
 

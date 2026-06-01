@@ -421,6 +421,7 @@ RECURSE(
 IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
+        actions/benchmarks
         concurrency/benchmarks
         bus/benchmarks
         ypath/benchmarks
@@ -448,7 +449,7 @@ IF (NOT OS_WINDOWS)
     )
 
     RECURSE_FOR_TESTS(
-        bus/unittests
+        bus/tcp/unittests
         compression/unittests
         crypto/unittests
         json/unittests

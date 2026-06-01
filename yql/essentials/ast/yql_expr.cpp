@@ -3090,6 +3090,7 @@ TConstraintSet TExprContext::MakeConstraintSet(const NYT::TNode& serializedConst
         {TUniqueConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TUniqueConstraintNode, const NYT::TNode&>)},
         {TDistinctConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TDistinctConstraintNode, const NYT::TNode&>)},
         {TEmptyConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TEmptyConstraintNode, const NYT::TNode&>)},
+        {TStreamingConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TStreamingConstraintNode, const NYT::TNode&>)},
         {TVarIndexConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TVarIndexConstraintNode, const NYT::TNode&>)},
         {TMultiConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TMultiConstraintNode, const NYT::TNode&>)},
     };

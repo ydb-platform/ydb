@@ -2,9 +2,28 @@
 
 #include "direct_block_group.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TOracleMock: public IOracle
+{
+    TDuration WriteHedgingDelay;
+    TDuration WriteRequestTimeout;
+    TDuration PBufferReplyTimeout;
+    EWriteMode WriteMode = EWriteMode::DirectPBuffersFilling;
+
+    [[nodiscard]] THostIndex SelectBestPBufferHost(
+        std::span<const THostIndex> hostIndexes,
+        EOperation operation) const override;
+
+    [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
+    [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
+    [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
+};
 
 class TDirectBlockGroupMock: public IDirectBlockGroup
 {
@@ -45,6 +64,7 @@ public:
     using TWriteBlocksToManyPBuffersHandler = std::function<
         NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>(
             ui32 vChunkIndex,
+            THostIndex coordinatorHostIndex,
             TVector<THostIndex> hostIndexes,
             ui64 lsn,
             TBlockRange64 range,
@@ -75,6 +95,7 @@ public:
         std::function<NThreading::TFuture<TDBGDumpResponse>()>;
 
     TExecutorPtr Executor;
+    TOracleMock Oracle;
     TScheduleHandler ScheduleHandler;
     TReadBlocksFromDDiskHandler ReadBlocksFromDDiskHandler;
     TReadBlocksFromPBufferHandler ReadBlocksFromPBufferHandler;
@@ -89,9 +110,12 @@ public:
 
     TVector<TVChunkWeakPtr> VChunks;
 
+    TDirectBlockGroupMock();
+
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+    IOraclePtr GetOracle() override;
 
     void Schedule(TDuration delay, TCallback callback) override;
 
@@ -134,6 +158,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
+        THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,

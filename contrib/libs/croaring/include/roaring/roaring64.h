@@ -1,3 +1,12 @@
+/*
+ * roaring64.h
+ *
+ * This file declares the 64-bit Roaring bitmap API. A roaring64 bitmap stores
+ * sets of 64-bit unsigned integers by partitioning the value space by high
+ * bits and using Roaring containers for the lower bits inside each partition.
+ * This keeps the structure compact while preserving fast membership tests,
+ * insertions, iteration, and set operations over large sparse integer sets.
+ */
 #ifndef ROARING64_H
 #define ROARING64_H
 
@@ -803,6 +812,75 @@ bool roaring64_iterator_move_equalorlarger(roaring64_iterator_t *it,
  */
 uint64_t roaring64_iterator_read(roaring64_iterator_t *it, uint64_t *buf,
                                  uint64_t count);
+
+/**
+ * Reads previous ${count} values from iterator into user-supplied ${buf}.
+ * Returns the number of read elements.
+ * This number can be smaller than ${count}, which means that iterator is
+ * drained.
+ *
+ * Values are written in descending order: buf[0] is the highest (current)
+ * value, buf[ret-1] is the lowest value read.
+ *
+ * This function satisfies semantics of reverse iteration and can be used
+ * together with other iterator functions.
+ *  - first value is copied from the current iterator value
+ *  - after function returns, iterator is positioned at the previous element
+ */
+uint64_t roaring64_iterator_read_backward(roaring64_iterator_t *it,
+                                          uint64_t *buf, uint64_t count);
+
+typedef struct roaring64_range_closed_s {
+    uint64_t min;
+    uint64_t max;
+} roaring64_range_closed_t;
+
+/**
+ * Reads next ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * This function can be used together with other iterator functions.
+ *  - first range will start with the current iterator value
+ *  - after the function returns, the iterator is positioned at the next element
+ *    after the end of the last returned range, or has_value is false if
+ *    the bitmap is exhausted.
+ */
+size_t roaring64_iterator_read_ranges(roaring64_iterator_t *it,
+                                      roaring64_range_closed_t *buf,
+                                      size_t count);
+
+/**
+ * Reads previous ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * Ranges are returned in reverse order, e.g. the first range returned is the
+ * highest range (ending at the current value).
+ *
+ * This function can be used together with other iterator functions.
+ *  - first range will end with the current iterator value
+ *  - after the function returns, the iterator is positioned at the element
+ *    before the beginning of the last returned range, or has_value is false if
+ *    the bitmap is exhausted.
+ */
+size_t roaring64_iterator_read_prev_ranges(roaring64_iterator_t *it,
+                                           roaring64_range_closed_t *buf,
+                                           size_t count);
 
 #ifdef __cplusplus
 }  // extern "C"

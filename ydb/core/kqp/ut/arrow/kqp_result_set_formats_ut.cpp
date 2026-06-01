@@ -504,6 +504,27 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
+     * Arrow format is rejected when EnableArrowResultSetFormat feature flag is false.
+     */
+    Y_UNIT_TEST(ArrowFormat_FeatureFlagDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableArrowResultSetFormat(false);
+
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto client = kikimr.GetQueryClient();
+
+        auto arrowSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+
+        auto result = client.ExecuteQuery(R"(
+            SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+        )", TTxControl::BeginTx().CommitTx(), arrowSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Arrow result set format is not enabled");
+    }
+
+    /**
      * Set Arrow format explicitly in TExecuteQuerySettings.
      */
     Y_UNIT_TEST(ArrowFormat_Simple) {
@@ -1032,6 +1053,64 @@ UuidNotNullValue:   [
     }
 
     /**
+     * Arrow format correctly preserves IEEE 754 special float values (NaN, +Infinity, -Infinity)
+     * for both Float and Double columns.
+     * Both VALUE and ARROW formats must return semantically equivalent results.
+     */
+    Y_UNIT_TEST(ArrowFormat_Types_Float_SpecialValues) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+        auto client = kikimr.GetQueryClient();
+
+        const TString query = R"(
+            SELECT
+                Float('nan') AS float_nan,
+                Float('inf') AS float_pos_inf,
+                Float('-inf') AS float_neg_inf,
+                Double('nan') AS double_nan,
+                Double('inf') AS double_pos_inf,
+                Double('-inf') AS double_neg_inf;
+        )";
+
+        // Verify Arrow format preserves NaN and Infinity as IEEE 754 special values
+        auto arrowBatches = ExecuteAndCombineBatches(client, query, /* assertSize */ true);
+
+        UNIT_ASSERT_C(!arrowBatches.empty(), "Batches must not be empty");
+
+        const auto& batch = arrowBatches.front();
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 6);
+
+        auto floatNanCol    = static_pointer_cast<arrow::FloatArray>(batch->column(0));
+        auto floatPosInfCol = static_pointer_cast<arrow::FloatArray>(batch->column(1));
+        auto floatNegInfCol = static_pointer_cast<arrow::FloatArray>(batch->column(2));
+        auto doubleNanCol    = static_pointer_cast<arrow::DoubleArray>(batch->column(3));
+        auto doublePosInfCol = static_pointer_cast<arrow::DoubleArray>(batch->column(4));
+        auto doubleNegInfCol = static_pointer_cast<arrow::DoubleArray>(batch->column(5));
+
+        UNIT_ASSERT_C(std::isnan(floatNanCol->Value(0)), "Float NaN must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(floatPosInfCol->Value(0)) && floatPosInfCol->Value(0) > 0, "Float +Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(floatNegInfCol->Value(0)) && floatNegInfCol->Value(0) < 0, "Float -Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isnan(doubleNanCol->Value(0)), "Double NaN must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(doublePosInfCol->Value(0)) && doublePosInfCol->Value(0) > 0, "Double +Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(doubleNegInfCol->Value(0)) && doubleNegInfCol->Value(0) < 0, "Double -Inf must be preserved in Arrow format");
+
+        // Verify VALUE format sees the same special values (format consistency check)
+        auto valueSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value);
+        auto valueResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), valueSettings).GetValueSync();
+        UNIT_ASSERT_C(valueResponse.IsSuccess(), valueResponse.GetIssues().ToString());
+
+        TResultSetParser parser(valueResponse.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+
+        UNIT_ASSERT_C(std::isnan(parser.ColumnParser("float_nan").GetFloat()), "Value format Float NaN must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("float_pos_inf").GetFloat()) && parser.ColumnParser("float_pos_inf").GetFloat() > 0, "Value format Float +Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("float_neg_inf").GetFloat()) && parser.ColumnParser("float_neg_inf").GetFloat() < 0, "Value format Float -Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isnan(parser.ColumnParser("double_nan").GetDouble()), "Value format Double NaN must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("double_pos_inf").GetDouble()) && parser.ColumnParser("double_pos_inf").GetDouble() > 0, "Value format Double +Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("double_neg_inf").GetDouble()) && parser.ColumnParser("double_neg_inf").GetDouble() < 0, "Value format Double -Inf must match Arrow format");
+    }
+
+    /**
      * Arrow format is supported for compression.
      * By default, unspecified compression codec is None (without compression).
      */
@@ -1079,6 +1158,71 @@ UuidNotNullValue:   [
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Codec 'lz4' doesn't support setting a compression level");
+        }
+    }
+
+    /**
+     * ZSTD edge-case compression levels are accepted without error
+     */
+    Y_UNIT_TEST(ArrowFormat_Compression_ZSTD_LevelEdgeCases) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        // Level 0: ZSTD maps this to its default level (3). Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(0),
+            /* assertEqual */ false);
+
+        // Level -5: valid ZSTD fast mode. Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(-5),
+            /* assertEqual */ false);
+
+        // Level 100: above ZSTD maximum (22). ZSTD silently clamps to 22. Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(100),
+            /* assertEqual */ false);
+    }
+
+    /**
+     * Compression with ZSTD and LZ4_FRAME works correctly when the result set is empty (0 rows).
+     * The compressed empty batch must be deserializable and contain 0 rows.
+     */
+    Y_UNIT_TEST(ArrowFormat_Compression_EmptyBatch) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        const TString query = R"(
+            SELECT Comment, Amount, Name FROM Test WHERE Amount >= 999999;
+        )";
+
+        for (auto codecType : {
+                TArrowFormatSettings::TCompressionCodec::EType::Zstd,
+                TArrowFormatSettings::TCompressionCodec::EType::Lz4Frame }) {
+            auto settings = TExecuteQuerySettings()
+                .Format(TResultSet::EFormat::Arrow)
+                .ArrowFormatSettings(TArrowFormatSettings()
+                    .CompressionCodec(TArrowFormatSettings::TCompressionCodec().Type(codecType)));
+
+            auto result = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+            const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+            const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
+
+            UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty even for empty result");
+            UNIT_ASSERT_C(!batches.empty(), "Expected at least one batch even for empty result");
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+
+            UNIT_ASSERT_C(arrowBatch, "Empty compressed batch must be deserializable");
+            UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Empty compressed batch validation failed");
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->num_rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->num_columns(), 3);
         }
     }
 

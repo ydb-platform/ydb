@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
         testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
         testConfig.PDiskPathSuffix = "synclog_real_live_bpd77.dat";
-        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureNone, testConfig);
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
         const auto& info = storage.Info;
         const TActorId edge = storage.Edge;
         const TActorId putQueue = storage.PutQueue;

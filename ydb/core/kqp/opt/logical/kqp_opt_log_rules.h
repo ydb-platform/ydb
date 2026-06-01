@@ -1,19 +1,32 @@
 #pragma once
 
-#include <ydb/core/kqp/opt/kqp_opt.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-
-#include <yql/essentials/ast/yql_expr.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 
 /*
  * This file contains declaration of all rule functions for logical optimizer
  */
 
-namespace NYql::NCommon {
-    class TKeyRange;
-}
+namespace NYql {
 
-namespace NKikimr::NKqp::NOpt {
+class TKikimrTableDescription;
+struct TTypeAnnotationContext;
+struct TKikimrConfiguration;
+
+namespace NCommon {
+
+class TKeyRange;
+
+} // namespace NCommon
+
+} // namespace NYql
+
+namespace NKikimr::NKqp {
+
+struct TOptimizerHints;
+
+namespace NOpt {
+
+struct TKqpOptimizeContext;
 
 NYql::NNodes::TKqlKeyRange BuildKeyRangeExpr(const NYql::NCommon::TKeyRange& keyRange,
     const NYql::TKikimrTableDescription& tableDesc, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
@@ -28,7 +41,7 @@ NYql::NNodes::TExprBase KqpJoinToIndexLookup(const NYql::NNodes::TExprBase& node
     const TKqpOptimizeContext& kqpCtx, bool useCBO, const NKikimr::NKqp::TOptimizerHints& hints);
 
 NYql::NNodes::TExprBase KqpRewriteSqlInToEquiJoin(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrConfiguration::TPtr& config);
+    const TKqpOptimizeContext& kqpCtx, const TIntrusivePtr<NYql::TKikimrConfiguration>& config);
 
 NYql::NNodes::TExprBase KqpRewriteSqlInCompactToJoin(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 
@@ -50,6 +63,9 @@ NYql::NNodes::TExprBase KqpRewriteTopSortOverIndexRead(const NYql::NNodes::TExpr
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpPushLimitOverFullText(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
@@ -83,4 +99,6 @@ NYql::NNodes::TExprBase KqpTopSortOverExtend(NYql::NNodes::TExprBase node, NYql:
 NYql::NNodes::TExprBase KqpUpsertRowsInputRewrite(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NOpt
+
+} // namespace NKikimr::NKqp

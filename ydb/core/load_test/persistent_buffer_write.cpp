@@ -21,7 +21,7 @@
 namespace NKikimr {
 
 namespace {
-static std::atomic<ui64> NextRequestIdx = 0;
+static std::atomic<ui64> NextRequestIdx = 1;
 
 class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersistentBufferWriterLoadTestActor> {
     static constexpr ui32 SectorSize = 4096;

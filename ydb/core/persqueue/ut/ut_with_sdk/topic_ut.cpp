@@ -296,6 +296,84 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         UNIT_ASSERT_C(false, "Session closed event not received");
     }
 
+    Y_UNIT_TEST(WriteSessionClosedWithSessionExpiredWhenOwnershipLost) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TTopicClient client(setup.MakeDriver());
+
+        auto createSession = [&]() {
+            TWriteSessionSettings settings;
+            settings.Path(TEST_TOPIC)
+                .ProducerId("producer-1")
+                .MessageGroupId("producer-1")
+                .PartitionId(0)
+                .Codec(ECodec::RAW)
+                .BatchFlushInterval(TDuration::Zero())
+                .BatchFlushSizeBytes(0)
+                .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
+            return client.CreateWriteSession(settings);
+        };
+
+        auto waitReady = [](const std::shared_ptr<IWriteSession>& session) {
+            for (;;) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    return std::move(ready->ContinuationToken);
+                }
+                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ready: "
+                                               << closed->DebugString());
+                }
+            }
+        };
+
+        auto waitAck = [](const std::shared_ptr<IWriteSession>& session) {
+            for (;;) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    UNIT_ASSERT(!ack->Acks.empty());
+                    for (const auto& item : ack->Acks) {
+                        UNIT_ASSERT_C(
+                            item.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN
+                                || item.State == TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN,
+                            TStringBuilder() << "Unexpected ack state: " << item.State);
+                    }
+                    return;
+                }
+                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ack: "
+                                               << closed->DebugString());
+                }
+            }
+        };
+
+        auto waitClosed = [](const std::shared_ptr<IWriteSession>& session) {
+            for (;;) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    return *closed;
+                }
+            }
+        };
+
+        auto first = createSession();
+        first->Write(waitReady(first), "first", 1);
+        waitAck(first);
+
+        auto second = createSession();
+        second->Write(waitReady(second), "second", 2);
+        waitAck(second);
+
+        const auto closed = waitClosed(first);
+        UNIT_ASSERT_VALUES_EQUAL_C(closed.GetStatus(), NYdb::EStatus::SESSION_EXPIRED, closed.DebugString());
+
+        UNIT_ASSERT(second->Close(TDuration::Seconds(5)));
+    }
+
     Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC);
@@ -388,6 +466,265 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(10, first10.size());
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+    }
+
+    Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting_LimitOneMessage) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TWriteSessionSettings writeSettings;
+        writeSettings.Path(TEST_TOPIC)
+            .ProducerId("producer-1")
+            .MessageGroupId("producer-1")
+            .Codec(ECodec::RAW);
+        auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        auto writeMessages = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                writeSession->Write(TString(1_KB, 'a'));
+            }
+        };
+
+        writeMessages(1);
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0));
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.PartitionMaxInFlightBytes(1_KB);
+        auto session = client.CreateReadSession(settings);
+
+        auto readMessages = [&](size_t count) {
+            TVector<TMessage> result;
+            while (result.size() < count) {
+                UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder()
+                    << "No event received, messages size: " << result.size());
+                auto eventOpt = session->GetEvent(false);
+                UNIT_ASSERT(eventOpt);
+                auto& event = *eventOpt;
+
+                if (auto* start = std::get_if<TStartPartitionEvent>(&event)) {
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TStopPartitionEvent>(&event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (std::get_if<TCommitOffsetAcknowledgementEvent>(&event)) {
+                    continue;
+                }
+
+                if (auto* data = std::get_if<TDataEvent>(&event)) {
+                    for (auto& msg : data->GetMessages()) {
+                        result.push_back(msg);
+                    }
+                }
+            }
+            return result;
+        };
+
+        auto messages = readMessages(1);
+        UNIT_ASSERT_VALUES_EQUAL(1, messages.size());
+
+        writeMessages(1);
+        Sleep(TDuration::Seconds(5));
+
+        // The first message is still in-flight, so the second one should not be delivered yet.
+        {
+            auto future = session->WaitEvent();
+            UNIT_ASSERT(!future.Wait(TDuration::Seconds(3)));
+        }
+
+        messages[0].Commit();
+        messages.clear();
+
+        // Once the first message is committed, partition in-flight bytes are released
+        // and the second message can be read.
+        messages = readMessages(1);
+        UNIT_ASSERT_VALUES_EQUAL(1, messages.size());
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+    }
+
+    Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting_UnorderedCommitGap) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TWriteSessionSettings writeSettings;
+        writeSettings.Path(TEST_TOPIC)
+            .ProducerId("producer-1")
+            .MessageGroupId("producer-1")
+            .Codec(ECodec::RAW);
+        auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        auto writeMessages = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                writeSession->Write(TString(1000, 'a'));
+            }
+        };
+
+        writeMessages(20);
+        Sleep(TDuration::Seconds(5));
+
+        auto writeOneMoreMessage = [&] {
+            writeMessages(1);
+            Sleep(TDuration::Seconds(5));
+        };
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0));
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.PartitionMaxInFlightBytes(10000);
+        auto session = client.CreateReadSession(settings);
+
+        auto readUntil = [&](size_t count) {
+            TVector<TMessage> result;
+            while (result.size() < count) {
+                UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder()
+                    << "No event received, messages size: " << result.size());
+                auto eventOpt = session->GetEvent(false);
+                UNIT_ASSERT(eventOpt);
+                auto& event = *eventOpt;
+
+                if (auto* start = std::get_if<TStartPartitionEvent>(&event)) {
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TStopPartitionEvent>(&event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (std::get_if<TCommitOffsetAcknowledgementEvent>(&event)) {
+                    continue;
+                }
+
+                if (auto* data = std::get_if<TDataEvent>(&event)) {
+                    for (auto& msg : data->GetMessages()) {
+                        result.push_back(msg);
+                    }
+                }
+            }
+            return result;
+        };
+
+        auto firstBatch = readUntil(10);
+        UNIT_ASSERT_C(firstBatch.size() >= 10, TStringBuilder()
+            << "Expected at least 10 messages, got " << firstBatch.size());
+
+        writeOneMoreMessage();
+
+        // Simulate unordered processing: later messages finish and call Commit(),
+        // but the first offset is still a gap. The server cannot advance the
+        // committed offset through this gap, so partition in-flight bytes remain held.
+        for (size_t i = 1; i < firstBatch.size(); ++i) {
+            firstBatch[i].Commit();
+        }
+
+        {
+            auto future = session->WaitEvent();
+            UNIT_ASSERT(!future.Wait(TDuration::Seconds(3)));
+        }
+
+        firstBatch[0].Commit();
+
+        auto nextMessages = readUntil(1);
+        UNIT_ASSERT_VALUES_EQUAL(1, nextMessages.size());
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+    }
+
+    Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting_DirectReadUnorderedCommitGap) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TWriteSessionSettings writeSettings;
+        writeSettings.Path(TEST_TOPIC)
+            .ProducerId("producer-1")
+            .MessageGroupId("producer-1")
+            .Codec(ECodec::RAW);
+        auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        auto writeMessages = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                writeSession->Write(TString(1000, 'a'));
+            }
+        };
+
+        writeMessages(20);
+        Sleep(TDuration::Seconds(5));
+
+        auto writeOneMoreMessage = [&] {
+            writeMessages(1);
+            Sleep(TDuration::Seconds(5));
+        };
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0));
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.PartitionMaxInFlightBytes(10000);
+        settings.DirectRead(true);
+        auto session = client.CreateReadSession(settings);
+
+        auto readUntil = [&](size_t count) {
+            TVector<TMessage> result;
+            while (result.size() < count) {
+                UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder()
+                    << "No event received, messages size: " << result.size());
+                auto eventOpt = session->GetEvent(false);
+                UNIT_ASSERT(eventOpt);
+                auto& event = *eventOpt;
+
+                if (auto* start = std::get_if<TStartPartitionEvent>(&event)) {
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TStopPartitionEvent>(&event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (std::get_if<TCommitOffsetAcknowledgementEvent>(&event)) {
+                    continue;
+                }
+
+                if (auto* data = std::get_if<TDataEvent>(&event)) {
+                    for (auto& msg : data->GetMessages()) {
+                        result.push_back(msg);
+                    }
+                }
+            }
+            return result;
+        };
+
+        auto firstBatch = readUntil(10);
+        UNIT_ASSERT_C(firstBatch.size() >= 10, TStringBuilder()
+            << "Expected at least 10 messages, got " << firstBatch.size());
+
+        writeOneMoreMessage();
+
+        for (size_t i = 1; i < firstBatch.size(); ++i) {
+            firstBatch[i].Commit();
+        }
+
+        {
+            auto future = session->WaitEvent();
+            UNIT_ASSERT(!future.Wait(TDuration::Seconds(3)));
+        }
+
+        firstBatch[0].Commit();
+
+        auto nextMessages = readUntil(1);
+        UNIT_ASSERT_VALUES_EQUAL(1, nextMessages.size());
+
         UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
     }
 

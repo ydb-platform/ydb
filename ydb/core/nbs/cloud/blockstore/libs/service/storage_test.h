@@ -40,6 +40,12 @@ public:
         Y_UNUSED(delay);
         executor->ExecuteSimple(std::move(callback));
     }
+
+    void UpdateVChunkConfig(
+        const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
+    {
+        Y_UNUSED(cfg);
+    }
 };
 
 struct TTestStorage: public IStorage

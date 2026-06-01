@@ -181,6 +181,18 @@ NProto::TTaskSortedUploadResult TaskSortedUploadResultToProto(const TTaskSortedU
 
 TTaskSortedUploadResult TaskSortedUploadResultFromProto(const NProto::TTaskSortedUploadResult& protoTaskSortedUploadResult);
 
+NProto::TPullOperationParams PullOperationParamsToProto(const TPullOperationParams& pullOperationParams);
+
+TPullOperationParams PullOperationParamsFromProto(const NProto::TPullOperationParams& protoPullOperationParams);
+
+NProto::TPullTaskParams PullTaskParamsToProto(const TPullTaskParams& pullTaskParams);
+
+TPullTaskParams PullTaskParamsFromProto(const NProto::TPullTaskParams& protoPullTaskParams);
+
+NProto::TTaskPullResult TaskPullResultToProto(const TTaskPullResult& taskPullResult);
+
+TTaskPullResult TaskPullResultFromProto(const NProto::TTaskPullResult& protoTaskPullResult);
+
 NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult);
 
 TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult);

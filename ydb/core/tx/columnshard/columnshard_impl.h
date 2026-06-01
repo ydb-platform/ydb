@@ -123,6 +123,7 @@ class TTxBlobsWritingFailed;
 class TWriteTasksQueue;
 class TWriteTask;
 class TCommitOperation;
+class IScanSnapshotGuard;
 
 namespace NLoading {
 class TTxControllerInitializer;
@@ -534,7 +535,8 @@ private:
     NOlap::TSnapshot LastCleanupSnapshot = NOlap::TSnapshot::Zero();
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
-    NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;
+    THashMap<TSchemeShardLocalPathId, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactions;
+    THashMap<ui64, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactionsByTxId;   // TxId -> BackupTransaction
 
     ui64 StatsReportRound = 0;
     TString OwnerPath;
@@ -587,6 +589,7 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
+    void PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const;
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;
     std::unique_ptr<NOlap::ISnapshotHolders> GetSnapshotHolders() const;
@@ -620,7 +623,11 @@ private:
         const NKikimrTxColumnShard::TCopyTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
+    void TryScheduleCompaction(const std::set<TInternalPathId>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
+    void StartCompactionTasksUpToLimit();
+    void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
+        const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
     bool SetupTtl();

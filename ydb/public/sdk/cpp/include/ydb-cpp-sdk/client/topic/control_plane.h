@@ -356,6 +356,10 @@ public:
 
     uint64_t GetPartitionWriteBurstBytes() const;
 
+    uint64_t GetPartitionWriteSpeedMessagesPerSecond() const;
+
+    uint64_t GetPartitionWriteBurstMessages() const;
+
     bool GetContentBasedDeduplication() const;
 
     const std::map<std::string, std::string>& GetAttributes() const;
@@ -381,6 +385,8 @@ private:
     std::optional<uint64_t> RetentionStorageMb_;
     uint64_t PartitionWriteSpeedBytesPerSecond_;
     uint64_t PartitionWriteBurstBytes_;
+    uint64_t PartitionWriteSpeedMessagesPerSecond_;
+    uint64_t PartitionWriteBurstMessages_;
     EMeteringMode MeteringMode_;
     std::map<std::string, std::string> Attributes_;
     std::vector<TConsumer> Consumers_;
@@ -794,6 +800,8 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
 
     FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteSpeedBytesPerSecond, 0);
     FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteBurstBytes, 0);
+    FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteSpeedMessagesPerSecond, 0);
+    FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteBurstMessages, 0);
 
     FLUENT_SETTING_VECTOR(TConsumerSettings<TCreateTopicSettings>, Consumers);
 
@@ -937,6 +945,8 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 
     FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteSpeedBytesPerSecond);
     FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteBurstBytes);
+    FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteSpeedMessagesPerSecond);
+    FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteBurstMessages);
 
     FLUENT_SETTING_OPTIONAL(EMeteringMode, SetMeteringMode);
 

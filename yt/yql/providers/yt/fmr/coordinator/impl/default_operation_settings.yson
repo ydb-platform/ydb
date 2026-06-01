@@ -54,18 +54,6 @@
     "generic" = {
         "max_failed_tasks" = 5;
     };
-    "job_factory" = {
-        "num_threads" = 10;
-        "max_queue_size" = 100;
-    };
-    "coordinator" = {
-        "session_inactivity_timeout_sec" = 1800;
-        "worker_deadline_lease_sec" = 5;
-        "health_check_interval_sec" = 1;
-        "idempotency_key_store_time_sec" = 10;
-        "time_to_sleep_between_clear_key_requests_sec" = 1;
-        "time_to_sleep_between_check_worker_status_requests_sec" = 1;
-    };
     "distributed_write_session" = {
         "ping_interval_sec" = 2;
         "retries_before_throw" = 5;

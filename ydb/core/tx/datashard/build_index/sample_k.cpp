@@ -49,6 +49,7 @@ protected:
     const TSerializedTableRange RequestedRange;
     const ui64 K;
     bool SkipForeign = false;
+    bool SkipEmptyColumns = false;
     NTable::TPos IsForeignPos = 0;
 
     ui64 TabletId = 0;
@@ -84,6 +85,7 @@ public:
         , TableRange(table.Range)
         , RequestedRange(range)
         , K(request.GetK())
+        , SkipEmptyColumns(request.GetSkipEmptyColumns())
         , TabletId(tabletId)
         , BuildId(request.GetId())
         , Sampler(request.GetK(), request.GetSeed(), request.GetMaxProbability())
@@ -141,7 +143,7 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
-        if (Clusters && (row.Get(0).IsNull() || row.Get(0).Size() == 0)) {
+        if ((Clusters || SkipEmptyColumns) && (row.Get(0).IsNull() || row.Get(0).Size() == 0)) {
             return EScan::Feed;
         }
 

@@ -167,6 +167,8 @@ struct TSelectRowsOptionsBase
     //! The quality of the the "cardinality" aggregate function estimates.
     //! 2^HyperLogLogPrecision 8-bit cells will be used.
     std::optional<int> HyperLogLogPrecision;
+    //! Perform the final aggregation on proxy in parallel.
+    std::optional<bool> EnableParallelizeUnorderedGroupBy;
 };
 
 struct TSelectRowsOptions

@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/counters_hive.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -9369,6 +9370,81 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         makeRequest(10, NKikimrProto::ERROR);
         makeRequest(0, NKikimrProto::ERROR);
         makeRequest(5, NKikimrProto::OK);
+    }
+
+    void TestShrinkStoragePool(TTestBasicRuntime& runtime, bool& activeZone) {
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeConsoleID(), TTabletTypes::Console), &NConsole::CreateConsole);
+        runtime.EnableScheduleForActor(hiveActor);
+        const TActorId senderA = runtime.AllocateEdgeActor(0);
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        bool done = false;
+        auto observer = runtime.AddObserver<TEvHive::TEvShrinkStoragePoolDone>([&](auto&&) { done = true; });
+
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        activeZone = true;
+        ui32 group;
+        for (int attempt = 0;; ++attempt) {
+            UNIT_ASSERT_LE(attempt, 10);
+            auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
+            request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
+            request->Record.MutableSubDomain()->SetPathId(1);
+            request->Record.SetStoragePool("def1");
+            request->Record.SetNewSize(1);
+            request->Record.SetVersion(1);
+            runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle, TDuration::MilliSeconds(100));
+            if (response) {
+                group = response->Record.GetGroupsToRemove(0);
+                break;
+            }
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTablet::EvMoveData);
+            runtime.DispatchEvents(options);
+        }
+        for (int attempt = 0; attempt < 10; ++attempt) {
+            for (ui32 channel = 0; channel < 3; ++channel) {
+                auto ev = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+                ev->Record.SetTabletID(tabletId);
+                ev->Record.SetChannel(channel);
+                ev->Record.SetFromGeneration(0);
+                ev->Record.SetGroupID(group);
+                runtime.SendToPipe(hiveTablet, senderA, ev.release(), 0, GetPipeConfigWithRetries());
+            }
+            if (done) {
+                break;
+            }
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(done);
+        activeZone = false;
+    }
+
+    Y_UNIT_TEST(TestShrinkStoragePoolWithReboots) {
+        const ui64 hiveTablet = MakeDefaultHiveID();
+
+        TListEventFilter filter = {NHive::TEvPrivate::EvProcessIncomingEvent};
+        //THiveEveryEventFilter filter;
+
+        RunTestWithReboots({hiveTablet}, [&]() {
+            return filter.Prepare();
+        }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            if (ENABLE_DETAILED_HIVE_LOG) {
+                Ctest << "At dispatch " << dispatchName << Endl;
+            }
+            TTestBasicRuntime runtime(1, false);
+            Setup(runtime, true, 2, [](TAppPrepare& app) {
+                app.HiveConfig.SetCutHistoryAllowList("Dummy");
+            });
+            setup(runtime);
+            TestShrinkStoragePool(runtime, activeZone);
+        });
     }
 }
 

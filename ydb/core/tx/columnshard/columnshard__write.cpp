@@ -502,6 +502,13 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    if (TablesManager.GetTable(*internalPathId).IsReadOnly(schemeShardLocalPathId)) {
+        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
+            operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "table is read only");
+        sendError("table is read only", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        return;
+    }
+
     Counters.GetColumnTablesCounters()->GetPathIdCounter(*internalPathId)->OnWriteEvent();
 
     auto arrowData = std::make_shared<TArrowData>(schema);

@@ -22,8 +22,6 @@ DECLARE_REFCOUNTED_STRUCT(IMessageHandler)
 using TConnectionId = TGuid;
 using TPacketId = TGuid;
 
-DECLARE_REFCOUNTED_CLASS(TTcpConnection)
-
 DEFINE_ENUM(EConnectionType,
     (Client)
     (Server)

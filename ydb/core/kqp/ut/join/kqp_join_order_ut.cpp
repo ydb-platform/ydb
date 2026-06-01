@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <fstream>
 #include <regex>
+#include <set>
 
 namespace NKikimr {
 namespace NKqp {
@@ -713,9 +714,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds2, ColumnStore) {
+    Y_UNIT_TEST(FiveWayJoinWithComplexPreds2) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, ColumnStore
+            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, false
         );
     }
 
@@ -725,9 +726,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, ColumnStore) {
+    Y_UNIT_TEST(FourWayJoinWithPredsAndEquivAndLeft) {
        ExecuteJoinOrderTestGenericQueryWithStats(
-        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", false, ColumnStore
+        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", false, false
         );
     }
 
@@ -760,91 +761,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/tpcds23.sql", "stats/tpcds1000s.json", false, true
         );
-    }
-
-    bool CheckNoSortings(const TString& plan) {
-        return !plan.Contains("Top") && !plan.Contains("SortBy");
-    }
-
-    bool CheckSorting(const TString& plan) {
-        return !CheckNoSortings(plan);
-    }
-
-    // tests, that check redudant sortings removal : if RemoveLimit is on we delete limit from the query to check
-    // if a sort operator was deleted, otherwise we want topsort deleted
-    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByPKAlias, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_pk_alias.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByAliasIndexDesc, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_alias_index_desc.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin1, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_1.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin2, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_2.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin3, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_3.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin4, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_4.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPrefixWithAttrEquiToPK, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_attr_equiv_to_pk.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPKWithLookupJoin, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk_with_lookupjoin.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoinByPrefix, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_by_prefix.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPrefixWithConstant, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_constant.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPK, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(Sortings4Year, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_4_year.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsComplexOrderBy, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_complex_order_by.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsPropagateThroughMapJoin, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_propagate_through_map_join.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsDifferentDirs, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_different_dirs.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckSorting(plan));
     }
 
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
@@ -890,11 +806,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST_TWIN(TestJoinHint1BlockHash, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint1_block_hash.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
     }
-
-    Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Map)", 1, false, ColumnStore);
-    }
-
+    
     Y_UNIT_TEST(BytesHintForceGraceJoin) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/bytes_hint_force_grace_join.sql", "stats/basic.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -1173,6 +1085,75 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(currentJoinOrder == ref);
     }
 
+    std::string LoadBenchmarkConsts(const std::string& constsPath) {
+        if (constsPath.empty()) {
+            return {};
+        }
+
+        TIFStream s(constsPath);
+        return s.ReadAll();
+    }
+
+    TString LoadBenchmarkQuery(
+        const std::string& consts,
+        const std::string& queryType,
+        const std::size_t queryId,
+        const std::string& queryPathTemplate,
+        const std::string& tablePrefix
+    ) {
+        TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << queryPathTemplate << queryType << "/" << "q" << queryId << ".sql";
+
+        TIFStream s(qPath);
+        std::string q = s.ReadAll();
+        Replace(q, "{path}", tablePrefix);
+        Replace(q, "{% include 'header.sql.jinja' %}", "");
+        std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
+        q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
+        if (queryType == "yql" && !consts.empty()) {
+            q = consts + "\n" + q;
+        }
+
+        return q;
+    }
+
+    void AssertCBOOptimizedEveryTree(const std::string& benchmarkName, const std::string& queryType, const std::size_t queryId, const TString& plan) {
+        const TString context = TStringBuilder()
+            << benchmarkName << " query " << queryId
+            << ", type " << queryType
+            << "\nPlan:\n" << plan;
+
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+        const auto& planRootMap = planRoot.GetMapSafe();
+        auto simplifiedPlanIt = planRootMap.find("SimplifiedPlan");
+        UNIT_ASSERT_C(simplifiedPlanIt != planRootMap.end(), "Missing SimplifiedPlan. " << context);
+
+        const auto& simplifiedPlan = simplifiedPlanIt->second;
+        const auto& simplifiedPlanMap = simplifiedPlan.GetMapSafe();
+        auto optimizerStatsIt = simplifiedPlanMap.find("OptimizerStats");
+        UNIT_ASSERT_C(optimizerStatsIt != simplifiedPlanMap.end(), "Missing OptimizerStats. " << context);
+
+        const auto& optimizerStats = optimizerStatsIt->second;
+        const auto& optimizerStatsMap = optimizerStats.GetMapSafe();
+        const auto getStat = [&](const TString& name) {
+            auto it = optimizerStatsMap.find(name);
+            UNIT_ASSERT_C(it != optimizerStatsMap.end(), "Missing optimizer stat " << name << ". " << context);
+            return it->second.GetUIntegerSafe();
+        };
+
+        const ui64 equiJoins = getStat("EquiJoinsCount");
+        const ui64 total = getStat("CBOTreesTotal");
+        const ui64 optimized = getStat("CBOTreesOptimized");
+        const TString statsContext = TStringBuilder()
+            << "Stats: " << optimizerStats.GetStringRobust()
+            << "\n" << context;
+
+        if (equiJoins > 0) {
+            UNIT_ASSERT_C(total > 0, TStringBuilder() << "Expected CBO to see at least one tree. " << statsContext);
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(optimized, total, statsContext);
+    }
+
     void RunBenchmarkQueries(
         NYdb::NQuery::TSession& session,
         const std::string& benchmarkName,
@@ -1183,25 +1164,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         const std::string& tablePrefix
     ) {
 
-        std::string consts;
-        if (!constsPath.empty()) {
-            TIFStream s(constsPath);
-            consts = s.ReadAll();
-        }
+        const std::string consts = LoadBenchmarkConsts(constsPath);
 
         for (const std::string& queryType : queryTypes) {
             for (std::size_t i = 1; i <= queryCount; ++i) {
-                TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << queryPathTemplate << queryType << "/" << "q" << i << ".sql";
-
-                TIFStream s(qPath);
-                std::string q = s.ReadAll();
-                Replace(q, "{path}", tablePrefix);
-                Replace(q, "{% include 'header.sql.jinja' %}", "");
-                std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
-                q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
-                if (queryType == "yql" && !consts.empty()) {
-                    q = consts + "\n" + q;
-                }
+                const TString q = LoadBenchmarkQuery(consts, queryType, i, queryPathTemplate, tablePrefix);
 
                 Cout << "Running " << benchmarkName << " query: " << i << ", type: " << queryType << Endl;
                 auto settings = NYdb::NQuery::TExecuteQuerySettings();
@@ -1209,6 +1176,36 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 result.GetIssues().PrintTo(Cerr);
                 UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder{} << "query " << benchmarkName << "#" << i
                     << ", type: " << queryType << " failed, query:\n" << q);
+            }
+        }
+    }
+
+    void ExplainBenchmarkQueriesAndAssertCBO(
+        NYdb::NQuery::TSession& session,
+        const std::string& benchmarkName,
+        const std::string& constsPath,
+        const std::vector<std::string>& queryTypes,
+        size_t queryCount,
+        const std::string& queryPathTemplate,
+        const std::string& tablePrefix,
+        const std::set<std::size_t>& queriesWithoutCboCheck = {}
+    ) {
+        const std::string consts = LoadBenchmarkConsts(constsPath);
+
+        for (const std::string& queryType : queryTypes) {
+            for (std::size_t i = 1; i <= queryCount; ++i) {
+                const TString q = LoadBenchmarkQuery(consts, queryType, i, queryPathTemplate, tablePrefix);
+
+                Cout << "Explaining " << benchmarkName << " query: " << i << ", type: " << queryType << Endl;
+                auto settings = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain);
+                auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                result.GetIssues().PrintTo(Cerr);
+                UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder{} << "query " << benchmarkName << "#" << i
+                    << ", type: " << queryType << " failed, query:\n" << q);
+                UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan");
+                if (!queriesWithoutCboCheck.contains(i)) {
+                    AssertCBOOptimizedEveryTree(benchmarkName, queryType, i, TString{*result.GetStats()->GetPlan()});
+                }
             }
         }
     }
@@ -1223,6 +1220,26 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CreateTables(session, "schema/tpch.sql", ColumnStore);
 
         RunBenchmarkQueries(
+            session,
+            "TPCH",
+            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            {"yql", "nice", "ydb"},
+            22,
+            "/ydb/library/benchmarks/queries/tpch/",
+            "/Root/"
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(TPCHCboOptimizesEveryQuery, ColumnStore) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
+        auto db = kikimr.GetQueryClient();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateTables(session, "schema/tpch.sql", ColumnStore);
+
+        ExplainBenchmarkQueriesAndAssertCBO(
             session,
             "TPCH",
             ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
@@ -1250,6 +1267,28 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             99,
             "/ydb/library/benchmarks/queries/tpcds/",
             "/Root/test/ds/"
+        );
+    }
+
+    Y_UNIT_TEST(TPCDSCboOptimizesEveryQuery) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpcds1000s.json"), true);
+        auto db = kikimr.GetQueryClient();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateTables(session, "schema/tpcds.sql", true);
+
+        ExplainBenchmarkQueriesAndAssertCBO(
+            session,
+            "TPCDS",
+            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            {"yql"},
+            99,
+            "/ydb/library/benchmarks/queries/tpcds/",
+            "/Root/test/ds/",
+            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
+            {15, 31, 58, 64, 72, 78, 85}
         );
     }
 

@@ -226,6 +226,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--key=%s" % self.__configurator.grpc_tls_key_path
             )
 
+        if self.__configurator.domain_name:
+            command.append(
+                "--node-domain=%s" % self.__configurator.domain_name
+            )
+
         if self.__role == 'slot' or (self.__configurator.node_kind == "yq" and self._tenant_affiliation is not None):
             command.append(
                 "--tenant=%s" % self._tenant_affiliation

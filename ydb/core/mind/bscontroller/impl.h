@@ -799,9 +799,10 @@ public:
 
         bool Listable() const {
             return VDisksInGroup
-                || !VirtualGroupState
-                || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING
-                || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED;
+                || BridgeGroupInfo
+                || (VirtualGroupState
+                    && (*VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING
+                        || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED));
         }
 
         void ClearVDisksInGroup() {

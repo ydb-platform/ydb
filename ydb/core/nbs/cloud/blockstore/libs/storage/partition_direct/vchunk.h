@@ -4,7 +4,6 @@
 
 #include "erase_request.h"
 #include "flush_request.h"
-#include "vchunk_config.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -13,7 +12,10 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -35,9 +37,6 @@ public:
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
-        TDuration writeHedgingDelay,
-        TDuration writeRequestTimeout,
-        TDuration traceSamplePeriod,
         NMonitoring::TDynamicCounterPtr counters);
 
     ~TVChunk();
@@ -52,14 +51,18 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        EWriteMode writeMode,
-        TDuration pbufferReplyTimeout,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 
+    void SetHostState(THostIndex hostIndex, EHostState state);
+
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
-    [[nodiscard]] ui64 GetPBufferUsedSize(ui8 hostIndex) const;
+    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
+
+    // Persists newConfig to the partition's local DB. The in-memory config is
+    // unchanged; the new value applies after the next partition restart.
+    void UpdateConfig(const TVChunkConfig& newConfig);
 
 private:
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
@@ -78,43 +81,44 @@ private:
         TBlockRange64 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        EWriteMode writeMode,
-        TDuration pbufferReplyTimeout,
         ui64 lsn,
         std::shared_ptr<NWilson::TSpan> span);
     void OnWriteBlocksResponse(
         TTracedPromise<TWriteBlocksLocalResponse> promise,
-        TBlockRange64 range,
+        TBlockRange64 vchunkRange,
         const TBaseWriteRequestExecutor::TResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void DoFlush();
+    void DoFlush(bool force);
     void OnFlushResponse(const TFlushRequestExecutor::TResponse& response);
 
-    void DoErase();
+    void DoErase(bool force);
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
+
+    void ScheduleCleaningUp();
+    void CleaningUp();
+
+    void UpdatePendingCounters();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const ISchedulerPtr Scheduler;
-    const ITimerPtr Timer;
-    const TVChunkConfig VChunkConfig;
     const ui32 BlockSize;
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
-    const TDuration WriteHedgingDelay;
-    const TDuration WriteRequestTimeout;
-    const TDuration TraceSamplePeriod;
 
+    TLogTitle LogTitle;
+    TVChunkConfig VChunkConfig;
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
 
-    TVChunkCounters Counters;
+    size_t InflightWritesCount = 0;
+    size_t InflightFlushesCount = 0;
+    bool CleaningUpScheduled = false;
 
-    void UpdatePendingCounters();
+    TVChunkCounters Counters;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

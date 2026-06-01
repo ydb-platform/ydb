@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <utility>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -14,26 +16,24 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TWriteWithDirectReplicationRequestExecutor::
     TWriteWithDirectReplicationRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout)
+        NWilson::TTraceId traceId)
     : TBaseWriteRequestExecutor(
           actorSystem,
+          std::move(logTitle),
           vChunkConfig,
           std::move(directBlockGroup),
-          std::move(vChunkRange),
+          vChunkRange,
           std::move(callContext),
           std::move(request),
           lsn,
-          std::move(traceId),
-          hedgingDelay,
-          timeout)
+          std::move(traceId))
 {}
 
 void TWriteWithDirectReplicationRequestExecutor::Run()

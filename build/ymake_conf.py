@@ -113,6 +113,7 @@ class Platform(object):
         self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
         self.is_arm_aml403 = self.arch == 'arm_aml403'
         self.is_arm64_aml403 = self.arch == 'arm64_aml403'
+        self.is_arm_ats3089p = self.arch == 'arm_ats3089p'
 
         self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
@@ -159,7 +160,7 @@ class Platform(object):
         self.is_32_bit = (
             self.is_x86 or
             self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
-            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
+            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32 or self.is_arm_ats3089p
         )
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
@@ -195,6 +196,9 @@ class Platform(object):
         self.is_emscripten = self.os == 'emscripten'
 
         self.is_none = self.os == 'none'
+
+        self.is_freertos = self.os == 'freertos'
+        self.is_zephyr = self.os == 'zephyr'
 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
@@ -245,6 +249,7 @@ class Platform(object):
             (self.is_arm, 'ARCH_ARM'),
             (self.is_arm_aml403, 'ARCH_ARM_AML403'),
             (self.is_arm64_aml403, 'ARCH_ARM64_AML403'),
+            (self.is_arm_ats3089p, 'ARCH_ARM_ATS3089P'),
             (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
             (self.is_power8le, 'ARCH_POWER8LE'),
@@ -811,6 +816,7 @@ class Build(object):
         cuda = Cuda(self)
         cuda.print_()
         CuDNN(cuda).print_()
+        CuTENSOR(cuda).print_()
 
         if self.ignore_local_files or host.is_windows or is_positive('NO_SVN_DEPENDS'):
             emit_with_ignore_comment('SVN_DEPENDS_CACHE__NO_UID__')
@@ -1313,6 +1319,9 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-march=armv8-a -mcpu=cortex-a35')
             self.setup_amlogic64_rtos_sdk()
 
+        if target.is_arm_ats3089p and target.is_zephyr:
+            self.c_flags_platform.append('-mcpu=cortex-m33+nodsp -mfpu=fpv5-sp-d16 -mabi=aapcs -mthumb -mfloat-abi=hard')
+
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1478,16 +1487,22 @@ class GnuCompiler(Compiler):
         self.tc = tc
 
         self.debug_info_flags = [
-            '-g'
+            '-g',
         ]
+
+        if not self.build.is_release and self.target.is_linux:
+            # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
+            self.debug_info_flags.append('-gz=zstd')
         if self.tc.is_clang and self.tc.version_at_least(14):
-            # DTCC-1231: Clang 14 has switched to DWARFv5 by defaulg
+            # DTCC-1231: Clang 14 has switched to DWARFv5 by default
             self.debug_info_flags.append('-fdebug-default-version=4')
         if self.tc.is_clang and self.target.is_linux:
             self.debug_info_flags.append('-ggnu-pubnames')
             if self.build.is_release:
                 # Clang's more accurate debug info for sampling-PGO purposes. PGO only makes sense in release builds
                 self.debug_info_flags.append('-fdebug-info-for-profiling')
+        if self.target.is_arm_ats3089p:
+            self.debug_info_flags.append('-gdwarf-4')
 
         self.c_foptions = [
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
@@ -1498,6 +1513,8 @@ class GnuCompiler(Compiler):
             '-ffunction-sections',
             '-fdata-sections'
         ]
+
+        self.cxx_foptions = []
 
         if self.target.is_arm or self.target.is_powerpc:
             self.c_foptions += [
@@ -1520,7 +1537,7 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-fexceptions')
 
         if is_positive('NO_CXX_RTTI'):
-            self.c_foptions.append('-fno-rtti')
+            self.cxx_foptions.append('-fno-rtti')
         else:
             # RTTI is enabled by default
             pass
@@ -1583,8 +1600,14 @@ class GnuCompiler(Compiler):
             # Arcadia have API 16 for 32-bit Androids.
             self.c_defines.append('-D_FILE_OFFSET_BITS=64')
 
-        if self.target.is_linux or self.target.is_android or self.target.is_none:
+        if self.target.is_linux or self.target.is_android or self.target.is_none or self.target.is_freertos or self.target.is_zephyr:
             self.c_defines.append('-D_GNU_SOURCE')
+
+        if self.target.is_freertos:
+            self.c_defines.append('-D__FREERTOS__')
+
+        if self.target.is_zephyr:
+            self.c_defines.append('-D__ZEPHYR__')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
@@ -1639,6 +1662,26 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-fno-delete-null-pointer-checks')
             self.c_foptions.append('-fabi-version=8')
 
+        elif self.tc.is_gcc and self.target.is_arm_ats3089p:
+            self.c_warnings += [
+                '-Wno-char-subscripts',
+                '-Wno-unused-function',
+                '-Wno-unused-variable',
+                '-Wformat',
+                '-Wformat-security',
+                '-Wno-format-zero-length',
+                '-Wno-main',
+                '-Wpointer-arith',
+                '-Wexpansion-to-defined',
+                '-Wno-address-of-packed-member',
+                '-Wno-unused-but-set-variable',
+            ]
+
+            self.cxx_warnings += [
+                '-Wno-register',
+                '-Wno-volatile',
+            ]
+
     def configure_build_type(self):
         if self.build.is_valgrind:
             self.c_defines.append('-DWITH_VALGRIND=1')
@@ -1680,6 +1723,7 @@ class GnuCompiler(Compiler):
         emit('_DEBUG_INFO_FLAGS', self.debug_info_flags)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
+        emit('_CXX_FOPTIONS', self.cxx_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
@@ -1799,6 +1843,9 @@ class LD(Linker):
                 self.llvm_ar_format = "gnu"
 
         self.ld_flags = []
+        if not self.build.is_release and target.is_linux:
+            # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
+            self.ld_flags.extend(['-Wl,--compress-debug-sections=zstd'])
 
         if self.musl.value:
             self.ld_flags.extend(['-Wl,--no-as-needed'])
@@ -2731,6 +2778,26 @@ class CuDNN(object):
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():
             self.cudnn_version.emit()
+
+
+class CuTENSOR(object):
+    def __init__(self, cuda):
+        """
+        :type cuda: Cuda
+        """
+        self.cuda = cuda
+
+        self.cutensor_version = Setting('CUTENSOR_VERSION', auto=self.auto_cutensor_version)
+
+    def have_cutensor(self):
+        return self.cutensor_version.value in ('2.6.0')
+
+    def auto_cutensor_version(self):
+        return '2.6.0'
+
+    def print_(self):
+        if self.cuda.have_cuda.value and self.have_cutensor():
+            self.cutensor_version.emit()
 
 
 def customization():

@@ -44,6 +44,15 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.dateTimeColumn("created_at", 3600));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 The example below shows how to use the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
@@ -86,6 +95,19 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.valueSinceUnixEpoch(
+                  "modified_at",
+                  TableTtl.TtlUnit.SECONDS,
+                  3600
+          ));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 ## Enabling data eviction to S3-compatible external storage {#enable-tiering-on-existing-tables}
@@ -116,6 +138,18 @@ In the following example, rows of the table `mytable` will be moved to the bucke
   ```
 
 {% endif %}
+
+- Java
+
+  This functionality is not currently supported.
+
+- Go
+
+  This functionality is not currently supported.
+
+- Python
+
+  This functionality is not currently supported.
 
 - JavaScript
 
@@ -176,6 +210,19 @@ For a newly created table, you can pass TTL settings along with the table descri
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Java
+
+  ```java
+  TableDescription description = TableDescription.newBuilder()
+          .addNullableColumn("id", PrimitiveType.Uint64)
+          .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+          .setPrimaryKey("id")
+          .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+          .build();
+
+  session.createTable("mytable", description).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 ## Disabling TTL {#disable}
@@ -216,6 +263,15 @@ For a newly created table, you can pass TTL settings along with the table descri
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.notSet());
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 ## Getting TTL settings {#describe}
@@ -255,6 +311,12 @@ The current TTL settings can be obtained from the table description:
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
+  ```
 
 {% endlist %}
 

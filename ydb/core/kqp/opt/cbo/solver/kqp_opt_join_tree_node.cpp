@@ -56,7 +56,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
             return {}; // SE — do not shuffle.
         }
 
-        if (join->JoinAlgo != EJoinAlgoType::GraceJoin) {
+        if (join->JoinAlgo != EJoinAlgoType::GraceJoin && join->JoinAlgo != EJoinAlgoType::ReverseBlockJoin) {
             return {};
         }
 

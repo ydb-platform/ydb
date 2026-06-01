@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 CLUSTER_CONFIG = dict(
     use_in_memory_pdisks=False,
+    extra_feature_flags=["enable_snapshots_locking"],
     additional_log_configs={
         'STATISTICS': LogLevels.DEBUG,
     },
@@ -36,7 +37,6 @@ LONG_TX_SERVICE_CONFIG = {
 @pytest.fixture(scope="module")
 def ydb_configurator(ydb_cluster_configuration):
     config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
-    config_generator.yaml_config["feature_flags"]["enable_snapshots_locking"] = True
     # Explicitly configure snapshot registry timings for CS min-read-snapshot
     # calculation. Total service delay is up to 1+1+1+10 = 13s.
     config_generator.yaml_config["long_tx_service_config"] = LONG_TX_SERVICE_CONFIG
@@ -103,10 +103,9 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
         resp = get_base_stats_response()
         return resp and resp.status_code == 200 and resp.json()["row_count"] == total_count
 
-    # SchemeShard may wait ~120s before the first update to StatisticsAggregator.
-    # Snapshot-registry timing in this test is 1+1+1+10 = 13s, so 150s keeps a small
-    # deterministic buffer instead of a large arbitrary timeout.
-    assert_that(wait_for(base_stats_ready, timeout_seconds=150), "base stats ready")
+    # SchemeShard will wait for 120 seconds before sending the first update
+    # to StatisticsAggregator so provide a generous timeout.
+    assert_that(wait_for(base_stats_ready, timeout_seconds=300), "base stats ready")
 
     logger.info("restart and check that table stats are still the same")
 

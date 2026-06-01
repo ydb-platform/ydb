@@ -72,6 +72,7 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Install dependencies
         run: python3 -m pip install "ydb[yc]" requests matplotlib numpy
@@ -80,7 +81,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
           TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
-          YDB_QA_CONFIG: ${{ vars.YDB_QA_CONFIG }}
         run: |
           ARGS=""
           if [ "${{ inputs.force }}" = "true" ]; then

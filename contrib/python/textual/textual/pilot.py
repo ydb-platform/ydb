@@ -104,6 +104,7 @@ class Pilot(Generic[ReturnType]):
         shift: bool = False,
         meta: bool = False,
         control: bool = False,
+        button: int = 1,
     ) -> bool:
         """Simulate a [`MouseDown`][textual.events.MouseDown] event at a specified position.
 
@@ -121,6 +122,7 @@ class Pilot(Generic[ReturnType]):
             shift: Simulate the event with the shift key held down.
             meta: Simulate the event with the meta key held down.
             control: Simulate the event with the control key held down.
+            button: The mouse button to press.
 
         Raises:
             OutOfBounds: If the position for the event is outside of the (visible) screen.
@@ -134,7 +136,7 @@ class Pilot(Generic[ReturnType]):
                 [MouseMove, MouseDown],
                 widget=widget,
                 offset=offset,
-                button=1,
+                button=button,
                 shift=shift,
                 meta=meta,
                 control=control,
@@ -195,6 +197,7 @@ class Pilot(Generic[ReturnType]):
         meta: bool = False,
         control: bool = False,
         times: int = 1,
+        button: int = 1,
     ) -> bool:
         """Simulate clicking with the mouse at a specified position.
 
@@ -222,20 +225,21 @@ class Pilot(Generic[ReturnType]):
             meta: Click with the meta key held down.
             control: Click with the control key held down.
             times: The number of times to click. 2 will double-click, 3 will triple-click, etc.
+            button: The mouse button to click.
 
         Raises:
             OutOfBounds: If the position to be clicked is outside of the (visible) screen.
 
         Returns:
-            True if no selector was specified or if the click landed on the selected
-                widget, False otherwise.
+            `True` if no selector was specified or if the selected widget was under the mouse
+                when the click was initiated. `False` is the selected widget was not under the pointer.
         """
         try:
             return await self._post_mouse_events(
                 [MouseDown, MouseUp, Click],
                 widget=widget,
                 offset=offset,
-                button=1,
+                button=button,
                 shift=shift,
                 meta=meta,
                 control=control,
@@ -251,6 +255,7 @@ class Pilot(Generic[ReturnType]):
         shift: bool = False,
         meta: bool = False,
         control: bool = False,
+        button: int = 1,
     ) -> bool:
         """Simulate double clicking with the mouse at a specified position.
 
@@ -279,15 +284,18 @@ class Pilot(Generic[ReturnType]):
             shift: Click with the shift key held down.
             meta: Click with the meta key held down.
             control: Click with the control key held down.
+            button: The mouse button to click.
 
         Raises:
             OutOfBounds: If the position to be clicked is outside of the (visible) screen.
 
         Returns:
-            True if no selector was specified or if the clicks landed on the selected
-                widget, False otherwise.
+            `True` if no selector was specified or if the selected widget was under the mouse
+                when the click was initiated. `False` is the selected widget was not under the pointer.
         """
-        await self.click(widget, offset, shift, meta, control, times=2)
+        return await self.click(
+            widget, offset, shift, meta, control, times=2, button=button
+        )
 
     async def triple_click(
         self,
@@ -296,6 +304,7 @@ class Pilot(Generic[ReturnType]):
         shift: bool = False,
         meta: bool = False,
         control: bool = False,
+        button: int = 1,
     ) -> bool:
         """Simulate triple clicking with the mouse at a specified position.
 
@@ -324,15 +333,18 @@ class Pilot(Generic[ReturnType]):
             shift: Click with the shift key held down.
             meta: Click with the meta key held down.
             control: Click with the control key held down.
+            button: The mouse button to click.
 
         Raises:
             OutOfBounds: If the position to be clicked is outside of the (visible) screen.
 
         Returns:
-            True if no selector was specified or if the clicks landed on the selected
-                widget, False otherwise.
+            `True` if no selector was specified or if the selected widget was under the mouse
+                when the click was initiated. `False` is the selected widget was not under the pointer.
         """
-        await self.click(widget, offset, shift, meta, control, times=3)
+        return await self.click(
+            widget, offset, shift, meta, control, times=3, button=button
+        )
 
     async def hover(
         self,
@@ -414,7 +426,7 @@ class Pilot(Generic[ReturnType]):
         elif isinstance(widget, Widget):
             target_widget = widget
         else:
-            target_widget = app.screen.query_one(widget)
+            target_widget = screen.query_one(widget)
 
         message_arguments = _get_mouse_message_arguments(
             target_widget,
@@ -434,6 +446,7 @@ class Pilot(Generic[ReturnType]):
         widget_at = None
         for chain in range(1, times + 1):
             for mouse_event_cls in events:
+                await self.pause()
                 # Get the widget under the mouse before the event because the app might
                 # react to the event and move things around. We override on each iteration
                 # because we assume the final event in `events` is the actual event we care
@@ -444,7 +457,8 @@ class Pilot(Generic[ReturnType]):
                 if mouse_event_cls is Click:
                     kwargs = {**kwargs, "chain": chain}
 
-                widget_at, _ = app.get_widget_at(*offset)
+                if widget_at is None:
+                    widget_at, _ = app.get_widget_at(*offset)
                 event = mouse_event_cls(**kwargs)
                 # Bypass event processing in App.on_event. Because App.on_event
                 # is responsible for updating App.mouse_position, and because
@@ -452,8 +466,8 @@ class Pilot(Generic[ReturnType]):
                 # we patch the offset in there as well.
                 app.mouse_position = offset
                 screen._forward_event(event)
-                await self.pause()
 
+        await self.pause()
         return widget is None or widget_at is target_widget
 
     async def _wait_for_screen(self, timeout: float = 30.0) -> bool:

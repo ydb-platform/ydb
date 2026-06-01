@@ -138,6 +138,8 @@ public:
             },
             State_->Types->RuntimeLogLevel);
 
+        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(State_->Setting.SecureParams);
+
         TComputationPatternOpts patternOpts(alloc.Ref(),
                                             env,
                                             compFactory,
@@ -148,7 +150,7 @@ public:
                                             EGraphPerProcess::Multi,
                                             nullptr,
                                             nullptr,
-                                            nullptr,
+                                            secureParamsProvider.get(),
                                             logProvider.Get(),
                                             State_->Types->LangVer,
                                             State_->Types->RuntimeSettings);
@@ -161,11 +163,11 @@ public:
                                                *State_->Types->RandomProvider,
                                                *State_->Types->TimeProvider,
                                                NUdf::EValidatePolicy::Exception,
-                                               nullptr,
+                                               secureParamsProvider.get(),
                                                nullptr,
                                                logProvider.Get(),
                                                State_->Types->LangVer,
-                                               *State_->Types->RuntimeSettings);
+                                               State_->Types->RuntimeSettings);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();
@@ -276,8 +278,8 @@ TIntrusivePtr<IDataProvider> CreatePureProvider(const TPureState::TPtr& state) {
     return MakeIntrusive<TPureProvider>(state);
 }
 
-TDataProviderInitializer GetPureDataProviderInitializer() {
-    return [](
+TDataProviderInitializer GetPureDataProviderInitializer(TPureProviderSettings settings) {
+    return [settings = std::move(settings)](
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -304,6 +306,7 @@ TDataProviderInitializer GetPureDataProviderInitializer() {
         auto state = MakeIntrusive<TPureState>();
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
+        state->Setting = std::move(settings);
 
         info.Source = CreatePureProvider(state);
         info.OpenSession = [state](

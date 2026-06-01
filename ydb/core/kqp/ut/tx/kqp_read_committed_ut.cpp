@@ -672,6 +672,179 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
+
+    class TDeadlockDetection : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.SetNodeCount(2);
+        }
+        
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto tableClient = Kikimr->GetTableClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            ui32 nodeForTable = runtime.GetNodeId(0);
+            auto nodePinningObserver = runtime.AddObserver<TEvHive::TEvCreateTablet>([nodeForTable](TEvHive::TEvCreateTablet::TPtr& ev) {
+                auto* msg = ev->Get();
+                msg->Record.ClearAllowedNodeIDs();
+                msg->Record.AddAllowedNodeIDs(nodeForTable);
+            });
+
+            {
+                const TString createQuery1 = R"(
+                    CREATE TABLE `/Root/KeyValue1` (
+                        Key Uint64 NOT NULL,
+                        Value Uint64 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery1).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            nodeForTable = runtime.GetNodeId(1);
+
+            {
+                const TString createQuery2 = R"(
+                    CREATE TABLE `/Root/KeyValue2` (
+                        Key Uint64 NOT NULL,
+                        Value Uint64 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery2).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            nodePinningObserver.Remove();
+
+            {
+                auto result = Kikimr->RunCall([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 0);
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                auto result = Kikimr->RunCall([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 0);
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            auto tx1 = Kikimr->RunCall([&] {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 1);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetTransaction();
+            });
+            UNIT_ASSERT(tx1);
+
+            auto tx2 = Kikimr->RunCall([&] {
+                auto result = session2.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 2);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetTransaction();
+            });
+            UNIT_ASSERT(tx2);
+
+            auto future1 = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 1);
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            });
+
+            auto future2 = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 2);
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            });
+
+            auto result1 = runtime.WaitFuture(future1);
+            auto result2 = runtime.WaitFuture(future2);
+
+            bool tx1Aborted = result1.GetStatus() == EStatus::ABORTED;
+            bool tx2Aborted = result2.GetStatus() == EStatus::ABORTED;
+
+            UNIT_ASSERT_C(tx1Aborted || tx2Aborted, "At least one transaction should be aborted due to deadlock");
+            UNIT_ASSERT_C(!(tx1Aborted && tx2Aborted), "Only one transaction should be aborted, not both");
+
+            if (tx1Aborted) {
+                Cerr << "Transaction 1 aborted with status: " << result1.GetStatus() << Endl;
+                Cerr << "Transaction 1 issues: " << result1.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_C(result1.GetIssues().ToString().contains("Deadlock"),
+                              "Error message should contain 'Deadlock': " + result1.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                
+                auto commitResult = Kikimr->RunCall([&] { return tx2->Commit().ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            } else {
+                Cerr << "Transaction 2 aborted with status: " << result2.GetStatus() << Endl;
+                Cerr << "Transaction 2 issues: " << result2.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_C(result2.GetIssues().ToString().contains("Deadlock"),
+                              "Error message should contain 'Deadlock': " + result2.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+                
+                auto commitResult = Kikimr->RunCall([&] { return tx1->Commit().ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            auto verifyResult1 = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
+                SELECT Key, Value FROM `/Root/KeyValue1`;
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult1.GetStatus(), EStatus::SUCCESS, verifyResult1.GetIssues().ToString());
+            
+            auto verifyResult2 = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
+                SELECT Key, Value FROM `/Root/KeyValue2`;
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult2.GetStatus(), EStatus::SUCCESS, verifyResult2.GetIssues().ToString());
+            
+            auto resultSet1 = verifyResult1.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet1.RowsCount(), 1);
+            
+            TResultSetParser parser1(resultSet1);
+            parser1.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser1.ColumnParser("Key").GetUint64(), 1u);
+            ui64 key1Value = parser1.ColumnParser("Value").GetUint64();
+            
+            auto resultSet2 = verifyResult2.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet2.RowsCount(), 1);
+            
+            TResultSetParser parser2(resultSet2);
+            parser2.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser2.ColumnParser("Key").GetUint64(), 2u);
+            ui64 key2Value = parser2.ColumnParser("Value").GetUint64();
+            
+            if (tx1Aborted) {
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 2u, "KeyValue1 should have Value = 2 when Tx2 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 2u, "KeyValue2 should have Value = 2 when Tx2 succeeded");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 1u, "KeyValue1 should have Value = 1 when Tx1 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 1u, "KeyValue2 should have Value = 1 when Tx1 succeeded");
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TDeadlockDetectionOltp) {
+        TDeadlockDetection tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

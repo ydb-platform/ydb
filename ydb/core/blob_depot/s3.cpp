@@ -1,8 +1,8 @@
 #include "s3.h"
+#include "s3_router_events.h"
 
-#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/protos/s3_settings.pb.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -17,8 +17,12 @@ namespace NKikimr::NBlobDepot {
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS05, "Init", (Settings, settings));
         if (settings) {
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings->GetSettings());
-            WrapperId = Self->Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));
+            // All S3 traffic goes through the per-node router managed by NodeWarden.
+            // Acquire is fire-and-forget: NodeWarden registers the router under its
+            // well-known service id before any later event we send can be processed.
+            Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(Self->TabletID(), *settings));
+            WrapperId = MakeBlobDepotS3RouterID(Self->TabletID());
             BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
             Bucket = settings->GetSettings().GetBucket();
             SyncMode = settings->HasSyncMode();
@@ -41,12 +45,19 @@ namespace NKikimr::NBlobDepot {
         if (ScannerActorId) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, ScannerActorId, Self->SelfId(), nullptr, 0));
         }
+        if (WrapperId) {
+            Self->Send(MakeBlobStorageNodeWardenID(Self->SelfId().NodeId()),
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(Self->TabletID()));
+            WrapperId = {};
+        }
     }
 
     void TS3Manager::Handle(TAutoPtr<IEventHandle> ev) {
         STRICT_STFUNC_BODY(
             fFunc(TEvPrivate::EvDeleteResult, HandleDeleter)
             fFunc(TEvPrivate::EvScanFound, HandleScanner)
+            cFunc(TEvPrivate::EvDeleteThrottleWakeup, HandleDeleteThrottleWakeup)
+            cFunc(TEvPrivate::EvPutThrottleWakeup, HandlePutThrottleWakeup)
         )
     }
 

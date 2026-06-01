@@ -477,6 +477,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("enable_debug_command_line_arguments").Value(config.EnableDebugCommandLineArguments)
         .Item("config_remote_patch_path").Value(config.ConfigRemotePatchPath)
         .Item("enable_client_tracing").Value(config.EnableClientTracing)
+        .Item("enable_multiplexing_band").Value(config.EnableControlMultiplexingBand)
     .EndMap();
 }
 
@@ -549,6 +550,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("enable_debug_command_line_arguments", config.EnableDebugCommandLineArguments);
     DESERIALIZE_ITEM("config_remote_patch_path", config.ConfigRemotePatchPath);
     DESERIALIZE_ITEM("enable_client_tracing", config.EnableClientTracing);
+    DESERIALIZE_ITEM("enable_multiplexing_band", config.EnableControlMultiplexingBand);
 }
 
 #undef DESERIALIZE_ITEM

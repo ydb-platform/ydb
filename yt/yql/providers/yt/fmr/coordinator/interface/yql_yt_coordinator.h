@@ -32,6 +32,7 @@ struct TStartOperationRequest {
     std::vector<TFileInfo> Files = {};
     std::vector<TYtResourceInfo> YtResources = {};
     std::vector<TFmrResourceOperationInfo> FmrResources = {};
+    TMaybe<TYtResourceInfo> FmrJob;
 };
 
 struct TStartOperationResponse {

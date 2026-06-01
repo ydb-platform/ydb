@@ -117,6 +117,7 @@ message TPQConfig {
     message TMirrorConfig {
         optional bool Enabled = 1 [default = true];
         optional TPQLibSettings PQLibSettings = 2;
+        optional uint32 RewindCommitDelaySeconds = 3;
     }
 
     optional TMirrorConfig MirrorConfig = 29;

@@ -14,6 +14,9 @@
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
+namespace NKikimr::NMiniKQL {
+class TTypeEnvironment;
+}
 
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
@@ -33,6 +36,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqStaticGateway::TPtr pqGateway,

@@ -1,5 +1,9 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -38,7 +42,58 @@ TExprBase ProjectColumnsInternal(const TExprBase& input, const T& columnNames, T
         .Done();
 }
 
-} // namespace
+} // anonymous namespace
+
+TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusivePtr<NYql::TKikimrConfiguration>& config,
+    const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables,
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext, bool usePessimisticLocks)
+    : Cluster(cluster)
+    , Config(config)
+    , QueryCtx(queryCtx)
+    , Tables(tables)
+    , UserRequestContext(userRequestContext)
+    , UsePessimisticLocks(usePessimisticLocks)
+{
+    YQL_ENSURE(QueryCtx);
+    YQL_ENSURE(Tables);
+}
+
+std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() {
+    if (!Config->OptOverrideStatistics.Get()) {
+        return std::shared_ptr<NJson::TJsonValue>();
+    }
+
+    if (!OverrideStatistics) {
+        auto jsonValue = new NJson::TJsonValue();
+        NJson::ReadJsonTree(*Config->OptOverrideStatistics.Get(), jsonValue, true);
+        OverrideStatistics = std::shared_ptr<NJson::TJsonValue>(jsonValue);
+    }
+
+    return OverrideStatistics;
+}
+
+NKikimr::NKqp::TOptimizerHints TKqpOptimizeContext::GetOptimizerHints() {
+    if (Config->OptimizerHints.Get()) {
+        if (!Hints) {
+            Hints = std::make_shared<NKikimr::NKqp::TOptimizerHints>(*Config->OptimizerHints.Get());
+        }
+        return *Hints;
+    }
+
+    return NKikimr::NKqp::TOptimizerHints();
+}
+
+bool TKqpOptimizeContext::IsDataQuery() const {
+    return QueryCtx->Type == NYql::EKikimrQueryType::Dml;
+}
+
+bool TKqpOptimizeContext::IsScanQuery() const {
+    return QueryCtx->Type == NYql::EKikimrQueryType::Scan;
+}
+
+bool TKqpOptimizeContext::IsGenericQuery() const {
+    return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
+}
 
 bool IsKqpPureLambda(const TCoLambda& lambda) {
     return !FindNode(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {

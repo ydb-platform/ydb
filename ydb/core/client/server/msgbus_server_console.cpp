@@ -356,6 +356,7 @@ public:
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             SFunc(TEvents::TEvWakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         default:
             Y_ABORT("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),

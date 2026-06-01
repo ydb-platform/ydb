@@ -182,6 +182,13 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
+            res = SendHttpRequest("/Root", "kinesisApi.MethodNotExists", request, FormAuthorizationStr("ru-central-1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "InvalidAction");
+        }
+        {
+            request = CreateDescribeStreamRequest();
+            request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", "kinesisApi.", request, FormAuthorizationStr("ru-central-1"));
             UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
             UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
@@ -190,22 +197,22 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", ".", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
         }
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", "", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
         }
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", ".DescribeStream", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
         }
     }
 

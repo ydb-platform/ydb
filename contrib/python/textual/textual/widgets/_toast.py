@@ -48,6 +48,10 @@ class Toast(Static, inherit_css=False):
         link-background-hover: $primary;
         link-color-hover: $foreground;
         link-style-hover: bold not underline;
+
+        &:ansi {
+            background: $ansi-background;
+        }
     }
 
     .toast--title {
@@ -144,6 +148,7 @@ class ToastRack(Container, inherit_css=False):
 
     DEFAULT_CSS = """
     ToastRack {
+        display: none;
         layer: _toastrack;
         width: 1fr;
         height: auto;
@@ -175,6 +180,7 @@ class ToastRack(Container, inherit_css=False):
         Args:
             notifications: The notifications to show.
         """
+        self.display = bool(notifications)
         # Look for any stale toasts and remove them.
         for toast in self.query(Toast):
             if toast._notification not in notifications:

@@ -198,20 +198,26 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
+void TColumnShard::PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const {
+    const auto minSnapshot = guard.GetMinSnapshotForNewReads();
+    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
+}
+
 NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
     auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
-    auto minSnapshot = guard->GetMinSnapshotForNewReads();
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
-    return minSnapshot;
+    PublishMinSnapshotForNewScans(*guard);
+    return guard->GetMinSnapshotForNewReads();
 }
 
 bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const {
     auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
+    PublishMinSnapshotForNewScans(*guard);
     return guard->MayStartScanAt(snapshot, schemeShardLocalPathId);
 }
 
 std::unique_ptr<NOlap::ISnapshotHolders> TColumnShard::GetSnapshotHolders() const {
     auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
+    PublishMinSnapshotForNewScans(*guard);
     return guard->BuildSnapshotHolders();
 }
 
@@ -497,6 +503,10 @@ public:
 }   // namespace
 
 void TColumnShard::SetupCompaction(const std::set<TInternalPathId>& pathIds) {
+    TryScheduleCompaction(pathIds);
+}
+
+void TColumnShard::TryScheduleCompaction(const std::set<TInternalPathId>& pathIds) {
     if (!AppDataVerified().ColumnShardConfig.GetCompactionEnabled() ||
         !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Compaction)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
@@ -504,7 +514,19 @@ void TColumnShard::SetupCompaction(const std::set<TInternalPathId>& pathIds) {
     }
 
     BackgroundController.CheckDeadlines();
+    if (!BackgroundController.GetCompactionsCount() && BackgroundController.HasCompactionSession()) {
+        BackgroundController.ClearCompactionSession();
+    }
     if (BackgroundController.GetCompactionsCount()) {
+        if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling()) {
+            if (BackgroundController.CanStartMoreCompactions() && BackgroundController.HasCompactionSession()) {
+                StartCompactionTasksUpToLimit();
+            }
+        }
+        return;
+    }
+    if (BackgroundController.HasCompactionSession()) {
+        StartCompactionTasksUpToLimit();
         return;
     }
     const ui64 priority = TablesManager.GetPrimaryIndexSafe().GetCompactionPriority(pathIds, BackgroundController.GetWaitingPriorityOptional());
@@ -633,7 +655,66 @@ public:
     }
 };
 
+void TColumnShard::StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
+    const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+    AFL_VERIFY(indexChanges);
+    AFL_VERIFY(guard);
+    indexChanges->SetActivityFlag(GetTabletActivity());
+    indexChanges->SetQueueGuard(guard);
+    indexChanges->Start(*this);
+
+    const ui64 compactionStageMemoryLimit =
+        HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+    static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
+    auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
+    NOlap::NDataFetcher::TRequestInput rInput(indexChanges->GetSwitchedPortions(), actualIndexInfo,
+        NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, indexChanges->GetTaskIdentifier(), processGuard, TabletID());
+    auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+    NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
+        std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(),
+            GetLastCompletedTx(), TabletActivityImpl), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+}
+
+void TColumnShard::StartCompactionTasksUpToLimit() {
+    const auto& guard = BackgroundController.GetCompactionSessionGuard();
+    if (!guard) {
+        return;
+    }
+    while (BackgroundController.CanStartMoreCompactions()) {
+        auto indexChanges = TablesManager.MutablePrimaryIndex().GetNextCompactionTask(DataLocksManager);
+        if (!indexChanges) {
+            if (!BackgroundController.GetCompactionsCount()) {
+                BackgroundController.ClearCompactionSession();
+            }
+            break;
+        }
+        if (BackgroundController.GetCompactionsCount() == 0) {
+            BackgroundController.SetMaxInflightCompactions(indexChanges->GetGranuleMeta()->GetMaxCompactionInflight());
+        }
+        StartOneCompactionTask(indexChanges, guard);
+    }
+}
+
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+    if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling()) {
+        if (!BackgroundController.CanStartMoreCompactions() && BackgroundController.GetCompactionsCount()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_inflight_full");
+            return;
+        }
+        Counters.GetCSCounters().OnSetupCompaction();
+        BackgroundController.ResetWaitingPriority();
+        if (!BackgroundController.HasCompactionSession()) {
+            BackgroundController.SetCompactionSessionGuard(guard);
+        }
+        StartCompactionTasksUpToLimit();
+        if (!BackgroundController.GetCompactionsCount()) {
+            BackgroundController.ClearCompactionSession();
+        }
+        return;
+    }
+
     if (BackgroundController.GetCompactionsCount()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_in_progress");
         return;

@@ -140,6 +140,8 @@ items:
       href: workload-tpcds.md
     - name: Query load
       href: workload-query.md
+    - name: Fulltext load
+      href: workload-fulltext.md
   - name: Managing configuration
     href: configs.md
     include:

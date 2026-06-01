@@ -5,11 +5,58 @@ Descriptors to define properties on your widget, screen, or App.
 
 from __future__ import annotations
 
-from typing import Generic, overload
+from inspect import isclass
+from typing import TYPE_CHECKING, Callable, Generic, TypeVar, overload
 
+from textual._context import NoActiveAppError, active_app
 from textual.css.query import NoMatches, QueryType, WrongType
-from textual.dom import DOMNode
 from textual.widget import Widget
+
+if TYPE_CHECKING:
+    from textual.app import App
+    from textual.dom import DOMNode
+    from textual.message_pump import MessagePump
+
+
+AppType = TypeVar("AppType", bound="App")
+
+
+class app(Generic[AppType]):
+    """Create a property to return the active app.
+
+    All widgets have a default `app` property which returns an App instance.
+    Type checkers will complain if you try to access attributes defined on your App class, which aren't
+    present in the base class. To keep the type checker happy you can add this property to get your
+    specific App subclass.
+
+    Example:
+        ```python
+        class MyWidget(Widget):
+            app = getters.app(MyApp)
+        ```
+
+    Args:
+        app_type: The App subclass, or a callable which returns an App subclass.
+    """
+
+    def __init__(self, app_type: type[AppType] | Callable[[], type[AppType]]) -> None:
+        self._app_type = app_type if isclass(app_type) else app_type()
+
+    def __get__(self, obj: MessagePump, obj_type: type[MessagePump]) -> AppType:
+        try:
+            app = active_app.get()
+        except LookupError:
+            from textual.app import App
+
+            node: MessagePump | None = obj
+            while not isinstance(node, App):
+                if node is None:
+                    raise NoActiveAppError()
+                node = node._parent
+            app = node
+
+        assert isinstance(app, self._app_type)
+        return app
 
 
 class query_one(Generic[QueryType]):
@@ -45,7 +92,7 @@ class query_one(Generic[QueryType]):
     """
 
     selector: str
-    expect_type: type[Widget]
+    expect_type: type["Widget"]
 
     @overload
     def __init__(self, selector: str) -> None:
@@ -54,23 +101,17 @@ class query_one(Generic[QueryType]):
         Args:
             selector: A TCSS selector, e.g. "#mywidget"
         """
-        self.selector = selector
-        self.expect_type = Widget
 
     @overload
-    def __init__(self, selector: type[QueryType]) -> None:
-        self.selector = selector.__name__
-        self.expect_type = selector
+    def __init__(self, selector: type[QueryType]) -> None: ...
 
     @overload
-    def __init__(self, selector: str, expect_type: type[QueryType]) -> None:
-        self.selector = selector
-        self.expect_type = expect_type
+    def __init__(self, selector: str, expect_type: type[QueryType]) -> None: ...
 
     @overload
-    def __init__(self, selector: type[QueryType], expect_type: type[QueryType]) -> None:
-        self.selector = selector.__name__
-        self.expect_type = expect_type
+    def __init__(
+        self, selector: type[QueryType], expect_type: type[QueryType]
+    ) -> None: ...
 
     def __init__(
         self,
@@ -78,6 +119,8 @@ class query_one(Generic[QueryType]):
         expect_type: type[QueryType] | None = None,
     ) -> None:
         if expect_type is None:
+            from textual.widget import Widget
+
             self.expect_type = Widget
         else:
             self.expect_type = expect_type
@@ -140,14 +183,10 @@ class child_by_id(Generic[QueryType]):
     expect_type: type[Widget]
 
     @overload
-    def __init__(self, child_id: str) -> None:
-        self.child_id = child_id
-        self.expect_type = Widget
+    def __init__(self, child_id: str) -> None: ...
 
     @overload
-    def __init__(self, child_id: str, expect_type: type[QueryType]) -> None:
-        self.child_id = child_id
-        self.expect_type = expect_type
+    def __init__(self, child_id: str, expect_type: type[QueryType]) -> None: ...
 
     def __init__(
         self,
@@ -176,13 +215,11 @@ class child_by_id(Generic[QueryType]):
         """Get the widget matching the selector and/or type."""
         if obj is None:
             return self
-        child = obj._nodes._get_by_id(self.child_id)
+        child = obj._get_dom_base()._nodes._get_by_id(self.child_id)
         if child is None:
-            raise NoMatches(f"No child found with id={id!r}")
+            raise NoMatches(f"No child found with id={self.child_id!r}")
         if not isinstance(child, self.expect_type):
-            if not isinstance(child, self.expect_type):
-                raise WrongType(
-                    f"Child with id={id!r} is wrong type; expected {self.expect_type}, got"
-                    f" {type(child)}"
-                )
+            raise WrongType(
+                f"Child with id={self.child_id!r} is the wrong type; expected type {self.expect_type.__name__!r}, found {child}"
+            )
         return child

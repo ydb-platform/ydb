@@ -361,15 +361,25 @@ public:
                 }
             }
 
+            auto fillFromSink = [&addTable](const auto& sink) {
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().template Is<NKikimrKqp::TKqpTableSinkSettings>());
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                addTable(settings.GetTable());
+                for (const auto& index : settings.GetIndexes()) {
+                    addTable(index.GetTable());
+                }
+            };
+
             for (const auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    addTable(settings.GetTable());
-                    for (const auto& index : settings.GetIndexes()) {
-                        addTable(index.GetTable());
-                    }
+                    fillFromSink(sink);
+                }
+            }
+
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink) {
+                    fillFromSink(transform);
                 }
             }
         }

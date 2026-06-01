@@ -316,7 +316,8 @@ public:
     NMetrics::TResourceMetrics* GetResourceMetrics() const override { Y_TABLET_ERROR("Not supported"); }
     float GetRejectProbability() const override { Y_TABLET_ERROR("Not supported"); }
     void SetPreloadTablesData(THashSet<ui32>) override { Y_TABLET_ERROR("Not supported"); }
-    void StartVacuum(ui64) override { Y_TABLET_ERROR("Not supported"); }
+    void StartVacuum(TVacuumTag) override { Y_TABLET_ERROR("Not supported"); }
+    void VacuumComplete(TVacuumGeneration, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
     void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
     void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) override { Y_TABLET_ERROR("Not supported"); }
     void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
@@ -327,6 +328,7 @@ public:
     void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
     void DisableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
     ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
+    void MoveData(TEvTablet::TEvMoveData::TPtr&) override { Y_TABLET_ERROR("Not supported"); }
 
 private:
     void ScheduleProcessPending() {

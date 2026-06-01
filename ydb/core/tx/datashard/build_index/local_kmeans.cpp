@@ -75,7 +75,7 @@ protected:
     TBufferData* OutputBuf = nullptr;
     TBufferData* UploadBuf = nullptr;
 
-    const ui32 Dimensions = 0;
+    ui32 Dimensions = 0;
     const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
@@ -113,6 +113,8 @@ protected:
     ui64 NextCheckpointAtBytes = 0;
 
     std::unique_ptr<IClusters> Clusters;
+    Ydb::Table::VectorIndexSettings DeferredSettings;
+    ui32 DeferredRounds = 0;
     std::vector<std::pair<ui32, double>> TmpClusters;
 
 public:
@@ -141,9 +143,11 @@ public:
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
-        , PrefixColumns{request.GetParentFrom() == 0 && request.GetParentTo() == 0 ? 0u : 1u}
+        , PrefixColumns{(request.GetParentFrom() != 0 || request.GetParentTo() != 0) ? 1u : 0u}
         , KeyTypes(table.KeyColumnTypes)
         , Clusters(std::move(clusters))
+        , DeferredSettings(request.GetSettings())
+        , DeferredRounds(request.GetNeedsRounds())
     {
         LOG_I("Create " << Debug());
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
@@ -382,7 +386,9 @@ protected:
         IsPrefixRowsValid = true;
         PrefixRows.Clear();
         Sampler.Finish();
-        Clusters->Clear();
+        if (Clusters) {
+            Clusters->Clear();
+        }
     }
 
     bool FinishPrefix()
@@ -500,6 +506,18 @@ protected:
         }
 
         const auto embedding = row.at(EmbeddingPos).AsRef();
+
+        if (!Clusters) {
+            TString error;
+            TStringBuf embeddingBuf(embedding.data(), embedding.size());
+            Clusters = NKikimr::NKMeans::CreateClustersAutoDetect(DeferredSettings, embeddingBuf, DeferredRounds, error);
+            if (!Clusters) {
+                InvalidEmbeddingError = error;
+                return;
+            }
+            Dimensions = DeferredSettings.vector_dimension();
+        }
+
         if (!Clusters->IsExpectedFormat(embedding)) {
             if (!embedding.empty()) {
                 InvalidEmbeddingError = Clusters->FormatError(embedding);
@@ -596,7 +614,7 @@ protected:
             << " State: " << State
             << " Parent: " << Parent << " Child: " << Child
             << " " << Sampler.Debug()
-            << " " << Clusters->Debug()
+            << " " << (Clusters ? Clusters->Debug() : "Clusters: null")
             << " " << Uploader.Debug();
     }
 };
@@ -776,7 +794,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         // 3. Validating vector index settings
         TString error;
         auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
-        if (!clusters) {
+        if (!clusters && !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
             badRequest(error);
             auto sent = trySendBadRequest();
             Y_ENSURE(sent);

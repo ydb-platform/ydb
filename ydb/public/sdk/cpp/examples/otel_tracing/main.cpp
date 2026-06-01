@@ -8,13 +8,15 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/trace.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/metrics.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metric_buffer.h>
 
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
 #include <opentelemetry/sdk/trace/tracer_provider.h>
-#include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_options.h>
 #include <opentelemetry/sdk/metrics/meter_provider.h>
 #include <opentelemetry/sdk/metrics/view/view_registry.h>
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
@@ -49,6 +51,19 @@ struct TConfig {
     int Iterations = 20;
     int RetryWorkers = 6;
     int RetryOps = 30;
+
+    bool EnableTracing = true;
+    bool EnableMetrics = true;
+
+    int TraceMaxQueueSize = 4096;
+    int TraceScheduleDelayMs = 1000;
+    int TraceMaxExportBatchSize = 512;
+
+    int MetricExportIntervalMs = 5000;
+    int MetricExportTimeoutMs = 3000;
+
+    int MetricBufferFlushIntervalMs = 100;
+    int TelemetryDrainSleepMs = 3000;
 };
 
 nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfig& cfg) {
@@ -56,7 +71,13 @@ nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfi
     opts.url = cfg.OtlpEndpoint + "/v1/traces";
 
     auto exporter = otlp::OtlpHttpExporterFactory::Create(opts);
-    auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
+
+    sdktrace::BatchSpanProcessorOptions batchOpts;
+    batchOpts.max_queue_size = static_cast<size_t>(cfg.TraceMaxQueueSize);
+    batchOpts.schedule_delay_millis = std::chrono::milliseconds(cfg.TraceScheduleDelayMs);
+    batchOpts.max_export_batch_size = static_cast<size_t>(cfg.TraceMaxExportBatchSize);
+
+    auto processor = sdktrace::BatchSpanProcessorFactory::Create(std::move(exporter), batchOpts);
 
     auto res = resource::Resource::Create({
         {"service.name", "ydb-cpp-sdk-demo"},
@@ -71,12 +92,13 @@ nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfi
 nostd::shared_ptr<opentelemetry::metrics::MeterProvider> InitMetrics(const TConfig& cfg) {
     otlp::OtlpHttpMetricExporterOptions opts;
     opts.url = cfg.OtlpEndpoint + "/v1/metrics";
+    opts.aggregation_temporality = otlp::PreferredAggregationTemporality::kCumulative;
 
     auto exporter = otlp::OtlpHttpMetricExporterFactory::Create(opts);
 
     sdkmetrics::PeriodicExportingMetricReaderOptions readerOpts;
-    readerOpts.export_interval_millis = std::chrono::milliseconds(5000);
-    readerOpts.export_timeout_millis = std::chrono::milliseconds(3000);
+    readerOpts.export_interval_millis = std::chrono::milliseconds(cfg.MetricExportIntervalMs);
+    readerOpts.export_timeout_millis = std::chrono::milliseconds(cfg.MetricExportTimeoutMs);
 
     auto reader = sdkmetrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), readerOpts);
 
@@ -379,6 +401,41 @@ int main(int argc, char** argv) {
     opts.AddLongOption("retry-ops", "Operations per retry worker")
         .DefaultValue(std::to_string(cfg.RetryOps)).StoreResult(&cfg.RetryOps);
 
+    opts.AddLongOption("disable-tracing", "Do not pass TraceProvider to YDB SDK")
+        .NoArgument()
+        .Handler0([&]{ cfg.EnableTracing = false; });
+    opts.AddLongOption("disable-metrics", "Do not pass MetricRegistry to YDB SDK")
+        .NoArgument()
+        .Handler0([&]{ cfg.EnableMetrics = false; });
+
+    opts.AddLongOption("trace-max-queue-size",
+                       "BatchSpanProcessor: max queued spans before drop")
+        .DefaultValue(std::to_string(cfg.TraceMaxQueueSize)).StoreResult(&cfg.TraceMaxQueueSize);
+    opts.AddLongOption("trace-schedule-delay-ms",
+                       "BatchSpanProcessor: wait between exports, ms")
+        .DefaultValue(std::to_string(cfg.TraceScheduleDelayMs)).StoreResult(&cfg.TraceScheduleDelayMs);
+    opts.AddLongOption("trace-max-export-batch-size",
+                       "BatchSpanProcessor: max spans per export RPC")
+        .DefaultValue(std::to_string(cfg.TraceMaxExportBatchSize)).StoreResult(&cfg.TraceMaxExportBatchSize);
+
+    opts.AddLongOption("metric-export-interval-ms",
+                       "PeriodicExportingMetricReader: export interval, ms")
+        .DefaultValue(std::to_string(cfg.MetricExportIntervalMs))
+        .StoreResult(&cfg.MetricExportIntervalMs);
+    opts.AddLongOption("metric-export-timeout-ms",
+                       "PeriodicExportingMetricReader: export timeout, ms")
+        .DefaultValue(std::to_string(cfg.MetricExportTimeoutMs))
+        .StoreResult(&cfg.MetricExportTimeoutMs);
+
+    opts.AddLongOption("metric-buffer-flush-ms",
+                       "TMetricBuffer: flush interval, ms (0 disables the buffer)")
+        .DefaultValue(std::to_string(cfg.MetricBufferFlushIntervalMs))
+        .StoreResult(&cfg.MetricBufferFlushIntervalMs);
+    opts.AddLongOption("telemetry-drain-sleep-ms",
+                       "Sleep after ForceFlush so external collectors can scrape demo data")
+        .DefaultValue(std::to_string(cfg.TelemetryDrainSleepMs))
+        .StoreResult(&cfg.TelemetryDrainSleepMs);
+
     NLastGetopt::TOptsParseResult parsedOpts(&opts, argc, argv);
 
     if (cfg.Endpoint.rfind("grpc://", 0) == 0) {
@@ -388,50 +445,86 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "Initializing OpenTelemetry..." << std::endl;
+    std::cout << "  Tracing: " << (cfg.EnableTracing ? "enabled" : "disabled") << std::endl;
+    std::cout << "  Metrics: " << (cfg.EnableMetrics ? "enabled" : "disabled") << std::endl;
     std::cout << "  OTLP endpoint: " << cfg.OtlpEndpoint << std::endl;
+    std::cout << "  Trace batching: max_queue_size=" << cfg.TraceMaxQueueSize
+              << ", schedule_delay_ms=" << cfg.TraceScheduleDelayMs
+              << ", max_export_batch_size=" << cfg.TraceMaxExportBatchSize << std::endl;
+    std::cout << "  Metric batching: export_interval_ms=" << cfg.MetricExportIntervalMs
+              << ", export_timeout_ms=" << cfg.MetricExportTimeoutMs << std::endl;
+    std::cout << "  Metric buffer (in-SDK): flush_interval_ms="
+              << cfg.MetricBufferFlushIntervalMs
+              << (cfg.MetricBufferFlushIntervalMs == 0 ? " (disabled)" : "") << std::endl;
+    std::cout << "  Telemetry drain sleep: " << cfg.TelemetryDrainSleepMs << " ms" << std::endl;
 
-    auto tracerProvider = InitTracing(cfg);
-    auto meterProvider = InitMetrics(cfg);
+    auto tracerProvider = cfg.EnableTracing ? InitTracing(cfg) : nullptr;
+    auto meterProvider = cfg.EnableMetrics ? InitMetrics(cfg) : nullptr;
 
-    opentelemetry::trace::Provider::SetTracerProvider(tracerProvider);
-    opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
+    std::shared_ptr<NTrace::ITraceProvider> ydbTraceProvider;
+    std::shared_ptr<NMetrics::IMetricRegistry> ydbMetricRegistry;
 
-    auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(tracerProvider);
-    auto ydbMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
+    if (cfg.EnableTracing) {
+        opentelemetry::trace::Provider::SetTracerProvider(tracerProvider);
+        ydbTraceProvider = NTrace::CreateOtelTraceProvider(tracerProvider);
+    }
+
+    if (cfg.EnableMetrics) {
+        opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
+        auto otelMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
+        if (cfg.MetricBufferFlushIntervalMs > 0) {
+            NObservability::TMetricBufferSettings bufferSettings;
+            bufferSettings.FlushInterval =
+                std::chrono::milliseconds(cfg.MetricBufferFlushIntervalMs);
+            ydbMetricRegistry = NObservability::CreateBufferedMetricRegistry(
+                otelMetricRegistry, bufferSettings);
+        } else {
+            ydbMetricRegistry = otelMetricRegistry;
+        }
+    }
 
     std::cout << "Connecting to YDB at " << cfg.Endpoint << cfg.Database << std::endl;
 
-    auto driverConfig = TDriverConfig()
-        .SetEndpoint(cfg.Endpoint)
-        .SetDatabase(cfg.Database)
-        .SetDiscoveryMode(EDiscoveryMode::Off)
-        .SetTraceProvider(ydbTraceProvider)
-        .SetMetricRegistry(ydbMetricRegistry);
+    {
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(cfg.Endpoint)
+            .SetDatabase(cfg.Database)
+            .SetDiscoveryMode(EDiscoveryMode::Off);
 
-    TDriver driver(driverConfig);
-    NQuery::TQueryClient queryClient(driver);
-    NTable::TTableClient tableClient(driver);
-
-    try {
-        RunQueryWorkload(queryClient, cfg.Iterations);
-        RunTableWorkload(tableClient, cfg.Iterations);
-
-        if (cfg.RetryWorkers > 0 && cfg.RetryOps > 0) {
-            RunRetryWorkload(queryClient, cfg.RetryWorkers, cfg.RetryOps);
+        if (ydbTraceProvider) {
+            driverConfig.SetTraceProvider(ydbTraceProvider);
+        }
+        if (ydbMetricRegistry) {
+            driverConfig.SetMetricRegistry(ydbMetricRegistry);
         }
 
-        std::cout << "\n=== Cleanup ===" << std::endl;
-        ThrowOnError(queryClient.RetryQuerySync([](NQuery::TSession session) {
-            return session.ExecuteQuery(
-                "DROP TABLE otel_demo", NQuery::TTxControl::NoTx()).GetValueSync();
-        }));
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        TDriver driver(driverConfig);
+        NQuery::TQueryClient queryClient(driver);
+        NTable::TTableClient tableClient(driver);
+
+        try {
+            RunQueryWorkload(queryClient, cfg.Iterations);
+            RunTableWorkload(tableClient, cfg.Iterations);
+
+            if (cfg.RetryWorkers > 0 && cfg.RetryOps > 0) {
+                RunRetryWorkload(queryClient, cfg.RetryWorkers, cfg.RetryOps);
+            }
+
+            std::cout << "\n=== Cleanup ===" << std::endl;
+            ThrowOnError(queryClient.RetryQuerySync([](NQuery::TSession session) {
+                return session.ExecuteQuery(
+                    "DROP TABLE otel_demo", NQuery::TTxControl::NoTx()).GetValueSync();
+            }));
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
+        }
+
+        driver.Stop(true);
     }
 
     std::cout << "Flushing telemetry..." << std::endl;
 
-    driver.Stop(true);
+    NObservability::FlushBufferedMetricRegistry(ydbMetricRegistry);
 
     if (auto* sdkTracerProvider = dynamic_cast<sdktrace::TracerProvider*>(tracerProvider.get())) {
         sdkTracerProvider->ForceFlush();
@@ -440,7 +533,11 @@ int main(int argc, char** argv) {
         sdkMeterProvider->ForceFlush();
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    ydbMetricRegistry.reset();
+
+    if (cfg.TelemetryDrainSleepMs > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(cfg.TelemetryDrainSleepMs));
+    }
 
     opentelemetry::trace::Provider::SetTracerProvider(
         nostd::shared_ptr<opentelemetry::trace::TracerProvider>{});

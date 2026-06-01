@@ -13,6 +13,7 @@
 #include <util/system/fs.h>
 #include <util/generic/guid.h>
 
+#include <optional>
 #include <type_traits>
 
 namespace NKikimr::NWrappers::NExternalStorage {
@@ -92,73 +93,98 @@ private:
         this->Send(sender, response.release());
     }
 
+    struct TReplyErrorOpts {
+        TString ErrorMessage;
+        Aws::S3::S3Errors ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE;
+        bool Retryable = false;
+        TString ExceptionName = "FsStorageError";
+        std::optional<Aws::Http::HttpResponseCode> ResponseCode = std::nullopt;
+    };
+
     template<typename TEvResponse>
-    auto CreateOutcome(Aws::S3::S3Errors errorType, const TString& errorMessage, bool retryable) {
+    auto CreateOutcome(const TReplyErrorOpts& opts) {
         Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
-            errorType,
-            "FsStorageError",
-            errorMessage,
-            retryable
-        );
-        Aws::S3::S3Error error(std::move(awsError));
-        Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome(std::move(error));
-        return outcome;
-    }
-
-    template<typename TEvResponse>
-    void ReplyError(
-            const NActors::TActorId& sender,
-            const TString& errorMessage,
-            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
-            bool retryable = false)
-    {
-        std::unique_ptr<TEvResponse> response;
-        response = std::make_unique<TEvResponse>(CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
-        this->Send(sender, response.release());
-    }
-
-    template<typename TEvResponse>
-    void ReplyError(
-            const NActors::TActorId& sender,
-            const TString& key,
-            const TString& errorMessage,
-            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
-            bool retryable = false)
-    {
-        std::unique_ptr<TEvResponse> response;
-        response = std::make_unique<TEvResponse>(key, CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
-        this->Send(sender, response.release());
-    }
-
-    template<typename TEvResponse>
-    void ReplyError(
-            const NActors::TActorId& sender,
-            const TString& key,
-            const std::pair<ui64, ui64>& range,
-            const TString& errorMessage,
-            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
-            bool retryable = false)
-    {
-        std::unique_ptr<TEvResponse> response;
-        response = std::make_unique<TEvResponse>(key, range, CreateOutcome<TEvResponse>(errorType, errorMessage, retryable));
-        this->Send(sender, response.release());
-    }
-
-    template<typename TEvResponse>
-    bool HandleFileLockError(
-            const TSystemError& ex,
-            const NActors::TActorId& sender,
-            const TString& key,
-            const TString& operation)
-    {
-        if (ex.Status() == EWOULDBLOCK) {
-            FS_LOG_W(operation << ": failed to acquire lock (file is busy)"
-                << ": key# " << key);
-            ReplyError<TEvResponse>(sender, key, "File is locked by another process",
-                Aws::S3::S3Errors::INTERNAL_FAILURE, true /* retryable */);
-            return true;
+            opts.ErrorType, opts.ExceptionName, opts.ErrorMessage, opts.Retryable);
+        if (opts.ResponseCode) {
+            awsError.SetResponseCode(*opts.ResponseCode);
         }
-        return false;
+        return Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error>(
+            Aws::S3::S3Error(std::move(awsError)));
+    }
+
+    template<typename TEvResponse, typename... Args>
+    void ReplyError(const NActors::TActorId& sender, TReplyErrorOpts opts, Args&&... args) {
+        auto outcome = CreateOutcome<TEvResponse>(opts);
+        auto response = std::make_unique<TEvResponse>(std::forward<Args>(args)..., std::move(outcome));
+        this->Send(sender, response.release());
+    }
+
+    static std::optional<TReplyErrorOpts> ClassifyFsError(int status) {
+        switch (status) {
+            case EACCES:
+            case EPERM:
+            case EROFS:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::ACCESS_DENIED,
+                    .ExceptionName = "FsPermissionDenied",
+                    .ResponseCode = Aws::Http::HttpResponseCode::FORBIDDEN,
+                };
+            case EDQUOT:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::ACCESS_DENIED,
+                    .ExceptionName = "FsQuotaExceeded",
+                    .ResponseCode = Aws::Http::HttpResponseCode::INSUFFICIENT_STORAGE,
+                };
+            case ENOENT:
+            case ENOTDIR:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::NO_SUCH_KEY,
+                    .ExceptionName = "FsPathNotFound",
+                    .ResponseCode = Aws::Http::HttpResponseCode::NOT_FOUND,
+                };
+            case EISDIR:
+            case ENAMETOOLONG:
+            case EINVAL:
+            case ELOOP:
+            case EXDEV:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::INVALID_PARAMETER_VALUE,
+                    .ExceptionName = "FsInvalidPath",
+                    .ResponseCode = Aws::Http::HttpResponseCode::BAD_REQUEST,
+                };
+            case EFBIG:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::INVALID_PARAMETER_VALUE,
+                    .ExceptionName = "FsFileTooLarge",
+                    .ResponseCode = Aws::Http::HttpResponseCode::BAD_REQUEST,
+                };
+            case ENOSPC:
+                return TReplyErrorOpts{
+                    .ErrorType = Aws::S3::S3Errors::INVALID_PARAMETER_VALUE,
+                    .ExceptionName = "FsNoSpaceLeft",
+                    .ResponseCode = Aws::Http::HttpResponseCode::INSUFFICIENT_STORAGE,
+                };
+            case EWOULDBLOCK:
+#if EAGAIN != EWOULDBLOCK
+            case EAGAIN:
+#endif
+                return TReplyErrorOpts{
+                    .ErrorMessage = "File is locked by another process",
+                    .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+                    .Retryable = true,
+                    .ExceptionName = "FsFileLocked",
+                    .ResponseCode = Aws::Http::HttpResponseCode::SERVICE_UNAVAILABLE,
+                };
+            default:
+                return std::nullopt;
+        }
+    }
+
+    template<typename TEvResponse, typename... Args>
+    void ReplyFsSystemError(const NActors::TActorId& sender, const TSystemError& ex, Args&&... args) {
+        auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
+        opts.ErrorMessage = ex.what();
+        ReplyError<TEvResponse>(sender, std::move(opts), std::forward<Args>(args)...);
     }
 
 public:
@@ -249,20 +275,19 @@ public:
             session.File.Write(body.data(), body.size());
             session.File.Flush();
             session.File.Close();
+
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
-                FS_LOG_E("PutObject failed with system error"
-                    << ": key# " << key
-                    << ", error# " << ex.what()
-                    << ", errno# " << ex.Status());
-                ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
-            }
+            FS_LOG_E("PutObject failed with system error"
+                << ": key# " << key
+                << ", error# " << ex.what()
+                << ", errno# " << ex.Status());
+            ReplyFsSystemError<TEvPutObjectResponse>(ev->Sender, ex, key);
         } catch (const std::exception& ex) {
             FS_LOG_E("PutObject failed"
                 << ": key# " << key
                 << ", error# " << ex.what());
-            ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
+            ReplyError<TEvPutObjectResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
 
@@ -293,7 +318,9 @@ public:
 
             if (!rangeStr.empty()) {
                 if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
-                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, InvalidRange, TStringBuilder() << "Invalid range format: " << rangeStr);
+                    ReplyError<TEvGetObjectResponse>(ev->Sender,
+                        {.ErrorMessage = TStringBuilder() << "Invalid range format: " << rangeStr},
+                        key, InvalidRange);
                     return;
                 }
             } else {
@@ -303,13 +330,15 @@ public:
             ui64 start = range.first;
             ui64 end = range.second;
             if (start > end) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, InvalidRange, TStringBuilder() << "Invalid range: start > end: " << rangeStr);
+                ReplyError<TEvGetObjectResponse>(ev->Sender,
+                    {.ErrorMessage = TStringBuilder() << "Invalid range: start > end: " << rangeStr},
+                    key, InvalidRange);
                 return;
             }
             const ui64 length = end - start + 1;
 
             if ((i64)start >= fileSize) {
-                ReplyError<TEvGetObjectResponse>(ev->Sender, key, range, "Range out of bounds");
+                ReplyError<TEvGetObjectResponse>(ev->Sender, {.ErrorMessage = "Range out of bounds"}, key, range);
                 return;
             }
 
@@ -330,12 +359,19 @@ public:
 
             auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(data));
             Send(ev->Sender, response.release());
-
+        } catch (const TSystemError& ex) {
+            FS_LOG_E("GetObject failed with system error"
+                << ": key# " << key
+                << ", error# " << ex.what()
+                << ", errno# " << ex.Status());
+            ReplyFsSystemError<TEvGetObjectResponse>(ev->Sender, ex, key, InvalidRange);
         } catch (const std::exception& ex) {
             FS_LOG_E("GetObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
-            ReplyError<TEvGetObjectResponse>(ev->Sender, key, InvalidRange, TString("File read error: ") + ex.what());
+            ReplyError<TEvGetObjectResponse>(ev->Sender,
+                {.ErrorMessage = TString("File read error: ") + ex.what()},
+                key, InvalidRange);
         }
     }
 
@@ -361,16 +397,18 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));
             Send(ev->Sender, response.release());
-        } catch (const TFileError& ex) {
-            FS_LOG_W("HeadObject"
+        } catch (const TSystemError& ex) {
+            FS_LOG_E("HeadObject failed with system error"
                 << ": key# " << key
-                << ", error# " << "file not found");
-                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File not found: " << ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
+                << ", error# " << ex.what()
+                << ", errno# " << ex.Status());
+            ReplyFsSystemError<TEvHeadObjectResponse>(ev->Sender, ex, key);
         } catch (const std::exception& ex) {
             FS_LOG_E("HeadObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
-                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File head error: " << ex.what());
+            ReplyError<TEvHeadObjectResponse>(ev->Sender,
+                {.ErrorMessage = TStringBuilder() << "File head error: " << ex.what()}, key);
         }
     }
 
@@ -378,14 +416,14 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         FS_LOG_W("DeleteObject: not implemented");
-        ReplyError<TEvDeleteObjectResponse>(ev->Sender, key, "Not implemented");
+        ReplyError<TEvDeleteObjectResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 
     void Handle(TEvCheckObjectExistsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         FS_LOG_W("CheckObjectExists: not implemented");
-        ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, key, "Not implemented");
+        ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 
     static constexpr int DefaultMaxListKeys = 1000;
@@ -469,7 +507,7 @@ public:
                     if (basePath.GetPath() != realBasePath.GetPath()) {
                         errorMsg << ", resolvedBasePath# " << realBasePath.GetPath();
                     }
-                    ReplyError<TEvListObjectsResponse>(ev->Sender, errorMsg);
+                    ReplyError<TEvListObjectsResponse>(ev->Sender, {.ErrorMessage = errorMsg});
                     return;
                 }
 
@@ -483,18 +521,25 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvListObjectsResponse>(std::move(outcome));
             Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            FS_LOG_E("ListObjects failed with system error"
+                << ": prefix# " << prefix
+                << ", error# " << ex.what()
+                << ", errno# " << ex.Status());
+            ReplyFsSystemError<TEvListObjectsResponse>(ev->Sender, ex);
         } catch (const std::exception& ex) {
             FS_LOG_E("ListObjects failed"
                 << ": prefix# " << prefix
                 << ", error# " << ex.what());
-            ReplyError<TEvListObjectsResponse>(ev->Sender, TString("ListObjects error: ") + ex.what());
+            ReplyError<TEvListObjectsResponse>(ev->Sender,
+                {.ErrorMessage = TString("ListObjects error: ") + ex.what()});
         }
     }
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         FS_LOG_W("DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
-        ReplyError<TEvDeleteObjectsResponse>(ev->Sender, "Not implemented");
+        ReplyError<TEvDeleteObjectsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"});
     }
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
@@ -525,18 +570,16 @@ public:
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, originalKey, "CreateMultipartUpload")) {
-                FS_LOG_E("CreateMultipartUpload failed with system error"
-                    << ": key# " << originalKey
-                    << ", error# " << ex.what()
-                    << ", errno# " << ex.Status());
-                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
-            }
+            FS_LOG_E("CreateMultipartUpload failed with system error"
+                << ": key# " << originalKey
+                << ", error# " << ex.what()
+                << ", errno# " << ex.Status());
+            ReplyFsSystemError<TEvCreateMultipartUploadResponse>(ev->Sender, ex, originalKey);
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
                 << ": key# " << originalKey
                 << ", error# " << ex.what());
-            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
+            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, originalKey);
         }
     }
 
@@ -565,7 +608,9 @@ public:
                         << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
                     FS_LOG_E("UploadPart: " << errorMsg);
-                    ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, errorMsg, Aws::S3::S3Errors::INTERNAL_FAILURE);
+                    ReplyError<TEvUploadPartResponse>(ev->Sender,
+                        {.ErrorMessage = errorMsg, .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE},
+                        originalKey);
                     return;
                 }
                 it = ActiveUploads.emplace(uploadId, TMultipartUploadSession(key)).first;
@@ -591,20 +636,18 @@ public:
             auto response = std::make_unique<TEvUploadPartResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, originalKey, "UploadPart")) {
-                FS_LOG_E("UploadPart failed with system error"
-                    << ": key# " << originalKey
-                    << ", uploadId# " << uploadId
-                    << ", error# " << ex.what()
-                    << ", errno# " << ex.Status());
-                ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
-            }
+            FS_LOG_E("UploadPart failed with system error"
+                << ": key# " << originalKey
+                << ", uploadId# " << uploadId
+                << ", error# " << ex.what()
+                << ", errno# " << ex.Status());
+            ReplyFsSystemError<TEvUploadPartResponse>(ev->Sender, ex, originalKey);
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
                 << ": key# " << originalKey
                 << ", uploadId# " << uploadId
                 << ", error# " << ex.what());
-            ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
+            ReplyError<TEvUploadPartResponse>(ev->Sender, {.ErrorMessage = ex.what()}, originalKey);
         }
     }
 
@@ -621,18 +664,14 @@ public:
             const TString incompleteKey = GetIncompletePath(key.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                // Upload session not found - likely due to actor restart
-                // Return retryable error to force datashard to retry with cleared uploadId
-                Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
-                    Aws::S3::S3Errors::INTERNAL_FAILURE,
-                    "FsUploadSessionLost",
-                    TStringBuilder() << "Upload session not found: uploadId# " << uploadId,
-                    true // retryable
-                );
-                Aws::S3::S3Error error(std::move(awsError));
-                Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(error));
-                auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
-                this->Send(ev->Sender, response.release());
+                ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender,
+                    {
+                        .ErrorMessage = TStringBuilder() << "Upload session not found: uploadId# " << uploadId,
+                        .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+                        .Retryable = true,
+                        .ExceptionName = "FsCompleteMultipartUploadFailed",
+                    },
+                    key);
                 return;
             }
 
@@ -649,9 +688,14 @@ public:
                 NFs::Remove(incompleteKey);
                 ActiveUploads.erase(it);
 
-                ReplyError<TEvCompleteMultipartUploadResponse>(
-                    ev->Sender, key, errorMsg,
-                    Aws::S3::S3Errors::INTERNAL_FAILURE, true /* retryable */);
+                ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender,
+                    {
+                        .ErrorMessage = errorMsg,
+                        .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+                        .Retryable = true,
+                        .ExceptionName = "FsCompleteMultipartUploadFailed",
+                    },
+                    key);
                 return;
             }
             FsyncParentDir(key);
@@ -672,9 +716,16 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            FS_LOG_E("CompleteMultipartUpload failed with system error"
+                << ": key# " << key
+                << ", uploadId# " << uploadId
+                << ", error# " << ex.what()
+                << ", errno# " << ex.Status());
+            ReplyFsSystemError<TEvCompleteMultipartUploadResponse>(ev->Sender, ex, key);
         } catch (const std::exception& ex) {
             FS_LOG_E("CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
-            ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, key, ex.what());
+            ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
 
@@ -716,7 +767,7 @@ public:
                 << ": key# " << key
                 << ", uploadId# " << uploadId
                 << ", error# " << ex.what());
-            ReplyError<TEvAbortMultipartUploadResponse>(ev->Sender, key, ex.what());
+            ReplyError<TEvAbortMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
 
@@ -725,7 +776,7 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
         FS_LOG_W("UploadPartCopy: not implemented");
-        ReplyError<TEvUploadPartCopyResponse>(ev->Sender, key, "Not implemented");
+        ReplyError<TEvUploadPartCopyResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 };
 

@@ -1,8 +1,10 @@
+#include "schemeshard__backup_collection_common.h"
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -1405,6 +1407,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Self->IsOldArgonHashFormatMigrationCompleted = isOldArgonHashFormatMigrationCompletedVal;
         }
 
+        {
+            ui64 sweepStatusVal = 0;
+            RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_TablePartitionsFormatSweepStatus, sweepStatusVal));
+            switch (sweepStatusVal) {
+                case 1:
+                    Self->TablePartitionsFormatSweep.Status = TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Running;
+                    break;
+                case 2:
+                    Self->TablePartitionsFormatSweep.Status = TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Paused;
+                    break;
+                default:
+                    Self->TablePartitionsFormatSweep.Status = TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle;
+                    break;
+            }
+        }
+
+        if (Self->TablePartitionsFormatSweep.Status != TSchemeShard::TTablePartitionsFormatSweepState::EStatus::Idle) {
+            ui64 sweepTargetVal = 0;
+            RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_TablePartitionsFormatSweepTarget, sweepTargetVal));
+            Self->TablePartitionsFormatSweep.TargetIsShardIdx = (sweepTargetVal != 0);
+        }
+
 #undef RETURN_IF_NO_PRECHARGED
 
         if (!Self->IsSchemeShardConfigured()) {
@@ -2388,6 +2412,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                         Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
                         partitions.clear();
+                        Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
                     }
 
                     prevTableId = tableId;
@@ -2420,7 +2445,110 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
                 TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                 Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
+                partitions.clear();
+                Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
             }
+        }
+
+        // Read partitions from ShardIdx-keyed format (new tables only, mutually exclusive with above)
+        // Depends on TTableInfo::Columns filled.
+        {
+            auto rowSet = db.Table<Schema::TablePartitionsByShardIdx>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TablePartitionsByShardIdx" << ", at schemeshard: " << Self->TabletID());
+
+            auto flushPartitions = [this](const TPathId& tablePathId, TVector<TTableShardInfo>&& partitions) {
+                if (!tablePathId) {
+                    return;
+                }
+                Y_ABORT_UNLESS(!partitions.empty(), "tablePathId %s", ToString(tablePathId).c_str());
+                Y_ABORT_UNLESS(Self->Tables.contains(tablePathId), "tablePathId %s", ToString(tablePathId).c_str());
+                TTableInfo::TPtr tableInfo = Self->Tables.at(tablePathId);
+                Y_ABORT_UNLESS(!tableInfo->Columns.empty(), "tablePathId %s", ToString(tablePathId).c_str());
+                // tables must not have mixed format partitions
+                Y_ABORT_UNLESS(tableInfo->GetPartitions().empty(), "tablePathId %s", ToString(tablePathId).c_str());
+
+                // Build key column type list for border comparison
+                TVector<NScheme::TTypeInfo> keyColTypeIds;
+                for (const auto& [colId, col] : tableInfo->Columns) {
+                    if (col.KeyOrder == (ui32)-1) {
+                        continue;
+                    }
+                    if (keyColTypeIds.size() <= col.KeyOrder) {
+                        keyColTypeIds.resize(col.KeyOrder + 1);
+                    }
+                    keyColTypeIds[col.KeyOrder] = col.PType;
+                }
+
+                // Sort by RangeEnd; empty EndOfRange = last partition, goes to the end
+                std::sort(partitions.begin(), partitions.end(),
+                    [&](const TTableShardInfo& a, const TTableShardInfo& b) {
+                        if (a.EndOfRange.empty()) {
+                            return false;
+                        }
+                        if (b.EndOfRange.empty()) {
+                            return true;
+                        }
+                        TSerializedCellVec ca(a.EndOfRange);
+                        TSerializedCellVec cb(b.EndOfRange);
+                        return CompareBorders<true, true>(ca.GetCells(), cb.GetCells(), true, true, keyColTypeIds) < 0;
+                    }
+                );
+
+                Self->SetPartitioning(tablePathId, tableInfo, std::move(partitions));
+                tableInfo->PartitionsInShardIdxFormat = true;
+                Self->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+            };
+
+            const auto now = ctx.Now();
+
+            TPathId prevPathId;
+            TVector<TTableShardInfo> partitions;
+
+            while (!rowSet.EndOfSet()) {
+                const TPathId pathId(
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::OwnerPathId>(),
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::LocalPathId>()
+                );
+                const TShardIdx shardIdx(
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::OwnerShardIdx>(),
+                    rowSet.GetValue<Schema::TablePartitionsByShardIdx::LocalShardIdx>()
+                );
+
+                if (pathId != prevPathId) {
+                    flushPartitions(prevPathId, std::move(partitions));
+                    partitions.clear();
+                    prevPathId = pathId;
+                }
+
+                TString rangeEnd = rowSet.GetValue<Schema::TablePartitionsByShardIdx::RangeEnd>();
+                ui64 lastCondErase = rowSet.GetValueOrDefault<Schema::TablePartitionsByShardIdx::LastCondErase>(0);
+                ui64 nextCondErase = rowSet.GetValueOrDefault<Schema::TablePartitionsByShardIdx::NextCondErase>(0);
+
+                TTableShardInfo shardInfo(shardIdx, rangeEnd, lastCondErase, nextCondErase);
+
+                if (Self->TTLEnabledTables.contains(pathId)) {
+                    auto& lag = shardInfo.LastCondEraseLag;
+                    if (now >= shardInfo.LastCondErase) {
+                        lag = now - shardInfo.LastCondErase;
+                    } else {
+                        lag = TDuration::Zero();
+                    }
+                    Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+                }
+
+                partitions.push_back(std::move(shardInfo));
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+            // for the last table
+            flushPartitions(prevPathId, std::move(partitions));
+            partitions.clear();
         }
 
         // Read partition config patches
@@ -2567,6 +2695,113 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (prevTableId) {
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
+                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
+                if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
+                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
+                }
+            }
+        }
+
+        // Read partition stats (ShardIdx format)
+        {
+            using T = Schema::TablePartitionStatsByShardIdx;
+            auto rowSet = db.Table<T>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+
+            TPathId prevTableId;
+            TInstant now = AppData()->TimeProvider->Now();
+            while (!rowSet.EndOfSet()) {
+                const TPathId tableId = TPathId(
+                    rowSet.GetValue<T::OwnerPathId>(),
+                    rowSet.GetValue<T::LocalPathId>());
+                const TShardIdx shardIdx = TShardIdx(
+                    rowSet.GetValue<T::OwnerShardIdx>(),
+                    rowSet.GetValue<T::LocalShardIdx>());
+
+                if (tableId != prevTableId) {
+                    // Aggregate the previous table's newly updated stats.
+                    // (Tables also processed by the positional block get re-aggregated here;
+                    // that is acceptable since the domain aggregate will self-correct on the
+                    // first live stats update from any shard.)
+                    if (prevTableId && Self->Tables.contains(prevTableId)) {
+                        TTableInfo::TPtr prevTableInfo = Self->Tables.at(prevTableId);
+                        if (!prevTableInfo->IsBackup && !prevTableInfo->IsShardsStatsDetached()) {
+                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, prevTableInfo->GetStats().Aggregated);
+                        }
+                    }
+                    prevTableId = tableId;
+                }
+
+                if (!Self->Tables.contains(tableId)) {
+                    if (!rowSet.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+                TTableInfo::TPtr tableInfo = Self->Tables.at(tableId);
+                if (!tableInfo->GetPartitionStore().contains(shardIdx)) {
+                    if (!rowSet.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+
+                TPartitionStats stats;
+                stats.SeqNo = TMessageSeqNo(
+                    rowSet.GetValue<T::SeqNoGeneration>(),
+                    rowSet.GetValue<T::SeqNoRound>());
+                stats.RowCount = rowSet.GetValue<T::RowCount>();
+                stats.DataSize = rowSet.GetValue<T::DataSize>();
+                stats.IndexSize = rowSet.GetValue<T::IndexSize>();
+                stats.ByKeyFilterSize = rowSet.GetValue<T::ByKeyFilterSize>();
+                if (rowSet.HaveValue<T::StoragePoolsStats>()) {
+                    NKikimrTableStats::TStoragePoolsStats proto;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(proto, rowSet.GetValue<T::StoragePoolsStats>()));
+                    for (const auto& poolUsage : proto.GetPoolsUsage()) {
+                        stats.StoragePoolsStats.emplace(
+                            poolUsage.GetPoolKind(),
+                            TPartitionStats::TStoragePoolStats{poolUsage.GetDataSize(), poolUsage.GetIndexSize()});
+                    }
+                }
+                stats.LastAccessTime = TInstant::FromValue(rowSet.GetValue<T::LastAccessTime>());
+                stats.LastUpdateTime = TInstant::FromValue(rowSet.GetValue<T::LastUpdateTime>());
+                stats.ImmediateTxCompleted = rowSet.GetValue<T::ImmediateTxCompleted>();
+                stats.PlannedTxCompleted = rowSet.GetValue<T::PlannedTxCompleted>();
+                stats.TxRejectedByOverload = rowSet.GetValue<T::TxRejectedByOverload>();
+                stats.TxRejectedBySpace = rowSet.GetValue<T::TxRejectedBySpace>();
+                stats.TxCompleteLag = TDuration::FromValue(rowSet.GetValue<T::TxCompleteLag>());
+                stats.InFlightTxCount = rowSet.GetValue<T::InFlightTxCount>();
+                stats.RowUpdates = rowSet.GetValue<T::RowUpdates>();
+                stats.RowDeletes = rowSet.GetValue<T::RowDeletes>();
+                stats.RowReads = rowSet.GetValue<T::RowReads>();
+                stats.RangeReads = rowSet.GetValue<T::RangeReads>();
+                stats.RangeReadRows = rowSet.GetValue<T::RangeReadRows>();
+                stats.SetCurrentRawCpuUsage(rowSet.GetValue<T::CPU>(), now);
+                stats.Memory = rowSet.GetValue<T::Memory>();
+                stats.Network = rowSet.GetValue<T::Network>();
+                stats.Storage = rowSet.GetValue<T::Storage>();
+                stats.ReadThroughput = rowSet.GetValue<T::ReadThroughput>();
+                stats.WriteThroughput = rowSet.GetValue<T::WriteThroughput>();
+                stats.ReadIops = rowSet.GetValue<T::ReadIops>();
+                stats.WriteIops = rowSet.GetValue<T::WriteIops>();
+                stats.SearchHeight = rowSet.GetValueOrDefault<T::SearchHeight>();
+                stats.FullCompactionTs = rowSet.GetValueOrDefault<T::FullCompactionTs>();
+                stats.MemDataSize = rowSet.GetValueOrDefault<T::MemDataSize>();
+                stats.LocksAcquired = rowSet.GetValueOrDefault<T::LocksAcquired>();
+                stats.LocksWholeShard = rowSet.GetValueOrDefault<T::LocksWholeShard>();
+                stats.LocksBroken = rowSet.GetValueOrDefault<T::LocksBroken>();
+
+                TDiskSpaceUsageDelta unusedDelta;
+                tableInfo->UpdateShardStats(&unusedDelta, shardIdx, stats, now);
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+
+            if (prevTableId && Self->Tables.contains(prevTableId)) {
                 TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
                 if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
                     Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
@@ -4769,7 +5004,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
-                        item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
+                        item.Metadata = ::NKikimr::NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
@@ -4807,7 +5042,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
-                        item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
+                        item.ExportItemIV = ::NKikimr::NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
                     }
 
                     if (item.WaitTxId != InvalidTxId) {
@@ -5463,6 +5698,111 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Must load before IncrementalRestoreOperations so IncrementalRestoreStates is
+        // populated when the contains() check in that block runs.
+        {
+            auto rowset = db.Table<Schema::IncrementalRestoreState>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                ui64 operationId = rowset.GetValue<Schema::IncrementalRestoreState::OperationId>();
+                ui32 stateValue = rowset.GetValue<Schema::IncrementalRestoreState::State>();
+                ui32 currentIdx = rowset.GetValue<Schema::IncrementalRestoreState::CurrentIncrementalIdx>();
+                TString serializedData = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::SerializedData>("");
+                ui32 finalStatus = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalStatus>(0);
+                TString finalIssues = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalIssues>("");
+                ui64 restoreStartedAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RestoreStartedAt>(0);
+                ui64 currentStageStartedAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::CurrentStageStartedAt>(0);
+                bool retryScheduled = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryScheduled>(false);
+                ui64 nextRetryAttemptAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0);
+                bool retryNeeded = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryNeeded>(false);
+
+                auto& state = Self->IncrementalRestoreStates[operationId];
+                state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
+                state.CurrentIncrementalIdx = currentIdx;
+                state.FinalStatus = finalStatus;
+                state.FinalIssues = finalIssues;
+                state.RestoreStartedAt = TInstant::MicroSeconds(restoreStartedAtUs);
+                state.CurrentStageStartedAt = TInstant::MicroSeconds(currentStageStartedAtUs);
+                state.RetryScheduled = retryScheduled;
+                state.NextRetryAttemptAt = TInstant::MicroSeconds(nextRetryAttemptAtUs);
+                state.RetryNeeded = retryNeeded;
+                state.FreshBootRetryAbsorbPending = retryNeeded;
+
+                // Always restore CompletedOperations (late replies for already-Completed
+                // sub-ops are dropped by RecordShardResult). Also restore per-shard
+                // dispatch sets so TTxInit can re-issue requests for unanswered shards.
+                if (!serializedData.empty()) {
+                    NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
+                    if (protoList.ParseFromString(serializedData)) {
+                        for (const auto& protoOp : protoList.GetSubOps()) {
+                            const TOperationId subOpId(TTxId(protoOp.GetId().GetTxId()), protoOp.GetId().GetSubTxId());
+                            const bool hasPerShardData =
+                                protoOp.ExpectedShardLocalIdsSize() > 0
+                                || protoOp.CompletedShardLocalIdsSize() > 0
+                                || protoOp.FailedShardLocalIdsSize() > 0;
+                            if (!hasPerShardData) {
+                                state.CompletedOperations.insert(subOpId);
+                                continue;
+                            }
+                            auto& tableOp = state.TableOperations[subOpId];
+                            tableOp.OperationId = subOpId;
+                            tableOp.HasNonRetriableFailure = protoOp.GetHasNonRetriableFailure();
+                            tableOp.RequestsDispatched = true;
+                            const ui64 ssTablet = Self->TabletID();
+                            for (ui64 localId : protoOp.GetExpectedShardLocalIds()) {
+                                tableOp.ExpectedShards.insert(TShardIdx(ssTablet, localId));
+                            }
+                            for (ui64 localId : protoOp.GetCompletedShardLocalIds()) {
+                                tableOp.CompletedShards.insert(TShardIdx(ssTablet, localId));
+                            }
+                            for (ui64 localId : protoOp.GetFailedShardLocalIds()) {
+                                tableOp.FailedShards.insert(TShardIdx(ssTablet, localId));
+                            }
+                            const bool isComplete = !tableOp.ExpectedShards.empty()
+                                && (tableOp.CompletedShards.size() + tableOp.FailedShards.size()
+                                    == tableOp.ExpectedShards.size())
+                                && !tableOp.HasFailures();
+                            if (isComplete) {
+                                state.CompletedOperations.insert(subOpId);
+                            } else {
+                                state.InProgressOperations.insert(subOpId);
+                                Self->IncrementalRestoreOperationToState[subOpId] = operationId;
+                                Self->TxIdToIncrementalRestore[subOpId.GetTxId()] = operationId;
+                            }
+
+                            if (protoOp.HasSrcPathLocalId() && protoOp.HasDstPathLocalId()) {
+                                auto& dispatch = state.ShardDispatchByOp[subOpId];
+                                dispatch.SrcPathId = TPathId(ssTablet, protoOp.GetSrcPathLocalId());
+                                dispatch.DstPathId = TPathId(ssTablet, protoOp.GetDstPathLocalId());
+                                dispatch.SchemeShardGeneration = Self->Generation();
+                                for (ui64 localId : protoOp.GetExpectedShardLocalIds()) {
+                                    TShardIdx shardIdx(ssTablet, localId);
+                                    auto shardInfoIt = Self->ShardInfos.find(shardIdx);
+                                    if (shardInfoIt != Self->ShardInfos.end()) {
+                                        dispatch.ShardTablets[shardIdx] = shardInfoIt->second.TabletID;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit loaded IncrementalRestoreState"
+                    << ", operationId: " << operationId
+                    << ", state: " << stateValue
+                    << ", currentIdx: " << currentIdx
+                    << ", at schemeshard: " << Self->TabletID());
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Read incremental restore operations
         {
             auto rowset = db.Table<Schema::IncrementalRestoreOperations>().Select();
@@ -5480,86 +5820,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TOperationId opId(txId, 0);
                 Self->LongIncrementalRestoreOps[opId] = op;
 
-                // Load involved shards into IncrementalRestoreState if it exists
-                if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
-                    auto& state = Self->IncrementalRestoreStates[ui64(txId)];
-                    for (const auto& shardIdValue : op.GetInvolvedShards()) {
-                        TShardIdx shardIdx = TShardIdx(Self->TabletID(), TLocalShardIdx(shardIdValue));
-                        state.InvolvedShards.insert(shardIdx);
-                    }
-                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                 "TTxInit loaded " << op.GetInvolvedShards().size()
-                                 << " involved shards for incremental restore operation " << txId);
-                }
-
-                // Restore table path states based on the operation
                 if (op.HasBackupCollectionPathId()) {
-                    TPathId backupCollectionPathId = TPathId(
-                        op.GetBackupCollectionPathId().GetOwnerId(),
-                        op.GetBackupCollectionPathId().GetLocalId()
-                    );
-
-                    // Set target tables to EPathStateIncomingIncrementalRestore
-                    for (const auto& tablePath : op.GetTablePathList()) {
-                        TPath resolvedPath = TPath::Resolve(tablePath, Self);
-                        if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
-                            auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
-                            targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
-                        }
-                    }
-
-                    // Set source backup collection to EPathStateOutgoingIncrementalRestore if it exists locally
-                    if (Self->PathsById.contains(backupCollectionPathId)) {
-                        auto sourcePath = Self->PathsById.at(backupCollectionPathId);
-                        sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
-
-                        // Get the backup collection path to construct backup table paths
-                        TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
-                        if (backupCollectionPath.IsResolved()) {
-                            TString backupCollectionPathStr = backupCollectionPath.PathString();
-
-                            // Set full backup table states using trimmed names
-                            if (op.HasFullBackupTrimmedName()) {
-                                TString fullBackupName = op.GetFullBackupTrimmedName() + "_full";
-                                TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
-
-                                // Set state for each table in the full backup
-                                for (const auto& tablePath : op.GetTablePathList()) {
-                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
-                                    if (originalTablePath.IsResolved()) {
-                                        TString tableName = originalTablePath.LeafName();
-                                        TString fullBackupTablePath = fullBackupPath + "/" + tableName;
-
-                                        TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
-                                        if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
-                                            auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
-                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Set incremental backup table states using trimmed names
-                            for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
-                                TString incrBackupName = trimmedIncrName + "_incremental";
-                                TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
-
-                                // Set state for each table in the incremental backup
-                                for (const auto& tablePath : op.GetTablePathList()) {
-                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
-                                    if (originalTablePath.IsResolved()) {
-                                        TString tableName = originalTablePath.LeafName();
-                                        TString incrBackupTablePath = incrBackupPath + "/" + tableName;
-
-                                        TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
-                                        if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
-                                            auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
-                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    // Skip path-state re-locking for terminal restores: leaving paths in
+                    // EPathStateIncoming/Outgoing would block DDL until manual FORGET.
+                    auto stateIt = Self->IncrementalRestoreStates.find(ui64(txId));
+                    const bool isTerminal = stateIt != Self->IncrementalRestoreStates.end()
+                        && (stateIt->second.State == TIncrementalRestoreState::EState::Completed
+                         || stateIt->second.State == TIncrementalRestoreState::EState::Failed);
+                    if (!isTerminal) {
+                        RestoreIncrementalRestoreOpPathStates(op);
                     }
                 }
 
@@ -5577,30 +5846,126 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             // Check for orphaned incremental restore operations during restart
             for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
                 TTxId txId = opId.GetTxId();
-                bool controlOperationExists = false;
 
-                for (const auto& [txOpId, txState] : Self->TxInFlight) {
-                    if (txOpId.GetTxId() == txId) {
-                        controlOperationExists = true;
+                // Skip orphan recovery for ops whose state was already loaded above.
+                if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
+                    continue;
+                }
+
+                ScheduleOrphanedIncrementalRestoreOp(opId, op, OnComplete, ctx);
+            }
+        }
+
+        for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
+            ui64 operationId = opId.GetTxId().GetValue();
+            if (Self->IncrementalRestoreStates.contains(operationId)) {
+                auto& state = Self->IncrementalRestoreStates[operationId];
+
+                for (const auto& backupName : op.GetIncrementalBackupTrimmedNames()) {
+                    TPathId dummyPathId;
+                    state.AddIncrementalBackup(dummyPathId, backupName, 0);
+                }
+
+                state.BackupCollectionPathId = TPathId(
+                    op.GetBackupCollectionPathId().GetOwnerId(),
+                    op.GetBackupCollectionPathId().GetLocalId());
+                state.OriginalOperationId = operationId;
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit reconstructed IncrementalBackups for operation: " << operationId
+                    << ", backups count: " << state.IncrementalBackups.size()
+                    << ", at schemeshard: " << Self->TabletID());
+            }
+        }
+
+        // Restore InFlightItems for sub-ops still tracked by Self->Operations.
+        // Orphans are dropped; the orchestrator's re-entry re-enqueues them.
+        {
+            auto irow = db.Table<Schema::IncrementalRestoreItem>().Range().Select();
+            if (!irow.IsReady()) {
+                return false;
+            }
+            while (!irow.EndOfSet()) {
+                ui64 originalOpId = irow.GetValue<Schema::IncrementalRestoreItem::OriginalOpId>();
+                ui32 itemSeq = irow.GetValue<Schema::IncrementalRestoreItem::ItemSeq>();
+                ui32 kind = irow.GetValue<Schema::IncrementalRestoreItem::ItemKind>();
+                ui64 tableLocal = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::TablePathId>(0);
+                ui64 waitTxId = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::WaitTxId>(0);
+                ui64 srcTableLocal = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::SrcTablePathId>(0);
+
+                auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
+                if (stateIt == Self->IncrementalRestoreStates.end()) {
+                    // Orphan row (state already forgotten / cleaned up). Drop.
+                    db.Table<Schema::IncrementalRestoreItem>()
+                        .Key(originalOpId, itemSeq).Delete();
+                    if (!irow.Next()) return false;
+                    continue;
+                }
+                auto& state = stateIt->second;
+
+                // Bookkeeping: track NextItemSeq so future enqueues don't collide.
+                state.NextItemSeq = Max(state.NextItemSeq, itemSeq + 1);
+
+                if (waitTxId != 0 && Self->Operations.contains(TTxId(waitTxId))) {
+                    // Sub-op survived reboot. Rebuild reverse mappings.
+                    TIncrementalRestoreState::TItem item;
+                    item.ItemSeq = itemSeq;
+                    item.Kind = static_cast<TIncrementalRestoreState::TItem::EKind>(kind);
+                    item.TablePathId = TPathId(Self->TabletID(), tableLocal);
+                    item.SrcTablePathId = srcTableLocal
+                        ? TPathId(Self->TabletID(), srcTableLocal)
+                        : TPathId{};
+                    item.WaitTxId = waitTxId;
+                    state.InFlightItems[itemSeq] = std::move(item);
+                    state.WaitTxIdToItemSeq[waitTxId] = itemSeq;
+                    Self->TxIdToIncrementalRestore[TTxId(waitTxId)] = originalOpId;
+                } else {
+                    // Sub-op didn't survive reboot. Drop; re-entry will re-enqueue.
+                    db.Table<Schema::IncrementalRestoreItem>()
+                        .Key(originalOpId, itemSeq).Delete();
+                }
+
+                if (!irow.Next()) return false;
+            }
+        }
+
+        for (auto& [operationId, state] : Self->IncrementalRestoreStates) {
+            // Finalizing without a surviving finalize sub-op: reset to Running so the
+            // orchestrator re-triggers it (SyncIndexSchemaVersions/ReleasePathState are idempotent).
+            if (state.State == TIncrementalRestoreState::EState::Finalizing) {
+                bool finalizeStillInFlight = false;
+                for (const auto& [_, item] : state.InFlightItems) {
+                    if (item.Kind == TIncrementalRestoreState::TItem::EKind::Finalize
+                        && item.WaitTxId != 0
+                        && Self->Operations.contains(TTxId(item.WaitTxId))) {
+                        finalizeStillInFlight = true;
                         break;
                     }
                 }
-
-                if (!controlOperationExists) {
-                    TPathId backupCollectionPathId;
-                    backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
-                    backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
-
+                if (!finalizeStillInFlight) {
                     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxInit detected orphaned incremental restore operation during recovery"
-                            << ", operationId: " << opId
-                            << ", txId: " << txId
-                            << ", backupCollectionPathId: " << backupCollectionPathId
-                            << ", scheduling TTxProgress to continue operation"
-                            << ", at schemeshard: " << Self->TabletID());
-
-                    OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
+                        "TTxInit resetting Finalizing -> Running because finalize sub-op missing"
+                        << ", operationId: " << operationId
+                        << ", at schemeshard: " << Self->TabletID());
+                    state.State = TIncrementalRestoreState::EState::Running;
+                    db.Table<Schema::IncrementalRestoreState>().Key(operationId).Update(
+                        NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(
+                            static_cast<ui32>(state.State)));
                 }
+            }
+
+            if (state.State == TIncrementalRestoreState::EState::Running ||
+                state.State == TIncrementalRestoreState::EState::Finalizing) {
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit resuming incremental restore operation: " << operationId
+                    << ", state: " << static_cast<ui32>(state.State)
+                    << ", currentIdx: " << state.CurrentIncrementalIdx
+                    << ", at schemeshard: " << Self->TabletID());
+
+                Self->ReDispatchPathAIncrementalRestoreOnInit(operationId, state, ctx);
+
+                OnComplete.Send(Self->SelfId(),
+                    new TEvPrivate::TEvProgressIncrementalRestore(operationId));
             }
         }
 
@@ -5811,6 +6176,119 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         OnComplete.ApplyOnExecute(Self, txc, ctx);
         DbChanges.Apply(Self, txc, ctx);
         return true;
+    }
+
+    void RestoreIncrementalRestoreOpPathStates(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
+        TPathId backupCollectionPathId = TPathId(
+            op.GetBackupCollectionPathId().GetOwnerId(),
+            op.GetBackupCollectionPathId().GetLocalId()
+        );
+
+        for (const auto& tablePath : op.GetTablePathList()) {
+            TPath resolvedPath = TPath::Resolve(tablePath, Self);
+            if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
+                auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
+                Y_VERIFY_S(!targetPathElement->Dropped(),
+                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                    << ", pathId: " << resolvedPath.Base()->PathId
+                    << ", StepDropped: " << targetPathElement->StepDropped);
+                targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
+            }
+        }
+
+        if (Self->PathsById.contains(backupCollectionPathId)) {
+            auto sourcePath = Self->PathsById.at(backupCollectionPathId);
+            Y_VERIFY_S(!sourcePath->Dropped(),
+                "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                << ", pathId: " << backupCollectionPathId
+                << ", StepDropped: " << sourcePath->StepDropped);
+            sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+
+            TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
+            if (backupCollectionPath.IsResolved()) {
+                TString backupCollectionPathStr = backupCollectionPath.PathString();
+
+                if (op.HasFullBackupTrimmedName()) {
+                    TString fullBackupName = NBackup::FullBackupDirName(op.GetFullBackupTrimmedName());
+                    TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
+
+                    for (const auto& tablePath : op.GetTablePathList()) {
+                        TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                        if (originalTablePath.IsResolved()) {
+                            TString tableName = originalTablePath.LeafName();
+                            TString fullBackupTablePath = fullBackupPath + "/" + tableName;
+
+                            TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
+                            if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
+                                auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
+                                Y_VERIFY_S(!backupTablePathElement->Dropped(),
+                                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                                    << ", pathId: " << fullBackupTableResolvedPath.Base()->PathId
+                                    << ", StepDropped: " << backupTablePathElement->StepDropped);
+                                backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+                            }
+                        }
+                    }
+                }
+
+                for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
+                    TString incrBackupName = NBackup::IncrementalBackupDirName(trimmedIncrName);
+                    TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
+
+                    for (const auto& tablePath : op.GetTablePathList()) {
+                        TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                        if (originalTablePath.IsResolved()) {
+                            TString tableName = originalTablePath.LeafName();
+                            TString incrBackupTablePath = incrBackupPath + "/" + tableName;
+
+                            TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
+                            if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
+                                auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
+                                Y_VERIFY_S(!backupTablePathElement->Dropped(),
+                                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                                    << ", pathId: " << incrBackupTableResolvedPath.Base()->PathId
+                                    << ", StepDropped: " << backupTablePathElement->StepDropped);
+                                backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void ScheduleOrphanedIncrementalRestoreOp(const TOperationId& opId, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op, TSideEffects& onComplete, const TActorContext& ctx) {
+        TTxId txId = opId.GetTxId();
+
+        bool controlOperationExists = false;
+        for (const auto& [txOpId, txState] : Self->TxInFlight) {
+            if (txOpId.GetTxId() == txId) {
+                controlOperationExists = true;
+                break;
+            }
+        }
+
+        if (!controlOperationExists) {
+            TPathId backupCollectionPathId;
+            backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
+            backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TTxInit detected orphaned incremental restore operation during recovery"
+                    << ", operationId: " << opId
+                    << ", txId: " << txId
+                    << ", backupCollectionPathId: " << backupCollectionPathId
+                    << ", scheduling TTxProgress to continue operation"
+                    << ", at schemeshard: " << Self->TabletID());
+
+            TVector<TString> backupNames;
+            for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
+                backupNames.push_back(name);
+            }
+            RestoreIncrementalRestoreOpPathStates(op);
+            onComplete.Send(Self->SelfId(),
+                new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, opId, backupNames));
+        }
     }
 
     TTxType GetTxType() const override { return TXTYPE_INIT; }

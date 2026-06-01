@@ -14,6 +14,7 @@
 #include <yql/essentials/sql/v1/proto_parser/statement.h>
 #include <yql/essentials/sql/v1/proto_parser/token.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/yql_paths.h>
 #include <yql/essentials/public/udf/udf_log.h>
 
@@ -1462,8 +1463,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                        stmtPos, "CREATE VIEW", MakeLangVersion(2025, 5))) {
+                if (!Ctx_.EnsureAvailable(stmtPos, NYql::NFeature::YtCreateView)) {
                     return false;
                 }
             }
@@ -1528,8 +1528,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                        Ctx_.Pos(), "DROP VIEW", MakeLangVersion(2025, 5))) {
+                if (!Ctx_.EnsureAvailable(Ctx_.Pos(), NYql::NFeature::YtDropView)) {
                     return false;
                 }
             }
@@ -3882,8 +3881,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
-        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                ctx.Pos(), "YqlSelect", YqlSelectLangVersion())) {
+        if (!ctx.EnsureAvailable(ctx.Pos(), NYql::NFeature::YqlSelect)) {
             return Nothing();
         }
 
@@ -3910,11 +3908,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
-        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                ctx.Pos(),
-                "FailOnNonPersistableFlattenAndAggrExprs",
-                MakeLangVersion(2025, 03)))
-        {
+        if (!ctx.EnsureAvailable(ctx.Pos(), NYql::NFeature::PersistableFlattenAndAggrExprs)) {
             return Nothing();
         }
 
@@ -4587,7 +4581,7 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
 }
 namespace {
 
-static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& translation) {
+bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& translation) {
     const TString columnName(Id(columnSchema.GetRule_an_id_schema1(), translation));
     TString columnType;
 

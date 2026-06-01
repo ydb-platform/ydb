@@ -18,7 +18,7 @@ using namespace NKikimr;
 namespace NPython {
 namespace {
 
-static ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& castCtx)
+ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& castCtx)
 {
     PyObject* item;
 
@@ -35,7 +35,7 @@ static ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& 
     return length;
 }
 
-static bool IsIteratorHasItems(PyObject* iter, const TPyCastContext::TPtr& castCtx)
+bool IsIteratorHasItems(PyObject* iter, const TPyCastContext::TPtr& castCtx)
 {
     if (const TPyObjectPtr item = PyIter_Next(iter)) {
         return true;

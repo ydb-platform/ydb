@@ -167,6 +167,7 @@ void DeserializeImpl(TReplicaInfo& replicaInfo, TSerializableReplicaInfoPtr seri
     replicaInfo.Mode = serializable->Mode;
     replicaInfo.State = serializable->State;
     replicaInfo.ReplicationProgress = std::move(serializable->ReplicationProgress);
+    replicaInfo.EnableReplicatedTableTracker = serializable->EnableReplicatedTableTracker;
 }
 
 void DeserializeImpl(TReplicationCard& replicationCard, TSerializableReplicationCardPtr serializable)

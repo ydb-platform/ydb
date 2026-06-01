@@ -6221,7 +6221,7 @@ void PrintTupleDiff(TStringBuilder& res, size_t level, const TIndentPrinter& ind
     }
 }
 
-static void PrintTypeDiff(TStringBuilder& res, size_t level, const TIndentPrinter& indent, const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
+void PrintTypeDiff(TStringBuilder& res, size_t level, const TIndentPrinter& indent, const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
     if (&left == &right) {
         res << "no diff";
         return;

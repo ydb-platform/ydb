@@ -336,6 +336,72 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TPopulatePDisk& cmd, TStatus& /*status*/) {
+        const TPDiskId destinationPDiskId = GetPDiskId(*this, cmd.GetDestinationPDisk());
+
+        const TPDiskInfo *destinationPDisk = PDisks.Find(destinationPDiskId);
+
+        if (!destinationPDisk) {
+            throw TExPDiskNotFound(destinationPDiskId.NodeId, destinationPDiskId.PDiskId);
+        }
+
+        const bool hasExplicitVDisks = cmd.VDiskIdSize() != 0;
+        if (!hasExplicitVDisks) {
+            throw TExError() << "Specify non-empty VDiskId list";
+        }
+
+        TVector<const TVSlotInfo*> selected;
+        THashSet<TVSlotId> selectedIds;
+
+        selected.reserve(cmd.VDiskIdSize());
+        for (const auto& protoVDiskId : cmd.GetVDiskId()) {
+            const TVDiskID vdiskId = VDiskIDFromVDiskID(protoVDiskId);
+
+            const TGroupInfo *group = Groups.Find(vdiskId.GroupID);
+            if (!group) {
+                throw TExGroupNotFound(vdiskId.GroupID.GetRawId());
+            }
+            if (group->VDisksInGroup.empty()) {
+                throw TExReassignNotViable() << "GroupId# " << group->ID << " has no active VDisks";
+            }
+            if (!group->Topology->IsValidId(vdiskId)) {
+                throw TExError() << "VDiskId# " << vdiskId << " out of range";
+            }
+            if (vdiskId.GroupGeneration && vdiskId.GroupGeneration != group->Generation) {
+                throw TExGroupGenerationMismatch(group->ID.GetRawId(), vdiskId.GroupGeneration, group->Generation);
+            }
+
+            const ui32 orderNumber = group->Topology->GetOrderNumber(vdiskId);
+            const TVSlotInfo *slot = group->VDisksInGroup.at(orderNumber);
+            Y_ABORT_UNLESS(slot);
+
+            if (slot->IsBeingDeleted() || slot->Mood == TMood::Donor) {
+                throw TExReassignNotViable() << "VDiskId# " << vdiskId << " is not movable at the moment";
+            }
+            if (!selectedIds.insert(slot->VSlotId).second) {
+                throw TExError() << "Duplicate VDiskId# " << vdiskId;
+            }
+
+            if (slot->VSlotId.ComprisingPDiskId() != destinationPDiskId) {
+                selected.push_back(slot);
+            }
+        }
+
+        for (const TVSlotInfo *slot : selected) {
+            Y_ABORT_UNLESS(slot->Group);
+            const auto [it, inserted] = ExplicitReconfigureMap.emplace(slot->VSlotId, destinationPDiskId);
+            if (!inserted) {
+                throw TExError() << "VSlotId# " << slot->VSlotId << " is already scheduled for reassignment";
+            }
+
+            if (cmd.GetSuppressDonorMode()) {
+                SuppressDonorMode.insert(slot->VSlotId);
+            }
+
+            Fit.PoolsAndGroups.emplace(slot->Group->StoragePoolId, slot->Group->ID);
+        }
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& /*status*/) {
         TPDiskId sourcePDiskId = GetPDiskId(*this, cmd.GetSourcePDisk());
         TPDiskId destinationPDiskId = GetPDiskId(*this, cmd.GetDestinationPDisk());

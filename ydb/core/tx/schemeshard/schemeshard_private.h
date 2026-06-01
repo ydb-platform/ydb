@@ -54,6 +54,7 @@ namespace TEvPrivate {
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
+        EvProgressTablePartitionsFormatSweep,
         EvEnd
     };
 
@@ -293,12 +294,6 @@ namespace TEvPrivate {
             , IncrementalBackupNames(incrementalBackupNames)
         {}
 
-        // Backward compatibility constructor
-        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId)
-            : BackupCollectionPathId(backupCollectionPathId)
-            , OperationId(0, 0)
-            , IncrementalBackupNames()
-        {}
     };
 
     struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {
@@ -387,6 +382,10 @@ namespace TEvPrivate {
         const bool Success = false;
         const TString Error;
     };
+
+    struct TEvProgressTablePartitionsFormatSweep
+        : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
+    {};
 
 }; // TEvPrivate
 

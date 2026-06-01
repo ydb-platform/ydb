@@ -170,7 +170,8 @@ struct TJoinLinkSettings {
         SortedMerge,
         StreamLookup,
         ForceMap,
-        ForceGrace
+        ForceGrace,
+        ForceStar
     };
     EStrategy Strategy = EStrategy::Default;
     TVector<TString> Values;
@@ -313,6 +314,7 @@ TSourcePtr BuildSelectCore(
     TColumnsSets&& distinctSets);
 TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
 TSourcePtr BuildAnyColumnSource(TPosition pos);
+TSourcePtr BuildWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda);
 
 enum class EReduceMode {
     ByPartition,

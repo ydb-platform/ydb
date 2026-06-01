@@ -201,9 +201,14 @@ public:
                 break;
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
-                    : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
+                    EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                    IsSnapshotROConvertedFromOnlineRO = true;
+                } else {
+                    EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
+                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                }
                 Readonly = true;
                 break;
 
@@ -310,6 +315,7 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
     bool HasTableRead = false;
+    bool IsSnapshotROConvertedFromOnlineRO = false;
 
     std::optional<bool> EnableOlapSink;
     std::optional<bool> EnableHtapTx;

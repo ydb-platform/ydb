@@ -55,7 +55,7 @@ struct TSchemaOperation {
         ETypeAlterCdcStream = 14,
         ETypeDropCdcStream = 15,
         ETypeMoveIndex = 16,
-        ETypeCreateIncrementalRestoreSrc = 17,
+        EType_DEPRECATED_17 = 17,
         ETypeCreateIncrementalBackupSrc = 18,
         ETypeRotateCdcStream = 19,
         ETypeTruncate = 20,
@@ -117,7 +117,6 @@ struct TSchemaOperation {
     bool IsAlterCdcStream() const { return Type == ETypeAlterCdcStream; }
     bool IsDropCdcStream() const { return Type == ETypeDropCdcStream; }
     bool IsRotateCdcStream() const { return Type == ETypeRotateCdcStream; }
-    bool IsCreateIncrementalRestoreSrc() const { return Type == ETypeCreateIncrementalRestoreSrc; }
     bool IsCreateIncrementalBackupSrc() const { return Type == ETypeCreateIncrementalBackupSrc; }
     bool IsTruncate() const { return Type == ETypeTruncate; }
 

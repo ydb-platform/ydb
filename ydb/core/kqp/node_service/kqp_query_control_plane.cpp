@@ -176,12 +176,15 @@ TString TasksIdsStr(const TTasksCollection& tasks) {
 
 class TKqpQueryManager : public NActors::TActor<TKqpQueryManager> {
 public:
-    TKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state, std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory)
+    TKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
+        std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
+        bool enableChannelMemoryTracking)
         : TActor(&TThis::StateFunc)
         , Counters_(counters)
         , State_(state)
         , ResourceManager_(resourceManager)
         , CaFactory_(caFactory)
+        , EnableChannelMemoryTracking(enableChannelMemoryTracking)
     {
     }
 
@@ -343,7 +346,7 @@ public:
             co_return;
         }
 
-        if (!ChannelQuotaManager) {
+        if (EnableChannelMemoryTracking && !ChannelQuotaManager) {
             ChannelQuotaManager = CreateChannelQuotaManager(ResourceManager_, TxInfo, channelMemory);
         }
 
@@ -499,11 +502,13 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
     NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    const bool EnableChannelMemoryTracking;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
-    std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory) {
-    return new TKqpQueryManager(counters, state, resourceManager, caFactory);
+    std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
+    bool enableChannelMemoryTracking) {
+    return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableChannelMemoryTracking);
 }
 
 } // namespace NKikimr::NKqp

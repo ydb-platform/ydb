@@ -37,4 +37,7 @@ message TPBufferConfig
 
     // default 1024
     optional uint32 MaxPendingEventsQueueSize = 8;
+
+    // default true
+    optional bool EnableFastErases = 9;
 }

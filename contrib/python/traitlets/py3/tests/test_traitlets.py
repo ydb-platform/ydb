@@ -7,6 +7,7 @@
 # also under the terms of the Modified BSD License.
 from __future__ import annotations
 
+import decimal
 import pickle
 import re
 import typing as t
@@ -1391,7 +1392,7 @@ class TestLong(TraitTestBase):
     obj = LongTrait()
 
     _default_value = 99
-    _good_values = [10, -10]
+    _good_values = [10, -10, 10.0, decimal.Decimal("10.0")]
     _bad_values = [
         "ten",
         [10],
@@ -1401,6 +1402,7 @@ class TestLong(TraitTestBase):
         1j,
         10.1,
         -10.1,
+        decimal.Decimal("10.1"),
         "10",
         "-10",
         "10L",

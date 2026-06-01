@@ -3,10 +3,11 @@
 #include "public.h"
 
 #include "restore_request.h"
-#include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -123,6 +124,8 @@ public:
 
     virtual TExecutorPtr GetExecutor() = 0;
 
+    virtual IOraclePtr GetOracle() = 0;
+
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
 
     virtual std::shared_ptr<NWilson::TSpan> CreateChildSpan(
@@ -164,6 +167,7 @@ public:
     virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
+        THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,

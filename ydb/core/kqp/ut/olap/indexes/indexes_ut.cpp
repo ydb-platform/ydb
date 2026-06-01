@@ -144,19 +144,16 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
-        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
         ONE_ACTUALIZATION
         ------
-        READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
-        EXPECTED: [[["{\"min\":\"x\",\"max\":\"x\"}"]]]
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
     )";
     Y_UNIT_TEST(ChunkDetailsMinMax) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
@@ -2107,23 +2104,21 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        const auto executeProbeQuery = [&]() -> TDuration {
-            const TInstant start = TInstant::Now();
+        const auto executeProbeQuery = [&]() {
             auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
                 --!syntax_v1
                 SELECT COUNT(*)
                 FROM `/Root/olapStore/olapTable`
-                WHERE resource_id = 'nonexistent_value'
+                WHERE resource_id = '0'
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             CompareYson(StreamResultToYson(it), "[[0u;]]");
-            return TInstant::Now() - start;
         };
 
         const ui64 skipBeforeNoIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveBeforeNoIndex = csController->GetIndexesApprovedOnSelect().Val();
-        const TDuration noIndexDuration = executeProbeQuery();
+        executeProbeQuery();
         const ui64 skipAfterNoIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveAfterNoIndex = csController->GetIndexesApprovedOnSelect().Val();
         UNIT_ASSERT_VALUES_EQUAL_C(skipAfterNoIndex, skipBeforeNoIndex, "No index configured yet, skipping counter must not change");
@@ -2131,7 +2126,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_bf_probe, TYPE=BLOOM_FILTER,
-                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
+                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.001}`);
         )");
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -2139,20 +2134,18 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         )");
 
         csController->WaitActualization(TDuration::Seconds(10));
+        csController->WaitCompactions(TDuration::Seconds(5));
 
         const ui64 skipBeforeWithIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveBeforeWithIndex = csController->GetIndexesApprovedOnSelect().Val();
-        const TDuration withIndexDuration = executeProbeQuery();
-        const ui64 skipAfterWithIndex = csController->GetIndexesSkippingOnSelect().Val();
-        const ui64 approveAfterWithIndex = csController->GetIndexesApprovedOnSelect().Val();
+        const ui64 skippedNoDataBeforeWithIndex = csController->GetIndexesSkippedNoData().Val();
+        executeProbeQuery();
+        const ui64 skippedPortions = csController->GetIndexesSkippingOnSelect().Val() - skipBeforeWithIndex;
+        const ui64 approvedPortions = csController->GetIndexesApprovedOnSelect().Val() - approveBeforeWithIndex;
 
-        UNIT_ASSERT_C(skipAfterWithIndex > skipBeforeWithIndex, TStringBuilder() << "Expected bloom filter to skip portions in appropriate scenario. before=" << skipBeforeWithIndex << ", after=" << skipAfterWithIndex);
-        UNIT_ASSERT_C(skipAfterWithIndex + approveAfterWithIndex > skipBeforeWithIndex + approveBeforeWithIndex, "Expected bloom filter index to be checked after creation");
-        UNIT_ASSERT_C(
-            withIndexDuration < noIndexDuration,
-            TStringBuilder()
-                << "Expected probe query to become faster with bloom index. no-index=" << noIndexDuration
-                << ", with-index=" << withIndexDuration);
+        UNIT_ASSERT_VALUES_EQUAL_C(csController->GetIndexesSkippedNoData().Val(), skippedNoDataBeforeWithIndex, "Every portion must have bloom data; otherwise select falls back to reading data");
+        UNIT_ASSERT_VALUES_EQUAL_C(approvedPortions, 0, "Absent resource_id must not produce bloom false positives on any portion");
+        UNIT_ASSERT_C(skippedPortions >= 3, TStringBuilder() << "Bloom filter must skip multiple portions for resource_id = '0', skipped=" << skippedPortions);
     }
 
     Y_UNIT_TEST(TestIndicesWorkOnSupportedDataTypes) {

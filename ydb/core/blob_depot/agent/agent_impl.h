@@ -3,7 +3,10 @@
 #include "defs.h"
 #include "resolved_value.h"
 
+#include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -223,9 +226,11 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3GetBytesOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsError;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsSlowDown;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutBytesOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
 
         enum class EMode {
             None,
@@ -245,6 +250,7 @@ namespace NKikimr::NBlobDepot {
                 EvProcessPendingEvent,
                 EvPendingEventQueueWatchdog,
                 EvPushMetrics,
+                EvS3GetThrottleWakeup,
             };
         };
 
@@ -294,6 +300,8 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
 
                 cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
+
+                cFunc(TEvPrivate::EvS3GetThrottleWakeup, HandleS3GetThrottleWakeup);
             )
 
             DeletePendingQueries.Clear();
@@ -306,10 +314,17 @@ namespace NKikimr::NBlobDepot {
                 GetServiceCounters(AppData()->Counters, "blob_depot_agent")->RemoveSubgroup("group", ::ToString(VirtualGroupId));
             }
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
-            if (S3WrapperId) {
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, S3WrapperId, SelfId(), nullptr, 0));
-            }
+            ReleaseS3Wrapper();
             TActor::PassAway();
+        }
+
+        void ReleaseS3Wrapper() {
+            if (!S3WrapperId) {
+                return;
+            }
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                new NStorage::TEvNodeWardenReleaseBlobDepotS3Router(TabletId));
+            S3WrapperId = {};
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
@@ -376,6 +391,9 @@ namespace NKikimr::NBlobDepot {
         float ApproximateFreeSpaceShare = 0.0f;
 
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
+        // S3WrapperId is always the per-node router service id obtained from NodeWarden
+        // (TEvNodeWardenAcquireBlobDepotS3Router). The agent is responsible for releasing
+        // it on shutdown / re-init via TEvNodeWardenReleaseBlobDepotS3Router.
         TActorId S3WrapperId;
         TString S3BasePath;
 
@@ -445,7 +463,7 @@ namespace NKikimr::NBlobDepot {
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
             virtual void OnIdAllocated(bool /*success*/) {}
             virtual void OnDestroy(bool /*success*/) {}
-            virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/) { Y_ABORT(); }
+            virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
 
             NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
@@ -601,6 +619,42 @@ namespace NKikimr::NBlobDepot {
                 return EscapeC(key);
             }
         }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // S3 read throttling
+        //
+        // All agent-issued S3 GETs flow through this gate. On SlowDown/TooManyRequests we drop the concurrency cap
+        // to 1, arm an exponential backoff, and queue further reads until the cooldown elapses; successes gradually
+        // restore the cap. Throttling is per-agent because GETs are issued from the agent without any tablet
+        // round-trip, so there is no central place to gate them.
+
+        static constexpr ui32 MaxS3GetsInFlight = 32;
+        static constexpr ui32 SuccessesPerGetConcurrencyStepUp = 3;
+        static constexpr ui32 MaxS3GetSlowDownRetries = 100;
+
+        struct TPendingS3Read {
+            TString Key;
+            ui32 Offset;
+            ui32 Len;
+            TQuery::TFinishCallback Finish;
+            ui64 ReadId;
+            ui32 SlowDownRetries = 0;
+        };
+
+        TBackoff S3GetBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
+        TMonotonic S3GetThrottleUntil;
+        bool S3GetWakeupScheduled = false;
+        ui32 CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
+        ui32 ConsecutiveSuccessfulGetBatches = 0;
+        ui32 S3GetsInFlight = 0;
+        std::deque<TPendingS3Read> PendingS3Reads;
+
+        void IssueOrEnqueueS3Read(TPendingS3Read&& read);
+        void DispatchS3Read(TPendingS3Read&& read);
+        void NotifyS3GetSlowDown();
+        void OnS3GetCompleted(bool success, ui64 bytes);
+        void RunPendingS3ReadsIfPossible();
+        void HandleS3GetThrottleWakeup();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Metrics

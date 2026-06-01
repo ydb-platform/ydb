@@ -23,7 +23,7 @@
 (let $22 (SecureParam '"cluster:default_pq"))
 (let $23 (DataType 'Timestamp))
 (let $24 (StructType '('_yql_sys_tsp_write_time $23) $10 $13 $14))
-(let $25 (DqPqTopicSource $6 $16 $17 $21 $22 '"" $24 (lambda '($30) (- (Member $30 '_yql_sys_tsp_write_time) (Interval '"8000000"))) '"\x1A0\b\x03\x12\x19\x12\x17_yql_sys_tsp_write_time\x1A\x11\n\x0F\n\x02\b3\x12\t!\x00\x12z\x00\x00\x00\x00\x00"))
+(let $25 (DqPqTopicSource $6 $16 $17 $21 $22 '"" $24 (Void) '"" '"" (lambda '($30) (- (Member $30 '_yql_sys_tsp_write_time) (Interval '"8000000"))) '"\x1A0\b\x03\x12\x19\x12\x17_yql_sys_tsp_write_time\x1A\x11\n\x0F\n\x02\b3\x12\t!\x00\x12z\x00\x00\x00\x00\x00"))
 (let $26 (DqStage '((DqSource $7 $25)) (lambda '($31) (block '(
   (let $32 '('('"data.datetime.formatname" '"POSIX") '('"data.timestamp.formatname" '"POSIX") '('"watermarkgranularity" '"PT11S")))
   (let $33 '('('"format" '"json_each_row") '('"metadataColumns" '('_yql_sys_tsp_write_time)) '('"formatSettings" $32) '('"settings" '($19))))

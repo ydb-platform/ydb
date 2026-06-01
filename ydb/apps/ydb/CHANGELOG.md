@@ -1,4 +1,9 @@
-* Added CPU Time satistics to becnhmarks run commands.
+* Added `--partition-max-inflight-bytes` option to `ydb topic workload`
+* Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
+* Added CPU Time statistics to benchmarks run commands.
+* `ydb sql`: add `--resource-pool` option
+* `ydb` interactive mode add `SET resource_pool` command
+* Added `ydb workload fulltext` command to make load testing and measure quality of fulltext indexes.
 
 ## 2.31.0 ##
 

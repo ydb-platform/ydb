@@ -1,6 +1,7 @@
 #include "fast_path_service.h"
 
 #include "direct_block_group.h"
+#include "partition_direct_events_private.h"
 #include "range_translate.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -89,6 +90,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
+    const TVChunkConfigByIndex& vChunkConfigs,
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
@@ -104,11 +106,9 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             partitionDirectService,
             i,
             directBlockGroups,
+            vChunkConfigs,
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
-            storageConfig.GetWriteHedgingDelay(),
-            storageConfig.GetWriteRequestTimeout(),
-            storageConfig.GetTraceSamplePeriod(),
             regionCounters);
     }
 
@@ -121,16 +121,19 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
 
 TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
+    NActors::TActorId partitionActorId,
     ui64 tabletId,
     const TString& diskId,
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
+    TVChunkConfigByIndex vChunkConfigs,
     TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
+    , PartitionActorId(partitionActorId)
     , StorageConfig(std::move(storageConfig))
     , DiskId(diskId)
     , Scheduler(std::move(scheduler))
@@ -141,13 +144,12 @@ TFastPathService::TFastPathService(
           blockCount,
           blockSize,
           DirectBlockGroups,
+          vChunkConfigs,
           *StorageConfig,
           MakeCountersChain(
               counters,
               StorageConfig->GetDDiskPoolName(),
               tabletId)))
-    , WriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
-    , PBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
     , TraceSamplePeriod(StorageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
@@ -180,6 +182,9 @@ void TFastPathService::Run()
 
     for (const auto& dbg: DirectBlockGroups) {
         dbg->Run(this);
+    }
+    for (const auto& region: Regions) {
+        region->Run();
     }
     ScheduleDirtyMapDebugPrint();
 }
@@ -247,8 +252,6 @@ TFastPathService::WriteBlocksLocal(
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        WriteMode,
-        PBufferReplyTimeout,
         GenerateSequenceNumber(),
         span->GetTraceId());
 
@@ -318,6 +321,13 @@ void TFastPathService::ScheduleAfterDelay(
         executor.get(),
         Timer->Now() + delay,
         std::move(callback));
+}
+
+void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
+{
+    ActorSystem->Send(
+        PartitionActorId,
+        new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(cfg));
 }
 
 ui64 TFastPathService::GenerateSequenceNumber()

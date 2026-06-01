@@ -449,7 +449,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     TTransformationPipeline pipeline(&types, typeAnnCallableFactory);
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
-    pipeline.AddExpressionEvaluation(functionRegistry);
+    pipeline.AddExpressionEvaluation(functionRegistry, calcTransfomer);
     pipeline.AddIOAnnotation();
     pipeline.AddTypeAnnotationTransformer();
     auto topLevelTypeCheck = [&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {

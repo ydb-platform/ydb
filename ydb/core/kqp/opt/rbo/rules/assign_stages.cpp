@@ -1,7 +1,10 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+namespace NKikimr::NKqp {
 
 namespace {
+
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
@@ -29,7 +32,7 @@ void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
 // TODO: We can also push to row storage stage, but it requires an implementation on physical plan generation.
 void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPlanProps& props) {
     const auto readStageId = *read->Props.StageId;
-    if (!op->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
+    if (!read->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
         const auto newStageId = props.StageGraph.AddStage();
         op->Props.StageId = newStageId;
         props.StageGraph.Connect(readStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(readStageId)));
@@ -37,16 +40,14 @@ void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPl
         op->Props.StageId = readStageId;
     }
 }
-} // namespace
 
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 /**
  * Assign stages and build stage graph in the process
  */
 bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    auto nodeName = input->ToString(ctx.ExprCtx);
+    const auto nodeName = input->ToString(ctx.ExprCtx);
     YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
 
     if (input->Props.StageId.has_value()) {
@@ -65,7 +66,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         auto opRead = CastOperator<TOpRead>(input);
         TString readName;
         if (input->Kind == EOperator::Source) {
-            auto opRead = CastOperator<TOpRead>(input);
+            const auto opRead = CastOperator<TOpRead>(input);
             const auto newStageId = props.StageGraph.AddSourceStage(opRead->StorageType);
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
@@ -159,14 +160,21 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         const auto prevStageId = *(sort->GetInput()->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(prevStageId)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages sort";
     } else if (input->Kind == EOperator::Limit) {
-        auto limit = CastOperator<TOpLimit>(input);
-        const auto newStageId = props.StageGraph.AddStage();
-        input->Props.StageId = newStageId;
-        const auto prevStageId = *(limit->GetInput()->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+        const auto limit = CastOperator<TOpLimit>(input);
+        const auto limitInput = limit->GetInput();
+        const auto prevStageId = *limitInput->Props.StageId;
+        if (limitInput->GetKind() == EOperator::Sort) {
+            // Put limit to sort stage.
+            limit->Props.StageId = prevStageId;
+        } else {
+            const auto newStageId = props.StageGraph.AddStage();
+            const auto outputIndex = props.StageGraph.GetOutputIndex(prevStageId);
+            input->Props.StageId = newStageId;
+            props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+        }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages limit";
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
@@ -187,19 +195,16 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
     } else if (input->Kind == EOperator::Aggregate) {
         auto aggregate = CastOperator<TOpAggregate>(input);
         const auto inputStageId = *(aggregate->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
         if (!aggregate->KeyColumns.empty()) {
-            const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
-            auto connection = MakeIntrusive<TShuffleConnection>(
-                aggregate->KeyColumns,
-                outputIndex
-            );
+            auto connection = MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex);
 
             props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));
         } else {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
@@ -209,5 +214,5 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
     return true;
 }
-}
-}
+
+} // namespace NKikimr::NKqp

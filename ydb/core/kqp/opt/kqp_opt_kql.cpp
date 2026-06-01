@@ -1,11 +1,15 @@
 #include "kqp_opt_impl.h"
 
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-
-#include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
@@ -1193,7 +1197,7 @@ TExprNode::TPtr HandleExternalWrite(const TCallable& effect, TExprContext& ctx, 
     return {};
 }
 
-} // namespace
+} // anonymous namespace
 
 const TKikimrTableDescription& GetTableData(const TKikimrTablesData& tablesData,
     TStringBuf cluster, TStringBuf table)
@@ -1353,7 +1357,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
                             const auto wrSettings = IDqIntegration::TWrapReadSettings {
-                                .WatermarksMode = kqpCtx->Config->GetEnableWatermarks() ? "default" : "",
+                                .WatermarksMode = kqpCtx->Config->GetEnableWatermarksAdvanced() ? "advanced" : (kqpCtx->Config->GetEnableWatermarks() ? "default" : ""),
                                 .EnableStreamingPartitionBalancing = kqpCtx->Config->GetEnableStreamingPartitionBalancing(),
                             };
                             auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, wrSettings);

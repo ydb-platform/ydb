@@ -202,16 +202,20 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
         using namespace NChangeExchange;
 
+        const auto tabletAppPath = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? ETabletAppPath::Secure
+            : ETabletAppPath::Plain;
+
         TStringStream html;
 
         HTML(html) {
-            Header(html, "CdcStream partition change sender", DataShard.TabletId);
+            Header(html, "CdcStream partition change sender", DataShard.TabletId, tabletAppPath);
 
-            SimplePanel(html, "Info", [this](IOutputStream& html) {
+            SimplePanel(html, "Info", [this, tabletAppPath](IOutputStream& html) {
                 HTML(html) {
                     DL_CLASS("dl-horizontal") {
                         TermDesc(html, "PartitionId", PartitionId);
-                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
+                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId, tabletAppPath));
                         TermDesc(html, "SourceId", SourceId);
                         TermDesc(html, "Writer", Writer);
                         TermDesc(html, "MaxSeqNo", MaxSeqNo);
@@ -585,7 +589,10 @@ class TCdcChangeSenderMain
         }
 
         const bool topicAutoPartitioning = IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());
-        Y_ENSURE(topicAutoPartitioning || entry.PQGroupInfo->Schema);
+        if (!topicAutoPartitioning && !entry.PQGroupInfo->Schema) {
+            return LogWarnAndRetry("Empty schema and disabled auto-partitioning");
+        }
+
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
         Y_ENSURE(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TPartitioning>(entry.PQGroupInfo->Partitioning);

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 

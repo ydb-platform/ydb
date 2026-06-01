@@ -272,6 +272,10 @@ namespace NKikimr::NStorage {
         TBindQueue OtherPilesBindQueue;
         bool Scheduled = false;
 
+        // unbound-state diagnostic
+        ui32 BindFailuresStreak = 0;
+        TInstant LastUnboundWarnAt = TInstant::Zero();
+
         // incoming bindings
         struct TIndirectBoundNode {
             std::list<TStorageConfigMeta> Configs; // last one is the latest one
@@ -427,6 +431,7 @@ namespace NKikimr::NStorage {
         void UnsubscribeInterconnect(ui32 nodeId);
         TActorId SubscribeToPeerNode(ui32 nodeId, TActorId sessionId);
         void AbortBinding(const char *reason, bool sendUnbindMessage = true, bool sendUpdate = true);
+        void LogUnboundBindingWarning();
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
         void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
@@ -463,7 +468,7 @@ namespace NKikimr::NStorage {
             bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TStringBuf> selfAssemblyUUID, bool dryRun = false);
+            std::optional<TString> selfAssemblyUUID, bool dryRun = false);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 

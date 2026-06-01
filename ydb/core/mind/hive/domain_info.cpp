@@ -160,5 +160,23 @@ void TDomainInfo::ClosePipeToHive(const TActorId& actorId) {
     NTabletPipe::CloseAndForgetClient(TActorIdentity(actorId), HivePipeClient);
 }
 
+bool TDomainInfo::AddShrinkingPool(const TString& pool) {
+    auto it = std::find(ShrinkingStoragePools.begin(), ShrinkingStoragePools.end(), pool);
+    if (it == ShrinkingStoragePools.end()) {
+        ShrinkingStoragePools.push_back(pool);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+TString TDomainInfo::ShrinkingPoolsString() const {
+    return JoinStrings(ShrinkingStoragePools, ";");
+}
+
+void TDomainInfo::ParseShrinkingPools(const TString& str) {
+    ShrinkingStoragePools = SplitString(str, ";");
+}
+
 } // NHive
 } // NKikimr

@@ -896,8 +896,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     func addVectorIndex(
       ctx context.Context,
       db *ydb.Driver,
-      tableName, indexName, strategy string,
-      dimension, levels, clusters int,
+      tableName, indexName, strategy string
     ) error {
       tempIndexName := indexName + "__temp"
       query := fmt.Sprintf(`
@@ -906,13 +905,9 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
         GLOBAL USING vector_kmeans_tree
         ON (embedding)
         WITH (
-          %s,
-          vector_type="Float",
-          vector_dimension=%d,
-          levels=%d,
-          clusters=%d
+          %s
         );
-      `, "`"+tableName+"`", tempIndexName, strategy, dimension, levels, clusters)
+      `, "`"+tableName+"`", tempIndexName, strategy)
 
       if err := db.Query().Exec(ctx, query); err != nil {
         return err
@@ -940,10 +935,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           driver: ydb.Driver,
           table_name: str,
           index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
+          strategy: str
       ):
           temp_index_name = f"{index_name}__temp"
           query = f"""
@@ -952,12 +944,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           GLOBAL USING vector_kmeans_tree
           ON (embedding)
           WITH (
-              {strategy},
-              vector_type="Float",
-              vector_dimension={dimension},
-              levels={levels},
-              clusters={clusters},
-              overlap_clusters=3
+              {strategy}
           );
           """
 
@@ -986,10 +973,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           driver: ydb.aio.Driver,
           table_name: str,
           index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
+          strategy: str
       ):
           temp_index_name = f"{index_name}__temp"
           query = f"""
@@ -998,12 +982,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           GLOBAL USING vector_kmeans_tree
           ON (embedding)
           WITH (
-              {strategy},
-              vector_type="Float",
-              vector_dimension={dimension},
-              levels={levels},
-              clusters={clusters},
-              overlap_clusters=3
+              {strategy}
           );
           """
 
@@ -1033,10 +1012,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
         const std::string& database,
         const std::string& tableName,
         const std::string& indexName,
-        const std::string& strategy,
-        std::uint64_t dim,
-        std::uint64_t levels,
-        std::uint64_t clusters)
+        const std::string& strategy)
     {
         std::string query = std::format(R"(
             ALTER TABLE `{0}`
@@ -1044,14 +1020,9 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
             GLOBAL USING vector_kmeans_tree
             ON (embedding)
             WITH (
-                {2},
-                vector_type="Float",
-                vector_dimension={3},
-                levels={4},
-                clusters={5},
-                overlap_clusters=3
+                {2}
             );
-        )", tableName, indexName, strategy, dim, levels, clusters);
+        )", tableName, indexName, strategy);
 
         NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
             return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -1092,10 +1063,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
             SessionRetryContext tableRetry,
             String tableName,
             String indexName,
-            String strategy,
-            long dimension,
-            long levels,
-            long clusters) {
+            String strategy) {
 
         String tempIndexName = indexName + "__temp";
         String query = String.format("""
@@ -1104,13 +1072,9 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
                 GLOBAL USING vector_kmeans_tree
                 ON (embedding)
                 WITH (
-                    %s,
-                    vector_type="Float",
-                    vector_dimension=%d,
-                    levels=%d,
-                    clusters=%d
+                    %s
                 );
-                """, tableName, tempIndexName, strategy, dimension, levels, clusters);
+                """, tableName, tempIndexName, strategy);
 
         queryRetry.supplyResult(session -> QueryReader.readFrom(
                 session.createQuery(query, TxMode.NONE, Params.empty())

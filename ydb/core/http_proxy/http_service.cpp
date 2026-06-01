@@ -1,5 +1,6 @@
-#include "http_req.h"
 #include "http_service.h"
+
+#include "http_req.h"
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -9,12 +10,14 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/error/error.h>
 
-#include <util/string/ascii.h>
 #include <util/stream/file.h>
+#include <util/string/ascii.h>
 
 namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
+
+    TString BuildError(MimeTypes mimeType, HttpCodes httpCode, const TString& errorName, const TString& errorText);
 
     class THttpProxyActor : public NActors::TActorBootstrapped<THttpProxyActor> {
         using TBase = NActors::TActorBootstrapped<THttpProxyActor>;
@@ -36,7 +39,6 @@ namespace NKikimr::NHttpProxy {
         NKikimrConfig::TServerlessProxyConfig Config;
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
-        std::shared_ptr<NYdb::ICoreFacility> CoreFacility;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
     };
 
@@ -44,7 +46,6 @@ namespace NKikimr::NHttpProxy {
         : Config(cfg.Config)
     {
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
-        CoreFacility = cfg.CoreFacility;
         Processors = MakeHolder<THttpRequestProcessors>(Config);
         if (cfg.UseSDK) {
             auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
@@ -101,15 +102,18 @@ namespace NKikimr::NHttpProxy {
                       " database [" << context.DatabasePath << "]" <<
                       " requestId: " << context.RequestId);
 
+        auto contentType = context.ContentType;
         try {
             auto signature = context.GetSignature();
             auto methodName = context.MethodName;
             Processors->Execute(std::move(methodName), std::move(context), std::move(signature), ctx);
         } catch (const NKikimr::NSQS::TSQSException& e) {
-            context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
-            context.ResponseData.ErrorText = e.what();
-            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::ACCESS_DENIED));
-            return;
+            context.DoReply({
+                .HttpCode = HTTP_BAD_REQUEST,
+                .ContentType = contentType,
+                .Message = "AccessDeniedException",
+                .Body = BuildError(contentType, HTTP_BAD_REQUEST, "AccessDeniedException", e.what())
+            });
         }
     }
 
@@ -118,3 +122,4 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
+

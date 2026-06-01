@@ -135,6 +135,41 @@ struct TMasterReadOptions
 };
 
 ///
+/// @brief Expected revision of a Cypress node, used as a precondition.
+///
+/// The command fails if the node at @ref Path has a revision different from @ref Revision.
+struct TPrerequisiteRevisionOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TPrerequisiteRevisionOptions;
+    /// @endcond
+
+    /// @brief Cypress node's path.
+    FLUENT_FIELD_OPTION(TYPath, Path);
+
+    /// @brief Expected revision.
+    FLUENT_FIELD_OPTION(ui64, Revision);
+};
+
+///
+/// @brief Server-side preconditions checked before the request is processed.
+///
+/// If any of the listed prerequisites is not satisfied, the command fails.
+template <typename TDerived>
+struct TPrerequisiteOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Transactions that must be alive.
+    FLUENT_VECTOR_FIELD(TTransactionId, PrerequisiteTransactionId);
+
+    /// @brief Cypress nodes whose current revisions must match the expected ones.
+    FLUENT_VECTOR_FIELD(TPrerequisiteRevisionOptions, PrerequisiteRevision);
+};
+
+///
 /// @brief Options for @ref NYT::ICypressClient::Exists
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#exists
@@ -151,6 +186,7 @@ struct TExistsOptions
 struct TGetOptions
     : public TMasterReadOptions<TGetOptions>
     , public TSuppressableAccessTrackingOptions<TGetOptions>
+    , public TPrerequisiteOptions<TGetOptions>
 {
     /// @brief Attributes that should be fetched with each node.
     FLUENT_FIELD_OPTION(TAttributeFilter, AttributeFilter);
@@ -1257,6 +1293,24 @@ enum class ETableReplicaMode
     Async   /* "async" */,
 };
 
+///
+/// @brief Row lock type used by modify-rows commands.
+///
+/// Controls the lock acquired on each touched row at the dynamic table tablet level.
+/// Mirrors a subset of NYT::NTableClient::ELockType.
+///
+/// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables#conflicts
+enum class ELockType
+{
+    /// Exclusive write lock on the row (default for modify-rows commands).
+    Exclusive   /* "exclusive" */,
+
+    /// Shared-write lock. Multiple concurrent shared-write writers to the same
+    /// aggregate column coexist without conflict; their aggregate values fold
+    /// commutatively. Conflicts with Exclusive.
+    SharedWrite /* "shared_write" */,
+};
+
 /// Base class for options dealing with io to dynamic tables.
 template <typename TDerived>
 struct TTabletTransactionOptions
@@ -1317,6 +1371,13 @@ struct TInsertRowsOptions
     /// https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/replicated-dynamic-tables#write
     /// Default value is 'false'. So insertion into table without sync replicas fails.
     FLUENT_FIELD_OPTION(bool, RequireSyncReplica);
+
+    ///
+    /// @brief Row lock mode acquired on each modified row.
+    ///
+    /// Defaults to NYT::ELockType::Exclusive (server-side default). Set to
+    /// NYT::ELockType::SharedWrite for concurrent aggregate-column writers.
+    FLUENT_FIELD_OPTION(ELockType, LockType);
 };
 
 ///

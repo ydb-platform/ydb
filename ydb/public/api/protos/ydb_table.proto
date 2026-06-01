@@ -102,6 +102,8 @@ message KMeansTreeSettings {
     optional uint32 overlap_clusters = 4;
 
     optional double overlap_ratio = 5;
+
+    optional bool adaptive_clusters = 6;
 }
 
 message GlobalIndex {

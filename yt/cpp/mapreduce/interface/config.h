@@ -294,6 +294,12 @@ struct TConfig
     /// Allow to create trace_id on client side and propogate with request
     bool EnableClientTracing = true;
 
+    /// Use a separate connection for lightweight control requests.
+    /// If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
+    /// This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
+    /// However, using this option increases the number of open TCP connections.
+    bool EnableControlMultiplexingBand = false;
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);

@@ -1,72 +1,20 @@
-/* Originally written by Bodo Moeller for the OpenSSL project.
- * ====================================================================
- * Copyright (c) 1998-2005 The OpenSSL Project.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    openssl-core@openssl.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com).
- *
- */
-/* ====================================================================
- * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
- *
- * Portions of the attached software ("Contribution") are developed by
- * SUN MICROSYSTEMS, INC., and are contributed to the OpenSSL project.
- *
- * The Contribution is licensed pursuant to the OpenSSL open source
- * license provided above.
- *
- * The elliptic curve binary polynomial software is originally written by
- * Sheueling Chang Shantz and Douglas Stebila of Sun Microsystems
- * Laboratories. */
+// Copyright 2001-2016 The OpenSSL Project Authors. All Rights Reserved.
+// Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#ifndef OPENSSL_HEADER_EC_INTERNAL_H
-#define OPENSSL_HEADER_EC_INTERNAL_H
+#ifndef OPENSSL_HEADER_CRYPTO_FIPSMODULE_EC_INTERNAL_H
+#define OPENSSL_HEADER_CRYPTO_FIPSMODULE_EC_INTERNAL_H
 
 #include <contrib/restricted/google/boringssl/include/openssl/base.h>
 
@@ -76,12 +24,13 @@
 #include <contrib/restricted/google/boringssl/include/openssl/ec.h>
 #include <contrib/restricted/google/boringssl/include/openssl/ex_data.h>
 
+#include "../../mem_internal.h"
 #include "../bn/internal.h"
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
 
+DECLARE_OPAQUE_STRUCT(ec_key_st, ECKey)
+
+BSSL_NAMESPACE_BEGIN
 
 // EC internals.
 
@@ -129,6 +78,11 @@ OPENSSL_EXPORT int ec_scalar_from_bytes(const EC_GROUP *group, EC_SCALAR *out,
 // group order. This function treats |words| as secret.
 void ec_scalar_reduce(const EC_GROUP *group, EC_SCALAR *out,
                       const BN_ULONG *words, size_t num);
+
+// ec_random_nonzero_scalar sets |out| to a uniformly selected random value from
+// zero to |group->order| - 1. It returns one on success and zero on error.
+int ec_random_scalar(const EC_GROUP *group, EC_SCALAR *out,
+                     const uint8_t additional_data[32]);
 
 // ec_random_nonzero_scalar sets |out| to a uniformly selected random value from
 // 1 to |group->order| - 1. It returns one on success and zero on error.
@@ -471,6 +425,7 @@ void ec_set_to_safe_point(const EC_GROUP *group, EC_JACOBIAN *out);
 int ec_affine_jacobian_equal(const EC_GROUP *group, const EC_AFFINE *a,
                              const EC_JACOBIAN *b);
 
+BSSL_NAMESPACE_END
 
 // Implementation details.
 
@@ -479,70 +434,80 @@ struct ec_method_st {
   // of |p|. Either |x| or |y| may be NULL to omit it. It returns one on success
   // and zero if |p| is the point at infinity. It leaks whether |p| was the
   // point at infinity, but otherwise treats |p| as secret.
-  int (*point_get_affine_coordinates)(const EC_GROUP *, const EC_JACOBIAN *p,
-                                      EC_FELEM *x, EC_FELEM *y);
+  int (*point_get_affine_coordinates)(const EC_GROUP *,
+                                      const bssl::EC_JACOBIAN *p,
+                                      bssl::EC_FELEM *x, bssl::EC_FELEM *y);
 
   // jacobian_to_affine_batch implements |ec_jacobian_to_affine_batch|.
-  int (*jacobian_to_affine_batch)(const EC_GROUP *group, EC_AFFINE *out,
-                                  const EC_JACOBIAN *in, size_t num);
+  int (*jacobian_to_affine_batch)(const EC_GROUP *group, bssl::EC_AFFINE *out,
+                                  const bssl::EC_JACOBIAN *in, size_t num);
 
   // add sets |r| to |a| + |b|.
-  void (*add)(const EC_GROUP *group, EC_JACOBIAN *r, const EC_JACOBIAN *a,
-              const EC_JACOBIAN *b);
+  void (*add)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+              const bssl::EC_JACOBIAN *a, const bssl::EC_JACOBIAN *b);
   // dbl sets |r| to |a| + |a|.
-  void (*dbl)(const EC_GROUP *group, EC_JACOBIAN *r, const EC_JACOBIAN *a);
+  void (*dbl)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+              const bssl::EC_JACOBIAN *a);
 
   // mul sets |r| to |scalar|*|p|.
-  void (*mul)(const EC_GROUP *group, EC_JACOBIAN *r, const EC_JACOBIAN *p,
-              const EC_SCALAR *scalar);
+  void (*mul)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+              const bssl::EC_JACOBIAN *p, const bssl::EC_SCALAR *scalar);
   // mul_base sets |r| to |scalar|*generator.
-  void (*mul_base)(const EC_GROUP *group, EC_JACOBIAN *r,
-                   const EC_SCALAR *scalar);
+  void (*mul_base)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+                   const bssl::EC_SCALAR *scalar);
   // mul_batch implements |ec_mul_scalar_batch|.
-  void (*mul_batch)(const EC_GROUP *group, EC_JACOBIAN *r,
-                    const EC_JACOBIAN *p0, const EC_SCALAR *scalar0,
-                    const EC_JACOBIAN *p1, const EC_SCALAR *scalar1,
-                    const EC_JACOBIAN *p2, const EC_SCALAR *scalar2);
+  void (*mul_batch)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+                    const bssl::EC_JACOBIAN *p0, const bssl::EC_SCALAR *scalar0,
+                    const bssl::EC_JACOBIAN *p1, const bssl::EC_SCALAR *scalar1,
+                    const bssl::EC_JACOBIAN *p2,
+                    const bssl::EC_SCALAR *scalar2);
   // mul_public sets |r| to |g_scalar|*generator + |p_scalar|*|p|. It assumes
   // that the inputs are public so there is no concern about leaking their
   // values through timing.
   //
   // This function may be omitted if |mul_public_batch| is provided.
-  void (*mul_public)(const EC_GROUP *group, EC_JACOBIAN *r,
-                     const EC_SCALAR *g_scalar, const EC_JACOBIAN *p,
-                     const EC_SCALAR *p_scalar);
+  void (*mul_public)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+                     const bssl::EC_SCALAR *g_scalar,
+                     const bssl::EC_JACOBIAN *p,
+                     const bssl::EC_SCALAR *p_scalar);
   // mul_public_batch implements |ec_point_mul_scalar_public_batch|.
-  int (*mul_public_batch)(const EC_GROUP *group, EC_JACOBIAN *r,
-                          const EC_SCALAR *g_scalar, const EC_JACOBIAN *points,
-                          const EC_SCALAR *scalars, size_t num);
+  int (*mul_public_batch)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+                          const bssl::EC_SCALAR *g_scalar,
+                          const bssl::EC_JACOBIAN *points,
+                          const bssl::EC_SCALAR *scalars, size_t num);
 
   // init_precomp implements |ec_init_precomp|.
-  int (*init_precomp)(const EC_GROUP *group, EC_PRECOMP *out,
-                      const EC_JACOBIAN *p);
+  int (*init_precomp)(const EC_GROUP *group, bssl::EC_PRECOMP *out,
+                      const bssl::EC_JACOBIAN *p);
   // mul_precomp implements |ec_point_mul_scalar_precomp|.
-  void (*mul_precomp)(const EC_GROUP *group, EC_JACOBIAN *r,
-                      const EC_PRECOMP *p0, const EC_SCALAR *scalar0,
-                      const EC_PRECOMP *p1, const EC_SCALAR *scalar1,
-                      const EC_PRECOMP *p2, const EC_SCALAR *scalar2);
+  void (*mul_precomp)(const EC_GROUP *group, bssl::EC_JACOBIAN *r,
+                      const bssl::EC_PRECOMP *p0,
+                      const bssl::EC_SCALAR *scalar0,
+                      const bssl::EC_PRECOMP *p1,
+                      const bssl::EC_SCALAR *scalar1,
+                      const bssl::EC_PRECOMP *p2,
+                      const bssl::EC_SCALAR *scalar2);
 
   // felem_mul and felem_sqr implement multiplication and squaring,
-  // respectively, so that the generic |EC_POINT_add| and |EC_POINT_dbl|
-  // implementations can work both with |EC_GFp_mont_method| and the tuned
-  // operations.
+  // respectively, so that the generic |bssl::EC_POINT_add| and
+  // |bssl::EC_POINT_dbl| implementations can work both with
+  // |bssl::EC_GFp_mont_method| and the tuned operations.
   //
-  // TODO(davidben): This constrains |EC_FELEM|'s internal representation, adds
-  // many indirect calls in the middle of the generic code, and a bunch of
-  // conversions. If p224-64.c were easily convertable to Montgomery form, we
-  // could say |EC_FELEM| is always in Montgomery form. If we routed the rest of
-  // simple.c to |EC_METHOD|, we could give |EC_POINT| an |EC_METHOD|-specific
-  // representation and say |EC_FELEM| is purely a |EC_GFp_mont_method| type.
-  void (*felem_mul)(const EC_GROUP *, EC_FELEM *r, const EC_FELEM *a,
-                    const EC_FELEM *b);
-  void (*felem_sqr)(const EC_GROUP *, EC_FELEM *r, const EC_FELEM *a);
+  // TODO(davidben): This constrains |bssl::EC_FELEM|'s internal representation,
+  // adds many indirect calls in the middle of the generic code, and a bunch of
+  // conversions. If p224-64.c were easily convertible to Montgomery form, we
+  // could say |bssl::EC_FELEM| is always in Montgomery form. If we routed the
+  // rest of simple.c to |bssl::EC_METHOD|, we could give |bssl::EC_POINT| an
+  // |bssl::EC_METHOD|-specific representation and say |bssl::EC_FELEM| is
+  // purely a |bssl::EC_GFp_mont_method| type.
+  void (*felem_mul)(const EC_GROUP *, bssl::EC_FELEM *r,
+                    const bssl::EC_FELEM *a, const bssl::EC_FELEM *b);
+  void (*felem_sqr)(const EC_GROUP *, bssl::EC_FELEM *r,
+                    const bssl::EC_FELEM *a);
 
   void (*felem_to_bytes)(const EC_GROUP *group, uint8_t *out, size_t *out_len,
-                         const EC_FELEM *in);
-  int (*felem_from_bytes)(const EC_GROUP *group, EC_FELEM *out,
+                         const bssl::EC_FELEM *in);
+  int (*felem_from_bytes)(const EC_GROUP *group, bssl::EC_FELEM *out,
                           const uint8_t *in, size_t len);
 
   // felem_reduce sets |out| to |words|, reduced modulo the field size, p.
@@ -551,7 +516,7 @@ struct ec_method_st {
   //
   // This function is only used in hash-to-curve and may be omitted in curves
   // that do not support it.
-  void (*felem_reduce)(const EC_GROUP *group, EC_FELEM *out,
+  void (*felem_reduce)(const EC_GROUP *group, bssl::EC_FELEM *out,
                        const BN_ULONG *words, size_t num);
 
   // felem_exp sets |out| to |a|^|exp|. It treats |a| is secret but |exp| as
@@ -565,26 +530,32 @@ struct ec_method_st {
   // needs to avoid |BIGNUM|. Can we unify this a bit? By generalizing to
   // arbitrary exponentiation, we also miss an opportunity to use a specialized
   // addition chain.
-  void (*felem_exp)(const EC_GROUP *group, EC_FELEM *out, const EC_FELEM *a,
-                    const BN_ULONG *exp, size_t num_exp);
+  void (*felem_exp)(const EC_GROUP *group, bssl::EC_FELEM *out,
+                    const bssl::EC_FELEM *a, const BN_ULONG *exp,
+                    size_t num_exp);
 
   // scalar_inv0_montgomery implements |ec_scalar_inv0_montgomery|.
-  void (*scalar_inv0_montgomery)(const EC_GROUP *group, EC_SCALAR *out,
-                                 const EC_SCALAR *in);
+  void (*scalar_inv0_montgomery)(const EC_GROUP *group, bssl::EC_SCALAR *out,
+                                 const bssl::EC_SCALAR *in);
 
   // scalar_to_montgomery_inv_vartime implements
   // |ec_scalar_to_montgomery_inv_vartime|.
-  int (*scalar_to_montgomery_inv_vartime)(const EC_GROUP *group, EC_SCALAR *out,
-                                          const EC_SCALAR *in);
+  int (*scalar_to_montgomery_inv_vartime)(const EC_GROUP *group,
+                                          bssl::EC_SCALAR *out,
+                                          const bssl::EC_SCALAR *in);
 
   // cmp_x_coordinate compares the x (affine) coordinate of |p|, mod the group
   // order, with |r|. It returns one if the values match and zero if |p| is the
   // point at infinity of the values do not match.
-  int (*cmp_x_coordinate)(const EC_GROUP *group, const EC_JACOBIAN *p,
-                          const EC_SCALAR *r);
+  int (*cmp_x_coordinate)(const EC_GROUP *group, const bssl::EC_JACOBIAN *p,
+                          const bssl::EC_SCALAR *r);
 } /* EC_METHOD */;
 
-const EC_METHOD *EC_GFp_mont_method(void);
+BSSL_NAMESPACE_BEGIN
+
+const EC_METHOD *EC_GFp_mont_method();
+
+BSSL_NAMESPACE_END
 
 struct ec_point_st {
   // group is an owning reference to |group|, unless this is
@@ -594,7 +565,7 @@ struct ec_point_st {
   // typically check consistency with |EC_GROUP| while functions that take
   // |EC_JACOBIAN| do not. Thus accesses to this field should be externally
   // checked for consistency.
-  EC_JACOBIAN raw;
+  bssl::EC_JACOBIAN raw;
 } /* EC_POINT */;
 
 struct ec_group_st {
@@ -609,12 +580,17 @@ struct ec_group_st {
   BN_MONT_CTX order;
   BN_MONT_CTX field;
 
-  EC_FELEM a, b;  // Curve coefficients.
+  bssl::EC_FELEM a, b;  // Curve coefficients.
 
   // comment is a human-readable string describing the curve.
   const char *comment;
 
-  int curve_name;  // optional NID for named curve
+  // curve_name is the optional NID for named curve.
+  //
+  // If curve_name is NID_undef, the actual type is ECCustomGroup and the
+  // refcount must be respected when allocating/freeing.
+  int curve_name;
+
   uint8_t oid[9];
   uint8_t oid_len;
 
@@ -625,12 +601,21 @@ struct ec_group_st {
   // has_order is one if |generator| and |order| have been initialized.
   int has_order;
 
-  // field_greater_than_order is one if |field| is greate than |order| and zero
+  // field_greater_than_order is one if |field| is greater than |order| and zero
   // otherwise.
   int field_greater_than_order;
-
-  CRYPTO_refcount_t references;
 } /* EC_GROUP */;
+
+BSSL_NAMESPACE_BEGIN
+
+class ECCustomGroup : public ec_group_st, public RefCounted<ECCustomGroup> {
+ public:
+  explicit ECCustomGroup(const EC_METHOD *meth);
+
+ private:
+  ~ECCustomGroup();
+  friend RefCounted;
+};
 
 EC_GROUP *ec_group_new(const EC_METHOD *meth, const BIGNUM *p, const BIGNUM *a,
                        const BIGNUM *b, BN_CTX *ctx);
@@ -715,12 +700,12 @@ int ec_GFp_mont_felem_from_bytes(const EC_GROUP *group, EC_FELEM *out,
 void ec_GFp_nistp_recode_scalar_bits(crypto_word_t *sign, crypto_word_t *digit,
                                      crypto_word_t in);
 
-const EC_METHOD *EC_GFp_nistp224_method(void);
-const EC_METHOD *EC_GFp_nistp256_method(void);
+const EC_METHOD *EC_GFp_nistp224_method();
+const EC_METHOD *EC_GFp_nistp256_method();
 
 // EC_GFp_nistz256_method is a GFp method using montgomery multiplication, with
 // x86-64 optimized P256. See http://eprint.iacr.org/2013/816.
-const EC_METHOD *EC_GFp_nistz256_method(void);
+const EC_METHOD *EC_GFp_nistz256_method();
 
 // An EC_WRAPPED_SCALAR is an |EC_SCALAR| with a parallel |BIGNUM|
 // representation. It exists to support the |EC_KEY_get0_private_key| API.
@@ -729,28 +714,31 @@ typedef struct {
   EC_SCALAR scalar;
 } EC_WRAPPED_SCALAR;
 
-struct ec_key_st {
-  EC_GROUP *group;
+class ECKey : public ec_key_st, public RefCounted<ECKey> {
+ public:
+  explicit ECKey(const ENGINE *engine);
+
+  EC_GROUP *group = nullptr;
 
   // Ideally |pub_key| would be an |EC_AFFINE| so serializing it does not pay an
   // inversion each time, but the |EC_KEY_get0_public_key| API implies public
   // keys are stored in an |EC_POINT|-compatible form.
-  EC_POINT *pub_key;
-  EC_WRAPPED_SCALAR *priv_key;
+  EC_POINT *pub_key = nullptr;
+  bssl::EC_WRAPPED_SCALAR *priv_key = nullptr;
 
-  unsigned int enc_flag;
-  point_conversion_form_t conv_form;
+  unsigned int enc_flag = 0;
+  point_conversion_form_t conv_form = POINT_CONVERSION_UNCOMPRESSED;
 
-  CRYPTO_refcount_t references;
+  ECDSA_METHOD *ecdsa_meth = nullptr;
 
-  ECDSA_METHOD *ecdsa_meth;
+  CRYPTO_EX_DATA ex_data = {};
 
-  CRYPTO_EX_DATA ex_data;
+ private:
+  ~ECKey();
+  friend RefCounted;
 } /* EC_KEY */;
 
+BSSL_NAMESPACE_END
 
-#if defined(__cplusplus)
-}  // extern C
-#endif
 
-#endif  // OPENSSL_HEADER_EC_INTERNAL_H
+#endif  // OPENSSL_HEADER_CRYPTO_FIPSMODULE_EC_INTERNAL_H

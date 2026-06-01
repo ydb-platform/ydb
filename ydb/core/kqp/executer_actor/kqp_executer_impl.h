@@ -70,7 +70,6 @@ namespace NKqp {
 
 using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
-const ui64 MaxTaskSize = 48_MB;
 constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
@@ -158,6 +157,7 @@ public:
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
+        , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -1292,7 +1292,7 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
-            .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
+            .EnableWatermarks = EnableWatermarks,
         });
 
         auto err = Planner->PlanExecution();
@@ -1510,24 +1510,6 @@ protected:
     }
 
 protected:
-    template <class TCollection>
-    bool ValidateTaskSize(const TCollection& tasks) {
-        for (const auto& task : tasks) {
-            if (ui32 size = task->ByteSize(); size > MaxTaskSize) {
-                KQP_STLOG_E(KQPEX, "Abort execution. Task size is too big",
-                    (TaskId, task->GetId()),
-                    (Size, size),
-                    (MaxSize, MaxTaskSize),
-                    (trace_id, TraceId()));
-                ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                    MakeIssue(NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED, TStringBuilder() <<
-                        "Datashard program size limit exceeded (" << size << " > " << MaxTaskSize << ")"));
-                return false;
-            }
-        }
-        return true;
-    }
-
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
     }
@@ -1824,7 +1806,7 @@ protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     THolder<TPartitionPruner> PartitionPruner;
-
+    bool EnableWatermarks = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

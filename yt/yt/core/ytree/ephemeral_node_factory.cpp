@@ -141,7 +141,7 @@ private:
         using TScalarNode::TScalarNode; \
     };
 
-DECLARE_SCALAR_TYPE(String, TString)
+DECLARE_SCALAR_TYPE(String, std::string)
 DECLARE_SCALAR_TYPE(Int64, i64)
 DECLARE_SCALAR_TYPE(Uint64, ui64)
 DECLARE_SCALAR_TYPE(Double, double)

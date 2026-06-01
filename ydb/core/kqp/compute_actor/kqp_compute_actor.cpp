@@ -165,10 +165,11 @@ IDqOutputConsumer::TPtr TKqpTaskRunnerExecutionContext::CreateOutputConsumer(con
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache
     ) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterStreamLookupActorFactory(*factory, counters);
+    RegisterStreamLookupActorFactory(*factory, counters, std::move(vectorIndexLevelsCache));
     RegisterKqpReadActor(*factory, counters);
     RegisterKqpWriteActor(*factory, counters);
     RegisterSequencerActorFactory(*factory, counters);

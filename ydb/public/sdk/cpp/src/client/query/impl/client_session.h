@@ -18,8 +18,8 @@ public:
             std::shared_ptr<TQueryClient::TImpl> client,
             std::weak_ptr<ISessionClient> sessionClient)
             : Promise(promise)
-            , SessionId(sessionId)
-            , Endpoint(endpoint)
+            , SessionId(std::move(sessionId))
+            , Endpoint(std::move(endpoint))
             , Client(client)
             , SessionClient(sessionClient)
         { }

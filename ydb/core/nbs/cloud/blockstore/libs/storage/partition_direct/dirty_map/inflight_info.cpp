@@ -2,6 +2,11 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
+
+#include <util/string/builder.h>
+#include <util/string/cast.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,6 +20,7 @@ TInflightInfo::TInflightInfo(
     , ReadyQueue(readyQueues)
     , Lsn(lsn)
     , ByteCount(byteCount)
+    , StartAt(TInstant::Now())
 {
     WriteRequested.Set(host);
     WriteConfirmed.Set(host);
@@ -32,6 +38,7 @@ TInflightInfo::TInflightInfo(
     , ReadyQueue(readyQueue)
     , Lsn(lsn)
     , ByteCount(byteCount)
+    , StartAt(TInstant::Now())
     , WriteRequested(writeRequested)
     , WriteConfirmed(writeConfirmed)
 {
@@ -46,10 +53,13 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , ReadyQueue(other.ReadyQueue)
     , Lsn(other.Lsn)
     , ByteCount(other.ByteCount)
+    , StartAt(other.StartAt)
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
     , FlushRequested(other.FlushRequested)
     , FlushConfirmed(other.FlushConfirmed)
+    , EraseRequested(other.EraseRequested)
+    , EraseConfirmed(other.EraseConfirmed)
 {
     other.ReadyQueue = nullptr;
 }
@@ -204,7 +214,7 @@ bool TInflightInfo::ConfirmErase(THostIndex host)
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
 
     EraseConfirmed.Set(host);
-    if (EraseConfirmed == EraseRequested) {
+    if (EraseConfirmed == WriteRequested) {
         State = EState::PBufferErased;
     }
 
@@ -252,6 +262,21 @@ void TInflightInfo::UnlockPBuffer()
             ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
         }
     }
+}
+
+THostMask TInflightInfo::GetWriteRequested() const
+{
+    return WriteRequested;
+}
+
+TString TInflightInfo::DebugPrint(TInstant now) const
+{
+    TStringBuilder result;
+    result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
+           << ", size:" << ByteCount << ", locks:" << PBuffersLockCount
+           << ", requested:" << WriteRequested.Print()
+           << ", confirmed:" << WriteConfirmed.Print();
+    return result;
 }
 
 void TInflightInfo::ApplyBytes(

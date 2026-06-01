@@ -12,7 +12,7 @@
 
 #include <yt/yt/library/profiling/producer.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NConcurrency;
 using namespace NProfiling;
@@ -59,12 +59,12 @@ TBusNetworkStatistics TBusNetworkCounters::ToStatistics() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TIntrusivePtr<TTcpDispatcher::TImpl>& TTcpDispatcher::TImpl::Get()
+const TIntrusivePtr<TDispatcher::TImpl>& TDispatcher::TImpl::Get()
 {
-    return TTcpDispatcher::Get()->Impl_;
+    return TDispatcher::Get()->Impl_;
 }
 
-const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::string& networkName, bool encrypted)
+const TBusNetworkCountersPtr& TDispatcher::TImpl::GetCounters(const std::string& networkName, bool encrypted)
 {
     auto [statistics, ok] = NetworkStatistics_.FindOrInsert(networkName, [] {
         return std::array<TNetworkStatistics, 2>{};
@@ -73,7 +73,7 @@ const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::stri
     return (*statistics)[encrypted].Counters;
 }
 
-IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
+IPollerPtr TDispatcher::TImpl::GetOrCreatePoller(
     IThreadPoolPollerPtr* pollerPtr,
     bool isXfer,
     TStringBuf threadNamePrefix)
@@ -107,19 +107,19 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     return poller;
 }
 
-void TTcpDispatcher::TImpl::DisableNetworking()
+void TDispatcher::TImpl::DisableNetworking()
 {
     YT_LOG_INFO("Networking disabled");
 
     NetworkingDisabled_.store(true);
 }
 
-bool TTcpDispatcher::TImpl::IsNetworkingDisabled()
+bool TDispatcher::TImpl::IsNetworkingDisabled()
 {
     return NetworkingDisabled_.load();
 }
 
-const std::string& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
+const std::string& TDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
 {
     if (address.IsUnix()) {
         return LocalNetworkName;
@@ -143,7 +143,7 @@ const std::string& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetwor
     return DefaultNetworkName;
 }
 
-TTosLevel TTcpDispatcher::TImpl::GetTosLevelForBand(EMultiplexingBand band)
+TTosLevel TDispatcher::TImpl::GetTosLevelForBand(EMultiplexingBand band)
 {
     if (band < TEnumTraits<EMultiplexingBand>::GetMinValue() || band > TEnumTraits<EMultiplexingBand>::GetMaxValue()) {
         return DefaultTosLevel;
@@ -152,7 +152,7 @@ TTosLevel TTcpDispatcher::TImpl::GetTosLevelForBand(EMultiplexingBand band)
     return bandDescriptor.TosLevel.load(std::memory_order::relaxed);
 }
 
-int TTcpDispatcher::TImpl::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+int TDispatcher::TImpl::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
 {
     if (band < TEnumTraits<EMultiplexingBand>::GetMinValue() || band > TEnumTraits<EMultiplexingBand>::GetMaxValue()) {
         return std::clamp<int>(
@@ -167,19 +167,19 @@ int TTcpDispatcher::TImpl::GetMultiplexingParallelism(EMultiplexingBand band, in
         bandDescriptor.MaxMultiplexingParallelism.load(std::memory_order::relaxed));
 }
 
-IPollerPtr TTcpDispatcher::TImpl::GetAcceptorPoller()
+IPollerPtr TDispatcher::TImpl::GetAcceptorPoller()
 {
     static const TStringBuf ThreadNamePrefix("BusAcpt");
     return GetOrCreatePoller(&AcceptorPoller_, false, ThreadNamePrefix);
 }
 
-IPollerPtr TTcpDispatcher::TImpl::GetXferPoller()
+IPollerPtr TDispatcher::TImpl::GetXferPoller()
 {
     static const TStringBuf ThreadNamePrefix("BusXfer");
     return GetOrCreatePoller(&XferPoller_, true, ThreadNamePrefix);
 }
 
-void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
+void TDispatcher::TImpl::Configure(const TDispatcherConfigPtr& config)
 {
     {
         auto guard = WriterGuard(PollersLock_);
@@ -218,12 +218,12 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
     }
 }
 
-void TTcpDispatcher::TImpl::RegisterConnection(TTcpConnectionPtr connection)
+void TDispatcher::TImpl::RegisterConnection(TConnectionPtr connection)
 {
     ConnectionsToRegister_.Enqueue(std::move(connection));
 }
 
-void TTcpDispatcher::TImpl::StartPeriodicExecutors()
+void TDispatcher::TImpl::StartPeriodicExecutors()
 {
     auto poller = GetXferPoller();
     auto invoker = poller->GetInvoker();
@@ -238,7 +238,7 @@ void TTcpDispatcher::TImpl::StartPeriodicExecutors()
     }
 }
 
-void TTcpDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
+void TDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
 {
     NetworkStatistics_.IterateReadOnly([&] (const auto& name, const auto& statistics) {
         TWithTagGuard networkTagGuard(writer, "network", name);
@@ -266,11 +266,11 @@ void TTcpDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
     }
 }
 
-std::vector<TTcpConnectionPtr> TTcpDispatcher::TImpl::GetConnections()
+std::vector<TConnectionPtr> TDispatcher::TImpl::GetConnections()
 {
     auto connectionList = ConnectionList_.Load();
 
-    std::vector<TTcpConnectionPtr> result;
+    std::vector<TConnectionPtr> result;
     result.reserve(connectionList.size());
     for (const auto& weakConnection : connectionList) {
         if (auto connection = weakConnection.Lock()) {
@@ -280,9 +280,9 @@ std::vector<TTcpConnectionPtr> TTcpDispatcher::TImpl::GetConnections()
     return result;
 }
 
-void TTcpDispatcher::TImpl::BuildOrchid(IYsonConsumer* consumer)
+void TDispatcher::TImpl::BuildOrchid(IYsonConsumer* consumer)
 {
-    std::vector<std::pair<TTcpConnectionPtr, TBusNetworkStatistics>> connectionsWithStatistics;
+    std::vector<std::pair<TConnectionPtr, TBusNetworkStatistics>> connectionsWithStatistics;
     for (const auto& connection : GetConnections()) {
         connectionsWithStatistics.emplace_back(connection, connection->GetBusStatistics());
     }
@@ -312,13 +312,13 @@ void TTcpDispatcher::TImpl::BuildOrchid(IYsonConsumer* consumer)
 }
 
 
-IYPathServicePtr TTcpDispatcher::TImpl::GetOrchidService()
+IYPathServicePtr TDispatcher::TImpl::GetOrchidService()
 {
     return IYPathService::FromProducer(BIND(&TImpl::BuildOrchid, MakeStrong(this)))
         ->Via(GetXferPoller()->GetInvoker());
 }
 
-void TTcpDispatcher::TImpl::OnPeriodicCheck()
+void TDispatcher::TImpl::OnPeriodicCheck()
 {
     ConnectionList_.Transform([&] (auto& connectionList) {
         for (auto&& connection : ConnectionsToRegister_.DequeueAll()) {
@@ -346,12 +346,12 @@ void TTcpDispatcher::TImpl::OnPeriodicCheck()
     });
 }
 
-std::optional<TString> TTcpDispatcher::TImpl::GetBusCertsDirectoryPath() const
+std::optional<TString> TDispatcher::TImpl::GetBusCertsDirectoryPath() const
 {
     return Config_.Acquire()->BusCertsDirectoryPath;
 }
 
-void TTcpDispatcher::TImpl::RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler)
+void TDispatcher::TImpl::RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler)
 {
     {
         auto guard = WriterGuard(LocalMessageHandlersLock_);
@@ -365,7 +365,7 @@ void TTcpDispatcher::TImpl::RegisterLocalMessageHandler(int port, const ILocalMe
         port);
 }
 
-void TTcpDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
+void TDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
 {
     {
         auto guard = WriterGuard(LocalMessageHandlersLock_);
@@ -376,7 +376,7 @@ void TTcpDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
         port);
 }
 
-ILocalMessageHandlerPtr TTcpDispatcher::TImpl::FindLocalBypassMessageHandler(const TNetworkAddress& address)
+ILocalMessageHandlerPtr TDispatcher::TImpl::FindLocalBypassMessageHandler(const TNetworkAddress& address)
 {
     if (!TAddressResolver::Get()->IsLocalAddress(address)) {
         return nullptr;
@@ -392,4 +392,4 @@ ILocalMessageHandlerPtr TTcpDispatcher::TImpl::FindLocalBypassMessageHandler(con
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

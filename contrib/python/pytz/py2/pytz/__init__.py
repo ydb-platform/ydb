@@ -22,8 +22,8 @@ from pytz.tzfile import build_tzinfo
 
 
 # The IANA (nee Olson) database is updated several times a year.
-OLSON_VERSION = '2026a'
-VERSION = '2026.1.post1'  # pip compatible version number.
+OLSON_VERSION = '2026b'
+VERSION = '2026.2'  # pip compatible version number.
 __version__ = VERSION
 
 OLSEN_VERSION = OLSON_VERSION  # Old releases had this misspelling

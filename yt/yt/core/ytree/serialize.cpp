@@ -279,7 +279,7 @@ void Deserialize(bool& value, INodePtr node)
 // char
 void Deserialize(char& value, INodePtr node)
 {
-    TString stringValue = node->AsString()->GetValue();
+    std::string stringValue = node->AsString()->GetValue();
     if (stringValue.size() != 1) {
         THROW_ERROR_EXCEPTION("Char cannot be parsed from string whose length is not equal to 1")
             << TErrorAttribute("string_length", stringValue.size());
@@ -377,10 +377,10 @@ void Deserialize(TGuid& value, INodePtr node)
 // TStatisticPath.
 void Deserialize(NStatisticPath::TStatisticPath& value, INodePtr node)
 {
-    const TString& path = node->AsString()->GetValue();
+    const std::string& path = node->AsString()->GetValue();
 
     // Try to parse slashed paths.
-    if (!path.empty() && path.StartsWith('/')) {
+    if (!path.empty() && path.starts_with('/')) {
         value = NStatisticPath::SlashedStatisticPath(path).ValueOrThrow();
     } else {
         value = NStatisticPath::ParseStatisticPath(path).ValueOrThrow();

@@ -241,13 +241,14 @@ void FormatValue(TStringBuilderBase* builder, const TQueryStatistics& stats, TSt
     Format(
         builder,
         "{"
-        "RowsRead: %v, DataWeightRead: %v, RowsWritten: %v, "
+        "RowsRead: %v, DataWeightRead: %v, RowsWritten: %v, GroupedRowCount: %v, "
         "SyncTime: %v, AsyncTime: %v, ExecuteTime: %v, ReadTime: %v, WriteTime: %v, CodegenTime: %v, "
         "WaitOnReadyEventTime: %v, IncompleteInput: %v, IncompleteOutput: %v, MemoryUsage: %v"
         "}",
         stats.RowsRead.GetTotal(),
         stats.DataWeightRead.GetTotal(),
         stats.RowsWritten.GetTotal(),
+        stats.GroupedRowCount.GetTotal(),
         stats.SyncTime.GetTotal(),
         stats.AsyncTime.GetTotal(),
         stats.ExecuteTime.GetTotal(),

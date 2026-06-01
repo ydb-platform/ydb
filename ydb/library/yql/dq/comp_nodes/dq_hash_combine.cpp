@@ -5,7 +5,6 @@
 #include "type_utils.h"
 #include "coro_tasks.h"
 
-#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
@@ -65,6 +64,11 @@ using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
 
 using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
+
+static ui64 GetInstanceSeed(void* self) {
+    // Used to return CityHash64(self) but looks like that's unnecessary: we put the seed through regular and then Fibonacci hashing anyway
+    return reinterpret_cast<ui64>(self);
+}
 
 struct TSegmentedArena
 {
@@ -567,6 +571,7 @@ constexpr const size_t StorageArenaMinSize = 32_MB;
 struct TDqHashCombineTestParams
 {
     bool DisableStateDehydration = false;
+    bool DisableKeyPassthrough = false;
 };
 
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
@@ -988,7 +993,9 @@ protected:
         ui64 bucketId = 0;
         ui64 hash = Hasher(tempKey);
         if (EnableSpilling) {
-            bucketId = (hash * 11400714819323198485llu) & ((1ull << BucketBits) - 1);
+            // Lower 16 bits are used by the hash shuffle connection to distribute keys among tasks, so we can't use these (even with the hash seed)
+            // Another solution would be to rehash using a different function but shifted bits are uniform enough
+            bucketId = ((hash * 11400714819323198485llu) >> 16) & ((1ull << BucketBits) - 1ull);
         }
 
         if (!SpillingStack.empty()) {
@@ -1001,8 +1008,8 @@ protected:
                 auto k = tempKey;
                 for (ui32 i = 0U; i < tempKeySize; ++i) {
                     k->UnRef();
+                    k++;
                 }
-                k++;
             }
 
             if (SampleSpillingInput) {
@@ -1141,7 +1148,7 @@ public:
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes)))
+        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes, GetInstanceSeed(this))))
         , Equals(TWideUnboxedEqual(KeyTypes))
         , Draining(false)
         , SourceEmpty(false)
@@ -1186,7 +1193,7 @@ public:
 
         PrepareForNewBatch();
 
-        if (IsAggregation) {
+        if (IsAggregation && !TestParams.DisableKeyPassthrough) {
             std::vector<ui32> keySourceItems;
             for (const auto& node : Nodes.KeyResultNodes) {
 
@@ -2120,6 +2127,10 @@ public:
         TestParams.DisableStateDehydration = disable;
     }
 
+    virtual void DisableKeyPassthrough(const bool disable) override {
+        TestParams.DisableKeyPassthrough = disable;
+    }
+
 #if !defined(MKQL_DISABLE_CODEGEN)
     TGenerateResult DoGenGetValues(
         const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override
@@ -2435,6 +2446,11 @@ public:
     virtual void DisableStateDehydration(const bool disable) override {
         TestParams.DisableStateDehydration = disable;
     }
+
+    virtual void DisableKeyPassthrough(const bool disable) override {
+        TestParams.DisableKeyPassthrough = disable;
+    }
+
 
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {

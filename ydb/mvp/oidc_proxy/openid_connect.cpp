@@ -119,11 +119,11 @@ TString CreateNameYdbOidcCookie(TStringBuf suffix) {
 }
 
 TString CreateNameSessionCookie(TStringBuf key) {
-    return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
+    return "__Host-" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
 }
 
 TString CreateNameImpersonatedCookie(TStringBuf key) {
-    return "__Host_" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
+    return "__Host-" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
 }
 
 const TString& GetAuthCallbackUrl() {
@@ -134,14 +134,14 @@ const TString& GetAuthCallbackUrl() {
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds) {
     TStringBuilder cookieBuilder;
     cookieBuilder << name << "=" << value
-            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned"
+            << "; Path=/; Secure; HttpOnly; SameSite=None"
             << "; Max-Age=" << expiredSeconds;
     return cookieBuilder;
 }
 
 TString ClearSecureCookie(const TString& name) {
     TStringBuilder cookieBuilder;
-    cookieBuilder << name << "=; Path=/; Secure; HttpOnly; SameSite=None; Partitioned; Max-Age=0";
+    cookieBuilder << name << "=; Path=/; Secure; HttpOnly; SameSite=None; Max-Age=0";
     return cookieBuilder;
 }
 

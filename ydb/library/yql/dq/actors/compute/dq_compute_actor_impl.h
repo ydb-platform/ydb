@@ -4,7 +4,6 @@
 #include "dq_compute_actor_channels.h"
 #include "dq_compute_actor_checkpoints.h"
 #include "dq_compute_actor_metrics.h"
-#include "dq_compute_actor_watermarks.h"
 #include "dq_compute_actor.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
@@ -24,6 +23,7 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -437,6 +437,10 @@ protected:
                         outputChannel.Finished = true;
                     } else {
                         ProcessOutputsState.HasDataToSend = true;
+                        CA_LOG_T("Wait for finish of channelId: " << channelId
+                            << ", Push/Pop=" << outputChannel.Channel->GetPushStats().Bytes << '/' << outputChannel.Channel->GetPopStats().Bytes
+                            << ", EarlyFinish=" << outputChannel.EarlyFinish
+                        );
                     }
                 }
             } else {
@@ -1250,7 +1254,9 @@ protected:
         if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
-            Channels->SetCheckpointsSupport();
+            if (Channels) {
+                Channels->SetCheckpointsSupport();
+            }
         }
         TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
         Checkpoints->Receive(handle);

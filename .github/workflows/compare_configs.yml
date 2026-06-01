@@ -31,6 +31,7 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Build
       uses: ./.github/actions/build_and_test_ya
       with:
@@ -59,7 +60,7 @@ jobs:
         set -xe
         cd ./ydb/tests/library/compatibility/configs
         if [[ -z "${{inputs.branches}}" ]]; then
-            BRANCH_LIST="stable-25-4-1 stable-25-4 stable-26-1-1 stable-26-1 prestable-26-2 current"
+            BRANCH_LIST="stable-26-1-1 stable-26-1 stable-26-2-1 stable-26-2 prestable-26-3 current"
         else
             BRANCH_LIST="${{inputs.branches}}"
         fi

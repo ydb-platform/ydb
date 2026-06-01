@@ -229,6 +229,7 @@ private:
     bool InitCompleted = false;
     THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
+    ui64 ReservedBytes = 0;
 
     struct TTxWriteInfo {
         THashMap<ui32, TPartitionId> Partitions;

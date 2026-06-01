@@ -386,6 +386,9 @@ namespace NKikimr::NStorage {
 
         // check if we are enabling distconf by this operation and handle it accordingly
         if (!Self->SelfManagementEnabled && ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
+            if (IsDryRun) {
+                throw TExError() << "DryRun is not supported when enabling distconf";
+            }
             ControllerOp = EControllerOp::ENABLE_DISTCONF;
             TryEnableDistconf(); // collect quorum of configs first to see if we have to do rolling restart of the cluster
         } else {

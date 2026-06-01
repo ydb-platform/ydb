@@ -1,5 +1,7 @@
 #include "auth_actors.h"
 
+#include "http_req.h"
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/protos/config.pb.h>
@@ -54,7 +56,6 @@ namespace NKikimr::NHttpProxy {
             , IamToken(context.IamToken)
             , Authorize(!context.Driver)
             , DatabasePath(CanonizePath(context.DatabasePath))
-            , StreamName(context.StreamName)
             , SourceAddress(context.SourceAddress)
         {
         }
@@ -323,7 +324,6 @@ namespace NKikimr::NHttpProxy {
         TString CloudId;
         TString DatabaseId;
         TString DatabasePath;
-        TString StreamName;
         TString SourceAddress;
     };
 

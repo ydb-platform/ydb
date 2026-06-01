@@ -77,6 +77,18 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
+        
+        if (!LockSendTime.empty()) {
+            TInstant now = AppData()->TimeProvider->Now();
+            TDuration maxInFlightTime = TDuration::Zero();
+            for (const auto& [requestId, sendTime] : LockSendTime) {
+                TDuration elapsed = now - sendTime;
+                if (elapsed > maxInFlightTime) {
+                    maxInFlightTime = elapsed;
+                }
+            }
+            Settings.Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
+        }
 
         AFL_ENSURE(Settings.Alloc);
         {
@@ -267,6 +279,8 @@ public:
                 .ShardId = shardId,
                 .Blocked = false,
             }).second);
+        
+        LockSendTime[requestId] = AppData()->TimeProvider->Now();
     }
 
     void Handle(NEvents::TDataEvents::TEvLockRowsResult::TPtr& ev) {
@@ -294,6 +308,13 @@ public:
             << ", Table = " << Settings.TablePath
             << ", RequestId=" << record.GetRequestId()
             << ", Status=" << NKikimrDataEvents::TEvLockRowsResult::EStatus_Name(record.GetStatus()));
+
+        ui64 requestId = record.GetRequestId();
+        
+        if (auto it = LockSendTime.find(requestId); it != LockSendTime.end()) {
+            Settings.Counters->LockLatencyHistogram->Collect((AppData()->TimeProvider->Now() - it->second).MilliSeconds());
+            LockSendTime.erase(it);
+        }
 
         auto getIssues = [&record]() {
             NYql::TIssues issues;
@@ -369,6 +390,9 @@ public:
                     getIssues());
             }
         }
+
+        Settings.Counters->ModifiedRowsCount->Add(record.ModifiedKeysSize());
+        Settings.Counters->LockedRowsCount->Add(record.LockedKeysSize());
 
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(Settings.TxManager->AddLock(shardId, lock, Settings.QuerySpanId));
@@ -519,6 +543,8 @@ private:
 
     ui64 LockRowsCount = 0;
     ui64 BrokenLocksCount = 0;
+
+    THashMap<ui64, TInstant> LockSendTime;
 
     NWilson::TSpan LockActorSpan;
 };

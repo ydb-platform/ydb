@@ -24,7 +24,10 @@
               "pull_requests": "github_data/pull_requests",
               "digest_queue": "test_results/analytics/digest_queue",
               "fast_unmute_active": "test_mute/fast_unmute_active",
-              "fast_unmute_grace": "test_mute/fast_unmute_grace"
+              "fast_unmute_grace": "test_mute/fast_unmute_grace",
+              "mute_latency": "test_results/analytics/mute_latency",
+              "mute_latency_affected_prs": "test_results/analytics/mute_latency_affected_prs",
+              "mute_events": "test_results/analytics/mute_events"
 
           }
       },

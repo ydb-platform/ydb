@@ -326,13 +326,15 @@ public:
                             State_->UseSecureTmp->store(true);
                         }
 
-                        if (tmpSecurity == ETmpSecurityMode::Disable || !State_->Configuration->_SecureTmpRoot.Get(cluster)) {
+                        if (!State_->UseSecureTmp->load() || !State_->Configuration->_SecureTmpRoot.Get(cluster)) {
                             TStringBuilder msg;
                             msg << "Table " << cluster << "." << tableName
                                 << " contains sensitive data, but is used with the default tmp folder."
                                 << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
                             auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
                             if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(tmpSecurity == ETmpSecurityMode::Force)) {
+                                // treat this warning as error in force mode
+                                issue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
                                 ctx.AddError(issue);
                                 return TStatus::Error;
                             } else {

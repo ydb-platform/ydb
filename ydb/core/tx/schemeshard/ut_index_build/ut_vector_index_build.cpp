@@ -9,6 +9,10 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
@@ -148,6 +152,130 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
+    }
+
+    Y_UNIT_TEST(VectorIndexAutodetect) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            // Use TBuildIndexConfig for the boilerplate, then clear vector_type/vector_dimension
+            // to test the autodetection code path
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+            });
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->mutable_vector_settings()->mutable_settings()->clear_vector_type();
+            kmeansSettings->mutable_vector_settings()->mutable_settings()->clear_vector_dimension();
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+             NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                        Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8,
+                                        4, 4, 2)});
+
+        // Verify data was indexed: check row count in the posting table
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            Cerr << "... posting table contains " << rows << " rows" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
+    Y_UNIT_TEST(PrefixedVectorIndexAutodetect) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data with a fixed prefix value (0)
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            // Use TBuildIndexConfig for the boilerplate with prefix column, then clear vector_type/vector_dimension
+            // to test the autodetection code path for prefixed vector indexes
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"prefix", "embedding"}, {}, {}
+            });
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->mutable_vector_settings()->mutable_settings()->clear_vector_type();
+            kmeansSettings->mutable_vector_settings()->mutable_settings()->clear_vector_dimension();
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+
+        // Verify that vector_type and vector_dimension were auto-detected and stored in the index description
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+             NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                        Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8,
+                                        4, 4, 2)});
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
     }
 
     Y_UNIT_TEST(RecreatedColumns) {
@@ -2032,6 +2160,204 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
             {NLs::PathExist, NLs::IndexesCount(1)});
+    }
+
+    Y_UNIT_TEST_FLAG(ImportExport, Materialized) {
+        NKikimr::InitAwsAPI();
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        NWrappers::NTestHelpers::TS3Mock s3Mock({}, NWrappers::NTestHelpers::TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(Materialized));
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                buildIndexOperation.DebugString()
+            );
+        }
+
+        auto checkIndex = [&](const TString& tablePath) {
+            const auto d = DescribePath(runtime, tablePath, true, true);
+            bool found = false;
+            for (const auto& idx : d.GetPathDescription().GetTable().GetTableIndexes()) {
+                if (idx.GetName() == "index1") {
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_C(found, "missing index1 on " << tablePath);
+        };
+
+        checkIndex("/MyRoot/Table");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "test"
+                }
+                %s
+            }
+        )", port, Materialized ? "include_index_data: true" : ""));
+        env.TestWaitNotification(runtime, exportTxId);
+        TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        const TString popMode = Materialized
+            ? "index_population_mode: " + Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT)
+            : "";
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "test"
+                    destination_path: "/MyRoot/TableImported"
+                }
+                %s
+            }
+        )", port, popMode.c_str()));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        checkIndex("/MyRoot/TableImported");
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableImported/index1", true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+
+        NKikimr::ShutdownAwsAPI();
+    }
+
+    Y_UNIT_TEST(AdaptivePrefixedVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write 200 rows: prefix = key % 17, giving 17 prefixes with ~12 rows each
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build non-adaptive index first (K=4, each prefix gets 4 clusters)
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB",
+            "/MyRoot/ServerLessDB/Table", "index_fixed", {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto fixedLevelRows = CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_fixed/indexImplLevelTable");
+        Cerr << "... fixed level table contains " << fixedLevelRows << " rows" << Endl;
+
+        // Build adaptive index (K=4 as max, but small prefixes get K=2)
+        buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index_adaptive", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"prefix", "embedding"}, {}, {}
+            });
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->mutable_vector_settings()->set_adaptive_clusters(true);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        auto adaptiveLevelRows = CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_adaptive/indexImplLevelTable");
+        Cerr << "... adaptive level table contains " << adaptiveLevelRows << " rows" << Endl;
+
+        // Verify posting tables have all rows
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_fixed/indexImplPostingTable"), 200);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_adaptive/indexImplPostingTable"), 200);
+
+        // With adaptive mode, small prefixes (~12 rows < 100) get K=2 instead of K=4,
+        // so the adaptive level table should have fewer cluster rows
+        Cerr << "... fixed clusters: " << fixedLevelRows << ", adaptive clusters: " << adaptiveLevelRows << Endl;
+        UNIT_ASSERT_C(adaptiveLevelRows < fixedLevelRows,
+            "Adaptive index should have fewer clusters than fixed: "
+            << adaptiveLevelRows << " >= " << fixedLevelRows);
+
+        // Read the adaptive level table and count clusters per parent to verify
+        // that some prefixes got K=2 (adaptive minimum for small prefixes)
+        {
+            const TString levelTable = "/MyRoot/ServerLessDB/Table/index_adaptive/indexImplLevelTable";
+            auto tableDesc = DescribePath(runtime, tenantSchemeShard, levelTable, true, false, true);
+            const auto& pathDesc = tableDesc.GetPathDescription();
+
+            THashMap<ui64, ui32> clustersPerParent;
+            for (const auto& part : pathDesc.GetTablePartitions()) {
+                auto result = ReadTable(runtime, part.GetDatashardId(), pathDesc.GetSelf().GetName(),
+                    {"__ydb_parent", "__ydb_id"}, {"__ydb_parent"});
+                auto value = NClient::TValue::Create(result);
+                auto list = value["Result"]["List"];
+                for (size_t i = 0; i < list.Size(); ++i) {
+                    ui64 parent = list[i]["__ydb_parent"];
+                    clustersPerParent[parent]++;
+                }
+            }
+
+            ui32 prefixesWithK2 = 0;
+            for (const auto& [parent, count] : clustersPerParent) {
+                Cerr << "... parent " << parent << " has " << count << " clusters" << Endl;
+                if (count == 2) {
+                    prefixesWithK2++;
+                }
+            }
+            Cerr << "... prefixes with K=2: " << prefixesWithK2 << Endl;
+            UNIT_ASSERT_C(prefixesWithK2 > 0,
+                "At least some prefixes should have K=2 clusters in adaptive mode");
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
     }
 
 }

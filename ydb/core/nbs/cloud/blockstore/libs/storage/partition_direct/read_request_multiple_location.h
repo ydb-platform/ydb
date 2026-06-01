@@ -1,11 +1,12 @@
 #pragma once
 
 #include "read_request_executor.h"
-#include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/read_request_single_location.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -15,9 +16,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Class works with a multiple readHints.
-// It incapsulates logic of splitting original request into N subrequests,
+// It encapsulates logic of splitting original request into N subrequests,
 // sending them to different sources and collecting responses.
-// ATTENTION: you should use fabric method CreateReadRequestExecutor
+// ATTENTION: you should use factory method CreateReadRequestExecutor().
 class TReadMultipleLocationRequestExecutor
     : public IReadRequestExecutor
     , public std::enable_shared_from_this<TReadMultipleLocationRequestExecutor>
@@ -25,6 +26,7 @@ class TReadMultipleLocationRequestExecutor
 public:
     TReadMultipleLocationRequestExecutor(
         NActors::TActorSystem const* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TReadHint readHint,
@@ -40,8 +42,10 @@ public:
 
 private:
     void OnSubRequestComplete(const TResponse& response, size_t index);
+    void Reply(NProto::TError error, size_t index);
 
     NActors::TActorSystem const* ActorSystem;
+    const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TCallContextPtr CallContext;

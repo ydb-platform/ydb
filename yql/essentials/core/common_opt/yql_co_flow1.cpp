@@ -1415,7 +1415,7 @@ bool IsOptimizerToFlowOverIteratorWithDependsAllowed(const TTypeAnnotationContex
 
 bool IsOptimizerToFlowOverCollectAllowed(const TTypeAnnotationContext& types) {
     static const char Flag[] = "ToFlowOverCollect";
-    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+    return !IsOptimizerDisabled<Flag>(types);
 }
 
 }

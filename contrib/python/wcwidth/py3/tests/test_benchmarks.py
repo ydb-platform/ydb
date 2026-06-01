@@ -1,4 +1,5 @@
 """Performance benchmarks for wcwidth module."""
+
 # std imports
 import os
 import sys
@@ -10,7 +11,7 @@ import pytest
 # local
 import wcwidth
 
-_wcwidth_module = sys.modules['wcwidth.wcwidth']
+_width_module = sys.modules['wcwidth._width']
 
 
 def test_wcwidth_ascii(benchmark):
@@ -292,6 +293,149 @@ def test_clip_complex_sgr(benchmark):
     benchmark(wcwidth.clip, text, 6, 11)
 
 
+def test_clip_long_cjk_past_window(benchmark):
+    """Benchmark clip() with long CJK text, narrow window (early-exit path)."""
+    text = '中文测试字符串' * 100  # 700 chars, no escape sequences
+    benchmark(wcwidth.clip, text, 0, 50)
+
+
+def test_clip_dense_ansi_past_window(benchmark):
+    """Benchmark clip() with dense ANSI sequences past clip window (SGR tracking)."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.clip, text, 6, 30)
+
+
+def test_clip_dense_ansi_no_propagate(benchmark):
+    """Benchmark clip() with dense ANSI sequences, SGR propagation disabled."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.clip, text, 6, 30, propagate_sgr=False)
+
+
+def test_clip_osc8_hyperlinks(benchmark):
+    """Benchmark clip() with OSC 8 hyperlinks (hyperlink parsing path)."""
+    text = '\x1b]8;;http://example.com\x07Click Here\x1b]8;;\x07 ' * 20
+    benchmark(wcwidth.clip, text, 0, 80)
+
+
+def test_width_osc66(benchmark):
+    """Benchmark width() with OSC 66 text sizing sequences."""
+    text = '\x1b]66;w=2;XY\x07\x1b]66;s=3;ABC\x07'
+    benchmark(wcwidth.width, text)
+
+
+def test_clip_osc66(benchmark):
+    """Benchmark clip() with OSC 66 text sizing sequences."""
+    text = '\x1b]66;w=2;XY\x07\x1b]66;s=3;ABC\x07'
+    benchmark(wcwidth.clip, text, 3, 8)
+
+
+def test_clip_cursor_cr_overwrite(benchmark):
+    """Benchmark clip() with carriage-return overwrite (painter path)."""
+    text = 'hello\rworld ' * 20
+    benchmark(wcwidth.clip, text, 0, 50)
+
+
+def test_clip_cursor_csi_backward(benchmark):
+    """Benchmark clip() with CSI cursor-backward sequences (painter path)."""
+    text = 'hello\x1b[2Dxy ' * 20
+    benchmark(wcwidth.clip, text, 0, 40)
+
+
+def test_clip_long_ascii_fastpath(benchmark):
+    """Benchmark clip() with long ASCII string (fast-path slice)."""
+    text = 'hello world ' * 1000
+    benchmark(wcwidth.clip, text, 500, 600)
+
+
+def test_clip_with_ansi_no_overtype(benchmark):
+    """Benchmark clip() with ANSI sequences, overtyping disabled."""
+    text = '\x1b[31m中文字\x1b[0m'
+    benchmark(wcwidth.clip, text, 0, 3, overtyping=False)
+
+
+def test_clip_complex_sgr_no_overtype(benchmark):
+    """Benchmark clip() with complex SGR, overtyping disabled."""
+    text = '\x1b[1;38;5;208mHello world text\x1b[0m'
+    benchmark(wcwidth.clip, text, 6, 11, overtyping=False)
+
+
+def test_clip_dense_ansi_no_overtype(benchmark):
+    """Benchmark clip() with dense ANSI, overtyping disabled."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.clip, text, 6, 30, overtyping=False)
+
+
+def test_clip_dense_ansi_no_propagate_no_overtype(benchmark):
+    """Benchmark clip() with dense ANSI, SGR propagation and overtyping disabled."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.clip, text, 6, 30, propagate_sgr=False, overtyping=False)
+
+
+def test_clip_dense_ansi_overtype(benchmark):
+    """Benchmark clip() with dense ANSI, overtyping forced (painter path)."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.clip, text, 6, 30, overtyping=True)
+
+
+def test_clip_long_cjk_overtype(benchmark):
+    """Benchmark clip() with long CJK, overtyping forced (painter path)."""
+    text = '中文测试字符串' * 100
+    benchmark(wcwidth.clip, text, 0, 50, overtyping=True)
+
+
+def test_width_dense_ansi_control_codes_ignore(benchmark):
+    """Benchmark width() with dense ANSI and control_codes='ignore'."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.width, text, control_codes='ignore')
+
+
+def test_width_complex_ansi_control_codes_ignore(benchmark):
+    """Benchmark width() with complex ANSI and control_codes='ignore'."""
+    text = '\x1b[38;2;255;150;100mWARN\x1b[0m: \x1b[1mBold\x1b[0m \x1b[4mUnderline\x1b[0m'
+    benchmark(wcwidth.width, text, control_codes='ignore')
+
+
+def test_clip_dense_ansi_control_codes_ignore(benchmark):
+    """Benchmark clip() with dense ANSI, control_codes='ignore' (skips painter/OSC)."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.clip, text, 6, 30, control_codes='ignore')
+
+
+def test_clip_long_cjk_control_codes_ignore(benchmark):
+    """Benchmark clip() with long CJK and control_codes='ignore' (early-exit path)."""
+    text = '中文测试字符串' * 100
+    benchmark(wcwidth.clip, text, 0, 50, control_codes='ignore')
+
+
+def test_clip_cursor_cr_control_codes_ignore(benchmark):
+    """Benchmark clip() with CR overwrite and control_codes='ignore' (painter skipped)."""
+    text = 'hello\rworld ' * 20
+    benchmark(wcwidth.clip, text, 0, 50, control_codes='ignore')
+
+
+def test_clip_dense_ansi_no_propagate_control_codes_ignore(benchmark):
+    """Benchmark clip() with dense ANSI, propagate_sgr=False and control_codes='ignore'."""
+    text = '\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m \x1b[33myellow\x1b[0m ' * 50
+    benchmark(wcwidth.clip, text, 6, 30, propagate_sgr=False, control_codes='ignore')
+
+
+def test_clip_long_ascii_control_codes_ignore(benchmark):
+    """Benchmark clip() with long ASCII and control_codes='ignore' (fast-path slice)."""
+    text = 'hello world ' * 1000
+    benchmark(wcwidth.clip, text, 500, 600, control_codes='ignore')
+
+
+def test_wrap_with_ansi_control_codes_ignore(benchmark):
+    """Benchmark wrap() with ANSI sequences and control_codes='ignore'."""
+    text = '\x1b[31mThe quick brown fox jumps over the lazy dog.\x1b[0m Did it really? ' * 20
+    benchmark(wcwidth.wrap, text, 40, control_codes='ignore')
+
+
+def test_ljust_ascii_control_codes_ignore(benchmark):
+    """Benchmark ljust() with ASCII and control_codes='ignore'."""
+    benchmark(wcwidth.ljust, 'hello', 20, control_codes='ignore')
+
+
 def test_propagate_sgr_multiline(benchmark):
     """Benchmark propagate_sgr() with multiple lines."""
     lines = ['\x1b[1;31mline one', 'line two', 'line three\x1b[0m']
@@ -327,7 +471,7 @@ def test_iter_sequences_mixed(benchmark):
     benchmark(lambda: list(wcwidth.iter_sequences(text)))
 
 
-# Brahmic script benchmarks — text with virama conjuncts
+# Brahmic script benchmarks -- text with virama conjuncts
 BRAHMIC_DEVANAGARI = 'हिन्दी भाषा में लिखा गया पाठ है। क्षत्रिय स्त्री ' * 20
 BRAHMIC_BENGALI = 'বাংলা ভাষায় লেখা একটি পাঠ। বাঙ্গালী ভাষা ' * 20
 
@@ -374,33 +518,48 @@ _udhr_skip = pytest.mark.skipif(
     reason=f"{os.path.basename(UDHR_FILE)} is missing; run bin/update-tables.py",
 )
 
+_py38_skip_pedantic = pytest.mark.skipif(
+    sys.version_info[:2] < (3, 9),
+    reason='benchmark.pedantic() not supported in python 3.8 or earlier')
+
 
 @_udhr_skip
+@_py38_skip_pedantic
 def test_wrap_udhr(benchmark):
     """Benchmark wrap() with multilingual UDHR text."""
+    if not hasattr(benchmark, 'pedantic'):
+        pytest.skip('pytest-codspeed not installed')
     result = benchmark.pedantic(wcwidth.wrap, args=(UDHR_TEXT, 80), rounds=1, iterations=1)
     assert len(result)
     assert all(0 <= wcwidth.width(_l) <= 80 for _l in result)
 
 
 @_udhr_skip
+@_py38_skip_pedantic
 def test_width_udhr(benchmark):
     """Benchmark width() with multilingual UDHR text."""
+    if not hasattr(benchmark, 'pedantic'):
+        pytest.skip('pytest-codspeed not installed')
     result = benchmark.pedantic(wcwidth.width, args=(UDHR_TEXT,), rounds=1, iterations=1)
     assert result > 0
 
 
 @_udhr_skip
+@_py38_skip_pedantic
 def test_width_udhr_lines(benchmark):
     """Benchmark width() on individual UDHR lines."""
+    if not hasattr(benchmark, 'pedantic'):
+        pytest.skip('pytest-codspeed not installed')
     result = benchmark.pedantic(lambda: sum(wcwidth.width(line) for line in UDHR_LINES),
                                 rounds=1, iterations=1)
     assert result > 0
 
 
 @_udhr_skip
+@_py38_skip_pedantic
 def test_width_wcswidth_consistency_udhr(benchmark):
     """Verify width() and wcswidth() agree for printable multilingual text."""
+
     def check():
         failures = []
         for line in UDHR_LINES:
@@ -411,30 +570,38 @@ def test_width_wcswidth_consistency_udhr(benchmark):
             if w != wcs:
                 failures.append((line[:60], w, wcs))
         return failures
+    if not hasattr(benchmark, 'pedantic'):
+        pytest.skip('pytest-codspeed not installed')
     failures = benchmark.pedantic(check, rounds=1, iterations=1)
     assert not failures
 
 
 @_udhr_skip
+@_py38_skip_pedantic
 def test_width_fastpath_integrity_udhr(benchmark):
     """Verify width() produces identical results with and without the fast path."""
-    saved = _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN
+    saved = _width_module._WIDTH_FAST_PATH_MIN_LEN
 
     def check():
-        _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN = 0
+        _width_module._WIDTH_FAST_PATH_MIN_LEN = 0
         fast_total = sum(wcwidth.width(line) for line in UDHR_LINES)
-        _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN = 999_999
+        _width_module._WIDTH_FAST_PATH_MIN_LEN = 999_999
         parse_total = sum(wcwidth.width(line) for line in UDHR_LINES)
         return fast_total, parse_total
 
+    if not hasattr(benchmark, 'pedantic'):
+        pytest.skip('pytest-codspeed not installed')
     fast_total, parse_total = benchmark.pedantic(check, rounds=1, iterations=1)
-    _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN = saved
+    _width_module._WIDTH_FAST_PATH_MIN_LEN = saved
     assert fast_total == parse_total
 
 
 @_udhr_skip
+@_py38_skip_pedantic
 def test_ljust_udhr_lines(benchmark):
     """Benchmark ljust() on UDHR lines."""
+    if not hasattr(benchmark, 'pedantic'):
+        pytest.skip('pytest-codspeed not installed')
     benchmark.pedantic(lambda: [wcwidth.ljust(line, w + 1, UDHR_FILLCHAR)
                                 for line, w in zip(UDHR_LINES, UDHR_WIDTHS)],
                        rounds=1, iterations=1)

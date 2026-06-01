@@ -42,6 +42,7 @@ TS_LINT_DART_FIELDS = (
     df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
     df.NodejsRootVarName.value,
     df.TsCheckType.value,
+    df.TsCheckHasCoverage.value,
 )
 
 TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
@@ -483,6 +484,11 @@ def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
         elif tool == "nodejs":
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
+
+            if nodejs_version.major >= 25 and unit.get("OS_LINUX") == "yes":
+                dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
+                unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+
         elif erm_json.is_resource_multiplatform(tool):
             v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
             sb_resources = [
@@ -1065,8 +1071,31 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
             nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
             unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
 
-    pj_files = set(pj.get_files())
-    missing_outputs = set(ts_outputs) - pj_files
+    # remove "^./" and "/$"
+    # build/, ./build, ./build/ => build
+    # build/a/, ./build/a/, ./build/a => build/a
+    def _normalize_path(p):
+        if p.startswith("./"):
+            p = p[2:]
+        return p.rstrip("/")
+
+    # checks that build outputs contains in package.json#files
+    # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
+    # TS_OUTPUTS(build) -- files: ["./build", "./build/", "build/"] ✅
+    # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
+    # TS_OUTPUTS(dist) -- files: ["build"] ❌
+    # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
+    normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
+    normalized_ts_outputs = [_normalize_path(f) for f in ts_outputs]
+
+    missing_outputs = []
+    for output in normalized_ts_outputs:
+        found = any(
+            pj_file == output or pj_file.startswith(output + "/") or output.startswith(pj_file + "/")
+            for pj_file in normalized_pj_files
+        )
+        if not found:
+            missing_outputs.append(output)
 
     if missing_outputs:
         ymake.report_configure_error(
@@ -1084,6 +1113,9 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
 def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     if not _is_tests_enabled(unit):
         return
+
+    if unit.enabled('TS_COVERAGE'):
+        unit.on_peerdir_ts_resource("nyc")
 
     ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
@@ -1103,15 +1135,27 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     unit.on_setup_install_node_modules_recipe(pm.module_path)
     unit.on_setup_extract_output_tars_recipe(pm.module_path)
 
-    peers = _create_pm(unit).get_local_peers_from_package_json()
+    peers = pm.get_local_peers_from_package_json()
     if peers:
         unit.ondepends(peers)
 
+    test_env_value = None
+
+    if unit.get("_LD_LIBRARY_PATH_ARGS"):
+        tev_raw = unit.get("TEST_ENV_VALUE")
+        unit.set(["TEST_ENV_VALUE", '"LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"'])
+        test_env_value = df.TestEnv.value(unit, [], {})
+        unit.set(["TEST_ENV_VALUE", tev_raw])
+
+    pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
+
     for script_name, is_medium, check_type in ts_check_list:
+        cov_script_name = f"{script_name}:coverage"
         flat_args = ("ts_check",)
         spec_args = dict(
             NAME=[script_name],  # df.TestName.name_from_macro_args expects array
             TS_CHECK_TYPE=check_type,
+            TS_CHECK_HAS_COVERAGE="yes" if cov_script_name in pj_scripts else "no",
         )
         if is_medium == "yes":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
@@ -1120,6 +1164,9 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
 
         dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
         dart_record[df.TestFiles.KEY] = test_files
+
+        if test_env_value:
+            dart_record[df.TestEnv.KEY] = test_env_value
 
         data = ytest.dump_test(unit, dart_record)
         if data:

@@ -76,16 +76,16 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
             // expectedRange should be locked for reading and copying.
             UNIT_ASSERT_VALUES_EQUAL(
-                ExpectedRange.Print(),
+                ExpectedRange.Print() + "[H1];" + ExpectedRange.Print() +
+                    "[H0,H2,H3];",
                 DirtyMap.DebugPrintLockedDDiskRanges());
 
-            // Complete reading and rea-arm.
-            SetReadResult({.Error = MakeError(S_OK)});
-            ClearReadPromises();
+            // Complete reading and re-arm promise.
+            SetReadResult({.Error = MakeError(S_OK)}, false);
 
             // expectedRange should be locked for copying.
             UNIT_ASSERT_VALUES_EQUAL(
-                ExpectedRange.Print(),
+                ExpectedRange.Print() + "[H1];",
                 DirtyMap.DebugPrintLockedDDiskRanges());
 
             // Set next expected range right before completing write.
@@ -95,9 +95,9 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             ExpectedRange = nextExpectedRange;
 
             // Complete writing and rea-arm promise
-            WritePromise.SetValue(
-                TDBGWriteBlocksResponse{.Error = MakeError(S_OK)});
-            WritePromise = NewPromise<TDBGWriteBlocksResponse>();
+            SetWriteResult(
+                TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+                false);
 
             if (i == 5) {
                 // Check state on 5th iteration
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         auto complete = Copier->Start();
 
         // Read range - OK.
-        SetReadResult({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)}, false);
 
         // Data copying should be completed with error.
         UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
@@ -235,16 +235,16 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
 
         // Read range #0 - OK.
-        SetReadResult({.Error = MakeError(S_OK)});
-        ClearReadPromises();
+        SetReadResult({.Error = MakeError(S_OK)}, false);
 
         // Stop data copy
         auto stopped = Copier->Stop();
         UNIT_ASSERT_VALUES_EQUAL(false, stopped.IsReady());
 
         // Write range #0 - OK.
-        WritePromise.SetValue({.Error = MakeError(S_OK)});
-        WritePromise = NewPromise<TDBGWriteBlocksResponse>();
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
         // Coping should be stoped with "Interrupted" status.
         UNIT_ASSERT_VALUES_EQUAL(true, stopped.IsReady());
@@ -270,16 +270,16 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
 
         // Read range #1 - OK.
-        SetReadResult({.Error = MakeError(S_OK)});
-        ClearReadPromises();
+        SetReadResult({.Error = MakeError(S_OK)}, false);
 
         // Stop data copy
         stopped = Copier->Stop();
         UNIT_ASSERT_VALUES_EQUAL(false, stopped.IsReady());
 
         // Write range #1 - OK.
-        WritePromise.SetValue({.Error = MakeError(S_OK)});
-        WritePromise = NewPromise<TDBGWriteBlocksResponse>();
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
         // Coping should be stoped with "Interrupted" status.
         UNIT_ASSERT_VALUES_EQUAL(true, stopped.IsReady());
@@ -312,12 +312,14 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         auto complete = Copier->Start();
 
         // Read range - OK.
-        SetReadResult({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)}, false);
 
         // Stop after one range
         Copier->Stop();
 
-        WritePromise.SetValue({.Error = MakeError(S_OK)});
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
         // Data copying should be completed with error.
         UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
@@ -378,16 +380,16 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             flushHints.DebugPrint());
 
         // Read range #0 - OK.
-        SetReadResult({.Error = MakeError(S_OK)});
-        ClearReadPromises();
+        SetReadResult({.Error = MakeError(S_OK)}, false);
 
         // The reading of range #1 will begin immediately after writing to range
         // #0.
         ExpectedRange = TBlockRange64::WithLength(256, BlocksPerCopy);
 
         // Write range #0 - OK.
-        WritePromise.SetValue({.Error = MakeError(S_OK)});
-        WritePromise = NewPromise<TDBGWriteBlocksResponse>();
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
         // Coping range #1 in progress.
 
@@ -402,18 +404,18 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             flushHints.DebugPrint());
 
         // Read range #1 - OK.
-        SetReadResult({.Error = MakeError(S_OK)});
-        ClearReadPromises();
+        SetReadResult({.Error = MakeError(S_OK)}, false);
 
         // The reading of range #2 will begin immediately after writing to range
         // #1.
         ExpectedRange = TBlockRange64::WithLength(512, BlocksPerCopy);
 
         // Write range #1 - OK.
-        WritePromise.SetValue({.Error = MakeError(S_OK)});
-        WritePromise = NewPromise<TDBGWriteBlocksResponse>();
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
-        // Coping range #2 in progress.
+        //  Coping range #2 in progress.
 
         // Flush hints should contains writes overlapped with range #1
         flushHints = DirtyMap.MakeFlushHint(1);
@@ -425,12 +427,13 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             flushHints.DebugPrint());
 
         // Read range #2 - OK.
-        SetReadResult({.Error = MakeError(S_OK)});
-        ClearReadPromises();
+        SetReadResult({.Error = MakeError(S_OK)}, false);
 
         // Will stop after writing range #2.
         Copier->Stop();
-        WritePromise.SetValue({.Error = MakeError(S_OK)});
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
         // Data copying should be completed with error.
         UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());

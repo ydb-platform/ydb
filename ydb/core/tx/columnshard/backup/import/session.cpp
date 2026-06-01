@@ -17,8 +17,8 @@ void TSession::Finish() {
     Status = EStatus::Finished;
 }
 
-const TInternalPathId TSession::GetInternalPathId() const {
-    return Task->GetInternalPathId();
+const NColumnShard::TSchemeShardLocalPathId TSession::GetSchemeShardLocalPathId() const {
+    return Task->GetSchemeShardLocalPathId();
 }
 
 const TImportTask &TSession::GetTask() const {

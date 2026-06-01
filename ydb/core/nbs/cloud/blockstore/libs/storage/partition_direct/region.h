@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -23,12 +24,12 @@ public:
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,
+        const TVChunkConfigByIndex& vChunkConfigs,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
-        TDuration writeHedgingDelay,
-        TDuration writeRequestTimeout,
-        TDuration traceSamplePeriod,
         NMonitoring::TDynamicCounterPtr counters);
+
+    void Run();
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -38,8 +39,6 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        EWriteMode writeMode,
-        TDuration pbufferReplyTimeout,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 

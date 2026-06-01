@@ -490,6 +490,7 @@ message TReqCommitTransaction
     required NYT.NProto.TGuid transaction_id = 1;
     reserved 6;
     repeated NYT.NProto.TGuid additional_participant_cell_ids = 7;
+    repeated uint32 expected_prepare_signatures = 9;
     optional uint64 max_allowed_commit_timestamp = 8;
 
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -512,6 +513,7 @@ message TReqFlushTransaction
 message TRspFlushTransaction
 {
     repeated NYT.NProto.TGuid participant_cell_ids = 1;
+    repeated uint32 expected_prepare_signatures = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -743,6 +745,7 @@ message TReqSelectRows
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
     optional int32 optimization_level = 35; // EOptimizationLevel
     optional int32 hyper_log_log_precision = 36;
+    optional bool enable_parallelize_unordered_group_by = 37;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 

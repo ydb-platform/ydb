@@ -391,6 +391,13 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
     void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
+struct TCBOOptimizerStats {
+    // TreesTotal counts CBO candidates that reached the CBO-enabled path.
+    // TreesOptimized counts candidates for which join enumeration completed.
+    ui64 TreesTotal = 0;
+    ui64 TreesOptimized = 0;
+};
+
 class IOptimizerNew {
 public:
     using TPtr = std::shared_ptr<IOptimizerNew>;
@@ -401,9 +408,11 @@ public:
     {
     }
     virtual ~IOptimizerNew() = default;
+
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
-        const TOptimizerHints& hints = {}) = 0;
+        const TOptimizerHints& hints = {},
+        TCBOOptimizerStats* stats = nullptr) = 0;
 };
 
 struct TCBOSettings {

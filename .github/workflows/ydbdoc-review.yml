@@ -1,0 +1,50 @@
+# Запуск только когда на PR вешают лейбл doc_translate.
+
+name: ydbdoc-review (doc_translate label)
+
+on:
+  pull_request_target:
+    types: [labeled]
+    paths:
+      - "ydb/docs/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  ydbdoc-review:
+    if: |
+      github.event.label.name == 'doc_translate' 
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ydbdoc-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch merge base ref
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
+
+      - name: Documentation translation review
+        uses: ydb-platform/ydbdoc-review@v0.1.0
+        with:
+          repo: ${{ github.repository }}
+          pr: ${{ github.event.pull_request.number }}
+          merge_base_with: origin/${{ github.event.pull_request.base.ref }}
+          # dry_run: "true"   # раскомментируйте для прогона без записи/commit/push
+          # no_commit: "true" # или только запись файлов без коммита (см. README)
+        env:
+          YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDBDOC_REVIEW_ENABLED: ${{ vars.YDBDOC_REVIEW_ENABLED }}
+          YDBDOC_MODEL_CHECK: ${{ vars.YDBDOC_MODEL_CHECK }}
+          YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_PUSH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}  # секрет YDBDOC_PUSH_PAT → env для приложения
+          YDBDOC_REPO_PATH: ${{ github.workspace }}

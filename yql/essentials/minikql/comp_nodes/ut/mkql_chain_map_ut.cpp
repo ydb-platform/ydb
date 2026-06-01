@@ -1,4 +1,5 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -83,19 +84,13 @@ Y_UNIT_TEST_LLVM(TestOverList) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto dataType = pb.NewOptionalType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)}));
-
-    auto data0 = pb.NewEmptyOptional(dataType);
-
-    auto data2 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(7),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("A")}));
-    auto data3 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(1),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("D")}));
-
-    auto list = pb.NewList(dataType, {data2, data0, data3});
-
-    auto init = pb.NewTuple({pb.NewOptional(pb.NewDataLiteral<i32>(3)),
-                             pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("B"))});
+    using TItem = TMaybe<std::tuple<i32, TStringBuf>>;
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                         TItem{std::tuple<i32, TStringBuf>{7, "A"}},
+                                                         TItem{},
+                                                         TItem{std::tuple<i32, TStringBuf>{1, "D"}},
+                                                     });
+    auto init = NTest::ConvertValueToLiteralNode(pb, std::make_tuple(TMaybe<i32>{3}, TMaybe<TStringBuf>{"B"}));
 
     auto pgmReturn = pb.ChainMap(list, init,
                                  [&](TRuntimeNode item, TRuntimeNode state) -> TRuntimeNodePair {
@@ -120,18 +115,13 @@ Y_UNIT_TEST_LLVM(Test1OverList) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto dataType = pb.NewOptionalType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)}));
-
-    auto data0 = pb.NewEmptyOptional(dataType);
-
-    auto data1 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(3),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("B")}));
-    auto data2 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(7),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("A")}));
-    auto data3 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(1),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("D")}));
-
-    auto list = pb.NewList(dataType, {data1, data2, data3, data0});
+    using TItem = TMaybe<std::tuple<i32, TStringBuf>>;
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                         TItem{std::tuple<i32, TStringBuf>{3, "B"}},
+                                                         TItem{std::tuple<i32, TStringBuf>{7, "A"}},
+                                                         TItem{std::tuple<i32, TStringBuf>{1, "D"}},
+                                                         TItem{},
+                                                     });
 
     auto pgmReturn = pb.Chain1Map(list,
                                   [&](TRuntimeNode item) -> TRuntimeNodePair {
@@ -160,19 +150,13 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto dataType = pb.NewOptionalType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)}));
-
-    auto data0 = pb.NewEmptyOptional(dataType);
-
-    auto data2 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(7),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("A")}));
-    auto data3 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(1),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("D")}));
-
-    auto list = pb.NewList(dataType, {data2, data0, data3});
-
-    auto init = pb.NewTuple({pb.NewOptional(pb.NewDataLiteral<i32>(3)),
-                             pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("B"))});
+    using TItem = TMaybe<std::tuple<i32, TStringBuf>>;
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                         TItem{std::tuple<i32, TStringBuf>{7, "A"}},
+                                                         TItem{},
+                                                         TItem{std::tuple<i32, TStringBuf>{1, "D"}},
+                                                     });
+    auto init = NTest::ConvertValueToLiteralNode(pb, std::make_tuple(TMaybe<i32>{3}, TMaybe<TStringBuf>{"B"}));
 
     auto pgmReturn = pb.FromFlow(pb.ChainMap(pb.ToFlow(list), init,
                                              [&](TRuntimeNode item, TRuntimeNode state) -> TRuntimeNodePair {
@@ -199,18 +183,13 @@ Y_UNIT_TEST_LLVM(Test1OverFlow) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto dataType = pb.NewOptionalType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)}));
-
-    auto data0 = pb.NewEmptyOptional(dataType);
-
-    auto data1 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(3),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("B")}));
-    auto data2 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(7),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("A")}));
-    auto data3 = pb.NewOptional(pb.NewTuple({pb.NewDataLiteral<i32>(1),
-                                             pb.NewDataLiteral<NUdf::EDataSlot::String>("D")}));
-
-    auto list = pb.NewList(dataType, {data1, data2, data3, data0});
+    using TItem = TMaybe<std::tuple<i32, TStringBuf>>;
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                         TItem{std::tuple<i32, TStringBuf>{3, "B"}},
+                                                         TItem{std::tuple<i32, TStringBuf>{7, "A"}},
+                                                         TItem{std::tuple<i32, TStringBuf>{1, "D"}},
+                                                         TItem{},
+                                                     });
 
     auto pgmReturn = pb.FromFlow(pb.Chain1Map(pb.ToFlow(list),
                                               [&](TRuntimeNode item) -> TRuntimeNodePair {
@@ -307,13 +286,15 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
     TSetup<LLVM> setup(GetChain1MapThrottleFactory());
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto item1 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(10)}});
-    auto item2 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(20)}});
-    auto item3 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(30)}});
-    auto item4 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(40)}});
-    auto item5 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(50)}});
-    auto itemType = item1.GetStaticType();
-    auto list = pb.NewList(itemType, {item1, item2, item3, item4, item5});
+    using TInRow = NTest::TStructType<NTest::TStructMember<"dt", ui64>>;
+
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                         {{{10ULL}}},
+                                                         {{{20ULL}}},
+                                                         {{{30ULL}}},
+                                                         {{{40ULL}}},
+                                                         {{{50ULL}}},
+                                                     });
 
     auto throttledStream = ThrottleNarrowStream(pb, pb.Iterator(list, {}));
 

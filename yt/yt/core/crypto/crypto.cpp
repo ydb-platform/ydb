@@ -63,15 +63,16 @@ TMD5Hash TMD5Hasher::GetDigest() const
     return hash;
 }
 
-TString TMD5Hasher::GetHexDigestUpperCase() const
+std::string TMD5Hasher::GetHexDigestUpperCase() const
 {
     auto md5 = GetDigest();
     return HexEncode(md5.data(), md5.size());
 }
 
-TString TMD5Hasher::GetHexDigestLowerCase() const
+std::string TMD5Hasher::GetHexDigestLowerCase() const
 {
-    return to_lower(GetHexDigestUpperCase());
+    // TODO(babenko): migrate to std::string
+    return to_lower(TString(GetHexDigestUpperCase()));
 }
 
 void TMD5Hasher::Persist(const TStreamPersistenceContext& context)
@@ -88,14 +89,14 @@ const TMD5State& TMD5Hasher::GetState() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetMD5HexDigestUpperCase(TStringBuf data)
+std::string GetMD5HexDigestUpperCase(TStringBuf data)
 {
     TMD5Hasher hasher;
     hasher.Append(data);
     return hasher.GetHexDigestUpperCase();
 }
 
-TString GetMD5HexDigestLowerCase(TStringBuf data)
+std::string GetMD5HexDigestLowerCase(TStringBuf data)
 {
     TMD5Hasher hasher;
     hasher.Append(data);
@@ -142,15 +143,16 @@ TSha1Hash TSha1Hasher::GetDigest() const
     return hash;
 }
 
-TString TSha1Hasher::GetHexDigestUpperCase() const
+std::string TSha1Hasher::GetHexDigestUpperCase() const
 {
     auto sha1 = GetDigest();
     return HexEncode(sha1.data(), sha1.size());
 }
 
-TString TSha1Hasher::GetHexDigestLowerCase() const
+std::string TSha1Hasher::GetHexDigestLowerCase() const
 {
-    return to_lower(GetHexDigestUpperCase());
+    // TODO(babenko): migrate to std::string
+    return to_lower(TString(GetHexDigestUpperCase()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -183,27 +185,28 @@ TSha256Hasher::TDigest TSha256Hasher::GetDigest() const
     return digest;
 }
 
-TString TSha256Hasher::GetHexDigestUpperCase() const
+std::string TSha256Hasher::GetHexDigestUpperCase() const
 {
     auto digest = GetDigest();
     return HexEncode(digest.data(), digest.size());
 }
 
-TString TSha256Hasher::GetHexDigestLowerCase() const
+std::string TSha256Hasher::GetHexDigestLowerCase() const
 {
-    return to_lower(GetHexDigestUpperCase());
+    // TODO(babenko): migrate to std::string
+    return to_lower(TString(GetHexDigestUpperCase()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetSha256HexDigestUpperCase(TStringBuf data)
+std::string GetSha256HexDigestUpperCase(TStringBuf data)
 {
     TSha256Hasher hasher;
     hasher.Append(data);
     return hasher.GetHexDigestUpperCase();
 }
 
-TString GetSha256HexDigestLowerCase(TStringBuf data)
+std::string GetSha256HexDigestLowerCase(TStringBuf data)
 {
     TSha256Hasher hasher;
     hasher.Append(data);
@@ -230,16 +233,16 @@ TSha256Hmac CreateSha256HmacImpl(TStringBuf key, TStringBuf message)
     return hmac;
 }
 
-TString CreateSha256Hmac(TStringBuf key, TStringBuf message)
+std::string CreateSha256Hmac(TStringBuf key, TStringBuf message)
 {
     auto hmac = CreateSha256HmacImpl(key, message);
     return to_lower(HexEncode(hmac.data(), hmac.size()));
 }
 
-TString CreateSha256HmacRaw(TStringBuf key, TStringBuf message)
+std::string CreateSha256HmacRaw(TStringBuf key, TStringBuf message)
 {
     auto hmac = CreateSha256HmacImpl(key, message);
-    return TString(hmac.data(), hmac.size());
+    return std::string(hmac.data(), hmac.size());
 }
 
 bool ConstantTimeCompare(TStringBuf trusted, TStringBuf untrusted)
@@ -255,13 +258,13 @@ bool ConstantTimeCompare(TStringBuf trusted, TStringBuf untrusted)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString HashPassword(const TString& password, const TString& salt)
+std::string HashPassword(const std::string& password, const std::string& salt)
 {
     auto passwordSha256 = GetSha256HexDigestLowerCase(password);
     return HashPasswordSha256(passwordSha256, salt);
 }
 
-TString HashPasswordSha256(const TString& passwordSha256, const TString& salt)
+std::string HashPasswordSha256(const std::string& passwordSha256, const std::string& salt)
 {
     auto saltedPassword = salt + passwordSha256;
     return GetSha256HexDigestLowerCase(saltedPassword);
@@ -269,12 +272,12 @@ TString HashPasswordSha256(const TString& passwordSha256, const TString& salt)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GenerateCryptoStrongRandomString(int length)
+std::string GenerateCryptoStrongRandomString(int length)
 {
     std::vector<unsigned char> bytes(length);
     if (RAND_bytes(bytes.data(), bytes.size())) {
         auto* data = reinterpret_cast<char*>(bytes.data());
-        return TString{data, static_cast<size_t>(length)};
+        return std::string{data, static_cast<size_t>(length)};
     } else {
         THROW_ERROR_EXCEPTION("Failed to generate %v random bytes", length)
             << TErrorAttribute("openssl_error_code", ERR_get_error());

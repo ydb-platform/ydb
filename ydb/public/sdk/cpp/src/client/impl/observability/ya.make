@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    metric_buffer.cpp
     metrics.cpp
     observation.cpp
     span.cpp

@@ -26,7 +26,7 @@ namespace NKikimr {
 
 namespace {
 
-static const TString UdfName("UDF");
+const TString UdfName("UDF");
 
 class TPrefixLogger: public NUdf::ILogger {
 public:

@@ -5,6 +5,13 @@
 
 namespace NKikimr::NDDisk {
 
+    void TPersistentBufferBarriersManager::Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId) {
+        PersistentBufferUniqueId = uniqueId;
+        NodeId = nodeId;
+        PDiskId = pdiskId;
+        SlotId = slotId;
+    }
+
     ui64 TPersistentBufferBarriersManager::GetBarrier(ui64 tabletId) const {
         auto it = PersistentBufferBarriersLocation.find(tabletId);
         if (it == PersistentBufferBarriersLocation.end()) {
@@ -54,7 +61,11 @@ namespace NKikimr::NDDisk {
                     memset(&header, 0, sizeof(TPersistentBufferHeader));
                     memcpy(header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
                     header.Flags = TPersistentBufferHeader::IS_BARRIER;
-                    header.Barrier.BarrierLsn = 0;
+                    header.RecordLsn = 0;
+                    header.PersistentBufferUniqueId = PersistentBufferUniqueId;
+                    header.NodeId = NodeId;
+                    header.PDiskId = PDiskId;
+                    header.SlotId = SlotId;
                     header.Barrier.BarrierIdx = PersistentBufferBarriers.size();
                     PersistentBufferBarriers.push_back({Max<ui32>(), Max<ui32>(), std::move(header)});
                 }
@@ -79,7 +90,7 @@ namespace NKikimr::NDDisk {
             STLOG(PRI_ERROR, BS_DDISK, BSDD29, "TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous", (TabletId, tabletId), (Lsn, lsn), (PrevLsn, barrier.Header.Barrier.Barriers[pos].Lsn));
         }
         barrier.Header.Barrier.Barriers[pos] = {tabletId, lsn};
-        barrier.Header.Barrier.BarrierLsn++;
+        barrier.Header.RecordLsn++;
 
         return {oldChunkIdx, oldSectorIdx, barrier};
     }
@@ -138,9 +149,168 @@ namespace NKikimr::NDDisk {
             PersistentBufferBarriers.resize(idx + 1);
         }
 
-        if (PersistentBufferBarriers[idx].Header.Barrier.BarrierLsn < header->Barrier.BarrierLsn) {
+        if (PersistentBufferBarriers[idx].Header.RecordLsn < header->RecordLsn) {
             PersistentBufferBarriers[idx] = {chunkIdx, sectorIdx, *header};
         }
         return true;
+    }
+
+    bool TPersistentBufferBarriersManager::Compact(const std::set<ui64>& lsns, char* compactLsns) {
+        ui32 resPos = 0;
+        if (lsns.empty()) {
+            return false;
+        }
+
+        auto it = lsns.begin();
+        ui64 first = *it;
+
+        // Write first LSN as 8 raw bytes (little-endian)
+        memcpy(compactLsns, &first, 8);
+        resPos += 8;
+        ui64 prev = first;
+        ++it;
+        for (; it != lsns.end(); ++it) {
+            ui64 delta = *it - prev;
+            prev = *it;
+            // Encode delta as variable-length (LEB128-style)
+            while (delta >= 0x80) {
+                if (resPos >= TPersistentBufferHeader::ErasesBufferSize) {
+                    return false;
+                }
+                compactLsns[resPos++] = static_cast<char>((delta & 0x7F) | 0x80);
+                delta >>= 7;
+            }
+            if (resPos >= TPersistentBufferHeader::ErasesBufferSize) {
+                return false;
+            }
+            compactLsns[resPos++] = static_cast<char>(delta & 0x7F);
+        }
+
+        return true;
+    }
+
+    std::set<ui64> TPersistentBufferBarriersManager::Uncompact(const char* data) {
+        std::set<ui64> res;
+        ui64 first = 0;
+        memcpy(&first, data, 8);
+        if (first == 0) {
+            return res;
+        }
+        res.insert(first);
+
+        ui64 prev = first;
+        size_t pos = 8;
+        while (pos < TPersistentBufferHeader::ErasesBufferSize) {
+            ui64 delta = 0;
+            int shift = 0;
+            while (pos < TPersistentBufferHeader::ErasesBufferSize) {
+                ui8 byte = static_cast<ui8>(data[pos++]);
+                delta |= static_cast<ui64>(byte & 0x7F) << shift;
+                shift += 7;
+                if ((byte & 0x80) == 0) {
+                    break;
+                }
+            }
+            if (delta == 0) {
+                return res;
+            }
+            prev += delta;
+            res.insert(prev);
+        }
+
+        return res;
+    }
+
+    std::optional<TFastErase> TPersistentBufferBarriersManager::Erase(ui64 tabletId, const std::set<ui64>& lsns,
+        TPersistentBufferSpaceAllocator& allocator) {
+        if (allocator.GetFreeSpace() < 2 || lsns.size() < 2) {
+            return std::nullopt;
+        }
+        auto& erase = Erases[tabletId];
+        auto newLsns = erase.Lsns;
+        auto barrier = GetBarrier(tabletId);
+        auto it = newLsns.upper_bound(barrier);
+        newLsns.erase(newLsns.begin(), it);
+        newLsns.insert(lsns.begin(), lsns.end());
+
+        TPersistentBufferHeader header;
+        memset(&header, 0, sizeof(TPersistentBufferHeader));
+        if (!Compact(newLsns, header.Erase.CompactLsns)) {
+            return std::nullopt;
+        }
+        memcpy(header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+        erase.Lsns = std::move(newLsns);
+        auto oldChunkIdx = erase.ChunkIdx;
+        auto oldSectorIdx = erase.SectorIdx;
+        auto space = allocator.Occupy(1);
+        Y_ABORT_UNLESS(space.size() == 1);
+        erase.ChunkIdx = space[0].ChunkIdx;
+        erase.SectorIdx = space[0].SectorIdx;
+
+        header.Flags = TPersistentBufferHeader::IS_ERASE;
+        header.RecordLsn = ++erase.HeaderLsn;
+        header.PersistentBufferUniqueId = PersistentBufferUniqueId;
+        header.NodeId = NodeId;
+        header.PDiskId = PDiskId;
+        header.SlotId = SlotId;
+        header.Erase.TabletId = tabletId;
+        header.Erase.EraseIdx = 0;
+        return std::make_optional(TFastErase{oldChunkIdx, oldSectorIdx, erase.ChunkIdx, erase.SectorIdx, std::move(header)});
+    }
+
+    bool TPersistentBufferBarriersManager::AddErase(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx) {
+        if ((header->Flags & TPersistentBufferHeader::IS_ERASE) == 0) {
+            return false;
+        }
+        auto tabletId = header->Erase.TabletId;
+        auto& erase = Erases[tabletId];
+        if (erase.HeaderLsn > header->RecordLsn) {
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ", (TabletId, tabletId), (erase.HeaderLsn, erase.HeaderLsn), (header->RecordLsn, header->RecordLsn));
+            return false;
+        }
+        erase.ChunkIdx = chunkIdx;
+        erase.SectorIdx = sectorIdx;
+        erase.HeaderLsn = header->RecordLsn;
+        erase.Lsns = Uncompact(header->Erase.CompactLsns);
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase", (TabletId, tabletId), (HeaderLsn, header->RecordLsn));
+        return true;
+    }
+
+    void TPersistentBufferBarriersManager::RestoreErases(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
+        for (auto it = Erases.begin(); it != Erases.end();) {
+            auto& [tid, erase] = *it;
+
+            auto pbIt = persistentBuffers.lower_bound({tid, 0});
+            bool hasRecords = pbIt != persistentBuffers.end() && std::get<0>(pbIt->first) == tid;
+            if (!hasRecords) {
+                it = Erases.erase(it);
+                continue;
+            }
+
+            allocator.MarkOccupied({{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx}});
+
+            while (pbIt != persistentBuffers.end() && std::get<0>(pbIt->first) == tid) {
+                TPersistentBuffer& buffer = pbIt->second;
+                for (ui64 lsn : erase.Lsns) {
+                    STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found", (TabletId, tid), (Lsn, lsn));
+                    buffer.Records.erase(lsn);
+                }
+                if (buffer.Records.empty()) {
+                    auto eraseIt = pbIt++;
+                    persistentBuffers.erase(eraseIt);
+                } else {
+                    ++pbIt;
+                }
+            }
+            ++it;
+        }
+    }
+
+    ui32 TPersistentBufferBarriersManager::GetErasesCount(ui64 tabletId) {
+        const auto& it = Erases.find(tabletId);
+        if (it == Erases.end()) {
+            return 0;
+        }
+        return it->second.Lsns.size();
     }
 }

@@ -5,6 +5,7 @@ RECURSE_FOR_TESTS(
     ut_backup
     ut_backup_collection
     ut_backup_collection_reboots
+    ut_incr_backup_reboots
     ut_base
     ut_base_reboots
     ut_bsvolume
@@ -51,6 +52,7 @@ RECURSE_FOR_TESTS(
     ut_resource_pool
     ut_resource_pool_reboots
     ut_restore
+    ut_incr_restore_reboots
     ut_rtmr
     ut_rtmr_reboots
     ut_ru_calculator
@@ -168,6 +170,7 @@ SRCS(
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_secret.cpp
     schemeshard__operation_create_restore_incremental_backup.cpp
+    schemeshard__operation_incr_restore_lock_targets.cpp
     schemeshard__operation_incremental_restore_finalize.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
@@ -223,6 +226,7 @@ SRCS(
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
     schemeshard__tenant_shred_manager.cpp
@@ -319,6 +323,8 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_impl.h)
 
 GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
 

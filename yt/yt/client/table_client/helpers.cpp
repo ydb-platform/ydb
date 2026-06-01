@@ -1362,6 +1362,139 @@ void UnversionedValueToMapImpl(
         &consumer);
 }
 
+void UnversionedValueToMapImpl(
+    std::function<void(TString, TUnversionedValue)> appender,
+    TUnversionedValue unversionedValue)
+{
+    if (unversionedValue.Type == EValueType::Null) {
+        return;
+    }
+
+    if (unversionedValue.Type != EValueType::Any) {
+        THROW_ERROR_EXCEPTION("Cannot parse map from %Qlv",
+            unversionedValue.Type);
+    }
+
+    class TConsumer final
+        : public TYsonConsumerBase
+    {
+    public:
+        explicit TConsumer(std::function<void(TString, TUnversionedValue)> appender)
+            : Appender_(std::move(appender))
+        { }
+
+        void OnStringScalar(TStringBuf value) override
+        {
+            FlushValue(MakeUnversionedStringValue(value));
+        }
+
+        void OnInt64Scalar(i64 value) override
+        {
+            FlushValue(MakeUnversionedInt64Value(value));
+        }
+
+        void OnUint64Scalar(ui64 value) override
+        {
+            FlushValue(MakeUnversionedUint64Value(value));
+        }
+
+        void OnDoubleScalar(double value) override
+        {
+            FlushValue(MakeUnversionedDoubleValue(value));
+        }
+
+        void OnBooleanScalar(bool value) override
+        {
+            FlushValue(MakeUnversionedBooleanValue(value));
+        }
+
+        void OnEntity() override
+        {
+            FlushValue(MakeUnversionedSentinelValue(EValueType::Null));
+        }
+
+        void OnBeginList() override
+        {
+            THROW_ERROR_EXCEPTION("YSON lists are not supported in scalar maps");
+        }
+
+        void OnListItem() override
+        {
+            THROW_ERROR_EXCEPTION("YSON lists are not supported in scalar maps");
+        }
+
+        void OnEndList() override
+        {
+            THROW_ERROR_EXCEPTION("YSON lists are not supported in scalar maps");
+        }
+
+        void OnBeginMap() override
+        {
+            if (!InMap_) {
+                InMap_ = true;
+                return;
+            }
+            THROW_ERROR_EXCEPTION("YSON maps are not supported in scalar maps");
+        }
+
+        void OnKeyedItem(TStringBuf key) override
+        {
+            EnsureInMap();
+            if (PendingKey_) {
+                THROW_ERROR_EXCEPTION("Previous map item value is missing");
+            }
+            PendingKey_ = TString(key);
+        }
+
+        void OnEndMap() override
+        {
+            EnsureInMap();
+            if (PendingKey_) {
+                THROW_ERROR_EXCEPTION("Last map item value is missing");
+            }
+            InMap_ = false;
+        }
+
+        void OnBeginAttributes() override
+        {
+            THROW_ERROR_EXCEPTION("YSON attributes are not supported in scalar maps");
+        }
+
+        void OnEndAttributes() override
+        {
+            YT_ABORT();
+        }
+
+    private:
+        const std::function<void(TString, TUnversionedValue)> Appender_;
+
+        bool InMap_ = false;
+        std::optional<TString> PendingKey_;
+
+        void EnsureInMap() const
+        {
+            if (!InMap_) {
+                THROW_ERROR_EXCEPTION("YSON map expected");
+            }
+        }
+
+        void FlushValue(TUnversionedValue value)
+        {
+            EnsureInMap();
+            if (!PendingKey_) {
+                THROW_ERROR_EXCEPTION("YSON scalar value is unexpected");
+            }
+            Appender_(std::move(*PendingKey_), value);
+            PendingKey_.reset();
+        }
+    } consumer(std::move(appender));
+
+    ParseYsonStringBuffer(
+        unversionedValue.AsStringBuf(),
+        EYsonType::Node,
+        &consumer);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void UnversionedValueToYson(TUnversionedValue unversionedValue, TCheckedInDebugYsonTokenWriter* tokenWriter)
@@ -1522,7 +1655,7 @@ TUnversionedValue TryDecodeUnversionedAnyValue(
     TStatelessLexer lexer; // this will not allocate on happy path
     TToken token;
     lexer.ParseToken(value.AsStringBuf(), &token);
-    YT_VERIFY(!token.IsEmpty());
+    YT_VERIFY(token.GetType() != ETokenType::EndOfStream);
 
     switch (token.GetType()) {
         case ETokenType::Int64:

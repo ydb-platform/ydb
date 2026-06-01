@@ -140,7 +140,7 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kContainerRuntime = "conta
 
 /**
   A description about the runtime which could include, for example details about the CRI/API version
-  being used or other customisations.
+  being used or other customizations.
  */
 static constexpr const char *kContainerRuntimeDescription = "container.runtime.description";
 

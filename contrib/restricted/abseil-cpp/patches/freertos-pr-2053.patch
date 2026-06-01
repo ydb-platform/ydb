@@ -1,0 +1,85 @@
+--- contrib/restricted/abseil-cpp/absl/base/internal/sysinfo.cc	(index)
++++ contrib/restricted/abseil-cpp/absl/base/internal/sysinfo.cc	(working tree)
+@@ -50,6 +50,10 @@
+ #include <zircon/process.h>
+ #endif
+ 
++#if defined(__FREERTOS__)
++#include <task.h>
++#endif
++
+ #include <string.h>
+ 
+ #include <cassert>
+@@ -466,6 +470,12 @@ pid_t GetTID() {
+   return static_cast<pid_t>(zx_thread_self());
+ }
+ 
++#elif defined(__FREERTOS__)
++
++pid_t GetTID() {
++  return static_cast<pid_t>(uxTaskGetTaskNumber(xTaskGetCurrentTaskHandle()));
++}
++
+ #else
+ 
+ // Fallback implementation of `GetTID` using `pthread_self`.
+--- contrib/restricted/abseil-cpp/absl/debugging/internal/elf_mem_image.h	(index)
++++ contrib/restricted/abseil-cpp/absl/debugging/internal/elf_mem_image.h	(working tree)
+@@ -35,7 +35,7 @@
+ #if defined(__ELF__) && !defined(__OpenBSD__) && !defined(__QNX__) &&    \
+     !defined(__asmjs__) && !defined(__wasm__) && !defined(__HAIKU__) &&  \
+     !defined(__sun) && !defined(__VXWORKS__) && !defined(__hexagon__) && \
+-    !defined(__XTENSA__)
++    !defined(__XTENSA__)  && !defined(__FREERTOS__)
+ #define ABSL_HAVE_ELF_MEM_IMAGE 1
+ #endif
+ 
+--- contrib/restricted/abseil-cpp/absl/log/internal/log_message.cc	(index)
++++ contrib/restricted/abseil-cpp/absl/log/internal/log_message.cc	(working tree)
+@@ -221,13 +221,13 @@ LogMessage::LogMessageData::LogMessageData(absl::string_view file,
+ void LogMessage::LogMessageData::InitializeEncodingAndFormat() {
+   EncodeStringTruncate(EventTag::kFileName, entry.source_filename(),
+                        &encoded_remaining());
+-  EncodeVarint(EventTag::kFileLine, entry.source_line(), &encoded_remaining());
++  EncodeVarint(EventTag::kFileLine, static_cast<int32_t>(entry.source_line()), &encoded_remaining());
+   EncodeVarint(EventTag::kTimeNsecs, absl::ToUnixNanos(entry.timestamp()),
+                &encoded_remaining());
+   EncodeVarint(EventTag::kSeverity,
+                ProtoSeverity(entry.log_severity(), entry.verbosity()),
+                &encoded_remaining());
+-  EncodeVarint(EventTag::kThreadId, entry.tid(), &encoded_remaining());
++  EncodeVarint(EventTag::kThreadId, static_cast<int32_t>(entry.tid()), &encoded_remaining());
+ }
+ 
+ void LogMessage::LogMessageData::FinalizeEncodingAndFormat() {
+--- contrib/restricted/abseil-cpp/absl/log/internal/proto.h	(index)
++++ contrib/restricted/abseil-cpp/absl/log/internal/proto.h	(working tree)
+@@ -79,6 +79,9 @@ inline bool EncodeVarint(uint64_t tag, uint32_t value, absl::Span<char> *buf) {
+ inline bool EncodeVarint(uint64_t tag, int32_t value, absl::Span<char> *buf) {
+   return EncodeVarint(tag, static_cast<uint64_t>(value), buf);
+ }
++inline bool EncodeVarint(uint64_t tag, bool value, absl::Span<char> *buf) {
++  return EncodeVarint(tag, static_cast<uint64_t>(value), buf);
++}
+ 
+ // Encodes the specified integer as a varint field using ZigZag encoding and
+ // returns true if it fits.
+--- contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_libc.cc	(index)
++++ contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_libc.cc	(working tree)
+@@ -81,6 +81,15 @@ auto tm_zone(const std::tm& tm) -> decltype(tzname[0]) {
+   const bool is_dst = tm.tm_isdst > 0;
+   return tzname[is_dst];
+ }
++#elif defined(__FREERTOS__)
++long int tm_gmtoff(const std::tm& tm) {
++  (void)tm;
++  return 0;
++}
++const char* tm_zone(const std::tm& tm) {
++  (void)tm;
++  return "UTC";
++}
+ #else
+ // Adapt to different spellings of the struct std::tm extension fields.
+ #if defined(tm_gmtoff)

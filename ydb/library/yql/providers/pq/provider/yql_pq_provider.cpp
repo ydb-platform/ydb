@@ -20,8 +20,9 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const std::vector<std::pair<TString, TString>>& taskSensorLabels,
     const std::vector<ui64>& nodeIds,
     bool useActorSystemThreadsInTopicClient,
-    bool useYtflowEngine) {
-    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels, nodeIds, useActorSystemThreadsInTopicClient, useYtflowEngine] (
+    bool useYtflowEngine,
+    bool addTransparentPrefixToTransparentSystemColumns) {
+    return [=] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -44,6 +45,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             auto state = MakeIntrusive<TPqState>(sessionId);
             state->SupportRtmrMode = supportRtmrMode;
             state->UseActorSystemThreadsInTopicClient = useActorSystemThreadsInTopicClient;
+            state->AddTransparentPrefixToTransparentSystemColumns = addTransparentPrefixToTransparentSystemColumns;
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;

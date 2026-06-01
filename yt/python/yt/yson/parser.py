@@ -20,21 +20,18 @@ from .yson_token import (
     TOKEN_END_OF_STREAM,
 )
 
-try:
-    from yt.packages.six import PY3, BytesIO, text_type
-except ImportError:
-    from six import PY3, BytesIO, text_type
+from io import BytesIO
 
 
 def _is_text_reader(stream):
-    return type(stream.read(0)) is text_type
+    return type(stream.read(0)) is str
 
 
 class YsonParser(object):
     def __init__(self, stream, encoding, always_create_attributes):
         # COMPAT: Before porting YSON to Python 3 it supported parsing from
         # unicode strings.
-        if _is_text_reader(stream) and PY3:
+        if _is_text_reader(stream):
             raise TypeError("Only binary streams are supported by YSON parser")
         self._tokenizer = YsonTokenizer(stream, encoding)
         self._always_create_attributes = always_create_attributes
@@ -160,7 +157,7 @@ class YsonParser(object):
 
 class RawYsonParser(object):
     def __init__(self, stream):
-        if _is_text_reader(stream) and PY3:
+        if _is_text_reader(stream):
             raise TypeError("Only binary streams are supported by YSON parser")
         self._buffer = bytearray()
         self._tokenizer = YsonTokenizer(stream, output_buffer=self._buffer)
@@ -256,14 +253,8 @@ def load(stream, yson_type=None, always_create_attributes=True, raw=None,
             raise YsonError("Raw mode is only supported for list fragments")
         return RawYsonParser(stream).parse()
 
-    if not PY3 and encoding is not _ENCODING_SENTINEL and encoding is not None:
-        raise YsonError("Encoding parameter is not supported for Python 2")
-
     if encoding is _ENCODING_SENTINEL:
-        if PY3:
-            encoding = "utf-8"
-        else:
-            encoding = None
+        encoding = "utf-8"
 
     if yson_type == "list_fragment":
         stream = StreamWrap(stream, b"[", b"]")
@@ -280,7 +271,8 @@ def load(stream, yson_type=None, always_create_attributes=True, raw=None,
 def loads(string, yson_type=None, always_create_attributes=True, raw=None,
           encoding=_ENCODING_SENTINEL, lazy=False):
     """Deserializes object from YSON formatted string `string`. See :func:`load <.load>`."""
-    if type(string) is text_type and PY3:
+    if type(string) is str:
+        string = string.encode(encoding)
         raise TypeError("Only binary streams are supported by YSON parser")
     return load(BytesIO(string), yson_type=yson_type,
                 always_create_attributes=always_create_attributes,

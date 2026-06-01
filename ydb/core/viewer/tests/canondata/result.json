@@ -134,7 +134,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "not-zero-number-text"
                     },
-                    "Type": "PersQueueReadBalancer"
+                    "Type": "PersQueue"
                 },
                 {
                     "ChangeTime": "not-zero-number-text",
@@ -150,7 +150,7 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "not-zero-number-text"
                     },
-                    "Type": "PersQueue"
+                    "Type": "PersQueueReadBalancer"
                 }
             ]
         }
@@ -581,8 +581,8 @@
     },
     "test.TestViewer.test_security": {
         "cluster_nodes_database": {
-            "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "status_code": 400,
+            "text": "`database` is required for /viewer/nodes"
         },
         "cluster_nodes_monitoring": {
             "FieldsAvailable": "0000010000000000000000000110100000011",
@@ -695,18 +695,6 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
-        "restart_pdisk_empty_pdisk_id_root": {
-            "status_code": 400,
-            "text": "Unable to parse the 'pdisk_id' parameter"
-        },
-        "restart_pdisk_three_part_pdisk_id_root": {
-            "status_code": 400,
-            "text": "Unable to parse the 'pdisk_id' parameter"
-        },
-        "restart_pdisk_missing_pdisk_id_root": {
-            "status_code": 400,
-            "text": "Unable to parse the 'pdisk_id' parameter"
-        },
         "evict_vdisk_monitoring_force": {
             "status_code": 403,
             "text": "Administration access required when force=true"
@@ -718,6 +706,14 @@
         "restart_pdisk_database_force": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "restart_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "restart_pdisk_missing_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
         },
         "restart_pdisk_monitoring": {
             "debugMessage": "text",
@@ -738,6 +734,10 @@
             "debugMessage": "text",
             "result": true
         },
+        "restart_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
         "restart_pdisk_viewer": {
             "status_code": 403,
             "text": "Access denied"
@@ -750,13 +750,13 @@
             "status_code": 400,
             "text": "Unable to parse the 'pdisk_id' parameter"
         },
-        "status_pdisk_three_part_pdisk_id_root": {
-            "status_code": 400,
-            "text": "Unable to parse the 'pdisk_id' parameter"
-        },
         "status_pdisk_monitoring_force": {
             "status_code": 403,
             "text": "Administration access required when force=true"
+        },
+        "status_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
         },
         "storage_nodes_database": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
@@ -1119,7 +1119,7 @@
                 ]
             },
             {
-                "AllocationUnits": "32",
+                "AllocationUnits": "34",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -1223,7 +1223,7 @@
                 ]
             },
             {
-                "AllocationUnits": "52",
+                "AllocationUnits": "54",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -4201,7 +4201,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "38",
-                    "PathsInside": "35",
+                    "PathsInside": "36",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4249,7 +4249,7 @@
                     "SecurityState": {
                         "Audience": "/Root/dedicated_db"
                     },
-                    "ShardsInside": "11",
+                    "ShardsInside": "12",
                     "ShardsLimit": "200000",
                     "StoragePools": [
                         {
@@ -4297,7 +4297,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 1,
-                        "SchemeshardId": "72075186224038899"
+                        "SchemeshardId": "72075186224038900"
                     },
                     {
                         "ACL": "",
@@ -4311,7 +4311,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 2,
-                        "SchemeshardId": "72075186224038899"
+                        "SchemeshardId": "72075186224038900"
                     }
                 ],
                 "DomainDescription": {
@@ -4328,16 +4328,16 @@
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
-                            "72075186224038900"
+                            "72075186224038901"
                         ],
                         "Mediators": [
-                            "72075186224038901",
                             "72075186224038902",
-                            "72075186224038903"
+                            "72075186224038903",
+                            "72075186224038904"
                         ],
                         "PlanResolution": "10",
-                        "SchemeShard": "72075186224038899",
-                        "SysViewProcessor": "72075186224038904",
+                        "SchemeShard": "72075186224038900",
+                        "SysViewProcessor": "72075186224038905",
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
@@ -4393,11 +4393,11 @@
                     "PathSubType": 0,
                     "PathType": 4,
                     "PathVersion": "9",
-                    "SchemeshardId": "72075186224038899"
+                    "SchemeshardId": "72075186224038900"
                 }
             },
             "PathId": "not-zero-number-text",
-            "PathOwnerId": "72075186224038899",
+            "PathOwnerId": "72075186224038900",
             "Source": 1,
             "Status": "StatusSuccess"
         },
@@ -4459,7 +4459,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "39",
-                    "PathsInside": "35",
+                    "PathsInside": "36",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -4507,7 +4507,7 @@
                     "SecurityState": {
                         "Audience": "/Root/shared_db"
                     },
-                    "ShardsInside": "11",
+                    "ShardsInside": "12",
                     "ShardsLimit": "200000",
                     "StoragePools": [
                         {
@@ -4550,6 +4550,3313 @@
             }
         ],
         "TotalNodes": "1"
+    },
+    "test.TestViewer.test_viewer_external_http_access_controls": {
+        "administration_bscontrollerinfo_database": {
+            "status_code": 403,
+            "text": "Access denied"
+        },
+        "administration_bscontrollerinfo_monitoring": {
+            "status_code": 403,
+            "text": "Access denied"
+        },
+        "administration_bscontrollerinfo_root": {
+            "BSGroupInfo": [
+                {
+                    "DataSize": "0",
+                    "ErasureSpecies": 0,
+                    "GroupId": 2181038080,
+                    "VDiskInfo": [
+                        {
+                            "NodeId": 1,
+                            "PDiskCategory": "0",
+                            "PDiskId": 1,
+                            "VDiskCategory": "0",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038080,
+                                "Ring": 0,
+                                "VDisk": 0
+                            }
+                        }
+                    ]
+                },
+                {
+                    "DataSize": "0",
+                    "ErasureSpecies": 0,
+                    "GroupId": 2181038081,
+                    "VDiskInfo": [
+                        {
+                            "NodeId": 1,
+                            "PDiskCategory": "0",
+                            "PDiskId": 1,
+                            "VDiskCategory": "0",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 2181038081,
+                                "Ring": 0,
+                                "VDisk": 0
+                            }
+                        }
+                    ]
+                },
+                {
+                    "DataSize": "0",
+                    "ErasureSpecies": 0,
+                    "GroupId": 2181038082,
+                    "VDiskInfo": [
+                        {
+                            "NodeId": 1,
+                            "PDiskCategory": "0",
+                            "PDiskId": 1,
+                            "VDiskCategory": "0",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038082,
+                                "Ring": 0,
+                                "VDisk": 0
+                            }
+                        }
+                    ]
+                },
+                {
+                    "DataSize": "0",
+                    "ErasureSpecies": 0,
+                    "GroupId": 2181038083,
+                    "VDiskInfo": [
+                        {
+                            "NodeId": 1,
+                            "PDiskCategory": "0",
+                            "PDiskId": 1,
+                            "VDiskCategory": "0",
+                            "VDiskId": {
+                                "Domain": 0,
+                                "GroupGeneration": 2,
+                                "GroupID": 2181038083,
+                                "Ring": 0,
+                                "VDisk": 0
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        "administration_bscontrollerinfo_viewer": {
+            "status_code": 403,
+            "text": "Access denied"
+        },
+        "database_nodes_database": {
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "database_nodes_missing_database_database": {
+            "status_code": 400,
+            "text": "`database` is required for /viewer/nodes"
+        },
+        "database_nodes_monitoring": {
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "database_nodes_root": {
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "database_nodes_viewer": {
+            "FieldsAvailable": "0000010000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "viewer_config_database": {
+            "status_code": 403,
+            "text": "Access denied"
+        },
+        "viewer_config_monitoring": {
+            "ActorSystemConfig": {
+                "BatchExecutor": 2,
+                "Executor": [
+                    {
+                        "Name": "System",
+                        "SpinThreshold": "0",
+                        "Threads": 2,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "User",
+                        "SpinThreshold": "0",
+                        "Threads": 3,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "Batch",
+                        "SpinThreshold": "0",
+                        "Threads": 2,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "IO",
+                        "Threads": 1,
+                        "TimePerMailboxMicroSecs": 100,
+                        "Type": 2
+                    },
+                    {
+                        "Name": "IC",
+                        "SpinThreshold": "10",
+                        "Threads": 1,
+                        "TimePerMailboxMicroSecs": 100,
+                        "Type": 1
+                    }
+                ],
+                "IoExecutor": 3,
+                "Scheduler": {
+                    "ProgressThreshold": "10000",
+                    "Resolution": "1024",
+                    "SpinThreshold": "0"
+                },
+                "ServiceExecutor": [
+                    {
+                        "ExecutorId": 4,
+                        "ServiceName": "Interconnect"
+                    }
+                ],
+                "SysExecutor": 0,
+                "UserExecutor": 1
+            },
+            "AllocatorConfig": {
+                "Param": {
+                    "EnableDefrag": "false"
+                }
+            },
+            "BlobStorageConfig": {
+                "ServiceSet": {
+                    "AvailabilityDomains": [
+                        "1"
+                    ],
+                    "Groups": [
+                        {
+                            "ErasureSpecies": 0,
+                            "GroupGeneration": 1,
+                            "GroupID": 0,
+                            "Rings": [
+                                {
+                                    "FailDomains": [
+                                        {
+                                            "VDiskLocations": [
+                                                {
+                                                    "NodeID": 1,
+                                                    "PDiskGuid": "1",
+                                                    "PDiskID": 1,
+                                                    "VDiskSlotID": 0
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "PDisks": [
+                        {
+                            "NodeID": 1,
+                            "PDiskCategory": "0",
+                            "PDiskGuid": "1",
+                            "PDiskID": 1,
+                            "Path": "SectorMap:1:64"
+                        }
+                    ],
+                    "VDisks": [
+                        {
+                            "VDiskID": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 0,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskLocation": {
+                                "NodeID": 1,
+                                "PDiskGuid": "1",
+                                "PDiskID": 1,
+                                "VDiskSlotID": 0
+                            }
+                        }
+                    ]
+                }
+            },
+            "BootstrapConfig": {
+                "Tablet": [
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037968897"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 14
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037932033"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 15
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046678944"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 32
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046316545"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 13
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046382081"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 11
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046447617"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 18
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936128"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 51
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936129"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 52
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936130"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 53
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936131"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 54
+                    }
+                ]
+            },
+            "ChannelProfileConfig": {
+                "Profile": [
+                    {
+                        "Channel": [
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            }
+                        ],
+                        "ProfileId": 0
+                    },
+                    {
+                        "Channel": [
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            }
+                        ],
+                        "ProfileId": 1
+                    }
+                ]
+            },
+            "CompGroupedMemoryLimiterConfig": {
+                "CountBuckets": "1"
+            },
+            "DeduplicationGroupedMemoryLimiterConfig": {
+                "CountBuckets": "1"
+            },
+            "DomainsConfig": {
+                "Domain": [
+                    {
+                        "DomainId": 1,
+                        "ExplicitAllocators": [
+                            "72057594046447617"
+                        ],
+                        "ExplicitCoordinators": [
+                            "72057594046316545"
+                        ],
+                        "ExplicitMediators": [
+                            "72057594046382081"
+                        ],
+                        "Name": "Root",
+                        "PlanResolution": "10",
+                        "SchemeRoot": "72057594046678944",
+                        "StoragePoolTypes": [
+                            {
+                                "Kind": "hdd",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdd1",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdd2",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdde",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "EncryptionMode": 1,
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "HiveConfig": [
+                    {
+                        "Hive": "72057594037968897"
+                    }
+                ],
+                "SecurityConfig": {
+                    "AdministrationAllowedSIDs": [
+                        "root"
+                    ],
+                    "AllUsersGroup": "USERS",
+                    "DatabaseAllowedSIDs": [
+                        "database"
+                    ],
+                    "DefaultAccess": [
+                        "+(ConnDB):USERS",
+                        "+(DS|RA):METADATA-READERS",
+                        "+(SR):DATA-READERS",
+                        "+(UR|ER):DATA-WRITERS",
+                        "+(CD|CT|CQ|WA|WUA|AS|RS):DDL-ADMINS",
+                        "+(GAR):ACCESS-ADMINS",
+                        "+(CDB|DDB):DATABASE-ADMINS"
+                    ],
+                    "DefaultGroups": [
+                        {
+                            "Members": [
+                                "root"
+                            ],
+                            "Name": "ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "ADMINS"
+                            ],
+                            "Name": "DATABASE-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "DATABASE-ADMINS"
+                            ],
+                            "Name": "ACCESS-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "DATABASE-ADMINS"
+                            ],
+                            "Name": "DDL-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "ADMINS"
+                            ],
+                            "Name": "DATA-WRITERS"
+                        },
+                        {
+                            "Members": [
+                                "DATA-WRITERS"
+                            ],
+                            "Name": "DATA-READERS"
+                        },
+                        {
+                            "Members": [
+                                "DATA-READERS",
+                                "DDL-ADMINS"
+                            ],
+                            "Name": "METADATA-READERS"
+                        },
+                        {
+                            "Members": [
+                                "METADATA-READERS",
+                                "DATA-READERS",
+                                "DATA-WRITERS",
+                                "DDL-ADMINS",
+                                "ACCESS-ADMINS",
+                                "DATABASE-ADMINS",
+                                "ADMINS",
+                                "root"
+                            ],
+                            "Name": "USERS"
+                        }
+                    ],
+                    "DefaultUsers": [
+                        {
+                            "Name": "root",
+                            "Password": "1234"
+                        }
+                    ],
+                    "EnforceUserTokenCheckRequirement": true,
+                    "EnforceUserTokenRequirement": false,
+                    "MonitoringAllowedSIDs": [
+                        "monitoring",
+                        "root"
+                    ],
+                    "ViewerAllowedSIDs": [
+                        "viewer"
+                    ]
+                },
+                "StateStorage": [
+                    {
+                        "Ring": {
+                            "NToSelect": 1,
+                            "Ring": [
+                                {
+                                    "Node": [
+                                        1
+                                    ],
+                                    "UseRingSpecificNodeSelection": true
+                                }
+                            ]
+                        },
+                        "SSId": 1
+                    }
+                ]
+            },
+            "DynamicNodeConfig": {},
+            "FeatureFlags": {
+                "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableDrainOnShutdown": false,
+                "EnableExtraSidsControlForHttpViewer": true,
+                "EnableMvccSnapshotReads": true,
+                "EnablePersistentQueryStats": true,
+                "EnablePublicApiExternalBlobs": false,
+                "EnableSchemeTransactionsAtSchemeShard": true,
+                "EnableScriptExecutionOperations": true,
+                "EnableTopicTransfer": true
+            },
+            "FederatedQueryConfig": {
+                "Audit": {
+                    "UAConfig": {}
+                },
+                "CheckpointCoordinator": {
+                    "CheckpointingPeriodMillis": "1000",
+                    "Enabled": true,
+                    "MaxInflight": "1",
+                    "Storage": {}
+                },
+                "Common": {
+                    "IdsPrefix": "pt",
+                    "UseBearerForYdb": true
+                },
+                "ControlPlaneProxy": {
+                    "Enabled": true,
+                    "RequestTimeout": "30s"
+                },
+                "ControlPlaneStorage": {
+                    "AvailableBinding": [
+                        "DATA_STREAMS",
+                        "OBJECT_STORAGE"
+                    ],
+                    "AvailableConnection": [
+                        "YDB_DATABASE",
+                        "CLICKHOUSE_CLUSTER",
+                        "DATA_STREAMS",
+                        "OBJECT_STORAGE",
+                        "MONITORING"
+                    ],
+                    "Enabled": true,
+                    "Storage": {}
+                },
+                "DbPool": {
+                    "Enabled": true,
+                    "Storage": {}
+                },
+                "Gateways": {
+                    "Dq": {},
+                    "Enabled": true,
+                    "Pq": {},
+                    "Solomon": {}
+                },
+                "NodesManager": {
+                    "Enabled": true
+                },
+                "PendingFetcher": {
+                    "Enabled": true
+                },
+                "Pinger": {
+                    "PingPeriod": "30s"
+                },
+                "PrivateApi": {
+                    "Enabled": true
+                },
+                "PrivateProxy": {
+                    "Enabled": true
+                },
+                "ResourceManager": {
+                    "Enabled": true
+                },
+                "TokenAccessor": {
+                    "Enabled": true
+                }
+            },
+            "GRpcConfig": {
+                "Host": "[::]",
+                "Port": "not-zero-number",
+                "Services": [
+                    "nbs",
+                    "legacy",
+                    "tablet_service",
+                    "yql",
+                    "discovery",
+                    "cms",
+                    "locking",
+                    "kesus",
+                    "pq",
+                    "pqcd",
+                    "pqv1",
+                    "topic",
+                    "datastreams",
+                    "scripting",
+                    "clickhouse_internal",
+                    "rate_limiter",
+                    "analytics",
+                    "export",
+                    "import",
+                    "yq",
+                    "keyvalue",
+                    "monitoring",
+                    "auth",
+                    "query_service",
+                    "view"
+                ],
+                "StartGRpcProxy": true
+            },
+            "InterconnectConfig": {
+                "StartTcp": true
+            },
+            "KQPConfig": {
+                "Settings": [
+                    {
+                        "Name": "_ResultRowsLimit",
+                        "Value": "1000"
+                    }
+                ]
+            },
+            "Labels": [
+                {
+                    "Name": "node_id",
+                    "Value": "1"
+                }
+            ],
+            "LogConfig": {
+                "BackendFileName": "text",
+                "DefaultLevel": 5,
+                "SysLog": false
+            },
+            "MessageBusConfig": {
+                "BusProxyPort": 2134,
+                "ProxyBusQueueConfig": {
+                    "Name": "",
+                    "NumWorkers": "not-zero-number"
+                },
+                "ProxyBusSessionConfig": {
+                    "ConnectTimeout": "15000000",
+                    "Cork": "0",
+                    "DefaultBufferSize": "10240",
+                    "ExecuteOnMessageInWorkerPool": true,
+                    "ExecuteOnReplyInWorkerPool": true,
+                    "ListenPort": 0,
+                    "MaxBufferSize": "1048576",
+                    "MaxInFlight": "not-zero-number-text",
+                    "MaxInFlightBySize": "not-zero-number-text",
+                    "MaxMessageSize": 27262976,
+                    "Name": "",
+                    "NumRetries": 0,
+                    "PerConnectionMaxInFlight": 0,
+                    "PerConnectionMaxInFlightBySize": 0,
+                    "ReconnectWhenIdle": false,
+                    "RetryInterval": 1000,
+                    "SendThreshold": "10240",
+                    "SendTimeout": "0",
+                    "SocketRecvBufferSize": 0,
+                    "SocketSendBufferSize": 0,
+                    "SocketToS": -1,
+                    "TcpCork": false,
+                    "TcpNoDelay": false,
+                    "TotalTimeout": "300000000"
+                },
+                "StartBusProxy": false,
+                "StartTracingBusProxy": false,
+                "TracePath": ""
+            },
+            "MonitoringConfig": {
+                "MonitoringPort": "not-zero-number",
+                "MonitoringThreads": 10
+            },
+            "NameserviceConfig": {
+                "Node": [
+                    {
+                        "Address": "::1",
+                        "Host": "localhost",
+                        "NodeId": 1,
+                        "Port": "not-zero-number",
+                        "WalleLocation": {
+                            "Body": 1,
+                            "DataCenter": "1",
+                            "Rack": "1"
+                        }
+                    }
+                ],
+                "SuppressVersionCheck": true
+            },
+            "NetClassifierConfig": {
+                "CmsConfigTimeoutSeconds": 30,
+                "NetDataFilePath": "text",
+                "UpdaterConfig": {
+                    "NetDataUpdateIntervalSeconds": 60,
+                    "RetryIntervalSeconds": 30
+                }
+            },
+            "PQClusterDiscoveryConfig": {
+                "Enabled": false
+            },
+            "PQConfig": {
+                "CheckACL": false,
+                "ClusterTablePath": "",
+                "ClustersUpdateTimeoutSec": 1,
+                "EnableProtoSourceIdInfo": true,
+                "Enabled": true,
+                "MaxStorageNodePort": 65535,
+                "MetaCacheTimeoutSec": 1,
+                "QuotingConfig": {
+                    "EnableQuoting": false
+                },
+                "RequireCredentialsInNewProtocol": false,
+                "Root": "",
+                "TopicsAreFirstClassCitizen": true,
+                "VersionTablePath": ""
+            },
+            "ScanGroupedMemoryLimiterConfig": {
+                "CountBuckets": "10"
+            },
+            "SqsConfig": {
+                "EnableDeadLetterQueues": true,
+                "EnableSqs": false,
+                "ForceQueueCreationV2": true,
+                "ForceQueueDeletionV2": true,
+                "SchemeCacheHardRefreshTimeSeconds": 0,
+                "SchemeCacheSoftRefreshTimeSeconds": 0
+            },
+            "StartupConfigYaml": "text",
+            "TableServiceConfig": {
+                "ResourceManager": {
+                    "ChannelBufferSize": "262144",
+                    "MkqlHeavyProgramMemoryLimit": "1048576",
+                    "MkqlLightProgramMemoryLimit": "65536"
+                },
+                "SqlVersion": 1
+            },
+            "TenantPoolConfig": {
+                "Slots": [
+                    {
+                        "Id": "static-slot",
+                        "IsDynamic": false,
+                        "TenantName": "/Root"
+                    }
+                ]
+            },
+            "UDFsDir": ""
+        },
+        "viewer_config_root": {
+            "ActorSystemConfig": {
+                "BatchExecutor": 2,
+                "Executor": [
+                    {
+                        "Name": "System",
+                        "SpinThreshold": "0",
+                        "Threads": 2,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "User",
+                        "SpinThreshold": "0",
+                        "Threads": 3,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "Batch",
+                        "SpinThreshold": "0",
+                        "Threads": 2,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "IO",
+                        "Threads": 1,
+                        "TimePerMailboxMicroSecs": 100,
+                        "Type": 2
+                    },
+                    {
+                        "Name": "IC",
+                        "SpinThreshold": "10",
+                        "Threads": 1,
+                        "TimePerMailboxMicroSecs": 100,
+                        "Type": 1
+                    }
+                ],
+                "IoExecutor": 3,
+                "Scheduler": {
+                    "ProgressThreshold": "10000",
+                    "Resolution": "1024",
+                    "SpinThreshold": "0"
+                },
+                "ServiceExecutor": [
+                    {
+                        "ExecutorId": 4,
+                        "ServiceName": "Interconnect"
+                    }
+                ],
+                "SysExecutor": 0,
+                "UserExecutor": 1
+            },
+            "AllocatorConfig": {
+                "Param": {
+                    "EnableDefrag": "false"
+                }
+            },
+            "BlobStorageConfig": {
+                "ServiceSet": {
+                    "AvailabilityDomains": [
+                        "1"
+                    ],
+                    "Groups": [
+                        {
+                            "ErasureSpecies": 0,
+                            "GroupGeneration": 1,
+                            "GroupID": 0,
+                            "Rings": [
+                                {
+                                    "FailDomains": [
+                                        {
+                                            "VDiskLocations": [
+                                                {
+                                                    "NodeID": 1,
+                                                    "PDiskGuid": "1",
+                                                    "PDiskID": 1,
+                                                    "VDiskSlotID": 0
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "PDisks": [
+                        {
+                            "NodeID": 1,
+                            "PDiskCategory": "0",
+                            "PDiskGuid": "1",
+                            "PDiskID": 1,
+                            "Path": "SectorMap:1:64"
+                        }
+                    ],
+                    "VDisks": [
+                        {
+                            "VDiskID": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 0,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskLocation": {
+                                "NodeID": 1,
+                                "PDiskGuid": "1",
+                                "PDiskID": 1,
+                                "VDiskSlotID": 0
+                            }
+                        }
+                    ]
+                }
+            },
+            "BootstrapConfig": {
+                "Tablet": [
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037968897"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 14
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037932033"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 15
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046678944"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 32
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046316545"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 13
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046382081"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 11
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046447617"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 18
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936128"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 51
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936129"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 52
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936130"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 53
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936131"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 54
+                    }
+                ]
+            },
+            "ChannelProfileConfig": {
+                "Profile": [
+                    {
+                        "Channel": [
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            }
+                        ],
+                        "ProfileId": 0
+                    },
+                    {
+                        "Channel": [
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            }
+                        ],
+                        "ProfileId": 1
+                    }
+                ]
+            },
+            "CompGroupedMemoryLimiterConfig": {
+                "CountBuckets": "1"
+            },
+            "DeduplicationGroupedMemoryLimiterConfig": {
+                "CountBuckets": "1"
+            },
+            "DomainsConfig": {
+                "Domain": [
+                    {
+                        "DomainId": 1,
+                        "ExplicitAllocators": [
+                            "72057594046447617"
+                        ],
+                        "ExplicitCoordinators": [
+                            "72057594046316545"
+                        ],
+                        "ExplicitMediators": [
+                            "72057594046382081"
+                        ],
+                        "Name": "Root",
+                        "PlanResolution": "10",
+                        "SchemeRoot": "72057594046678944",
+                        "StoragePoolTypes": [
+                            {
+                                "Kind": "hdd",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdd1",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdd2",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdde",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "EncryptionMode": 1,
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "HiveConfig": [
+                    {
+                        "Hive": "72057594037968897"
+                    }
+                ],
+                "SecurityConfig": {
+                    "AdministrationAllowedSIDs": [
+                        "root"
+                    ],
+                    "AllUsersGroup": "USERS",
+                    "DatabaseAllowedSIDs": [
+                        "database"
+                    ],
+                    "DefaultAccess": [
+                        "+(ConnDB):USERS",
+                        "+(DS|RA):METADATA-READERS",
+                        "+(SR):DATA-READERS",
+                        "+(UR|ER):DATA-WRITERS",
+                        "+(CD|CT|CQ|WA|WUA|AS|RS):DDL-ADMINS",
+                        "+(GAR):ACCESS-ADMINS",
+                        "+(CDB|DDB):DATABASE-ADMINS"
+                    ],
+                    "DefaultGroups": [
+                        {
+                            "Members": [
+                                "root"
+                            ],
+                            "Name": "ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "ADMINS"
+                            ],
+                            "Name": "DATABASE-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "DATABASE-ADMINS"
+                            ],
+                            "Name": "ACCESS-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "DATABASE-ADMINS"
+                            ],
+                            "Name": "DDL-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "ADMINS"
+                            ],
+                            "Name": "DATA-WRITERS"
+                        },
+                        {
+                            "Members": [
+                                "DATA-WRITERS"
+                            ],
+                            "Name": "DATA-READERS"
+                        },
+                        {
+                            "Members": [
+                                "DATA-READERS",
+                                "DDL-ADMINS"
+                            ],
+                            "Name": "METADATA-READERS"
+                        },
+                        {
+                            "Members": [
+                                "METADATA-READERS",
+                                "DATA-READERS",
+                                "DATA-WRITERS",
+                                "DDL-ADMINS",
+                                "ACCESS-ADMINS",
+                                "DATABASE-ADMINS",
+                                "ADMINS",
+                                "root"
+                            ],
+                            "Name": "USERS"
+                        }
+                    ],
+                    "DefaultUsers": [
+                        {
+                            "Name": "root",
+                            "Password": "1234"
+                        }
+                    ],
+                    "EnforceUserTokenCheckRequirement": true,
+                    "EnforceUserTokenRequirement": false,
+                    "MonitoringAllowedSIDs": [
+                        "monitoring",
+                        "root"
+                    ],
+                    "ViewerAllowedSIDs": [
+                        "viewer"
+                    ]
+                },
+                "StateStorage": [
+                    {
+                        "Ring": {
+                            "NToSelect": 1,
+                            "Ring": [
+                                {
+                                    "Node": [
+                                        1
+                                    ],
+                                    "UseRingSpecificNodeSelection": true
+                                }
+                            ]
+                        },
+                        "SSId": 1
+                    }
+                ]
+            },
+            "DynamicNodeConfig": {},
+            "FeatureFlags": {
+                "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableDrainOnShutdown": false,
+                "EnableExtraSidsControlForHttpViewer": true,
+                "EnableMvccSnapshotReads": true,
+                "EnablePersistentQueryStats": true,
+                "EnablePublicApiExternalBlobs": false,
+                "EnableSchemeTransactionsAtSchemeShard": true,
+                "EnableScriptExecutionOperations": true,
+                "EnableTopicTransfer": true
+            },
+            "FederatedQueryConfig": {
+                "Audit": {
+                    "UAConfig": {}
+                },
+                "CheckpointCoordinator": {
+                    "CheckpointingPeriodMillis": "1000",
+                    "Enabled": true,
+                    "MaxInflight": "1",
+                    "Storage": {}
+                },
+                "Common": {
+                    "IdsPrefix": "pt",
+                    "UseBearerForYdb": true
+                },
+                "ControlPlaneProxy": {
+                    "Enabled": true,
+                    "RequestTimeout": "30s"
+                },
+                "ControlPlaneStorage": {
+                    "AvailableBinding": [
+                        "DATA_STREAMS",
+                        "OBJECT_STORAGE"
+                    ],
+                    "AvailableConnection": [
+                        "YDB_DATABASE",
+                        "CLICKHOUSE_CLUSTER",
+                        "DATA_STREAMS",
+                        "OBJECT_STORAGE",
+                        "MONITORING"
+                    ],
+                    "Enabled": true,
+                    "Storage": {}
+                },
+                "DbPool": {
+                    "Enabled": true,
+                    "Storage": {}
+                },
+                "Gateways": {
+                    "Dq": {},
+                    "Enabled": true,
+                    "Pq": {},
+                    "Solomon": {}
+                },
+                "NodesManager": {
+                    "Enabled": true
+                },
+                "PendingFetcher": {
+                    "Enabled": true
+                },
+                "Pinger": {
+                    "PingPeriod": "30s"
+                },
+                "PrivateApi": {
+                    "Enabled": true
+                },
+                "PrivateProxy": {
+                    "Enabled": true
+                },
+                "ResourceManager": {
+                    "Enabled": true
+                },
+                "TokenAccessor": {
+                    "Enabled": true
+                }
+            },
+            "GRpcConfig": {
+                "Host": "[::]",
+                "Port": "not-zero-number",
+                "Services": [
+                    "nbs",
+                    "legacy",
+                    "tablet_service",
+                    "yql",
+                    "discovery",
+                    "cms",
+                    "locking",
+                    "kesus",
+                    "pq",
+                    "pqcd",
+                    "pqv1",
+                    "topic",
+                    "datastreams",
+                    "scripting",
+                    "clickhouse_internal",
+                    "rate_limiter",
+                    "analytics",
+                    "export",
+                    "import",
+                    "yq",
+                    "keyvalue",
+                    "monitoring",
+                    "auth",
+                    "query_service",
+                    "view"
+                ],
+                "StartGRpcProxy": true
+            },
+            "InterconnectConfig": {
+                "StartTcp": true
+            },
+            "KQPConfig": {
+                "Settings": [
+                    {
+                        "Name": "_ResultRowsLimit",
+                        "Value": "1000"
+                    }
+                ]
+            },
+            "Labels": [
+                {
+                    "Name": "node_id",
+                    "Value": "1"
+                }
+            ],
+            "LogConfig": {
+                "BackendFileName": "text",
+                "DefaultLevel": 5,
+                "SysLog": false
+            },
+            "MessageBusConfig": {
+                "BusProxyPort": 2134,
+                "ProxyBusQueueConfig": {
+                    "Name": "",
+                    "NumWorkers": "not-zero-number"
+                },
+                "ProxyBusSessionConfig": {
+                    "ConnectTimeout": "15000000",
+                    "Cork": "0",
+                    "DefaultBufferSize": "10240",
+                    "ExecuteOnMessageInWorkerPool": true,
+                    "ExecuteOnReplyInWorkerPool": true,
+                    "ListenPort": 0,
+                    "MaxBufferSize": "1048576",
+                    "MaxInFlight": "not-zero-number-text",
+                    "MaxInFlightBySize": "not-zero-number-text",
+                    "MaxMessageSize": 27262976,
+                    "Name": "",
+                    "NumRetries": 0,
+                    "PerConnectionMaxInFlight": 0,
+                    "PerConnectionMaxInFlightBySize": 0,
+                    "ReconnectWhenIdle": false,
+                    "RetryInterval": 1000,
+                    "SendThreshold": "10240",
+                    "SendTimeout": "0",
+                    "SocketRecvBufferSize": 0,
+                    "SocketSendBufferSize": 0,
+                    "SocketToS": -1,
+                    "TcpCork": false,
+                    "TcpNoDelay": false,
+                    "TotalTimeout": "300000000"
+                },
+                "StartBusProxy": false,
+                "StartTracingBusProxy": false,
+                "TracePath": ""
+            },
+            "MonitoringConfig": {
+                "MonitoringPort": "not-zero-number",
+                "MonitoringThreads": 10
+            },
+            "NameserviceConfig": {
+                "Node": [
+                    {
+                        "Address": "::1",
+                        "Host": "localhost",
+                        "NodeId": 1,
+                        "Port": "not-zero-number",
+                        "WalleLocation": {
+                            "Body": 1,
+                            "DataCenter": "1",
+                            "Rack": "1"
+                        }
+                    }
+                ],
+                "SuppressVersionCheck": true
+            },
+            "NetClassifierConfig": {
+                "CmsConfigTimeoutSeconds": 30,
+                "NetDataFilePath": "text",
+                "UpdaterConfig": {
+                    "NetDataUpdateIntervalSeconds": 60,
+                    "RetryIntervalSeconds": 30
+                }
+            },
+            "PQClusterDiscoveryConfig": {
+                "Enabled": false
+            },
+            "PQConfig": {
+                "CheckACL": false,
+                "ClusterTablePath": "",
+                "ClustersUpdateTimeoutSec": 1,
+                "EnableProtoSourceIdInfo": true,
+                "Enabled": true,
+                "MaxStorageNodePort": 65535,
+                "MetaCacheTimeoutSec": 1,
+                "QuotingConfig": {
+                    "EnableQuoting": false
+                },
+                "RequireCredentialsInNewProtocol": false,
+                "Root": "",
+                "TopicsAreFirstClassCitizen": true,
+                "VersionTablePath": ""
+            },
+            "ScanGroupedMemoryLimiterConfig": {
+                "CountBuckets": "10"
+            },
+            "SqsConfig": {
+                "EnableDeadLetterQueues": true,
+                "EnableSqs": false,
+                "ForceQueueCreationV2": true,
+                "ForceQueueDeletionV2": true,
+                "SchemeCacheHardRefreshTimeSeconds": 0,
+                "SchemeCacheSoftRefreshTimeSeconds": 0
+            },
+            "StartupConfigYaml": "text",
+            "TableServiceConfig": {
+                "ResourceManager": {
+                    "ChannelBufferSize": "262144",
+                    "MkqlHeavyProgramMemoryLimit": "1048576",
+                    "MkqlLightProgramMemoryLimit": "65536"
+                },
+                "SqlVersion": 1
+            },
+            "TenantPoolConfig": {
+                "Slots": [
+                    {
+                        "Id": "static-slot",
+                        "IsDynamic": false,
+                        "TenantName": "/Root"
+                    }
+                ]
+            },
+            "UDFsDir": ""
+        },
+        "viewer_config_viewer": {
+            "ActorSystemConfig": {
+                "BatchExecutor": 2,
+                "Executor": [
+                    {
+                        "Name": "System",
+                        "SpinThreshold": "0",
+                        "Threads": 2,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "User",
+                        "SpinThreshold": "0",
+                        "Threads": 3,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "Batch",
+                        "SpinThreshold": "0",
+                        "Threads": 2,
+                        "Type": 1
+                    },
+                    {
+                        "Name": "IO",
+                        "Threads": 1,
+                        "TimePerMailboxMicroSecs": 100,
+                        "Type": 2
+                    },
+                    {
+                        "Name": "IC",
+                        "SpinThreshold": "10",
+                        "Threads": 1,
+                        "TimePerMailboxMicroSecs": 100,
+                        "Type": 1
+                    }
+                ],
+                "IoExecutor": 3,
+                "Scheduler": {
+                    "ProgressThreshold": "10000",
+                    "Resolution": "1024",
+                    "SpinThreshold": "0"
+                },
+                "ServiceExecutor": [
+                    {
+                        "ExecutorId": 4,
+                        "ServiceName": "Interconnect"
+                    }
+                ],
+                "SysExecutor": 0,
+                "UserExecutor": 1
+            },
+            "AllocatorConfig": {
+                "Param": {
+                    "EnableDefrag": "false"
+                }
+            },
+            "BlobStorageConfig": {
+                "ServiceSet": {
+                    "AvailabilityDomains": [
+                        "1"
+                    ],
+                    "Groups": [
+                        {
+                            "ErasureSpecies": 0,
+                            "GroupGeneration": 1,
+                            "GroupID": 0,
+                            "Rings": [
+                                {
+                                    "FailDomains": [
+                                        {
+                                            "VDiskLocations": [
+                                                {
+                                                    "NodeID": 1,
+                                                    "PDiskGuid": "1",
+                                                    "PDiskID": 1,
+                                                    "VDiskSlotID": 0
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "PDisks": [
+                        {
+                            "NodeID": 1,
+                            "PDiskCategory": "0",
+                            "PDiskGuid": "1",
+                            "PDiskID": 1,
+                            "Path": "SectorMap:1:64"
+                        }
+                    ],
+                    "VDisks": [
+                        {
+                            "VDiskID": {
+                                "Domain": 0,
+                                "GroupGeneration": 1,
+                                "GroupID": 0,
+                                "Ring": 0,
+                                "VDisk": 0
+                            },
+                            "VDiskLocation": {
+                                "NodeID": 1,
+                                "PDiskGuid": "1",
+                                "PDiskID": 1,
+                                "VDiskSlotID": 0
+                            }
+                        }
+                    ]
+                }
+            },
+            "BootstrapConfig": {
+                "Tablet": [
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037968897"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 14
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037932033"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 15
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046678944"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 32
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046316545"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 13
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046382081"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 11
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594046447617"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 18
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936128"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 51
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936129"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 52
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936130"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 53
+                    },
+                    {
+                        "Info": {
+                            "Channels": [
+                                {
+                                    "Channel": 0,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 1,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Channel": 2,
+                                    "ChannelErasureName": "none",
+                                    "History": [
+                                        {
+                                            "FromGeneration": 0,
+                                            "GroupID": 0
+                                        }
+                                    ]
+                                }
+                            ],
+                            "TabletID": "72057594037936131"
+                        },
+                        "Node": [
+                            1
+                        ],
+                        "Type": 54
+                    }
+                ]
+            },
+            "ChannelProfileConfig": {
+                "Profile": [
+                    {
+                        "Channel": [
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            }
+                        ],
+                        "ProfileId": 0
+                    },
+                    {
+                        "Channel": [
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            },
+                            {
+                                "ErasureSpecies": "none",
+                                "PDiskCategory": "0",
+                                "StoragePoolKind": "hdd"
+                            }
+                        ],
+                        "ProfileId": 1
+                    }
+                ]
+            },
+            "CompGroupedMemoryLimiterConfig": {
+                "CountBuckets": "1"
+            },
+            "DeduplicationGroupedMemoryLimiterConfig": {
+                "CountBuckets": "1"
+            },
+            "DomainsConfig": {
+                "Domain": [
+                    {
+                        "DomainId": 1,
+                        "ExplicitAllocators": [
+                            "72057594046447617"
+                        ],
+                        "ExplicitCoordinators": [
+                            "72057594046316545"
+                        ],
+                        "ExplicitMediators": [
+                            "72057594046382081"
+                        ],
+                        "Name": "Root",
+                        "PlanResolution": "10",
+                        "SchemeRoot": "72057594046678944",
+                        "StoragePoolTypes": [
+                            {
+                                "Kind": "hdd",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdd1",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdd2",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            },
+                            {
+                                "Kind": "hdde",
+                                "PoolConfig": {
+                                    "BoxId": "1",
+                                    "EncryptionMode": 1,
+                                    "ErasureSpecies": "none",
+                                    "Kind": "hdd",
+                                    "PDiskFilter": [
+                                        {
+                                            "Property": [
+                                                {
+                                                    "Type": 0
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "VDiskKind": "Default"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "HiveConfig": [
+                    {
+                        "Hive": "72057594037968897"
+                    }
+                ],
+                "SecurityConfig": {
+                    "AdministrationAllowedSIDs": [
+                        "root"
+                    ],
+                    "AllUsersGroup": "USERS",
+                    "DatabaseAllowedSIDs": [
+                        "database"
+                    ],
+                    "DefaultAccess": [
+                        "+(ConnDB):USERS",
+                        "+(DS|RA):METADATA-READERS",
+                        "+(SR):DATA-READERS",
+                        "+(UR|ER):DATA-WRITERS",
+                        "+(CD|CT|CQ|WA|WUA|AS|RS):DDL-ADMINS",
+                        "+(GAR):ACCESS-ADMINS",
+                        "+(CDB|DDB):DATABASE-ADMINS"
+                    ],
+                    "DefaultGroups": [
+                        {
+                            "Members": [
+                                "root"
+                            ],
+                            "Name": "ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "ADMINS"
+                            ],
+                            "Name": "DATABASE-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "DATABASE-ADMINS"
+                            ],
+                            "Name": "ACCESS-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "DATABASE-ADMINS"
+                            ],
+                            "Name": "DDL-ADMINS"
+                        },
+                        {
+                            "Members": [
+                                "ADMINS"
+                            ],
+                            "Name": "DATA-WRITERS"
+                        },
+                        {
+                            "Members": [
+                                "DATA-WRITERS"
+                            ],
+                            "Name": "DATA-READERS"
+                        },
+                        {
+                            "Members": [
+                                "DATA-READERS",
+                                "DDL-ADMINS"
+                            ],
+                            "Name": "METADATA-READERS"
+                        },
+                        {
+                            "Members": [
+                                "METADATA-READERS",
+                                "DATA-READERS",
+                                "DATA-WRITERS",
+                                "DDL-ADMINS",
+                                "ACCESS-ADMINS",
+                                "DATABASE-ADMINS",
+                                "ADMINS",
+                                "root"
+                            ],
+                            "Name": "USERS"
+                        }
+                    ],
+                    "DefaultUsers": [
+                        {
+                            "Name": "root",
+                            "Password": "1234"
+                        }
+                    ],
+                    "EnforceUserTokenCheckRequirement": true,
+                    "EnforceUserTokenRequirement": false,
+                    "MonitoringAllowedSIDs": [
+                        "monitoring",
+                        "root"
+                    ],
+                    "ViewerAllowedSIDs": [
+                        "viewer"
+                    ]
+                },
+                "StateStorage": [
+                    {
+                        "Ring": {
+                            "NToSelect": 1,
+                            "Ring": [
+                                {
+                                    "Node": [
+                                        1
+                                    ],
+                                    "UseRingSpecificNodeSelection": true
+                                }
+                            ]
+                        },
+                        "SSId": 1
+                    }
+                ]
+            },
+            "DynamicNodeConfig": {},
+            "FeatureFlags": {
+                "EnableAlterDatabaseCreateHiveFirst": true,
+                "EnableDrainOnShutdown": false,
+                "EnableExtraSidsControlForHttpViewer": true,
+                "EnableMvccSnapshotReads": true,
+                "EnablePersistentQueryStats": true,
+                "EnablePublicApiExternalBlobs": false,
+                "EnableSchemeTransactionsAtSchemeShard": true,
+                "EnableScriptExecutionOperations": true,
+                "EnableTopicTransfer": true
+            },
+            "FederatedQueryConfig": {
+                "Audit": {
+                    "UAConfig": {}
+                },
+                "CheckpointCoordinator": {
+                    "CheckpointingPeriodMillis": "1000",
+                    "Enabled": true,
+                    "MaxInflight": "1",
+                    "Storage": {}
+                },
+                "Common": {
+                    "IdsPrefix": "pt",
+                    "UseBearerForYdb": true
+                },
+                "ControlPlaneProxy": {
+                    "Enabled": true,
+                    "RequestTimeout": "30s"
+                },
+                "ControlPlaneStorage": {
+                    "AvailableBinding": [
+                        "DATA_STREAMS",
+                        "OBJECT_STORAGE"
+                    ],
+                    "AvailableConnection": [
+                        "YDB_DATABASE",
+                        "CLICKHOUSE_CLUSTER",
+                        "DATA_STREAMS",
+                        "OBJECT_STORAGE",
+                        "MONITORING"
+                    ],
+                    "Enabled": true,
+                    "Storage": {}
+                },
+                "DbPool": {
+                    "Enabled": true,
+                    "Storage": {}
+                },
+                "Gateways": {
+                    "Dq": {},
+                    "Enabled": true,
+                    "Pq": {},
+                    "Solomon": {}
+                },
+                "NodesManager": {
+                    "Enabled": true
+                },
+                "PendingFetcher": {
+                    "Enabled": true
+                },
+                "Pinger": {
+                    "PingPeriod": "30s"
+                },
+                "PrivateApi": {
+                    "Enabled": true
+                },
+                "PrivateProxy": {
+                    "Enabled": true
+                },
+                "ResourceManager": {
+                    "Enabled": true
+                },
+                "TokenAccessor": {
+                    "Enabled": true
+                }
+            },
+            "GRpcConfig": {
+                "Host": "[::]",
+                "Port": "not-zero-number",
+                "Services": [
+                    "nbs",
+                    "legacy",
+                    "tablet_service",
+                    "yql",
+                    "discovery",
+                    "cms",
+                    "locking",
+                    "kesus",
+                    "pq",
+                    "pqcd",
+                    "pqv1",
+                    "topic",
+                    "datastreams",
+                    "scripting",
+                    "clickhouse_internal",
+                    "rate_limiter",
+                    "analytics",
+                    "export",
+                    "import",
+                    "yq",
+                    "keyvalue",
+                    "monitoring",
+                    "auth",
+                    "query_service",
+                    "view"
+                ],
+                "StartGRpcProxy": true
+            },
+            "InterconnectConfig": {
+                "StartTcp": true
+            },
+            "KQPConfig": {
+                "Settings": [
+                    {
+                        "Name": "_ResultRowsLimit",
+                        "Value": "1000"
+                    }
+                ]
+            },
+            "Labels": [
+                {
+                    "Name": "node_id",
+                    "Value": "1"
+                }
+            ],
+            "LogConfig": {
+                "BackendFileName": "text",
+                "DefaultLevel": 5,
+                "SysLog": false
+            },
+            "MessageBusConfig": {
+                "BusProxyPort": 2134,
+                "ProxyBusQueueConfig": {
+                    "Name": "",
+                    "NumWorkers": "not-zero-number"
+                },
+                "ProxyBusSessionConfig": {
+                    "ConnectTimeout": "15000000",
+                    "Cork": "0",
+                    "DefaultBufferSize": "10240",
+                    "ExecuteOnMessageInWorkerPool": true,
+                    "ExecuteOnReplyInWorkerPool": true,
+                    "ListenPort": 0,
+                    "MaxBufferSize": "1048576",
+                    "MaxInFlight": "not-zero-number-text",
+                    "MaxInFlightBySize": "not-zero-number-text",
+                    "MaxMessageSize": 27262976,
+                    "Name": "",
+                    "NumRetries": 0,
+                    "PerConnectionMaxInFlight": 0,
+                    "PerConnectionMaxInFlightBySize": 0,
+                    "ReconnectWhenIdle": false,
+                    "RetryInterval": 1000,
+                    "SendThreshold": "10240",
+                    "SendTimeout": "0",
+                    "SocketRecvBufferSize": 0,
+                    "SocketSendBufferSize": 0,
+                    "SocketToS": -1,
+                    "TcpCork": false,
+                    "TcpNoDelay": false,
+                    "TotalTimeout": "300000000"
+                },
+                "StartBusProxy": false,
+                "StartTracingBusProxy": false,
+                "TracePath": ""
+            },
+            "MonitoringConfig": {
+                "MonitoringPort": "not-zero-number",
+                "MonitoringThreads": 10
+            },
+            "NameserviceConfig": {
+                "Node": [
+                    {
+                        "Address": "::1",
+                        "Host": "localhost",
+                        "NodeId": 1,
+                        "Port": "not-zero-number",
+                        "WalleLocation": {
+                            "Body": 1,
+                            "DataCenter": "1",
+                            "Rack": "1"
+                        }
+                    }
+                ],
+                "SuppressVersionCheck": true
+            },
+            "NetClassifierConfig": {
+                "CmsConfigTimeoutSeconds": 30,
+                "NetDataFilePath": "text",
+                "UpdaterConfig": {
+                    "NetDataUpdateIntervalSeconds": 60,
+                    "RetryIntervalSeconds": 30
+                }
+            },
+            "PQClusterDiscoveryConfig": {
+                "Enabled": false
+            },
+            "PQConfig": {
+                "CheckACL": false,
+                "ClusterTablePath": "",
+                "ClustersUpdateTimeoutSec": 1,
+                "EnableProtoSourceIdInfo": true,
+                "Enabled": true,
+                "MaxStorageNodePort": 65535,
+                "MetaCacheTimeoutSec": 1,
+                "QuotingConfig": {
+                    "EnableQuoting": false
+                },
+                "RequireCredentialsInNewProtocol": false,
+                "Root": "",
+                "TopicsAreFirstClassCitizen": true,
+                "VersionTablePath": ""
+            },
+            "ScanGroupedMemoryLimiterConfig": {
+                "CountBuckets": "10"
+            },
+            "SqsConfig": {
+                "EnableDeadLetterQueues": true,
+                "EnableSqs": false,
+                "ForceQueueCreationV2": true,
+                "ForceQueueDeletionV2": true,
+                "SchemeCacheHardRefreshTimeSeconds": 0,
+                "SchemeCacheSoftRefreshTimeSeconds": 0
+            },
+            "StartupConfigYaml": "text",
+            "TableServiceConfig": {
+                "ResourceManager": {
+                    "ChannelBufferSize": "262144",
+                    "MkqlHeavyProgramMemoryLimit": "1048576",
+                    "MkqlLightProgramMemoryLimit": "65536"
+                },
+                "SqlVersion": 1
+            },
+            "TenantPoolConfig": {
+                "Slots": [
+                    {
+                        "Id": "static-slot",
+                        "IsDynamic": false,
+                        "TenantName": "/Root"
+                    }
+                ]
+            },
+            "UDFsDir": ""
+        },
+        "viewer_simple_counter_database": {
+            "status_code": 403,
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "viewer_simple_counter_monitoring": {
+            "status_code": 200,
+            "text": "1\n"
+        },
+        "viewer_simple_counter_root": {
+            "status_code": 200,
+            "text": "1\n"
+        },
+        "viewer_simple_counter_viewer": {
+            "status_code": 200,
+            "text": "1\n"
+        }
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
@@ -4651,6 +7958,26 @@
             "TotalGroups": 5
         }
     ],
+    "test.TestViewer.test_viewer_groups_sort_by_vdisk_slot_usage_with_allocation_units": {
+        "with_allocation_units": {
+            "FoundGroups": 5,
+            "HasMaxVDiskSlotUsage": true,
+            "NeedFilter": false,
+            "NeedLimit": false,
+            "NeedSort": false,
+            "Problems": [],
+            "ReturnedGroups": 1
+        },
+        "without_allocation_units": {
+            "FoundGroups": 5,
+            "HasMaxVDiskSlotUsage": true,
+            "NeedFilter": false,
+            "NeedLimit": false,
+            "NeedSort": false,
+            "Problems": [],
+            "ReturnedGroups": 1
+        }
+    },
     "test.TestViewer.test_viewer_groups_with_invalid_database": {
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Unknown database\n</p></body></html>"
@@ -5914,7 +9241,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 1,
+                            "Count": 2,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -6328,7 +9655,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 1,
+                            "Count": 2,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -6978,7 +10305,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -7180,7 +10507,7 @@
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 1,
+                            "Count": 2,
                             "State": "Green",
                             "Type": "DataShard"
                         },
@@ -7214,6 +10541,26 @@
                 }
             ],
             "TotalNodes": "3"
+        }
+    },
+    "test.TestViewer.test_viewer_nodes_deleted_tablets": {
+        "created_tablets": [
+            {
+                "Overall": "Green",
+                "State": "Active",
+                "Type": "DataShard"
+            }
+        ],
+        "deleted_tablets": [
+            {
+                "Overall": "Grey",
+                "State": "Deleted",
+                "Type": "DataShard"
+            }
+        ],
+        "nodes": {
+            "datashards_delta": 0,
+            "non_green_datashards": []
         }
     },
     "test.TestViewer.test_viewer_nodes_group": [
@@ -12308,6 +15655,22 @@
                             "SchemeShard": "72057594046678944"
                         },
                         "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224037888",
+                        "Leader": true,
+                        "NodeId": 50000,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224037899",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
                     }
                 ]
             },
@@ -12325,7 +15688,7 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038899",
+                        "TabletId": "72075186224038900",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -12341,28 +15704,12 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038900",
-                        "TenantId": {
-                            "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
-                        },
-                        "Type": 13
-                    },
-                    {
-                        "ChangeTime": "not-zero-number-text",
-                        "FollowerId": 0,
-                        "Generation": 1,
-                        "HiveId": "72075186224038889",
-                        "Leader": true,
-                        "NodeId": 50001,
-                        "Overall": 1,
-                        "State": 10,
                         "TabletId": "72075186224038901",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 5
+                        "Type": 13
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -12410,6 +15757,22 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
+                        "Type": 5
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224038889",
+                        "Leader": true,
+                        "NodeId": 50001,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224038905",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
                         "Type": 32
                     },
                     {
@@ -12421,7 +15784,7 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038906",
+                        "TabletId": "72075186224038907",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -12604,7 +15967,23 @@
                         "NodeId": 50001,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186224038905",
+                        "TabletId": "72075186224038899",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224038889",
+                        "Leader": true,
+                        "NodeId": 50001,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224038906",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -12908,6 +16287,22 @@
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
                         "Generation": 1,
+                        "HiveId": "72075186224037888",
+                        "Leader": true,
+                        "NodeId": 50000,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224037899",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
                         "HiveId": "72057594037968897",
                         "Leader": true,
                         "NodeId": 50001,
@@ -13078,7 +16473,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 16
+                        "Type": 18
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -13094,7 +16489,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 13
+                        "Type": 16
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -13110,7 +16505,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 5
+                        "Type": 13
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -13158,7 +16553,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 32
+                        "Type": 5
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -13174,7 +16569,7 @@
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
                         },
-                        "Type": 18
+                        "Type": 32
                     },
                     {
                         "ChangeTime": "not-zero-number-text",
@@ -13186,6 +16581,22 @@
                         "Overall": 1,
                         "State": 10,
                         "TabletId": "72075186224038906",
+                        "TenantId": {
+                            "PathId": "not-zero-number-text",
+                            "SchemeShard": "72057594046678944"
+                        },
+                        "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 1,
+                        "HiveId": "72075186224038889",
+                        "Leader": true,
+                        "NodeId": 50001,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186224038907",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
                             "SchemeShard": "72057594046678944"
@@ -13249,7 +16660,7 @@
                         "Type": "Coordinator"
                     },
                     {
-                        "Count": 1,
+                        "Count": 2,
                         "Type": "DataShard"
                     },
                     {
@@ -13307,7 +16718,7 @@
                         "Type": "Coordinator"
                     },
                     {
-                        "Count": 1,
+                        "Count": 2,
                         "Type": "DataShard"
                     },
                     {
@@ -13352,7 +16763,7 @@
                         "Type": "Coordinator"
                     },
                     {
-                        "Count": 3,
+                        "Count": 5,
                         "Type": "DataShard"
                     },
                     {
@@ -13508,7 +16919,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 10,
+                            "Count": 11,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],
@@ -13595,7 +17006,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 10,
+                            "Count": 11,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],
@@ -13715,7 +17126,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 10,
+                            "Count": 11,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],
@@ -13795,7 +17206,7 @@
                     "State": "RUNNING",
                     "StateStats": [
                         {
-                            "Count": 10,
+                            "Count": 11,
                             "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
                         }
                     ],

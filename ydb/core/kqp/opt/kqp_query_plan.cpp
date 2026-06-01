@@ -1,33 +1,34 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
-#include <ydb/library/yql/utils/plan/plan_utils.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/utf8.h>
 
-#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
-
-#include <ydb/public/lib/ydb_cli/common/format.h>
-
-#include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/queue.h>
@@ -38,10 +39,7 @@
 #include <unordered_map>
 #include <regex>
 
-#include <yql/essentials/utils/log/log.h>
-
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -1032,7 +1030,7 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& stagePlanNode) {
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
@@ -1051,27 +1049,42 @@ private:
         if (dataSinkCategory == NYql::KqpTableSinkName) {
             auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
 
+            NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
+            {
+                AFL_ENSURE(stagePlanNode.StageProto);
+                bool found = false;
+                for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
+                    if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                            && protoSink.HasInternalSink()
+                            && protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                                found = true;
+                                break;
+                    }
+                }
+                AFL_ENSURE(found);
+            }
+
             TString tablePath;
             TTableWrite writeInfo;
-            if (settings.Mode().StringValue() == "replace") {
+            if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE) {
                 op.Properties["Name"] = "Replace";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert" || settings.Mode().StringValue() == "update_conditional" || settings.Mode().StringValue().empty()) {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
                 op.Properties["Name"] = "Upsert";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsert;
-            } else if (settings.Mode().StringValue() == "insert") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                 op.Properties["Name"] = "Insert";
                 writeInfo.Type = EPlanTableWriteType::MultiInsert;
-            } else if (settings.Mode().StringValue() == "delete") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
                 op.Properties["Name"] = "Delete";
                 writeInfo.Type = EPlanTableWriteType::MultiErase;
-            } else if (settings.Mode().StringValue() == "update") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
                 op.Properties["Name"] = "Update";
                 writeInfo.Type = EPlanTableWriteType::MultiUpdate;
-            } else if (settings.Mode().StringValue() == "fill_table") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                 op.Properties["Name"] = "FillTable";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert_increment") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT) {
                 op.Properties["Name"] = "UpsertIncrement";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsertIncrement;
             } else {
@@ -1112,7 +1125,79 @@ private:
             }
 
             SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+
+            if (tableSinkSettings.GetNeedLookup()) {
+                TTableRead readInfo;
+                readInfo.Type = EPlanTableReadType::Lookup;
+
+                NJson::TJsonValue lookupColumns;
+                lookupColumns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& col : tableSinkSettings.GetKeyColumns()) {
+                    readInfo.Columns.push_back(col.GetName());
+                }
+                for (const auto& col : tableSinkSettings.GetLookupColumns()) {
+                    lookupColumns.AppendValue(col.GetName());
+                    readInfo.Columns.push_back(col.GetName());
+                }
+
+                op.Properties["Lookup"] = lookupColumns;
+                SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
+            }
+
+            if (!tableSinkSettings.GetIndexes().empty()) {
+                NJson::TJsonValue updateIndexes;
+                updateIndexes.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& index : tableSinkSettings.GetIndexes()) {
+                    NJson::TJsonValue indexInfo;
+                    indexInfo["Name"] = index.GetIndexName();
+                    indexInfo["Path"] = index.GetTable().GetPath();
+
+                    TTableWrite indexWriteInfo;
+                    if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpdate;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiErase;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpsert;
+                    } else {
+                        YQL_ENSURE(false, "Unexpected operation type for index");
+                    }
+
+                    NJson::TJsonValue columns;
+                    columns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                    for (const auto& col : index.GetColumns()) {
+                        columns.AppendValue(col.GetName());
+                        indexWriteInfo.Columns.push_back(col.GetName());
+                    }
+                    indexInfo["Columns"] = columns;
+                    SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexWriteInfo);
+
+                    if (index.GetIsUniq()) {
+                        indexInfo["CheckUnique"] = true;
+
+                        TTableRead readInfo;
+                        readInfo.Type = EPlanTableReadType::Lookup;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            readInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Reads.push_back(readInfo);
+                    }
+
+                    if (index.GetNeedDeleteOldRows()) {
+                        TTableWrite indexDeleteInfo;
+                        indexDeleteInfo.Type = EPlanTableWriteType::MultiErase;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            indexDeleteInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexDeleteInfo);
+                    }
+
+                    updateIndexes.AppendValue(indexInfo);
+                }
+                op.Properties["UpdateIndexes"] = updateIndexes;
+            }
+
+            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;
@@ -1125,7 +1210,7 @@ private:
             dqIntegration->FillSinkPlanProperties(sink, op.Properties);
         }
 
-        AddOperator(stagePlanNode, "Sink", op);
+        AddOperator(planNode, "Sink", op);
     }
 
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
@@ -1198,7 +1283,7 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
                     }
                 }
             }
@@ -2789,7 +2874,7 @@ private:
                 // top level rows/size have to match stage output
                 if (!operatorRows && stats.contains("OutputRows")) {
                     auto outputRows = stats.at("OutputRows");
-                    int aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
+                    i64 aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
                     if (fromBroadcast && parentTaskCount && (aRows % parentTaskCount == 0)) {
                         aRows /= parentTaskCount;
                     }
@@ -2914,7 +2999,18 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
     return plan;
 }
 
-TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
+NJson::TJsonValue MakeOptimizerStats(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& optCtx) {
+    const auto& cboStats = optCtx->CBOStats;
+
+    NJson::TJsonValue optimizerStats(NJson::EJsonValueType::JSON_MAP);
+    optimizerStats["JoinsCount"] = static_cast<ui64>(optCtx->JoinsCount);
+    optimizerStats["EquiJoinsCount"] = static_cast<ui64>(optCtx->EquiJoinsCount);
+    optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;
+    optimizerStats["CBOTreesOptimized"] = cboStats.TreesOptimized;
+    return optimizerStats;
+}
+
+TString AddSimplifiedPlan(const TString& planText, bool analyzeMode, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx = nullptr) {
     Y_UNUSED(analyzeMode);
     NJson::TJsonValue planJson;
     NJson::ReadJsonTree(planText, &planJson, true);
@@ -2926,12 +3022,20 @@ TString AddSimplifiedPlan(const TString& planText, bool analyzeMode) {
     NJson::ReadJsonTree(planText, &planCopy, true);
 
     auto simplifiedPlan = SimplifyQueryPlan(planCopy.GetMapSafe().at("Plan"));
+    if (optCtx) {
+        simplifiedPlan["OptimizerStats"] = MakeOptimizerStats(optCtx);
+    }
     planJson["SimplifiedPlan"] = simplifiedPlan;
 
     return planJson.GetStringRobust();
 }
 
-TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString commonPlanInfo = "", const TString& queryStats = "") {
+TString SerializeTxPlans(
+    const TVector<const TString>& txPlans,
+    const TString commonPlanInfo = "",
+    const TString& queryStats = "",
+    TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx = nullptr)
+{
     YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: SerializeTxPlans";
     NJsonWriter::TBuf writer;
     writer.SetIndentSpaces(2);
@@ -2993,10 +3097,10 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString co
     writer.EndObject();
 
     auto resultPlan =  writer.Str();
-    return AddSimplifiedPlan(resultPlan, false);
+    return AddSimplifiedPlan(resultPlan, false, optCtx);
 }
 
-} // namespace
+} // anonymous namespace
 
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
@@ -3081,7 +3185,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     writer.SetIndentSpaces(2);
     WriteCommonTablesInfo(writer, serializerCtx.Tables);
 
-    queryProto.SetQueryPlan(SerializeTxPlans(txPlans, writer.Str(), queryStats));
+    queryProto.SetQueryPlan(SerializeTxPlans(txPlans, writer.Str(), queryStats, optCtx));
 }
 
 void FillAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqStatsAggr& aggr, const TString& name) {
@@ -3719,5 +3823,4 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
     return writer.Str();
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

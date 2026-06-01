@@ -200,10 +200,10 @@ static size_t rtb_on_remove(ngtcp2_rtb *rtb, ngtcp2_rtb_entry *ent,
 }
 
 /* NGTCP2_RECLAIM_FLAG_NONE indicates that no flag is set. */
-#define NGTCP2_RECLAIM_FLAG_NONE 0x00u
+#define NGTCP2_RECLAIM_FLAG_NONE 0x00U
 /* NGTCP2_RECLAIM_FLAG_ON_LOSS indicates that frames are reclaimed
    because of the packet loss.*/
-#define NGTCP2_RECLAIM_FLAG_ON_LOSS 0x01u
+#define NGTCP2_RECLAIM_FLAG_ON_LOSS 0x01U
 
 /*
  * rtb_reclaim_frame copies and queues frames included in |ent| for
@@ -233,7 +233,7 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
       continue;
     }
 
-    switch (frc->fr.type) {
+    switch (frc->fr.hd.type) {
     case NGTCP2_FRAME_STREAM:
       strm = ngtcp2_conn_find_stream(conn, fr->stream.stream_id);
       if (strm == NULL || (strm->flags & NGTCP2_STRM_FLAG_RESET_STREAM)) {
@@ -271,7 +271,12 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
         return rv;
       }
 
-      nfrc->fr = *fr;
+      nfrc->fr.stream.type = fr->stream.type;
+      nfrc->fr.stream.flags = fr->stream.flags;
+      nfrc->fr.stream.fin = fr->stream.fin;
+      nfrc->fr.stream.stream_id = fr->stream.stream_id;
+      nfrc->fr.stream.offset = fr->stream.offset;
+      nfrc->fr.stream.datacnt = fr->stream.datacnt;
       ngtcp2_vec_copy(nfrc->fr.stream.data, fr->stream.data,
                       fr->stream.datacnt);
 
@@ -314,7 +319,12 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
         return rv;
       }
 
-      nfrc->fr = *fr;
+      nfrc->fr.stream.type = fr->stream.type;
+      nfrc->fr.stream.flags = 0;
+      nfrc->fr.stream.fin = 0;
+      nfrc->fr.stream.stream_id = 0;
+      nfrc->fr.stream.offset = fr->stream.offset;
+      nfrc->fr.stream.datacnt = fr->stream.datacnt;
       ngtcp2_vec_copy(nfrc->fr.stream.data, fr->stream.data,
                       fr->stream.datacnt);
 
@@ -415,7 +425,7 @@ static int conn_process_lost_datagram(ngtcp2_conn *conn,
   int rv;
 
   for (frc = ent->frc; frc; frc = frc->next) {
-    switch (frc->fr.type) {
+    switch (frc->fr.hd.type) {
     case NGTCP2_FRAME_DATAGRAM:
     case NGTCP2_FRAME_DATAGRAM_LEN:
       assert(conn->callbacks.lost_datagram);
@@ -603,7 +613,7 @@ static int process_acked_pkt(ngtcp2_rtb_entry *ent, ngtcp2_conn *conn,
       frc->binder->flags |= NGTCP2_FRAME_CHAIN_BINDER_FLAG_ACK;
     }
 
-    switch (frc->fr.type) {
+    switch (frc->fr.hd.type) {
     case NGTCP2_FRAME_STREAM:
       strm = ngtcp2_conn_find_stream(conn, frc->fr.stream.stream_id);
       if (strm == NULL) {
@@ -851,7 +861,7 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
       goto fail;
     }
 
-    if (largest_ack == pkt_num) {
+    if (rtb->largest_acked_tx_pkt_num == pkt_num) {
       cc_ack.largest_pkt_sent_ts = ent->ts;
     }
 
@@ -1299,7 +1309,7 @@ static int rtb_reclaim_frame_on_retry(ngtcp2_rtb *rtb, ngtcp2_conn *conn,
   int rv;
 
   for (; *pfrc;) {
-    switch ((*pfrc)->fr.type) {
+    switch ((*pfrc)->fr.hd.type) {
     case NGTCP2_FRAME_STREAM:
       frc = *pfrc;
 

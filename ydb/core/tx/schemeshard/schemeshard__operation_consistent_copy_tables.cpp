@@ -305,6 +305,11 @@ bool CreateConsistentCopyTables(
 
             for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
                 TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+                if (srcImplTable.IsDeleted()) {
+                    LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "CreateConsistentCopyTables: Skipping deleted index impl child: " << srcImplTableName);
+                    continue;
+                }
                 Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
                 TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 

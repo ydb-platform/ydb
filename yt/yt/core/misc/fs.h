@@ -228,7 +228,6 @@ struct TSpliceResult
 TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
-    bool pipeIsSrc,
     const IInvokerPtr& ioInvoker,
     const NConcurrency::IPollerPtr& poller,
     i64 chunkSize = 16_MB);
@@ -240,6 +239,8 @@ TError AttachFindOutput(TError error, const std::string& path);
 TDeviceId GetDeviceId(const std::string& path);
 
 std::optional<std::string> FindBinaryPath(const std::string& binary);
+
+bool IsOutOfDiskSpaceError(const TError& error);
 
 ////////////////////////////////////////////////////////////////////////////////
 

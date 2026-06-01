@@ -159,7 +159,7 @@ TDirectReadSessionManager::TDirectReadSessionManager(
     TLog log
 )
     : ReadSessionSettings(settings)
-    , ServerSessionId(serverSessionId)
+    , ServerSessionId(std::move(serverSessionId))
     , ClientContext(clientContext)
     , ProcessorFactory(processorFactory)
     , ControlCallbacks(controlCallbacks)
@@ -171,7 +171,7 @@ TDirectReadSessionManager::~TDirectReadSessionManager() {
 }
 
 TStringBuilder TDirectReadSessionManager::GetLogPrefix() const {
-    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " ";
+    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " TraceId=" << ReadSessionSettings.TraceId_ << " ";
 }
 
 TDirectReadSessionContextPtr TDirectReadSessionManager::CreateDirectReadSession(TNodeId nodeId) {
@@ -332,7 +332,7 @@ TDirectReadSession::TDirectReadSession(
 )
     : ClientContext(clientContext)
     , ReadSessionSettings(settings)
-    , ServerSessionId(serverSessionId)
+    , ServerSessionId(std::move(serverSessionId))
     , ProcessorFactory(processorFactory)
     , NodeId(nodeId)
     , IncomingMessagesForControlSession(std::make_shared<TLockFreeQueue<Ydb::Topic::StreamDirectReadMessage::DirectReadResponse>>())
@@ -830,7 +830,7 @@ void TDirectReadSession::ReadFromProcessorImpl(TDeferredActions<false>& deferred
 }
 
 TStringBuilder TDirectReadSession::GetLogPrefix() const {
-    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSession ServerSessionId=" << ServerSessionId << " NodeId=" << NodeId << " ";
+    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSession ServerSessionId=" << ServerSessionId << " NodeId=" << NodeId << " TraceId=" << ReadSessionSettings.TraceId_ << " ";
 }
 
 void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {

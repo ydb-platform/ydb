@@ -1,5 +1,7 @@
 #include "kqp_opt_log_impl.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 #include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -320,7 +322,7 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
     };
 }
 
-} // namespace
+} // anonymous namespace
 
 TCoLambda MakeFilterForRange(TKqlKeyRange range, TExprContext& ctx, TPositionHandle pos, TVector<TString> keyColumns) {
     size_t prefix = 0;

@@ -1,6 +1,13 @@
 #include "kqp_stage_graph.h"
 
+#include <yql/essentials/utils/log/log.h>
+
+#include <util/generic/guid.h>
+
+namespace NKikimr::NKqp {
+
 namespace {
+
 using namespace NKikimr;
 using namespace NKqp;
 using namespace NYql;
@@ -35,13 +42,8 @@ NJson::TJsonValue MakeKeyColumnsJson(const TVector<TInfoUnit>& keys) {
     }
     return keyColumns;
 }
-}
 
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NNodes;
+} // anonymous namespace
 
 TString TSortElement::ToString() const {
     TStringBuilder result;
@@ -162,6 +164,15 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     return inputStage;
 }
 
+ui32 TStageGraph::AddStage() {
+    ui32 newStageId = StageIds.size();
+    StageIds.push_back(newStageId);
+    StageInputs[newStageId] = TVector<ui32>();
+    StageOutputs[newStageId] = TVector<ui32>();
+    StageGUIDs[newStageId] = CreateGuidAsString();
+    return newStageId;
+}
+
 std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32& stageInputCounter, TPositionHandle pos, TExprContext& ctx) const {
     const TString inputName = "input_arg_" + std::to_string(stageInputCounter++);
     YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
@@ -194,5 +205,5 @@ TList<ui32> TStageGraph::GetTopologicalOrder() const {
 void TStageGraph::TopologicalSort() {
     StageIds = GetTopologicalOrder();
 }
-}
-}
+
+} // namespace NKikimr::NKqp

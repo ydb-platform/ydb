@@ -13,6 +13,8 @@
 
 #include <yt/yt/client/transaction_client/helpers.h>
 
+#include <library/cpp/iterator/zip.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NConcurrency;
@@ -265,11 +267,16 @@ TFuture<TTransactionFlushResult> TTransaction::Flush()
 
                 const auto& rsp = rspOrError.Value();
                 TTransactionFlushResult result{
-                    .ParticipantCellIds = FromProto<std::vector<TCellId>>(rsp->participant_cell_ids())
+                    .ParticipantCellIds = FromProto<std::vector<TCellId>>(rsp->participant_cell_ids()),
+                    .ExpectedPrepareSignatures = FromProto<std::vector<TTransactionSignature>>(rsp->expected_prepare_signatures()),
                 };
+                // COMPAT(atalmenev): old proxies don't send expected_prepare_signatures.
+                // Pad with FinalTransactionSignature so lengths match ParticipantCellIds
+                result.ExpectedPrepareSignatures.resize(result.ParticipantCellIds.size(), FinalTransactionSignature);
 
-                YT_LOG_DEBUG("Transaction flushed (ParticipantCellIds: %v)",
-                    result.ParticipantCellIds);
+                YT_LOG_DEBUG("Transaction flushed (ParticipantCellIds: %v, ExpectedPrepareSignatures: %v)",
+                    result.ParticipantCellIds,
+                    result.ExpectedPrepareSignatures);
 
                 return result;
             }));
@@ -310,8 +317,8 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                         result.ParticipantCellIds,
                         transaction->GetConnection()->GetLoggingTag());
 
-                    for (auto cellId : result.ParticipantCellIds) {
-                        AdditionalParticipantCellIds_.insert(cellId);
+                    for (auto [cellId, signature] : Zip(result.ParticipantCellIds, result.ExpectedPrepareSignatures)) {
+                        EmplaceOrCrash(AdditionalParticipantCellIds_, cellId, signature);
                     }
                 })));
     }
@@ -321,7 +328,10 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
             BIND([=, this, this_ = MakeStrong(this)] {
                 auto req = Proxy_.CommitTransaction();
                 ToProto(req->mutable_transaction_id(), GetId());
-                ToProto(req->mutable_additional_participant_cell_ids(), AdditionalParticipantCellIds_);
+                for (auto [cellId, signature] : AdditionalParticipantCellIds_) {
+                    ToProto(req->add_additional_participant_cell_ids(), cellId);
+                    req->add_expected_prepare_signatures(signature);
+                }
                 ToProto(req->mutable_prerequisite_options(), options);
                 ToProto(req->mutable_mutating_options(), options);
                 req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
@@ -1124,6 +1134,7 @@ TFuture<void> TTransaction::SendPing()
     auto req = Proxy_.PingTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
     req->set_ping_ancestors(PingAncestors_);
+    SetControlMultiplexingBandIfNeeded(*req);
 
     return req->Invoke().Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspPingTransactionPtr& rspOrError) {
@@ -1333,6 +1344,13 @@ void TTransaction::SubscribeModificationsFlushed(const TModificationsFlushedHand
 void TTransaction::UnsubscribeModificationsFlushed(const TModificationsFlushedHandler& handler)
 {
     ModificationsFlushed_.Unsubscribe(handler);
+}
+
+void TTransaction::SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req)
+{
+    if (Client_->GetOptions().EnableControlMultiplexingBand) {
+        req.SetMultiplexingBand(NRpc::EMultiplexingBand::Control);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

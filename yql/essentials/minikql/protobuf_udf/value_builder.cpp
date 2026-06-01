@@ -74,7 +74,7 @@ TUnboxedValue TProtobufSerialize::Run(
 
 namespace {
 
-static TUnboxedValuePod CreateEnumValue(
+TUnboxedValuePod CreateEnumValue(
     const IValueBuilder* valueBuilder,
     const NProtoBuf::EnumValueDescriptor* desc,
     const EEnumFormat format,
@@ -97,7 +97,7 @@ static TUnboxedValuePod CreateEnumValue(
     Y_ENSURE(false, "Unreachable");
 }
 
-static TUnboxedValuePod CreateSingleField(
+TUnboxedValuePod CreateSingleField(
     const IValueBuilder* valueBuilder,
     const Message& proto,
     const FieldDescriptor* fd,
@@ -144,7 +144,7 @@ static TUnboxedValuePod CreateSingleField(
     return TUnboxedValuePod();
 }
 
-static TUnboxedValuePod CreateDefaultValue(
+TUnboxedValuePod CreateDefaultValue(
     const IValueBuilder* valueBuilder,
     const FieldDescriptor* fd,
     const TProtoInfo& info,
@@ -179,7 +179,7 @@ static TUnboxedValuePod CreateDefaultValue(
 #undef DEFAULT_TO_VALUE
 }
 
-static TUnboxedValuePod CreateRepeatedField(
+TUnboxedValuePod CreateRepeatedField(
     const IValueBuilder* valueBuilder,
     const Message& proto,
     const FieldDescriptor* fd,
@@ -239,7 +239,7 @@ static TUnboxedValuePod CreateRepeatedField(
     return list.Release();
 }
 
-static TUnboxedValuePod CreateMapField(
+TUnboxedValuePod CreateMapField(
     const IValueBuilder* valueBuilder,
     const Message& proto,
     const FieldDescriptor* fd,

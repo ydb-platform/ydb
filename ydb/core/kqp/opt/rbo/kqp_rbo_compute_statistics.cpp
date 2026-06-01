@@ -3,6 +3,11 @@
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
 
 /***
  * All the methods to compute metadata and statistics are collected in this file
@@ -13,23 +18,8 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
+using namespace NYql::NNodes;
 using namespace NYql::NDq;
-TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
-    if (!keyColumns) {
-        return {};
-    }
-
-    TVector<TInfoUnit> result;
-    for (const auto& key : keyColumns->Data) {
-        auto it = std::find_if(outputColumns.begin(), outputColumns.end(), [&key](const TInfoUnit& iu) {
-            return key == iu.GetColumnName();
-        });
-
-        Y_ENSURE(it != outputColumns.end());
-        result.push_back(*it);
-    }
-    return result;
-}
 
 void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusivePtr<IOperator>& right, TVector<TString>& leftAliases,
                           TVector<TString>& rightAliases, TVector<TString>& unionOfAliases) {
@@ -60,13 +50,35 @@ void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusive
     std::set_union(leftAliasSet.begin(), leftAliasSet.end(), rightAliasSet.begin(), rightAliasSet.end(),
             std::back_inserter(unionOfAliases));
 }
+
+TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
+    auto leftKeys = join->GetLeftInput()->Props.Metadata->KeyColumns;
+    if (join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
+        return leftKeys;
+    }
+
+    auto rightKeys = join->GetRightInput()->Props.Metadata->KeyColumns;
+    if (join->JoinKind == "RightSemi" || join->JoinKind == "RightOnly") {
+        return rightKeys;
+    }
+    
+    if (leftKeys.empty() || rightKeys.empty()) {
+        return {};
+    }
+
+    if(IUSetDiff(leftKeys, rightKeys).empty()) {
+        return rightKeys;
+    }
+    else if (IUSetDiff(rightKeys, leftKeys).empty()) {
+        return leftKeys;
+    }
+    else {
+        auto concatKeys = leftKeys;
+        AddUnique<TInfoUnit>(rightKeys, concatKeys);
+        return concatKeys;
+    }
 }
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NYql::NNodes;
+} // anonymous namespace
 
 /**
  * Default metadata computation for unary operators
@@ -350,27 +362,27 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         return;
     }
 
-    Props.Metadata = GetInput()->Props.Metadata;
+    const auto& inputMetadata = *GetInput()->Props.Metadata;
 
+    Props.Metadata = TRBOMetadata();
+
+    Props.Metadata->StorageType = inputMetadata.StorageType;
     // Compute logical cardinality info. Its the same as input cardinality, except in the case
     // where the group-by list is empty, then we always produce a single tuple
-    if (KeyColumns.empty()) {
-        Props.Metadata->LogicalCard = ELogicalCardinality::One;
-    }
-
+    Props.Metadata->LogicalCard = KeyColumns.empty() ? ELogicalCardinality::One : inputMetadata.LogicalCard;
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
     Props.Metadata->ShuffledByColumns = {};
 
-    // Aggregate acts list a source in terms of lineage
-    // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
-    Props.Metadata->ColumnLineage = {};
+    // Aggregate acts like a source in terms of lineage.
+    // FIXME: We currently delete all lineage of columns before Aggregate,
+    // maybe this is suboptimal in some future cases?
     TString alias = "_aggregate";
     int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, alias);
     for (const auto & iu : GetOutputIUs()) {
-        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, alias, iu.GetColumnName(), duplicateId));
+        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, "", iu.GetColumnName(), duplicateId));
     }
 }
 
@@ -442,7 +454,7 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         FindCardHint(unionOfAliases, *hints.BytesHints));
 
     Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
-    Props.Metadata->KeyColumns = ConvertKeyColumns(CBOStats.KeyColumns, GetOutputIUs());
+    Props.Metadata->KeyColumns = ComputeKeysAfterJoin(this);
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 
@@ -601,5 +613,4 @@ void TOpRoot::ComputePlanStatistics(TRBOContext& ctx) {
     }
 }
 
-}
-}
+} // namespace NKikimr::NKqp

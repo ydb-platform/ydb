@@ -1596,6 +1596,21 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 411000000000,
             DefaultValue: 3600 }];
+        optional int64 MaxIncrementalRestoreTablesInFlight = 16 [(ControlOptions) = {
+            Description: "Max concurrent per-table restore sub-operations within a single incremental backup. -1 disables the cap.",
+            MinValue: -1,
+            MaxValue: 1000000,
+            DefaultValue: 32 }];
+        optional int64 MaxIncrementalRestoreOverallDurationSeconds = 17 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) of the whole incremental restore (across all incremental backups in the chain), from first dispatch to terminal state. -1 disables the deadline.",
+            MinValue: -1,
+            MaxValue: 604800,
+            DefaultValue: 86400 }];
+        optional int64 MaxIncrementalRestoreStageDurationSeconds = 18 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) for restoring a single incremental backup in the chain; resets when the orchestrator advances to the next incremental. Must be <= MaxIncrementalRestoreOverallDurationSeconds. -1 disables the per-incremental deadline (only the overall deadline applies). Defaults to the overall deadline so single-incremental restores see one effective limit; lower this knob if per-incremental progress should be enforced.",
+            MinValue: -1,
+            MaxValue: 604800,
+            DefaultValue: 86400 }];
     }
 
     message TTCMallocControls {
@@ -1852,6 +1867,30 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 MaxInProgressStartupDataSyncCount = 43 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressStartupDataSyncPerPDiskCount = 44 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryCount = 45 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryPerPDiskCount = 46 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -2631,7 +2670,7 @@ message TColumnShardConfig {
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
 
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "tiling++"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
 

@@ -114,7 +114,6 @@ public:
 };
 
 TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, const TVector<TInfoUnit>& keyColumns);
 
 }
 }

@@ -5,42 +5,43 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
-#include <yql/essentials/providers/result/provider/yql_result_provider.h>
-#include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -1683,6 +1684,7 @@ private:
             settingsBuilder.SetSqlAutoCommit(false)
                 .SetUsePgParser(settings.UsePgParser)
                 .SetFromConfig(SessionCtx->Config())
+                .SetValidateViewStatement(!settings.IsInternalCall.GetOrElse(false))
                 .SetYqlSelect(settings.YqlSelect);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
 
@@ -2031,8 +2033,10 @@ private:
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
-        state->AllowTransparentSystemColumns = false;
+        state->AddTransparentPrefixToTransparentSystemColumns = false;
+        state->EnableUserAttributesInTopicQuery = Config->FeatureFlags.GetEnableUserAttributesInTopicQuery();
         state->StreamingTopicsReadByDefault = false;
+        state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2335,7 +2339,7 @@ private:
     bool UsePessimisticLocks = false;
 };
 
-} // namespace
+} // anonymous namespace
 
 Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode statsMode) {
     switch (statsMode) {
@@ -2361,5 +2365,4 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
                                    keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

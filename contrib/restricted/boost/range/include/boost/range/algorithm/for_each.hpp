@@ -13,8 +13,8 @@
 #include <boost/range/begin.hpp>
 #include <boost/range/end.hpp>
 #include <boost/range/concepts.hpp>
-#include <boost/utility/enable_if.hpp>
-#include <boost/ref.hpp>
+#include <boost/core/enable_if.hpp>
+#include <boost/core/ref.hpp>
 #include <algorithm>
 
 #if BOOST_WORKAROUND(BOOST_MSVC, == 1600)

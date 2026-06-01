@@ -4,8 +4,6 @@
 
 namespace NKikimr::NSecurity {
 
-////////////////////////////////////////////////////////////////////////////////
-
 Y_UNIT_TEST_SUITE(TNetUtilTest) {
 
     Y_UNIT_TEST(TestIsIPv4) {

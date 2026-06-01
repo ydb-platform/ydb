@@ -9,7 +9,7 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -31,7 +31,7 @@ DEFINE_REFCOUNTED_TYPE(TMultiplexingBandConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpDispatcherConfig
+struct TDispatcherConfig
     : public NYTree::TYsonStruct
 {
     int ThreadPoolSize;
@@ -50,18 +50,18 @@ struct TTcpDispatcherConfig
 
     bool EnableLocalBypass;
 
-    TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
+    TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
 
-    REGISTER_YSON_STRUCT(TTcpDispatcherConfig);
+    REGISTER_YSON_STRUCT(TDispatcherConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpDispatcherConfig)
+DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpDispatcherDynamicConfig
+struct TDispatcherDynamicConfig
     : public NYTree::TYsonStruct
 {
     std::optional<int> ThreadPoolSize;
@@ -79,12 +79,12 @@ struct TTcpDispatcherDynamicConfig
 
     std::optional<bool> EnableLocalBypass;
 
-    REGISTER_YSON_STRUCT(TTcpDispatcherDynamicConfig);
+    REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpDispatcherDynamicConfig)
+DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -200,5 +200,5 @@ DEFINE_REFCOUNTED_TYPE(TBusClientDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 

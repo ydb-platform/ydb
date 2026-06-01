@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/testlib/pg
     ydb/core/util
     ydb/core/wrappers/ut_helpers
+    ydb/library/aws_init
     ydb/public/lib/ydb_cli/dump
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/export

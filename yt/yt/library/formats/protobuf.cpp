@@ -945,7 +945,7 @@ void TProtobufFormatDescriptionBase<TType>::InitColumn(
 {
     if (columnConfig->Type->ProtoType == EProtobufType::EmbeddedMessage) {
         if (columnConfig->Repeated) {
-            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv can not be repeated",
+            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv cannot be repeated",
             columnConfig->Name,
             EProtobufType::EmbeddedMessage);
         }
@@ -958,7 +958,7 @@ void TProtobufFormatDescriptionBase<TType>::InitColumn(
     TLogicalTypePtr logicalType = columnSchema ? columnSchema->LogicalType() : nullptr;
     if (columnConfig->ProtoType == EProtobufType::OtherColumns) {
         if (columnConfig->Repeated) {
-            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv can not be repeated",
+            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv cannot be repeated",
                 columnConfig->Name,
                 EProtobufType::OtherColumns);
         }
@@ -1264,7 +1264,7 @@ void TProtobufTypeBuilder<TType>:: VisitStruct(
             ? descriptor.VariantStructField(fieldIndex)
             : descriptor.StructField(fieldIndex);
         if (isOneof && childDescriptor.GetType()->IsNullable()) {
-            THROW_ERROR_EXCEPTION("Optional variant field %Qv can not match oneof field in protobuf format",
+            THROW_ERROR_EXCEPTION("Optional variant field %Qv cannot match oneof field in protobuf format",
                 childDescriptor.GetDescription());
         }
         type->AddChild(

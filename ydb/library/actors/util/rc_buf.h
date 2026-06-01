@@ -786,7 +786,7 @@ public:
         } else {
             beginOffset = data.data() - backend.GetData().data();
         }
-        Backend = std::move(backend);
+        Backend = std::forward<T>(backend);
         Begin = Backend.GetData().data() + beginOffset;
         End = Begin + data.size();
     }

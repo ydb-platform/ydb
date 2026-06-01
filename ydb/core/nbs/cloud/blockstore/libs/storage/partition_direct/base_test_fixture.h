@@ -5,8 +5,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 
@@ -25,6 +26,12 @@ TString GenerateRandomString(size_t size);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TScheduledTask
+{
+    TDuration Delay;
+    TCallback Callback;
+};
+
 struct TBaseFixture: public NUnitTest::TBaseFixture
 {
     static constexpr ui32 FixtureVChunkIndex = 100;
@@ -38,8 +45,15 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         FixtureVChunkIndex,
         FixtureHostCount,
         FixturePrimaryCount);
+    TLogTitle LogTitle{
+        GetCycleCount(),
+        TLogTitle::TVChunk{
+            .DiskId = "disk-id",
+            .VChunkIndex = VChunkConfig.VChunkIndex}};
 
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters{
+        new ::NMonitoring::TDynamicCounters()};
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMap DirtyMap{
@@ -49,18 +63,42 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
 
     TBlockRange64 ExpectedRange;
     TString RangeData;
-    TMutex ReadMutex;
-    void SetReadResult(TDBGReadBlocksResponse response);
-    void ClearReadPromises();
-    void AddReadPromise(NThreading::TPromise<TDBGReadBlocksResponse> promise);
-    TVector<NThreading::TPromise<TDBGReadBlocksResponse>> ReadPromises;
 
-    NThreading::TPromise<TDBGWriteBlocksResponse> WritePromise =
-        NThreading::NewPromise<TDBGWriteBlocksResponse>();
+    TMutex PromisesGuard;
+    TVector<TScheduledTask> ScheduledTasks;
+    TVector<NThreading::TPromise<TDBGReadBlocksResponse>> ReadPromises;
+    TVector<NThreading::TPromise<TDBGWriteBlocksResponse>> WritePromises;
+    TVector<NThreading::TPromise<TDBGFlushResponse>> FlushPromises;
+    TVector<NThreading::TPromise<TDBGEraseResponse>> ErasePromises;
 
     virtual void Init();
 
     TGuardedSgList MakeSgList() const;
+
+    bool WaitScheduledTasks(size_t count, TDuration timeout);
+    void RunScheduledTasks();
+
+    void SetReadResult(TDBGReadBlocksResponse response, bool async);
+    bool WaitReadRequests(size_t count, TDuration timeout);
+
+    void SetWriteResult(TDBGWriteBlocksResponse response, bool async);
+    bool WaitWriteRequests(size_t count, TDuration timeout);
+
+    void SetFlushResult(TDBGFlushResponse response, bool async);
+    bool WaitFlushRequests(size_t count, TDuration timeout);
+
+    void SetEraseResult(TDBGEraseResponse response, bool async);
+    bool WaitEraseRequests(size_t count, TDuration timeout);
+
+private:
+    template <typename T>
+    void SetResult(
+        TVector<NThreading::TPromise<T>>& promises,
+        T response,
+        bool async);
+
+    template <typename T>
+    bool Wait(TVector<T>& items, size_t count, TDuration timeout);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

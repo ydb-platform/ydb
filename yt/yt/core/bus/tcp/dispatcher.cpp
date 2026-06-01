@@ -4,66 +4,66 @@
 
 #include <yt/yt/core/bus/private.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTcpDispatcher::TTcpDispatcher()
+TDispatcher::TDispatcher()
     : Impl_(New<TImpl>())
 {
     BusProfiler().WithSparse().AddProducer("", Impl_);
 }
 
-TTcpDispatcher* TTcpDispatcher::Get()
+TDispatcher* TDispatcher::Get()
 {
-    return LeakySingleton<TTcpDispatcher>();
+    return LeakySingleton<TDispatcher>();
 }
 
-void TTcpDispatcher::Configure(const TTcpDispatcherConfigPtr& config)
+void TDispatcher::Configure(const TDispatcherConfigPtr& config)
 {
     Impl_->Configure(config);
 }
 
-const TBusNetworkCountersPtr& TTcpDispatcher::GetCounters(const TString& networkName, bool encrypted)
+const TBusNetworkCountersPtr& TDispatcher::GetCounters(const TString& networkName, bool encrypted)
 {
     return Impl_->GetCounters(networkName, encrypted);
 }
 
-NConcurrency::IPollerPtr TTcpDispatcher::GetXferPoller()
+NConcurrency::IPollerPtr TDispatcher::GetXferPoller()
 {
     return Impl_->GetXferPoller();
 }
 
-void TTcpDispatcher::DisableNetworking()
+void TDispatcher::DisableNetworking()
 {
     Impl_->DisableNetworking();
 }
 
-bool TTcpDispatcher::IsNetworkingDisabled()
+bool TDispatcher::IsNetworkingDisabled()
 {
     return Impl_->IsNetworkingDisabled();
 }
 
-const std::string& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
+const std::string& TDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
 {
     return Impl_->GetNetworkNameForAddress(address);
 }
 
-TTosLevel TTcpDispatcher::GetTosLevelForBand(EMultiplexingBand band)
+TTosLevel TDispatcher::GetTosLevelForBand(EMultiplexingBand band)
 {
     return Impl_->GetTosLevelForBand(band);
 }
 
-int TTcpDispatcher::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+int TDispatcher::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
 {
     return Impl_->GetMultiplexingParallelism(band, multiplexingParallelism);
 }
 
-NYTree::IYPathServicePtr TTcpDispatcher::GetOrchidService()
+NYTree::IYPathServicePtr TDispatcher::GetOrchidService()
 {
     return Impl_->GetOrchidService();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

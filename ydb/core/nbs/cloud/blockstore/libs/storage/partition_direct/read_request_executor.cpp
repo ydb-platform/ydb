@@ -11,6 +11,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 IReadRequestExecutorPtr CreateReadRequestExecutor(
     NActors::TActorSystem const* actorSystem,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TReadHint readHint,
@@ -21,6 +22,9 @@ IReadRequestExecutorPtr CreateReadRequestExecutor(
     if (readHint.RangeHints.size() == 1) {
         return std::make_shared<TReadSingleLocationRequestExecutor>(
             actorSystem,
+            logTitle.GetChildWithTags(
+                GetCycleCount(),
+                {{"t", "read"}, {"r", request->Headers.Range.Print()}}),
             vChunkConfig,
             std::move(directBlockGroup),
             std::move(readHint),
@@ -31,6 +35,9 @@ IReadRequestExecutorPtr CreateReadRequestExecutor(
 
     return std::make_shared<TReadMultipleLocationRequestExecutor>(
         actorSystem,
+        logTitle.GetChildWithTags(
+            GetCycleCount(),
+            {{"t", "mread"}, {"r", request->Headers.Range.Print()}}),
         vChunkConfig,
         std::move(directBlockGroup),
         std::move(readHint),

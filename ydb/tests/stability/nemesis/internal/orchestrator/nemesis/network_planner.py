@@ -51,6 +51,10 @@ class NetworkNemesisPlanner(NemesisPlannerBase):
             return []
         return fanout(self.nemesis_type, extract_targets, "extract", self.PAYLOAD_EXTRACT)
 
+    def manual(self, host, action, payload=None):  # noqa: D401
+        """Disabled: planner relies on cross-tick state (isolated_hosts) for correctness."""
+        return None
+
     def _drain_tracked_hosts(self) -> list[str]:
         targets = list(self._state.isolated_hosts)
         self._state.isolated_hosts.clear()
@@ -89,3 +93,4 @@ class TimeSkewNemesisPlanner(NetworkNemesisPlanner):
 
     def __init__(self) -> None:
         super().__init__(max_affected=2)
+        self.nemesis_type = "TimeSkewNemesis"

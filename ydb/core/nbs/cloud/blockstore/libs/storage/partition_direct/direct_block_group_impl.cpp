@@ -5,6 +5,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
@@ -34,8 +35,8 @@ TString DoDump(
 {
     TStringBuilder sb;
     for (size_t i = 0; i < states.size(); ++i) {
-        sb << states[i].DebugPrint() << " " << statistics[i].DebugPrint()
-           << "\n";
+        sb << " H" << i << ": " << states[i].DebugPrint() << " "
+           << statistics[i].DebugPrint() << "\n";
     }
     return sb;
 }
@@ -73,21 +74,17 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
 TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
-    ISchedulerPtr scheduler,
-    ITimerPtr timer,
     TExecutorPtr executor,
     ui64 tabletId,
     ui32 generation,
-    size_t index,
+    size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds)
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
-    , Scheduler(std::move(scheduler))
-    , Timer(std::move(timer))
     , Executor(std::move(executor))
     , TabletId(tabletId)
-    , Index(index)
+    , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
     , HostStatistics(DirectBlockGroupHostCount)
@@ -101,7 +98,7 @@ TDirectBlockGroup::TDirectBlockGroup(
                                    TVector<TDDiskConnection>& connections,
                                    EConnectionType type)
     {
-        for (ui8 i = 0; i < ids.size(); ++i) {
+        for (THostIndex i = 0; i < ids.size(); ++i) {
             const auto& ddiskId = ids[i];
             connections.push_back(TDDiskConnection{
                 .HostConnection = NTransport::THostConnection{
@@ -138,12 +135,16 @@ TExecutorPtr TDirectBlockGroup::GetExecutor()
     return Executor;
 }
 
+IOraclePtr TDirectBlockGroup::GetOracle()
+{
+    return &Oracle;
+}
+
 void TDirectBlockGroup::Schedule(TDuration delay, TCallback callback)
 {
-    Scheduler->Schedule(
-        Executor.get(),
-        Timer->Now() + delay,
-        std::move(callback));
+    Y_ABORT_UNLESS(Service);
+
+    Service->ScheduleAfterDelay(Executor, delay, std::move(callback));
 }
 
 std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
@@ -490,6 +491,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
 TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
+    THostIndex coordinatorHostIndex,
     TVector<THostIndex> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
@@ -527,10 +529,6 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
-
-    const ui8 coordinatorHostIndex = Oracle.SelectBestPBufferHost(
-        hostIndexes,
-        EOperation::WriteToManyPBuffers);
 
     OnRequest(coordinatorHostIndex, EOperation::WriteToManyPBuffers);
 
@@ -931,7 +929,7 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     auto future = promise.GetFuture();
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(),
-         index = Index,
+         index = DirectBlockGroupIndex,
          promise = std::move(promise)]   //
         () mutable
         {
@@ -945,7 +943,7 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
-void TDirectBlockGroup::SetHostState(ui8 hostIndex, THostState::EState state)
+void TDirectBlockGroup::SetHostState(THostIndex hostIndex, EHostState state)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -958,16 +956,19 @@ void TDirectBlockGroup::SetHostState(ui8 hostIndex, THostState::EState state)
         ToString(state).c_str());
 
     HostStates[hostIndex].State = state;
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            vChunk->SetHostState(hostIndex, state);
+        }
+    }
 }
 
-ui64 TDirectBlockGroup::GetHostPBufferUsedSize(ui8 hostIndex) const
+ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
 {
     ui64 result = 0;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             result += vChunk->GetPBufferUsedSize(hostIndex);
-        } else {
-            return 0;
         }
     }
     return result;
@@ -1161,6 +1162,15 @@ void TDirectBlockGroup::OnMultiFlushResponse(
     }
 }
 
+void TDirectBlockGroup::Thinking()
+{
+    for (THostIndex hostIndex = 0; hostIndex < HostStates.size(); ++hostIndex) {
+        HostStates[hostIndex].PBufferUsedSize =
+            GetHostPBufferUsedSize(hostIndex);
+    }
+    Oracle.Think(TInstant::Now());
+}
+
 void TDirectBlockGroup::ScheduleOracleThinking()
 {
     const auto delay = TDuration::MilliSeconds(
@@ -1171,7 +1181,7 @@ void TDirectBlockGroup::ScheduleOracleThinking()
         [weakSelf = weak_from_this()]()
         {
             if (auto self = weakSelf.lock()) {
-                self->Oracle.Think(TInstant::Now());
+                self->Thinking();
                 self->ScheduleOracleThinking();
             }
         });
@@ -1182,11 +1192,11 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     TStringBuilder sb;
-    sb << "DBG[" << Index << "]\n";
+    sb << "DBG[" << DirectBlockGroupIndex << "]\n";
     sb << DoDump(HostStatistics, HostStates);
 
     TDBGDumpResponse result;
-    result.DirectBlockGroupIndex = Index;
+    result.DirectBlockGroupIndex = DirectBlockGroupIndex;
     result.Dump = std::move(sb);
     result.Dumps.reserve(VChunks.size());
     for (const auto& weakVChunk: VChunks) {

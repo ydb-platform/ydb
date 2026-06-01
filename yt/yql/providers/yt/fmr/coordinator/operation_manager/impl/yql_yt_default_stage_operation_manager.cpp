@@ -9,6 +9,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/reduce/yql_yt_reduce_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_upload/yql_yt_sorted_upload_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sort/yql_yt_sort_stage_operation_manager.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/pull/yql_yt_pull_stage_operation_manager.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -32,6 +33,8 @@ IFmrStageOperationManager::TPtr MakeStageOperationManager(EOperationType operati
             return MakeSortStageOperationManager(randomProvider);
         case EOperationType::Reduce:
             return MakeReduceStageOperationManager(randomProvider);
+        case EOperationType::Pull:
+            return MakePullStageOperationManager(randomProvider);
         default:
             ythrow yexception() << "Unknown operation type for stage operation manager";
     }

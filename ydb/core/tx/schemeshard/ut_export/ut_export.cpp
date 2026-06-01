@@ -1,4 +1,5 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
@@ -13,9 +14,9 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/testing/hook/hook.h>
 
@@ -319,8 +320,12 @@ namespace {
             return {};
         }
 
-        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", ui64 minWriteBatchSize = 1) {
+        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1) {
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+
+            if (encryptionBlock) {
+                Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+            }
 
             THolder<IEventHandle> injectResult;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -369,6 +374,11 @@ namespace {
                 compressionLine = Sprintf(R"(compression: "%s")", compression.c_str());
             }
 
+            TString extraSettings;
+            if (compressionLine || encryptionBlock) {
+                extraSettings = compressionLine + "\n" + encryptionBlock;
+            }
+
             const auto exportId = ++txId;
             TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
                 ExportToS3Settings {
@@ -381,7 +391,7 @@ namespace {
                   }
                   %s
                 }
-            )", S3Port(), compressionLine.c_str()));
+            )", S3Port(), extraSettings.c_str()));
 
             if (!injectResult) {
                 TDispatchOptions opts;
@@ -2154,6 +2164,81 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), exportTxId);
     }
 
+    Y_UNIT_TEST(ExportImportStandaloneColumnTableWithLocalMinMaxIndexes) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "OlapMinMaxTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_minmax"
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto assertMinMaxIndexes = [this](const TString& path) {
+            const auto d = DescribePrivatePath(Runtime(), path, true, true);
+            UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
+            const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+            THashSet<TString> found;
+            for (const auto& ix : schema.GetIndexes()) {
+                found.insert(ix.GetName());
+            }
+            UNIT_ASSERT_C(found.contains("idx_minmax"), "missing idx_minmax on " << path);
+        };
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxTable");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OlapMinMaxTable"
+                destination_prefix: "OlapMinMaxExport"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportTxId);
+        TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "OlapMinMaxExport"
+                destination_path: "/MyRoot/OlapMinMaxImported"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        assertMinMaxIndexes("/MyRoot/OlapMinMaxImported");
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportTxId);
+        Env().TestWaitNotification(Runtime(), exportTxId);
+    }
+
     Y_UNIT_TEST(ShouldCheckQuotasExportsLimited) {
         ShouldCheckQuotas(TSchemeLimits{.MaxExports = 0}, Ydb::StatusIds::PRECONDITION_FAILED);
     }
@@ -3636,6 +3721,33 @@ state: STATE_ENABLED
         for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
             UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
         }
+
+        // Round-trip: import back and verify impl tables exist on the imported table.
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/TableImported"
+              }
+              index_population_mode: INDEX_POPULATION_MODE_IMPORT
+            }
+        )", s3Port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const TString importedIndexPath = "/MyRoot/TableImported/index";
+        TestDescribeResult(DescribePrivatePath(runtime, importedIndexPath), {
+            NLs::PathExist,
+            NLs::IndexType(indexType),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+        for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime, TStringBuilder() << importedIndexPath << "/" << implTable),
+                {NLs::PathExist, NLs::IsTable});
+        }
     }
 
     Y_UNIT_TEST(IndexMaterializationDisabled) {
@@ -4542,5 +4654,48 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         Env().TestWaitNotification(Runtime(), importId);
 
         TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldNotCorruptEncryptedBufferOnRetry) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        txId = ExportWithRetryInjection(txId, "",
+        R"(
+            destination_prefix: "export1"
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+        )");
+
+        const auto* data = S3Mock().GetData().FindPtr("/export1/001/data_00.csv.enc");
+        UNIT_ASSERT(data);
+
+        TBuffer decryptedData;
+        NBackup::TEncryptionIV iv;
+        UNIT_ASSERT_NO_EXCEPTION(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+            NBackup::TEncryptionKey("0123456789012345"),
+            TBuffer(data->data(), data->size())
+        ));
+
+        const TString expected = "1,\"valueA\"\n2,\"valueB\"\n";
+        const TString decrypted(decryptedData.Data(), decryptedData.Size());
+        UNIT_ASSERT_VALUES_EQUAL_C(decrypted, expected, "Encrypted buffer corruption detected");
     }
 }

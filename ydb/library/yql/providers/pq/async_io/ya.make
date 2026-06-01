@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher
     ydb/library/actors/log_backend
     ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/runtime/streaming
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/pq/common

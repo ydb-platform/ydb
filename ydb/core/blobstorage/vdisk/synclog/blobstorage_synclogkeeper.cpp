@@ -141,11 +141,17 @@ namespace NKikimr {
             // HANDLERS
             ////////////////////////////////////////////////////////////////////////
             void Handle(TEvSyncLogPut::TPtr &ev, const TActorContext &ctx) {
+                if (SlCtx->VCtx->Top->GType.GetErasure() == TBlobStorageGroupType::ErasureNone) {
+                    return;
+                }
                 KeepState.PutMany(ev->Get()->GetRecs().GetData(), ev->Get()->GetRecs().GetSize());
                 PerformActions(ctx);
             }
 
             void Handle(TEvSyncLogPutSst::TPtr& ev, const TActorContext& ctx) {
+                if (SlCtx->VCtx->Top->GType.GetErasure() == TBlobStorageGroupType::ErasureNone) {
+                    return;
+                }
                 KeepState.PutLevelSegment(ev->Get()->LevelSegment.Get());
                 PerformActions(ctx);
             }
@@ -277,11 +283,11 @@ namespace NKikimr {
 
             void Handle(TEvPhantomFlagStorageCommitData::TPtr ev) {
                 KeepState.UpdatePhantomFlagStorageData(std::move(ev->Get()->Data));
+                KeepState.RetireExtractedChunks(ev->Get()->RetiredChunks);
             }
 
             void UpdateCounters() {
                 KeepState.UpdateMetrics();
-                KeepState.FlushPhantomFlagStorageWriteBufferIfNeeded();
                 Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
             }
 

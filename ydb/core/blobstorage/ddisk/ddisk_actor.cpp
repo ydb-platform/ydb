@@ -34,9 +34,11 @@ namespace {
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
-            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd)
+            ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
+            TFileHandle&& diskFd)
         : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true)
     {
+        PersistentBufferUniqueId = persistentBufferUniqueId;
         PDiskParams = pDiskParams;
         DiskFormat = std::move(diskFormat);
         DiskFd = std::move(diskFd);
@@ -62,11 +64,18 @@ namespace {
         , CountersParent(std::move(counters))
         , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
+        , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
+        if (IsPersistentBufferActor) {
+            SetActivityType(NKikimrServices::TActivity::BS_PERSISTENT_BUFFER);
+        } else {
+            SetActivityType(NKikimrServices::TActivity::BS_DDISK);
+        }
+
         StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
-        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
+        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME || BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_SSD) {
             latencyHistBounds = NvmeLatencyHistBoundsMs;
         } else {
             latencyHistBounds = GetCommonLatencyHistBounds(BaseInfo.DeviceType);
@@ -97,6 +106,8 @@ namespace {
         auto cDirectIOWrite = cDirectIO->GetSubgroup("operation", "Write");
         auto cDirectIORead = cDirectIO->GetSubgroup("operation", "Read");
 
+        auto cPersistentBuffer = counters->GetSubgroup("subsystem", "persistent_buffer");
+
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
 #define HISTOGRAM(GROUP, NAME, BUCKETS) .NAME = c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS)),
 #define COUNTER_VALUE(GROUP, NAME, DERIV) c##GROUP->GetCounter(#NAME, DERIV)
@@ -108,6 +119,7 @@ namespace {
                 .OP = [&] { \
                     TInterfaceOpCounters c; \
                     c.Requests = COUNTER_VALUE(Interface##OP, Requests, true); \
+                    c.RequestsInFlight = COUNTER_VALUE(Interface##OP, RequestsInFlight, false); \
                     c.ReplyOk = COUNTER_VALUE(Interface##OP, ReplyOk, true); \
                     c.ReplyErr = COUNTER_VALUE(Interface##OP, ReplyErr, true); \
                     c.Bytes = COUNTER_VALUE(Interface##OP, Bytes, true); \
@@ -135,6 +147,7 @@ namespace {
 #define XX(OP) \
                 .OP = { \
                     COUNTER(DirectIO##OP, Requests, true) \
+                    COUNTER(DirectIO##OP, RequestsInFlight, false) \
                     COUNTER(DirectIO##OP, Bytes, true) \
                     COUNTER(DirectIO##OP, BytesInFlight, false) \
                     HISTOGRAM(DirectIO##OP, RequestSizeKiB, RequestSizeBoundsKiB) \
@@ -154,6 +167,12 @@ namespace {
                 COUNTER(DirectIO, QueueSize, false)
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
+            },
+            .PersistentBuffer = {
+                COUNTER(PersistentBuffer, AllocatedChunks, false)
+                COUNTER(PersistentBuffer, TotalBytes, false)
+                COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
+                COUNTER(PersistentBuffer, InMemoryCacheSize, false)
             },
         };
 
@@ -182,6 +201,7 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
@@ -193,6 +213,7 @@ namespace {
     void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
         auto sourceType = ev->Get()->SourceType;
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             std::vector<TSegmentManager::TSegment> segments;
             ui64 syncId = SegmentManager.GetSync(ev->Cookie);
             SegmentManager.PopRequest(ev->Cookie, &segments);
@@ -242,6 +263,7 @@ namespace {
             hFunc(TEvRead, handleQuery)
             hFunc(TEvSyncWithPersistentBuffer, handleQuery)
             hFunc(TEvSyncWithDDisk, handleQuery)
+            hFunc(TEvDeleteTabletChunks, handleQuery)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)

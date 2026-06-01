@@ -201,6 +201,10 @@ namespace NActors {
             if (CurrentStateFunc() == &TThis::HoldByError) {
                 InErrorState = true;
             } else if (CurrentStateFunc() == &TThis::StateWork || CurrentStateFunc() == &TThis::PendingActivation) {
+                if (InErrorState) {
+                    LastErrorStateLogAt = TInstant::Zero();
+                    ErrorStateLogSuppressed = 0;
+                }
                 InErrorState = false;
             }
         }
@@ -368,7 +372,17 @@ namespace NActors {
         void HandleHandshakeStatus(TEvHandshakeDone::TPtr& ev);
         void HandleHandshakeStatus(TEvHandshakeFail::TPtr& ev);
 
-        void TransitToErrorState(TString Explanation, bool updateErrorLog = true);
+        void TransitToErrorState(TString explanation, bool updateErrorLog = true, const TEvHandshakeFail* handshakeFail = nullptr);
+        TString FormatRemoteNodeForLog(const TEvHandshakeFail& handshakeFail) const;
+        TString FormatHandshakeFailNotice(TStringBuf explanation, const TEvHandshakeFail& handshakeFail) const;
+        enum class EHandshakeStatusDirection {
+            Incoming,
+            Outgoing,
+        };
+        void LogHandshakeStatusNotice(TStringBuf marker, EHandshakeStatusDirection direction, const TEvHandshakeFail& handshakeFail) const;
+        void AppendSuppressedErrorStateLogs(TStringBuilder& stream, ui64 globalSuppressed, ui64 perPeerSuppressed) const;
+        void AppendHandshakeFailDebugInfo(TStringBuilder& stream, TStringBuf marker, TStringBuf rawReason,
+            TStringBuf extraDebugInfo = {}) const;
         void WakeupFromErrorState(TEvents::TEvWakeup::TPtr& ev);
         void Disconnect();
 
@@ -400,6 +414,7 @@ namespace NActors {
         }
 
         TString TechnicalPeerHostName;
+        ui16 TechnicalPeerPort = 0;
 
         std::shared_ptr<IInterconnectMetrics> Metrics;
 
@@ -542,6 +557,9 @@ namespace NActors {
 
         TDuration HoldByErrorWakeupDuration = TDuration::Zero();
         TEvents::TEvWakeup* HoldByErrorWakeupCookie;
+
+        TInstant LastErrorStateLogAt;
+        ui64 ErrorStateLogSuppressed = 0;
 
         THolder<TProgramInfo> RemoteProgramInfo;
         NInterconnect::TSecureSocketContext::TPtr SecureContext;

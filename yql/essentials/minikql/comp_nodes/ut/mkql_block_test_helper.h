@@ -6,121 +6,13 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 #include <variant>
 
 namespace NKikimr::NMiniKQL {
 
-// Template to count TMaybe nesting levels
-template <typename T>
-struct TMaybeTraits {
-    static constexpr ui32 value = 0;
-    using ResultType = T;
-};
-
-template <typename T>
-struct TMaybeTraits<TMaybe<T>> {
-    static constexpr ui32 value = 1 + TMaybeTraits<T>::value;
-    using ResultType = TMaybeTraits<T>::ResultType;
-};
-
-template <typename T>
-const TMaybeTraits<T>::ResultType* GetInnerValue(const T& value) {
-    if constexpr (TMaybeTraits<T>::value == 0) {
-        return &value;
-    } else {
-        if (value.Defined()) {
-            return GetInnerValue(value.GetRef());
-        } else {
-            return nullptr;
-        }
-    }
-}
-
-template <typename T>
-ui32 GetSettedLevel(const T& value) {
-    if constexpr (TMaybeTraits<T>::value == 0) {
-        return 0;
-    } else {
-        if (value.Defined()) {
-            return 1 + GetSettedLevel(value.GetRef());
-        } else {
-            return 0;
-        }
-    }
-}
-
-template <typename T>
-struct TUnpackedMaybe {
-    ui32 SettedLevel;
-    ui32 MaybeLevel;
-    const T* Value = nullptr;
-};
-
 arrow::Datum ConvertDatumToArrowFormat(arrow::Datum datum, arrow::MemoryPool& pool);
-
-class TSingularVoid {
-public:
-    TSingularVoid() = default;
-};
-
-class TSingularNull {
-public:
-    TSingularNull() = default;
-};
-
-enum class TTag {
-    A,
-    B,
-    C
-};
-
-template <typename T, TTag tag>
-class TTagged {
-public:
-    TTagged()
-        : Value_()
-    {};
-
-    explicit TTagged(T value)
-        : Value_(std::move(value))
-    {
-    }
-
-    const T& Value() const {
-        return Value_;
-    }
-
-    TStringBuf Tag() const {
-        switch (tag) {
-            case TTag::A:
-                return "A";
-            case TTag::B:
-                return "B";
-            case TTag::C:
-                return "C";
-        };
-    }
-
-private:
-    T Value_;
-};
-
-class TPgInt {
-public:
-    TPgInt() = default;
-    TPgInt(ui32 value)
-        : Value_(value)
-    {
-    }
-
-    TMaybe<ui32> Value() {
-        return Value_;
-    }
-
-private:
-    TMaybe<ui32> Value_{};
-};
 
 template <class T>
 struct TIsVector: std::false_type {};
@@ -143,99 +35,14 @@ public:
     }
 
     template <typename T>
-    TRuntimeNode ConvertValueToLiteralNode(T simpleNode)
-        requires(NYql::NUdf::TPrimitiveDataType<T>::Result)
-    {
-        return Pb_.NewDataLiteral<T>(simpleNode);
-    }
-
-    TRuntimeNode ConvertValueToLiteralNode(TSingularVoid simpleNode)
-    {
-        Y_UNUSED(simpleNode);
-        return Pb_.NewVoid();
-    }
-
-    TRuntimeNode ConvertValueToLiteralNode(TSingularNull simpleNode)
-    {
-        Y_UNUSED(simpleNode);
-        return Pb_.NewNull();
-    }
-
-    TRuntimeNode ConvertValueToLiteralNode(TPgInt simpleNode)
-    {
-        auto* type = Pb_.NewPgType(NYql::NPg::LookupType("int4").TypeId);
-        if (simpleNode.Value()) {
-            return Pb_.PgConst(static_cast<TPgType*>(type), std::to_string(*simpleNode.Value()));
-        } else {
-            return Pb_.Nop(Pb_.NewNull(), type);
-        }
-    }
-
-    TRuntimeNode ConvertValueToLiteralNode(TStringBuf simpleNode)
-    {
-        Y_UNUSED(simpleNode);
-        return Pb_.NewDataLiteral<NUdf::EDataSlot::String>(simpleNode);
-    }
-
-    template <typename T, TTag Tag>
-    TRuntimeNode ConvertValueToLiteralNode(const TTagged<T, Tag>& taggedNode) {
-        auto node = ConvertValueToLiteralNode(taggedNode.Value());
-        return Pb_.Nop(node, Pb_.NewTaggedType(node.GetStaticType(), taggedNode.Tag()));
-    }
-
-    template <typename T>
-    TRuntimeNode ConvertValueToLiteralNode(const TMaybe<T>& maybeNode) {
-        TUnpackedMaybe unpacked{.SettedLevel = GetSettedLevel(maybeNode), .MaybeLevel = TMaybeTraits<TMaybe<T>>::value, .Value = GetInnerValue(maybeNode)};
-        decltype(*unpacked.Value) defaultValue{};
-        auto data = ConvertValueToLiteralNode(unpacked.Value ? *unpacked.Value : defaultValue);
-
-        for (ui32 i = unpacked.SettedLevel; i < unpacked.MaybeLevel; i++) {
-            data = Pb_.NewEmptyOptional(Pb_.NewOptionalType(data.GetStaticType()));
-        }
-
-        for (ui32 i = 0; i < unpacked.SettedLevel; i++) {
-            data = Pb_.NewOptional(data);
-        }
-
-        return data;
-    }
-
-    template <typename... TArgs, std::size_t... Is>
-    TRuntimeNode ConvertValueToLiteralNodeTuple(const std::tuple<TArgs...>& maybeNode, std::index_sequence<Is...>) {
-        auto data = TVector<TRuntimeNode>{ConvertValueToLiteralNode(std::get<Is>(maybeNode))...};
-        return Pb_.NewTuple(data);
-    }
-
-    template <typename... TArgs>
-    TRuntimeNode ConvertValueToLiteralNode(const std::tuple<TArgs...>& node) {
-        return ConvertValueToLiteralNodeTuple(node, std::index_sequence_for<TArgs...>{});
-    }
-
-    template <typename... Args>
-    TRuntimeNode ConvertValueToLiteralNode(const std::variant<Args...>& v) {
-        TVector<TType*> types = {ConvertValueToLiteralNode(Args{}).GetStaticType()...};
-        TType* varType = Pb_.NewVariantType(Pb_.NewTupleType(types));
-        const ui32 idx = static_cast<ui32>(v.index());
-        TRuntimeNode result;
-        [&]<size_t... Is>(std::index_sequence<Is...>) {
-            Y_UNUSED(((Is == idx && (result = Pb_.NewVariant(ConvertValueToLiteralNode(std::get<Is>(v)), idx, varType), true)) || ...));
-        }(std::index_sequence_for<Args...>{});
-        return result;
-    }
-
-    template <typename T>
     TRuntimeNode ConvertNodeWithSpecificFuzzer(const TVector<T>& nodes, ui64 fuzzId) {
-        TRuntimeNode::TList convertedNodes;
-        for (auto& node : nodes) {
-            convertedNodes.push_back(ConvertValueToLiteralNode(node));
-        }
-        auto* type = ConvertValueToLiteralNode(T{}).GetStaticType();
-        return ConvertLiteralListToDatum(std::move(convertedNodes), type, fuzzId);
+        return ConvertLiteralListToDatum(NTest::ConvertValueToLiteralNode(Pb_, nodes), fuzzId);
     }
 
-    template <typename T> requires(!TIsVectorV<T>)
+    template <typename T>
+        requires(!TIsVectorV<T>)
     TRuntimeNode ConvertNodeFuzzied(const T& node) {
-        return Pb_.AsScalar(ConvertValueToLiteralNode(node));
+        return Pb_.AsScalar(NTest::ConvertValueToLiteralNode(Pb_, node));
     }
 
     template <typename T>
@@ -246,9 +53,10 @@ public:
         return convertedNode;
     }
 
-    template <typename T> requires(!TIsVectorV<T>)
+    template <typename T>
+        requires(!TIsVectorV<T>)
     TRuntimeNode ConvertNodeUnfuzzied(const T& node) {
-        return Pb_.AsScalar(ConvertValueToLiteralNode(node));
+        return Pb_.AsScalar(NTest::ConvertValueToLiteralNode(Pb_, node));
     }
 
     template <typename T>
@@ -256,11 +64,11 @@ public:
         return ConvertNodeWithSpecificFuzzer(nodes, TFuzzerHolder::EmptyFuzzerId);
     }
 
-    TRuntimeNode ConvertLiteralListToDatum(TRuntimeNode::TList nodes, TType* type, ui64 fuzzId);
+    TRuntimeNode ConvertLiteralListToDatum(TRuntimeNode list, ui64 fuzzId);
 
     template <typename T, typename U, typename V>
     void TestKernel(const T& left, const U& right, const V& expected, std::function<TRuntimeNode(TSetup<false>&, TRuntimeNode, TRuntimeNode)> binaryOp, TMaybe<size_t> iterations = Nothing()) {
-        size_t iterationCount =  (TIsVectorV<T> || TIsVectorV<U>) ? ManyIterations : SignleIteration;
+        size_t iterationCount = (TIsVectorV<T> || TIsVectorV<U>) ? ManyIterations : SignleIteration;
         if (iterations) {
             iterationCount = *iterations;
         }
@@ -400,9 +208,9 @@ TVector<std::tuple<Ts...>> TupleZip(const TVector<Ts>&... vecs) {
     return out;
 }
 
-template <TTag Tag, typename T>
-TVector<TTagged<T, Tag>> TagVector(const TVector<T>& values) {
-    TVector<TTagged<T, Tag>> result;
+template <NTest::TTag Tag, typename T>
+TVector<NTest::TTagged<T, Tag>> TagVector(const TVector<T>& values) {
+    TVector<NTest::TTagged<T, Tag>> result;
     result.reserve(values.size());
     for (const auto& v : values) {
         result.emplace_back(v);

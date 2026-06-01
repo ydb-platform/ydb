@@ -1,177 +1,192 @@
 {
-    "test.test[AsciiChecks]": [
+    "test.test[AsciiChecks-Peephole]": [
         {
-            "uri": "file://test.test_AsciiChecks_/results.txt"
+            "uri": "file://test.test_AsciiChecks-Peephole_/opt.yql"
         }
     ],
-    "test.test[AsciiCmpIgnoreCase]": [
+    "test.test[AsciiChecks-Results]": [
         {
-            "uri": "file://test.test_AsciiCmpIgnoreCase_/results.txt"
+            "uri": "file://test.test_AsciiChecks-Results_/results.txt"
         }
     ],
-    "test.test[AsciiCmpIgnoreCase_2025_02]": [
+    "test.test[AsciiCmpIgnoreCase-Peephole]": [
         {
-            "uri": "file://test.test_AsciiCmpIgnoreCase_2025_02_/extracted"
+            "uri": "file://test.test_AsciiCmpIgnoreCase-Peephole_/opt.yql"
         }
     ],
-    "test.test[AsciiCmpIgnoreCase_AllAlternatives_2025_01]": [
+    "test.test[AsciiCmpIgnoreCase-Results]": [
         {
-            "uri": "file://test.test_AsciiCmpIgnoreCase_AllAlternatives_2025_01_/results.txt"
+            "uri": "file://test.test_AsciiCmpIgnoreCase-Results_/results.txt"
         }
     ],
-    "test.test[AsciiContainsIgnoreCase_2025_01]": [
+    "test.test[AsciiCmpIgnoreCase_2025_02-Results]": [
         {
-            "uri": "file://test.test_AsciiContainsIgnoreCase_2025_01_/extracted"
+            "uri": "file://test.test_AsciiCmpIgnoreCase_2025_02-Results_/extracted"
         }
     ],
-    "test.test[AsciiContainsIgnoreCase_2025_01_scan]": [
+    "test.test[AsciiCmpIgnoreCase_AllAlternatives_2025_01-Peephole]": [
         {
-            "uri": "file://test.test_AsciiContainsIgnoreCase_2025_01_scan_/extracted"
+            "uri": "file://test.test_AsciiCmpIgnoreCase_AllAlternatives_2025_01-Peephole_/opt.yql"
         }
     ],
-    "test.test[Base32Decode]": [
+    "test.test[AsciiCmpIgnoreCase_AllAlternatives_2025_01-Results]": [
         {
-            "uri": "file://test.test_Base32Decode_/results.txt"
+            "uri": "file://test.test_AsciiCmpIgnoreCase_AllAlternatives_2025_01-Results_/results.txt"
         }
     ],
-    "test.test[Base32Encode]": [
+    "test.test[AsciiContainsIgnoreCase_2025_01-Results]": [
         {
-            "uri": "file://test.test_Base32Encode_/results.txt"
+            "uri": "file://test.test_AsciiContainsIgnoreCase_2025_01-Results_/extracted"
         }
     ],
-    "test.test[BlockAsciiChecks]": [
+    "test.test[AsciiContainsIgnoreCase_2025_01_scan-Results]": [
         {
-            "uri": "file://test.test_BlockAsciiChecks_/results.txt"
+            "uri": "file://test.test_AsciiContainsIgnoreCase_2025_01_scan-Results_/extracted"
         }
     ],
-    "test.test[BlockAsciiCmpIgnoreCase]": [
+    "test.test[Base32Decode-Peephole]": [
         {
-            "uri": "file://test.test_BlockAsciiCmpIgnoreCase_/results.txt"
+            "uri": "file://test.test_Base32Decode-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockFind]": [
+    "test.test[Base32Decode-Results]": [
         {
-            "uri": "file://test.test_BlockFind_/results.txt"
+            "uri": "file://test.test_Base32Decode-Results_/results.txt"
         }
     ],
-    "test.test[BlockRemove]": [
+    "test.test[Base32Encode-Peephole]": [
         {
-            "uri": "file://test.test_BlockRemove_/results.txt"
+            "uri": "file://test.test_Base32Encode-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockReplace]": [
+    "test.test[Base32Encode-Results]": [
         {
-            "uri": "file://test.test_BlockReplace_/results.txt"
+            "uri": "file://test.test_Base32Encode-Results_/results.txt"
         }
     ],
-    "test.test[BlockReverseBits]": [
+    "test.test[ExtendAndTake-Results]": [
         {
-            "uri": "file://test.test_BlockReverseBits_/results.txt"
+            "uri": "file://test.test_ExtendAndTake-Results_/results.txt"
         }
     ],
-    "test.test[BlockReverseBytes]": [
+    "test.test[Find-Peephole]": [
         {
-            "uri": "file://test.test_BlockReverseBytes_/results.txt"
+            "uri": "file://test.test_Find-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockStreamFormat]": [
+    "test.test[Find-Results]": [
         {
-            "uri": "file://test.test_BlockStreamFormat_/results.txt"
+            "uri": "file://test.test_Find-Results_/results.txt"
         }
     ],
-    "test.test[BlockStringUDF]": [
+    "test.test[List-Results]": [
         {
-            "uri": "file://test.test_BlockStringUDF_/results.txt"
+            "uri": "file://test.test_List-Results_/results.txt"
         }
     ],
-    "test.test[BlockStringUnsafeUDF]": [
+    "test.test[List_v0-Results]": [
         {
-            "uri": "file://test.test_BlockStringUnsafeUDF_/results.txt"
+            "uri": "file://test.test_List_v0-Results_/results.txt"
         }
     ],
-    "test.test[BlockTo]": [
+    "test.test[Remove-Peephole]": [
         {
-            "uri": "file://test.test_BlockTo_/results.txt"
+            "uri": "file://test.test_Remove-Peephole_/opt.yql"
         }
     ],
-    "test.test[ExtendAndTake]": [
+    "test.test[Remove-Results]": [
         {
-            "uri": "file://test.test_ExtendAndTake_/results.txt"
+            "uri": "file://test.test_Remove-Results_/results.txt"
         }
     ],
-    "test.test[Find]": [
+    "test.test[Replace-Peephole]": [
         {
-            "uri": "file://test.test_Find_/results.txt"
+            "uri": "file://test.test_Replace-Peephole_/opt.yql"
         }
     ],
-    "test.test[List]": [
+    "test.test[Replace-Results]": [
         {
-            "uri": "file://test.test_List_/results.txt"
+            "uri": "file://test.test_Replace-Results_/results.txt"
         }
     ],
-    "test.test[List_v0]": [
+    "test.test[ReplaceFirstLast-Results]": [
         {
-            "uri": "file://test.test_List_v0_/results.txt"
+            "uri": "file://test.test_ReplaceFirstLast-Results_/results.txt"
         }
     ],
-    "test.test[Remove]": [
+    "test.test[ReverseBits-Peephole]": [
         {
-            "uri": "file://test.test_Remove_/results.txt"
+            "uri": "file://test.test_ReverseBits-Peephole_/opt.yql"
         }
     ],
-    "test.test[ReplaceFirstLast]": [
+    "test.test[ReverseBits-Results]": [
         {
-            "uri": "file://test.test_ReplaceFirstLast_/results.txt"
+            "uri": "file://test.test_ReverseBits-Results_/results.txt"
         }
     ],
-    "test.test[Replace]": [
+    "test.test[ReverseBits_2025_01-Results]": [
         {
-            "uri": "file://test.test_Replace_/results.txt"
+            "uri": "file://test.test_ReverseBits_2025_01-Results_/extracted"
         }
     ],
-    "test.test[ReverseBits]": [
+    "test.test[ReverseBytes-Peephole]": [
         {
-            "uri": "file://test.test_ReverseBits_/results.txt"
+            "uri": "file://test.test_ReverseBytes-Peephole_/opt.yql"
         }
     ],
-    "test.test[ReverseBits_2025_01]": [
+    "test.test[ReverseBytes-Results]": [
         {
-            "uri": "file://test.test_ReverseBits_2025_01_/extracted"
+            "uri": "file://test.test_ReverseBytes-Results_/results.txt"
         }
     ],
-    "test.test[ReverseBytes]": [
+    "test.test[ReverseBytes_2025_01-Results]": [
         {
-            "uri": "file://test.test_ReverseBytes_/results.txt"
+            "uri": "file://test.test_ReverseBytes_2025_01-Results_/extracted"
         }
     ],
-    "test.test[ReverseBytes_2025_01]": [
+    "test.test[Reverse_2025.02-Results]": [
         {
-            "uri": "file://test.test_ReverseBytes_2025_01_/extracted"
+            "uri": "file://test.test_Reverse_2025.02-Results_/extracted"
         }
     ],
-    "test.test[Reverse_2025.02]": [
+    "test.test[StreamFormat-Peephole]": [
         {
-            "uri": "file://test.test_Reverse_2025.02_/extracted"
+            "uri": "file://test.test_StreamFormat-Peephole_/opt.yql"
         }
     ],
-    "test.test[StreamFormat]": [
+    "test.test[StreamFormat-Results]": [
         {
-            "uri": "file://test.test_StreamFormat_/results.txt"
+            "uri": "file://test.test_StreamFormat-Results_/results.txt"
         }
     ],
-    "test.test[StringUDF]": [
+    "test.test[StringUDF-Peephole]": [
         {
-            "uri": "file://test.test_StringUDF_/results.txt"
+            "uri": "file://test.test_StringUDF-Peephole_/opt.yql"
         }
     ],
-    "test.test[StringUnsafeUDF]": [
+    "test.test[StringUDF-Results]": [
         {
-            "uri": "file://test.test_StringUnsafeUDF_/results.txt"
+            "uri": "file://test.test_StringUDF-Results_/results.txt"
         }
     ],
-    "test.test[To]": [
+    "test.test[StringUnsafeUDF-Peephole]": [
         {
-            "uri": "file://test.test_To_/results.txt"
+            "uri": "file://test.test_StringUnsafeUDF-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[StringUnsafeUDF-Results]": [
+        {
+            "uri": "file://test.test_StringUnsafeUDF-Results_/results.txt"
+        }
+    ],
+    "test.test[To-Peephole]": [
+        {
+            "uri": "file://test.test_To-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[To-Results]": [
+        {
+            "uri": "file://test.test_To-Results_/results.txt"
         }
     ]
 }

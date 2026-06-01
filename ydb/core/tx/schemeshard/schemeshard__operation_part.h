@@ -726,6 +726,14 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
 
+// Incremental restore path-state lock/unlock ops. Propose-only; fan out to TChangePathState sub-ops.
+TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateIncrementalRestoreLockTargets(TOperationId opId, TTxState::ETxState state);
+TVector<ISubOperation::TPtr> CreateIncrementalRestoreUnlockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateIncrementalRestoreUnlockTargets(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateIncrementalRestoreUnlockTargets(TOperationId opId, TTxState::ETxState state);
+
 // Incremental Restore Finalization
 ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, TTxState::ETxState state);

@@ -183,7 +183,8 @@ struct TEncryptionKey {
 // Has streaming interface
 class TEncryptedFileSerializer {
 public:
-    TEncryptedFileSerializer(TEncryptedFileSerializer&&) = default;
+    TEncryptedFileSerializer(TEncryptedFileSerializer&&) noexcept;
+    TEncryptedFileSerializer& operator=(TEncryptedFileSerializer&&) noexcept;
     TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv);
     ~TEncryptedFileSerializer();
 

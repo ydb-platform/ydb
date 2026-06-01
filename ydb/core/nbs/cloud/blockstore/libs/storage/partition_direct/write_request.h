@@ -2,14 +2,14 @@
 
 #include "public.h"
 
-#include "vchunk_config.h"
-
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -34,15 +34,14 @@ public:
 
     TBaseWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout);
+        NWilson::TTraceId traceId);
 
     virtual ~TBaseWriteRequestExecutor();
 
@@ -55,19 +54,21 @@ protected:
 
     void SendWriteRequest(THostIndex host);
 
-    void OnWriteResponse(
+    virtual void OnWriteResponse(
         THostIndex host,
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
     void ScheduleRequestTimeoutCallback();
     void RequestTimeoutCallback();
+    [[nodiscard]] bool ShouldReplyOk() const;
 
     TVector<THostIndex> GetAvailableHandOffHosts() const;
 
     virtual void ScheduleHedging() = 0;
 
     NActors::TActorSystem* ActorSystem;
+    const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TBlockRange64 VChunkRange;
@@ -83,6 +84,21 @@ protected:
     THostMask RequestedWrites;
     THostMask CompletedWrites;
 };
+
+using TBaseWriteRequestExecutorPtr = std::shared_ptr<TBaseWriteRequestExecutor>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
+    NActors::TActorSystem* actorSystem,
+    const TLogTitle& logTitle,
+    const TVChunkConfig& vChunkConfig,
+    IDirectBlockGroupPtr directBlockGroup,
+    TBlockRange64 vChunkRange,
+    TCallContextPtr callContext,
+    std::shared_ptr<TWriteBlocksLocalRequest> request,
+    ui64 lsn,
+    NWilson::TTraceId traceId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

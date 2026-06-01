@@ -3,3 +3,4 @@ GraceSelfJoinCoreWrapper
 SqlExternalFunctionWrapper
 UnsafeTimestampCastWrapper
 TakeWrapper
+WatermarkGeneratorWrapper

@@ -392,7 +392,7 @@ namespace NTable {
                 if (chain->Rop != ERowOp::Absent) {
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion) {
-                        return { *commitVersion, chain->RowVersion.TxId };
+                        return { *commitVersion, chain->RowVersion.TxId, chain->Rop };
                     }
                     transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
                 }
@@ -403,7 +403,7 @@ namespace NTable {
                 CurrentVersion = chain;
             }
 
-            return chain->RowVersion;
+            return { chain->RowVersion, 0, chain->Rop };
         }
 
         bool IsValid() const

@@ -43,6 +43,35 @@ TExprNode::TPtr BuildExpandMapForNarrowInput(TExprNode::TPtr input, const TVecto
 }
 
 template <typename T>
+TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<T>& inputs, const THashSet<TString>& outputs, TExprContext& ctx) {
+    // clang-format off
+    return ctx.Builder(input->Pos())
+        .Callable("NarrowMap")
+            .Add(0, input)
+            .Lambda(1)
+                .Params("wide_input", inputs.size())
+                .Callable("AsStruct")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    ui32 outIndex = 0;
+                    for (ui32 i = 0; i < inputs.size(); ++i) {
+                        const auto name = GetFullName(inputs[i]);
+                        if (outputs.contains(name)) {
+                            parent.List(outIndex++)
+                                .Atom(0, GetFullName(inputs[i]))
+                                .Arg(1, "wide_input", i)
+                            .Seal();
+                        }
+                    }
+                    return parent;
+                })
+                .Seal()
+            .Seal()
+        .Seal()
+    .Build();
+    // clang-format on
+}
+
+template <typename T>
 TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<T>& inputs, TExprContext& ctx) {
     // clang-format off
     return ctx.Builder(input->Pos())

@@ -263,7 +263,7 @@ protected:
     bool OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
     bool SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
-    bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
+    [[nodiscard]] bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const;
 
     bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);

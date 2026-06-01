@@ -348,9 +348,11 @@ type_name_composite:
   | type_name_dynamiclinear
   ) QUESTION*;
 
+type_name_null: NULL;
+
 type_name:
     type_name_composite
-  | (type_name_decimal | type_name_simple) QUESTION*;
+  | (type_name_decimal | type_name_simple | type_name_null) QUESTION*;
 
 type_name_or_bind: type_name | bind_parameter;
 
@@ -1434,6 +1436,7 @@ keyword_window_uncompat:
 keyword_hint_uncompat:
     SCHEMA
   | COLUMNS
+  | WATERMARK
 ;
 
 keyword_as_compat:
@@ -1904,7 +1907,7 @@ keyword_compat: (
   | VALUES
   | VIEW
   | VIRTUAL
-  | WATERMARK
+//  | WATERMARK
   | WITH
   | WRAPPER
 //  | WRITE

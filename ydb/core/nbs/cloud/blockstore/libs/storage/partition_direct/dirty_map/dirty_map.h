@@ -162,15 +162,26 @@ private:
 
 struct TPBufferCounters
 {
+    // The current count of records stored in PBuffer
     size_t CurrentRecordsCount = 0;
+    // The current count of bytes stored in PBuffer
     size_t CurrentBytesCount = 0;
+    // Total count of records written to PBuffer and possibly already deleted
     size_t TotalRecordsCount = 0;
+    // Total count of bytes written to PBuffer and possibly already deleted
     size_t TotalBytesCount = 0;
 
+    // The current number of records prohibited for deletion from PBuffer
     size_t CurrentLockedRecordsCount = 0;
+    // The current number of bytes prohibited for deletion from PBuffer
     size_t CurrentLockedBytesCount = 0;
+
+    // The total number of records ever prohibited for deletion from PBuffer
     size_t TotalLockedRecordsCount = 0;
+    // The total number of bytes ever prohibited for deletion from PBuffer
     size_t TotalLockedBytesCount = 0;
+
+    [[nodiscard]] TString DebugPrint() const;
 };
 
 class TBlocksDirtyMap
@@ -252,10 +263,17 @@ public:
         EPBufferCounter counter,
         size_t byteCount) override;
 
+    [[nodiscard]] bool NeedFlush() const;
+    [[nodiscard]] bool NeedErase() const;
+
     // Debug purposes
+    [[nodiscard]] TString DebugPrintPBuffers();
+    [[nodiscard]] TString DebugPrintPBuffersUsage() const;
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
     [[nodiscard]] TString DebugPrintDDiskState() const;
+    [[nodiscard]] TString DebugPrintReadyToClone() const;
     [[nodiscard]] TString DebugPrintReadyToFlush() const;
+    [[nodiscard]] TString DebugPrintReadyToErase() const;
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;

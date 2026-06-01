@@ -25,8 +25,8 @@ namespace NYql {
 
 namespace {
 using namespace NKikimr::NMiniKQL;
-static const ui32 RAW_INDEX_NO_HOLE = -1;
-static const ui32 RAW_BROKEN_INDEX_LIST_TO_DICT = 1;
+const ui32 RAW_INDEX_NO_HOLE = -1;
+const ui32 RAW_BROKEN_INDEX_LIST_TO_DICT = 1;
 
 template <class T>
 NUdf::TUnboxedValue ToUnboxedValue(const T& val) {
@@ -489,7 +489,7 @@ SIMPLE_UDF_RUN(TSeqListWithHole, NUdf::TListType<ui32>(ui32, ui32), NUdf::TOptio
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static const auto TUPLE = std::make_tuple(ui8(33), TString("world"), ui64(0xFEEDB00B2A115E), TString("funny bunny"));
+const auto TUPLE = std::make_tuple(ui8(33), TString("world"), ui64(0xFEEDB00B2A115E), TString("funny bunny"));
 
 using NUdfTuple = NUdf::TTuple<ui8, char*, ui64, char*>;
 
@@ -500,7 +500,7 @@ SIMPLE_UDF(TTuple, NUdfTuple(ui32)) {
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static const std::vector<std::pair<ui32, ui64>> DICT_DIGIT2DIGIT = {
+const std::vector<std::pair<ui32, ui64>> DICT_DIGIT2DIGIT = {
     {1, 100500},
     {42, 0xDEADBEAF},
     {911, 1234567890},
@@ -528,13 +528,13 @@ SIMPLE_UDF(TDictDigDigHoleAsOpt, NUdfDictDigDig(ui32, ui32)) {
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static const NUdf::TPersonStruct STRUCT_PERSON_JONNIE = {.FirstName = "Johnnie Walker", .LastName = "Blue Label", .Age = 25};
-static const NUdf::TPersonStruct STRUCT_PERSON_HITHCOCK = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81};
-static const NUdf::TPersonStruct STRUCT_PERSON_LOVECRAFT = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25};
-static const NUdf::TPersonStruct STRUCT_PERSON_KING = {.FirstName = "Stephen", .LastName = "King", .Age = 25};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_HITHCOCK_LIST = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81, .Tags = {}};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_LOVECRAFT_LIST = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25, .Tags = {3, 2, 99}};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_KING_LIST = {.FirstName = "Stephen", .LastName = "King", .Age = 25, .Tags = {}};
+const NUdf::TPersonStruct STRUCT_PERSON_JONNIE = {.FirstName = "Johnnie Walker", .LastName = "Blue Label", .Age = 25};
+const NUdf::TPersonStruct STRUCT_PERSON_HITHCOCK = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81};
+const NUdf::TPersonStruct STRUCT_PERSON_LOVECRAFT = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25};
+const NUdf::TPersonStruct STRUCT_PERSON_KING = {.FirstName = "Stephen", .LastName = "King", .Age = 25};
+const NUdf::TPersonStructWithOptList STRUCT_PERSON_HITHCOCK_LIST = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81, .Tags = {}};
+const NUdf::TPersonStructWithOptList STRUCT_PERSON_LOVECRAFT_LIST = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25, .Tags = {3, 2, 99}};
+const NUdf::TPersonStructWithOptList STRUCT_PERSON_KING_LIST = {.FirstName = "Stephen", .LastName = "King", .Age = 25, .Tags = {}};
 
 SIMPLE_UDF_RUN(TPersonStruct, NUdf::TPersonStruct(ui32), NUdf::TOptional<void>) {
     Y_UNUSED(valueBuilder);
@@ -544,16 +544,16 @@ SIMPLE_UDF_RUN(TPersonStruct, NUdf::TPersonStruct(ui32), NUdf::TOptional<void>) 
 }
 
 using NUdfPersonTuple = NUdf::TTuple<NUdf::TPersonStructWithOptList, NUdf::TPersonStruct, NUdf::TPersonStructWithOptList, NUdf::TPersonStruct>;
-static const auto TUPLE_OF_PERSON = std::make_tuple(
+const auto TUPLE_OF_PERSON = std::make_tuple(
     STRUCT_PERSON_HITHCOCK_LIST,
     STRUCT_PERSON_JONNIE,
     STRUCT_PERSON_LOVECRAFT_LIST,
     STRUCT_PERSON_KING);
 
-static const auto TUPLE_OF_PERSON_NO_LIST = std::make_tuple(STRUCT_PERSON_HITHCOCK_LIST,
-                                                            STRUCT_PERSON_JONNIE,
-                                                            STRUCT_PERSON_KING_LIST,
-                                                            STRUCT_PERSON_KING);
+const auto TUPLE_OF_PERSON_NO_LIST = std::make_tuple(STRUCT_PERSON_HITHCOCK_LIST,
+                                                     STRUCT_PERSON_JONNIE,
+                                                     STRUCT_PERSON_KING_LIST,
+                                                     STRUCT_PERSON_KING);
 
 SIMPLE_UDF(TTupleOfPersonStruct, NUdfPersonTuple(ui32)) {
     Y_UNUSED(valueBuilder);
@@ -569,7 +569,7 @@ SIMPLE_UDF(TTupleOfPersonStructNoList, NUdfPersonTuple(ui32)) {
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static const std::vector<NUdf::TPersonStructWithOptList> LIST_OF_STRUCT_PERSON = {
+const std::vector<NUdf::TPersonStructWithOptList> LIST_OF_STRUCT_PERSON = {
     STRUCT_PERSON_HITHCOCK_LIST,
     STRUCT_PERSON_LOVECRAFT_LIST,
     STRUCT_PERSON_KING_LIST};
@@ -597,7 +597,7 @@ SIMPLE_UDF(TListOfPersonStructWithBrokenIndexToDict, NUdf::TListType<NUdf::TPers
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static std::array<const NUdf::TPersonStruct*, 3> DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX = {
+std::array<const NUdf::TPersonStruct*, 3> DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX = {
     &STRUCT_PERSON_HITHCOCK, &STRUCT_PERSON_JONNIE, &STRUCT_PERSON_LOVECRAFT};
 const ui32 DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX = 1;
 const ui32 DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX = 2;

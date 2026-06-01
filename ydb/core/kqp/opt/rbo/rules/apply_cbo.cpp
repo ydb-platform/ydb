@@ -1,18 +1,25 @@
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/utils/log/log.h>
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_make_join_hypergraph.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <library/cpp/iterator/zip.h>
+
 #include <typeinfo>
 #include <bitset>
 #include <limits>
 #include <optional>
 
+namespace NKikimr::NKqp {
+
 namespace {
+
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
@@ -167,12 +174,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
             childAliases.push_back("#fake_alias" + std::to_string(fakeAliasId++));
         }
 
-        TVector<TInfoUnit> mappedKeyColumns;
-        for (const auto& col : child->Props.Metadata->KeyColumns) {
-            mappedKeyColumns.push_back(cboTree->TreeRoot->Props.Metadata->MapColumn(col));
-        }
-
-        auto stats = BuildOptimizerStatistics(child->Props, true, mappedKeyColumns);
+        auto stats = BuildOptimizerStatistics(child->Props, true);
         auto relNode = std::make_shared<TRBORelOptimizerNode>(childAliases, stats, child);
         rels.push_back(relNode);
         nodeMap.insert({child.get(), relNode});
@@ -301,11 +303,7 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         return res;
     }
 }
-}
-
-namespace NKikimr {
-namespace NKqp {
-
+} // anonymous namespace
 
 /**
  * Run dynamic programming CBO and convert the resulting tree into operator tree
@@ -321,6 +319,9 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
+    auto cboTree = CastOperator<TOpCBOTree>(input);
+    auto& cboStats = ctx.KqpCtx.CBOStats;
+
     auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
     auto useBlockHashJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
@@ -329,7 +330,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
-    auto cboTree = CastOperator<TOpCBOTree>(input);
+    ++cboStats.TreesTotal;
 
     // Check that all inputs have statistics
     for (auto c : cboTree->Children) {
@@ -391,7 +392,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints());
+        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints(), &cboStats);
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
@@ -404,5 +405,4 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     return ConvertOptimizedTree(joinTree, cboTree->Props.Metadata->ColumnLineage, cboTree->Pos);
 }
 
-}
-}
+} // namespace NKikimr::NKqp

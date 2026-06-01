@@ -17,7 +17,10 @@
 #include <util/folder/tempdir.h>
 #include <util/generic/guid.h>
 #include <util/generic/scope.h>
+#include <util/generic/set.h>
+#include <util/system/event.h>
 #include <util/system/tempfile.h>
+#include <util/system/thread.h>
 #include <util/thread/factory.h>
 #include <util/thread/lfqueue.h>
 
@@ -1073,6 +1076,158 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         future1.GetValue(TDuration::Seconds(5));
         future2.GetValue(TDuration::Seconds(5));
+
+        server->Stop();
+    }
+
+    Y_UNIT_TEST(ShouldHandleMultiQueueRequestsInParallelThreads)
+    {
+        // This test verifies that when an endpoint is created with
+        // VhostQueuesCount = N > 1, requests sent to different vhost queues
+        // are picked up and processed by N different executor threads in
+        // parallel. This exercises the multi-queue support end-to-end:
+        //
+        //   vhost queues -> N executor threads -> shared device handler
+        //
+        // Even though all queues share a single IDeviceHandler, dispatch
+        // happens in the executor thread of the originating queue, so the
+        // storage handler sees calls from N distinct threads concurrently
+        // (as long as request ranges don't overlap and aren't coalesced by
+        // the overlapped-requests guard).
+
+        const TString unixSocketPath = CreateGuidAsString() + ".sock";
+        const ui32 blockSize = 4096;
+        const ui32 queuesCount = 4;
+        const ui64 blocksCount = 1;
+
+        auto queueFactory = std::make_shared<TTestVhostQueueFactory>();
+        auto vhostStats = std::make_shared<TTestVHostStats>();
+
+        TManualEvent allRequestsInFlight;
+        TManualEvent releaseRequests;
+        std::atomic<ui32> inflightCount = 0;
+        TMutex threadIdsLock;
+        TSet<TThread::TId> observedThreadIds;
+
+        auto testService = std::make_shared<TTestPartitionDirectService>();
+        auto testStorage = std::make_shared<TTestStorage>();
+        testStorage->WriteBlocksLocalHandler =
+            [&](TCallContextPtr ctx,
+                std::shared_ptr<TWriteBlocksLocalRequest> request)
+        {
+            Y_UNUSED(ctx);
+            Y_UNUSED(request);
+
+            with_lock (threadIdsLock) {
+                observedThreadIds.insert(TThread::CurrentThreadId());
+            }
+
+            ui32 count = inflightCount.fetch_add(1) + 1;
+            if (count == queuesCount) {
+                allRequestsInFlight.Signal();
+            }
+
+            releaseRequests.Wait();
+            return MakeFuture(TWriteBlocksLocalResponse());
+        };
+
+        TServerConfig serverConfig;
+        serverConfig.ThreadsCount = queuesCount;
+
+        auto server = CreateServer(
+            CreateLoggingService("console"),
+            vhostStats,
+            queueFactory,
+            CreateDefaultDeviceHandlerFactory(),
+            serverConfig,
+            TVhostCallbacks());
+
+        server->Start();
+
+        Sleep(TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL(queuesCount, queueFactory->Queues.size());
+
+        TStorageOptions options;
+        options.DiskId = "testDiskId";
+        options.BlockSize = blockSize;
+        options.BlocksCount = 256;
+        options.VhostQueuesCount = queuesCount;
+        options.UnalignedRequestsDisabled = false;
+        options.CreateOverlappedRequestsGuard = true;
+
+        {
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
+            const auto& error = future.GetValue(TDuration::Seconds(5));
+            UNIT_ASSERT_C(!HasError(error), error);
+        }
+
+        // Each test queue should have exactly one registered device since we
+        // picked N distinct executors.
+        for (const auto& queue: queueFactory->Queues) {
+            UNIT_ASSERT_VALUES_EQUAL(1, queue->GetDevices().size());
+        }
+        auto device = queueFactory->Queues[0]->GetDevices()[0];
+        UNIT_ASSERT_VALUES_EQUAL(queuesCount, device->GetQueuesCount());
+
+        TVector<TString> blocks;
+        auto sgList =
+            ResizeBlocks(blocks, blocksCount, TString(blockSize, 'x'));
+
+        // Send one request per queue. With the multi-queue server each queue
+        // is served by its own executor thread, so the handlers will run in
+        // parallel on N different threads. Each request targets a distinct
+        // range so the shared overlapped-requests guard does not coalesce
+        // them.
+        TVector<TFuture<TVhostRequest::EResult>> futures;
+        for (ui32 i = 0; i < queuesCount; ++i) {
+            const ui64 startIndex = 3 + i * blocksCount;
+            futures.push_back(device->SendTestRequest(
+                i,
+                EBlockStoreRequest::WriteBlocks,
+                startIndex * blockSize,
+                blocksCount * blockSize,
+                sgList));
+        }
+
+        // Wait until all requests are simultaneously in flight. If requests
+        // were serialized on a single thread, the last request would never
+        // start until earlier ones complete and this would time out.
+        const bool allStarted =
+            allRequestsInFlight.WaitT(TDuration::Seconds(10));
+        UNIT_ASSERT_C(
+            allStarted,
+            "Not all requests started in parallel: inflight="
+                << inflightCount.load());
+
+        UNIT_ASSERT_VALUES_EQUAL(queuesCount, inflightCount.load());
+
+        size_t distinctThreads = 0;
+        with_lock (threadIdsLock) {
+            distinctThreads = observedThreadIds.size();
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            queuesCount,
+            distinctThreads,
+            "Requests were handled by " << distinctThreads
+                                        << " distinct thread(s), expected "
+                                        << queuesCount);
+
+        releaseRequests.Signal();
+
+        for (auto& future: futures) {
+            const auto result = future.GetValue(TDuration::Seconds(10));
+            UNIT_ASSERT(result == TVhostRequest::SUCCESS);
+        }
+
+        {
+            auto future = server->StopEndpoint(unixSocketPath);
+            const auto& error = future.GetValue(TDuration::Seconds(5));
+            UNIT_ASSERT_C(!HasError(error), error);
+        }
 
         server->Stop();
     }

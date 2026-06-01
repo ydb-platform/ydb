@@ -34,6 +34,13 @@ class TDqProgramBuilder : public TProgramBuilder {
 
     TRuntimeNode AsTuple(TArrayRef<const ui32> nums);
 
+    TRuntimeNode DqWatermarkGenerator(
+        TRuntimeNode input,
+        const TUnaryLambda& watermarkExtractor,
+        const TUnaryLambda& partitionIdExtractor,
+        TArrayRef<std::string_view> watermarkSettings
+    );
+
   protected:
     TCallableBuilder BuildCommonCombinerParams(const TStringBuf operatorName, const TRuntimeNode operatorParams,
                                                const TRuntimeNode flow,

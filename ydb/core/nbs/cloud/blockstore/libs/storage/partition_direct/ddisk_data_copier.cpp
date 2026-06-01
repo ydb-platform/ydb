@@ -56,6 +56,11 @@ TDDiskDataCopier::TDDiskDataCopier(
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
     , DirtyMap(dirtyMap)
+    , LogTitle{
+          GetCycleCount(),
+          TLogTitle::TDDiskDataCopier{
+              .DiskId = VolumeConfig->DiskId,
+              .Destination = static_cast<int>(Destination)}}
 {
     Y_ASSERT(Destination < VChunkConfig.DDiskHosts.HostCount());
 }
@@ -160,6 +165,7 @@ void TDDiskDataCopier::StartCopyRange()
 
     auto readExecutor = CreateReadRequestExecutor(
         ActorSystem,
+        LogTitle,
         VChunkConfig,
         DirectBlockGroup,
         std::move(readHint),

@@ -1,6 +1,6 @@
 import time
 
-from ydb.tests.fq.streaming.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 import pytest

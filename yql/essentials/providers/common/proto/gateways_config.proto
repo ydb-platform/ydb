@@ -84,7 +84,6 @@ message TYtClusterConfig {
     optional string YTToken = 4; // token to use at YT servers
     optional string YTName = 5; // YT cluster name
     optional bool EnabledYtQlQueries = 6 [default = true]; // Allow to handle YtQl queries
-    optional bool EnabledSpytQueries = 7 [default = true]; // Allow to handle SPYT queries
 
     repeated TAttr Settings = 100;
 }
@@ -360,6 +359,18 @@ message TChytGatewayConfig {
     repeated TChytClusterConfig ClusterMapping = 1;
 }
 
+///////////////////////////// SPYT /////////////////////////////
+
+message TSpytClusterConfig {
+    optional string Name = 1; // Short cluster name
+    optional string YtCluster = 2; // Name of the corresponding YT cluster.
+    optional string DiscoveryPath = 3; // SPYT discovery path on YT.
+}
+
+message TSpytGatewayConfig {
+    repeated TSpytClusterConfig ClusterMapping = 1;
+}
+
 ///////////////////////////// S3 /////////////////////////////
 
 message TS3ClusterConfig {
@@ -457,6 +468,7 @@ message TPostgresqlClusterConfig {
     optional string PGtoken = 3;
     optional string TargetServerType = 4;
     optional uint64 MaxResultBufferSize = 5 [default = 1000000]; // Zero value disables adaptiveFetch
+    optional bool IdmOnlyAccess = 6 [default = false];
 }
 
 message TPostgresqlGatewayConfig {
@@ -983,4 +995,5 @@ message TGatewaysConfig {
     optional TFmrGatewayConfig Fmr = 25;
     optional TLayersConfig Layers = 26;
     optional NProto.TRuntimeSettings RuntimeSettings = 27;
+    optional TSpytGatewayConfig Spyt = 28;
 }

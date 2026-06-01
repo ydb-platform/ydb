@@ -1368,13 +1368,62 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         };
 
-        auto writeToPartition = [](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo, ui32 partitionId) {
+        auto describePartitionCount = [&]() -> size_t {
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe);
+            return describe.GetTopicDescription().GetPartitions().size();
+        };
+
+        // Autosplit is async; fixed sleeps are flaky on slow CI.
+        auto waitAtLeastPartitions = [&](size_t minPartitions, TDuration maxWait) -> size_t {
+            const TInstant deadline = TInstant::Now() + maxWait;
+            size_t last = describePartitionCount();
+            while (last < minPartitions && TInstant::Now() < deadline) {
+                Sleep(TDuration::Seconds(1));
+                last = describePartitionCount();
+            }
+            return last;
+        };
+
+        // KLL autosplit may split partition 1 before the third load phase; pick any leaf partition.
+        auto findWritableLeafPartition = [&](ui32 preferredId) -> ui32 {
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe);
+            TVector<ui32> leafPartitionIds;
+            for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
+                if (partition.GetChildPartitionIds().empty()) {
+                    leafPartitionIds.push_back(partition.GetPartitionId());
+                }
+            }
+            UNIT_ASSERT_C(!leafPartitionIds.empty(), "no leaf partitions in describe");
+            for (const ui32 id : leafPartitionIds) {
+                if (id == preferredId) {
+                    return preferredId;
+                }
+            }
+            for (const ui32 id : leafPartitionIds) {
+                if (id != 0) {
+                    return id;
+                }
+            }
+            return leafPartitionIds.front();
+        };
+
+        // Producer rejects explicit writes to a partition that already has Children_ in its cache
+        // (see TProducer::WriteInternal). Returns false if the partition was split mid-test.
+        auto writeToPartition = [](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo, ui32 partitionId) -> bool {
             TWriteMessage message(partitionId, body);
             message.SeqNo(seqNo);
             auto result = producer->Write(std::move(message));
-            if (!result.IsQueued()) {
-                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            if (result.IsQueued()) {
+                return true;
             }
+            if (result.ErrorMessage == "Partition was split") {
+                return false;
+            }
+            UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " "
+                << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            return false;
         };
 
         auto msg = TString(1_MB, 'a');
@@ -1386,10 +1435,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             writeToPartition(producer1, msg, 1, 0);
             writeToPartition(producer2, msg, 2, 0);
             flushAll({producer1, producer2});
-            Sleep(TDuration::Seconds(5));
-            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            auto partitionsCount = describe.GetTopicDescription().GetPartitions().size();
-            UNIT_ASSERT_EQUAL_C(partitionsCount, 3, "partitions: " << partitionsCount << " expected: 1");
+            auto partitionsCount = waitAtLeastPartitions(3, TDuration::Seconds(60));
+            UNIT_ASSERT_EQUAL_C(partitionsCount, 3, "partitions: " << partitionsCount << " expected: 3");
         }
 
         {
@@ -1398,21 +1445,27 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             writeToPartition(producer1, msg, 5, 0);
             writeToPartition(producer2, msg, 6, 0);
             flushAll({producer1, producer2});
-            Sleep(TDuration::Seconds(5));
-            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            auto partitionsCount = describe.GetTopicDescription().GetPartitions().size();
+            auto partitionsCount = waitAtLeastPartitions(5, TDuration::Seconds(60));
             UNIT_ASSERT_EQUAL_C(partitionsCount, 5, "partitions: " << partitionsCount << " expected: 5");
         }
 
         {
-            writeToPartition(producer1, msg, 7, 1);
-            writeToPartition(producer2, msg, 8, 1);
-            writeToPartition(producer1, msg, 9, 1);
-            writeToPartition(producer2, msg, 10, 1);
-            flushAll({producer1, producer2});
-            Sleep(TDuration::Seconds(5));
-            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            auto partitionsCount = describe2.GetTopicDescription().GetPartitions().size();
+            auto partitionsCount = describePartitionCount();
+            if (partitionsCount < 7) {
+                // Refresh producers so Children_ matches current describe.
+                UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+                UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-2");
+                producer1 = makeProducer("producer-1");
+                producer2 = makeProducer("producer-2");
+
+                const ui32 targetPartition = findWritableLeafPartition(1);
+                writeToPartition(producer1, msg, 7, targetPartition);
+                writeToPartition(producer2, msg, 8, targetPartition);
+                writeToPartition(producer1, msg, 9, targetPartition);
+                writeToPartition(producer2, msg, 10, targetPartition);
+                flushAll({producer1, producer2});
+                partitionsCount = waitAtLeastPartitions(7, TDuration::Seconds(60));
+            }
             UNIT_ASSERT_EQUAL_C(partitionsCount, 7, "partitions: " << partitionsCount << " expected: 7");
         }
 

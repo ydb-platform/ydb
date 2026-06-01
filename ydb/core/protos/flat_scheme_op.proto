@@ -1283,13 +1283,27 @@ message TIncrementalRestoreFinalize {
     repeated string BackupTablePaths = 4;
 }
 
-message TIncrementalRestoreOperationId {
+message TIncrementalRestoreSubOpId {
     optional uint64 TxId = 1;
     optional uint32 SubTxId = 2;
 }
 
+message TIncrementalRestoreSubOpState {
+    optional TIncrementalRestoreSubOpId Id = 1;
+
+    // Per-shard dispatch tracking for reboot recovery.
+    // TShardIdx.LocalId (ui64) is wire-stable; OwnerId is implicit (this SS).
+    repeated uint64 ExpectedShardLocalIds = 2;
+    repeated uint64 CompletedShardLocalIds = 3;
+    repeated uint64 FailedShardLocalIds = 4;
+    optional bool HasNonRetriableFailure = 5;
+    // Src/dst paths for re-dispatching failed shards after SS reboot.
+    optional uint64 SrcPathLocalId = 6;
+    optional uint64 DstPathLocalId = 7;
+}
+
 message TIncrementalRestoreOperationsList {
-    repeated TIncrementalRestoreOperationId Operations = 1;
+    repeated TIncrementalRestoreSubOpState SubOps = 1;
 }
 
 message TCreateLongIncrementalBackupOp {
@@ -1378,6 +1392,7 @@ message TGenericTxInFlyExtraData {
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
 }
 
 message TIndexedTableCreationConfig {
@@ -1856,6 +1871,7 @@ message TIndexBuildControl {
     optional string IndexName = 2;
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 5;
 }
 
 message TLockConfig {
@@ -2044,6 +2060,8 @@ message TModifyScheme {
     optional TSysViewDescription CreateSysView = 81;
 
     optional TChangePathState ChangePathState = 82;
+
+    optional TIncrementalRestoreLockTargets IncrementalRestoreLockTargets = 94;
 
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
 
@@ -2530,12 +2548,21 @@ message TLongIncrementalRestoreOp {
     repeated string TablePathList = 4;
     optional string FullBackupTrimmedName = 5;
     repeated string IncrementalBackupTrimmedNames = 6;
-    repeated uint64 InvolvedShards = 7;
+    reserved 7;
 }
 
 message TChangePathState {
     optional string Path = 1;
     optional EPathState TargetState = 2;
+}
+
+// Payload for ESchemeOpIncrementalRestoreLockTargets / UnlockTargets.
+// Dst paths transition to EPathStateIncomingIncrementalRestore; src paths to
+// EPathStateOutgoingIncrementalRestore (unlock reverses both to EPathStateNoChanges).
+message TIncrementalRestoreLockTargets {
+    repeated string DstPaths = 1;
+    repeated string SrcPaths = 2;
+    optional uint64 RestoreOpId = 3;
 }
 
 message TSecretDescription {

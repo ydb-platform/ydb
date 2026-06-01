@@ -356,7 +356,7 @@ Checks: >
   -performance-faster-string-find,
   -performance-for-range-copy,
   -performance-implicit-conversion-in-loop,
-  -performance-inefficient-algorithm,
+  performance-inefficient-algorithm,
   -performance-inefficient-string-concatenation,
   -performance-inefficient-vector-operation,
   -performance-move-const-arg,
@@ -364,7 +364,7 @@ Checks: >
   -performance-no-automatic-move,
   -performance-no-int-to-ptr,
   -performance-noexcept-move-constructor,
-  -performance-trivially-destructible,
+  performance-trivially-destructible,
   -performance-type-promotion-in-math-fn,
   -performance-unnecessary-copy-initialization,
   -performance-unnecessary-value-param,
@@ -396,6 +396,7 @@ Checks: >
   -readability-non-const-parameter,
   -readability-qualified-auto,
   -readability-redundant-access-specifiers,
+  -readability-redundant-casting,
   -readability-redundant-control-flow,
   readability-redundant-declaration,
   readability-redundant-function-ptr-dereference,
@@ -407,14 +408,13 @@ Checks: >
   readability-simplify-boolean-expr,
   readability-simplify-subscript-expr,
   -readability-static-accessed-through-instance,
-  -readability-static-definition-in-anonymous-namespace,
+  readability-static-definition-in-anonymous-namespace,
   -readability-string-compare,
   -readability-suspicious-call-argument,
   -readability-uniqueptr-delete-release,
   readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
-  readability-avoid-const-params-in-decls,
-  -sdc-no-lowercase-l-suffix
+  readability-avoid-const-params-in-decls
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true

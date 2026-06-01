@@ -830,7 +830,20 @@ private:
     }
 
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 0 : 1;
+        TStringBuf suffix;
+        if (src != nullptr) {
+            suffix = src->GetGroupBySuffix();
+        } else {
+            suffix = "";
+        }
+
+        const bool isPercentileAllowed =
+            (suffix.empty() ||
+             suffix == "Finalize" ||
+             suffix == "MergeFinalize" ||
+             suffix == "MergeManyFinalize");
+
+        ui32 adjustArgsCount = isFactory ? 0 : (isPercentileAllowed ? 1 : 0);
         if (exprs.size() < 0 + adjustArgsCount || exprs.size() > 1 + adjustArgsCount) {
             ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires "
                             << (0 + adjustArgsCount) << " or " << (1 + adjustArgsCount) << " arguments, given: " << exprs.size();
@@ -855,13 +868,20 @@ private:
         }
 
         TNodePtr x;
-        if (1 + adjustArgsCount == exprs.size()) {
-            x = exprs.back();
-            if (!x->Init(ctx, FakeSource_.Get())) {
-                return false;
+        if (isPercentileAllowed) {
+            if (1 + adjustArgsCount == exprs.size()) {
+                x = exprs.back();
+                if (!x->Init(ctx, FakeSource_.Get())) {
+                    return false;
+                }
+            } else {
+                x = Y("Double", Q("0.5"));
             }
         } else {
-            x = Y("Double", Q("0.5"));
+            TString message = TStringBuilder() << "Unexpected percentile usage at " << suffix << " phase";
+            x = Y("Unwrap",
+                  Y("Nothing", Y("OptionalType", Y("DataType", Q("Double")))),
+                  Y("String", BuildQuotedAtom(Pos_, message)));
         }
 
         if (isFactory) {

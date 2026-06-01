@@ -37,7 +37,7 @@ TYPED_TEST_P(TYTreeFluentStringScalarTest, Ok)
         .Value(passedScalar);
 }
 
-using TYTreeFluentStringScalarTestTypes = Types<const char*, TString>;
+using TYTreeFluentStringScalarTestTypes = Types<const char*, std::string>;
 
 REGISTER_TYPED_TEST_SUITE_P(TYTreeFluentStringScalarTest, Ok);
 INSTANTIATE_TYPED_TEST_SUITE_P(

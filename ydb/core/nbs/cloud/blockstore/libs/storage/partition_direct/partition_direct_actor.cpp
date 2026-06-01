@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -187,8 +188,6 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
-            nbsService->Scheduler,
-            nbsService->Timer,
             executors[i],
             TabletID(),
             Executor()->Generation(),   // generation
@@ -240,7 +239,8 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
-    TDirectBlockGroupsConnections directBlockGroupsConnections)
+    TDirectBlockGroupsConnections directBlockGroupsConnections,
+    TVector<TVChunkConfig> vChunkConfigs)
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
@@ -256,14 +256,22 @@ void TPartitionActor::Start(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
+    TVChunkConfigByIndex vChunkConfigsByIndex;
+    vChunkConfigsByIndex.reserve(vChunkConfigs.size());
+    for (const auto& cfg: vChunkConfigs) {
+        vChunkConfigsByIndex[cfg.VChunkIndex] = cfg;
+    }
+
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
+        SelfId(),
         TabletID(),
         VolumeConfig.GetDiskId(),
         blockCount,
         VolumeConfig.GetBlockSize(),
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
+        std::move(vChunkConfigsByIndex),
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,
@@ -284,7 +292,7 @@ void TPartitionActor::Start(
             .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
             .VChunkSize = StorageConfig->GetVChunkSize(),
-            .VhostQueuesCount = 1};
+            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
             fastPathService,
@@ -414,6 +422,21 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ctx.Send(ev->Sender, response.release());
 }
 
+void TPartitionActor::HandleUpdateVChunkConfig(
+    const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto& cfg = ev->Get()->VChunkConfig;
+
+    LOG_DEBUG_S(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        LogTitle.GetWithTime().c_str()
+            << " Handle UpdateVChunkConfig, vChunkIndex: " << cfg.VChunkIndex);
+
+    ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateWork)
@@ -437,6 +460,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
+            HandleUpdateVChunkConfig);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

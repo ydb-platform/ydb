@@ -3,7 +3,7 @@
 #include "kqp_partition_helper.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/control.h>
@@ -481,12 +481,106 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
     }
 }
 
-TString ResolveFullTextQueryToken(
-    const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token,
+void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf::TUnboxedValue value) {
+    if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
+        LOG_W("Cannot append parameter value to token, unexpected type: " << static_cast<int>(type->GetKind()));
+        return;
+    }
+
+    auto dataSlot = static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot();
+    if (!dataSlot) {
+        LOG_W("Cannot append parameter value to token: no data slot");
+        return;
+    }
+
+    switch (*dataSlot) {
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::String, value.AsStringRef());
+            break;
+
+        case NUdf::EDataSlot::Bool:
+            NJsonIndex::AppendJsonIndexLiteral(token,
+                value.Get<bool>() ? NBinaryJson::EEntryType::BoolTrue : NBinaryJson::EEntryType::BoolFalse);
+            break;
+
+        case NUdf::EDataSlot::Int8: {
+            double num = static_cast<double>(value.Get<i8>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Int16: {
+            double num = static_cast<double>(value.Get<i16>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Int32: {
+            double num = static_cast<double>(value.Get<i32>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Int64: {
+            auto intValue = value.Get<i64>();
+            if (intValue > NJsonIndex::MaxSupportedInt || intValue < -NJsonIndex::MaxSupportedInt) {
+                break;
+            }
+            double num = static_cast<double>(intValue);
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint8: {
+            double num = static_cast<double>(value.Get<ui8>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint16: {
+            double num = static_cast<double>(value.Get<ui16>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint32: {
+            double num = static_cast<double>(value.Get<ui32>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint64: {
+            auto uintValue = value.Get<ui64>();
+            if (uintValue > static_cast<ui64>(NJsonIndex::MaxSupportedInt)) {
+                break;
+            }
+            double num = static_cast<double>(uintValue);
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Float: {
+            double num = static_cast<double>(value.Get<float>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Double: {
+            double num = value.Get<double>();
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        default:
+            LOG_W("Cannot append parameter value to token, unexpected data slot: " << static_cast<int>(*dataSlot));
+    }
+}
+
+TString ResolveFullTextQueryToken(const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token,
     const TStageInfo& stageInfo)
 {
     TString fullToken = token.GetToken();
-
     if (token.GetParamName().empty()) {
         return fullToken;
     }
@@ -498,110 +592,58 @@ TString ResolveFullTextQueryToken(
     }
 
     auto [type, value] = *paramPtr;
-    while (true) {
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-            if (!value) {
-                NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Null);
-                return fullToken;
-            }
-
-            type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType();
-            value = value.GetOptionalValue();
-            continue;
-        }
-
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tagged) {
-            type = static_cast<NKikimr::NMiniKQL::TTaggedType*>(type)->GetBaseType();
-            continue;
-        }
-
-        break;
-    }
-
-    if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
-        LOG_W("Failed to get parameter value for token: " << token.GetParamName() << ", type is not data");
-        return fullToken;
-    }
-
-    auto dataSlot = static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot();
-    if (!dataSlot) {
-        LOG_W("Failed to get parameter value for token: " << token.GetParamName() << ", data slot is not found");
-        return fullToken;
-    }
-
-    switch (*dataSlot) {
-        case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::Utf8:
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::String, value.AsStringRef());
-            break;
-        case NUdf::EDataSlot::Bool:
-            NJsonIndex::AppendJsonIndexLiteral(fullToken,
-                value.Get<bool>() ? NBinaryJson::EEntryType::BoolTrue : NBinaryJson::EEntryType::BoolFalse);
-            break;
-        case NUdf::EDataSlot::Int8: {
-            double num = static_cast<double>(value.Get<i8>());
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Int16: {
-            double num = static_cast<double>(value.Get<i16>());
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Int32: {
-            double num = static_cast<double>(value.Get<i32>());
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Int64: {
-            auto intValue = value.Get<i64>();
-            if (intValue > NJsonIndex::MaxSupportedInt || intValue < -NJsonIndex::MaxSupportedInt) {
-                break;
-            }
-            double num = static_cast<double>(intValue);
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Uint8: {
-            double num = static_cast<double>(value.Get<ui8>());
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Uint16: {
-            double num = static_cast<double>(value.Get<ui16>());
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Uint32: {
-            double num = static_cast<double>(value.Get<ui32>());
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Uint64: {
-            auto uintValue = value.Get<ui64>();
-            if (uintValue > static_cast<ui64>(NJsonIndex::MaxSupportedInt)) {
-                break;
-            }
-            double num = static_cast<double>(uintValue);
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Float: {
-            double num = static_cast<double>(value.Get<float>());
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        case NUdf::EDataSlot::Double: {
-            double num = value.Get<double>();
-            NJsonIndex::AppendJsonIndexLiteral(fullToken, NBinaryJson::EEntryType::Number, {}, &num);
-            break;
-        }
-        default:
-            LOG_W("Failed to get parameter value for token: " << token.GetParamName() << ", data slot is not supported");
-            break;
-    }
-
+    AppendMKQLValueToToken(fullToken, type, std::move(value));
     return fullToken;
+}
+
+TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token,
+    const TStageInfo& stageInfo)
+{
+    const TString baseToken = token.GetToken();
+    if (token.GetParamName().empty()) {
+        return {baseToken};
+    }
+
+    auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
+    if (!paramPtr) {
+        LOG_W("Failed to get parameter value for token: " << token.GetParamName());
+        return {baseToken};
+    }
+
+    auto [type, value] = *paramPtr;
+    TVector<TString> result;
+
+    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
+        NUdf::TUnboxedValue item;
+        auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
+        auto iter = value.GetListIterator();
+        while (iter.Next(item)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, itemType, std::move(item));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple) {
+        auto* tupleType = static_cast<NKikimr::NMiniKQL::TTupleType*>(type);
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, tupleType->GetElementType(i), value.GetElement(i));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Dict) {
+        auto* dictType = static_cast<NKikimr::NMiniKQL::TDictType*>(type);
+        auto* keyType = dictType->GetKeyType();
+        NUdf::TUnboxedValue key;
+        auto iter = value.GetKeysIterator();
+        while (iter.Next(key)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, keyType, std::move(key));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else {
+        return {ResolveFullTextQueryToken(token, stageInfo)};
+    }
+
+    return result.empty() ? TVector<TString>{baseToken} : result;
 }
 
 } // anonymous namespace
@@ -1068,6 +1110,15 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     settings->SetMaxDelayedRows(dqSourceStreamLookup.GetMaxDelayedRows());
     settings->SetIsMultiget(dqSourceStreamLookup.GetIsMultiGet());
     settings->SetIsMultiMatches(dqSourceStreamLookup.GetIsMultiMatches());
+    if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinFullscan()) {
+        Y_ENSURE(
+            !dqSourceStreamLookup.HasFullscanLimit() || dqSourceStreamLookup.GetFullscanLimit() == 0,
+            TStringBuilder{} << "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is " << dqSourceStreamLookup.GetFullscanLimit()
+        );
+        settings->SetFullscanLimit(0);
+    } else if (dqSourceStreamLookup.HasFullscanLimit()) {
+        settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
+    }
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
     settings->MutableLeftJoinKeyNames()->Assign(leftJointKeys.begin(), leftJointKeys.end());
@@ -1120,7 +1171,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     }
 
     auto log = [&stageInfo, txId](ui64 channel, ui64 from, ui64 to, TStringBuf type, bool spilling) {
-        LOG_D( "TxId: " << txId << ". "
+        LOG_T( "TxId: " << txId << ". "
             << "Stage " << stageInfo.Id << " create channelId: " << channel
             << " from task: " << from << " to task: " << to << " of type " << type
             << (spilling ? " with spilling" : " without spilling"));
@@ -2598,7 +2649,9 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     for (const auto& token : fullTextSource.GetQuerySettings().GetTokens()) {
-        settings->MutableQuerySettings()->AddTokens(ResolveFullTextQueryToken(token, stageInfo));
+        for (const auto& resolved : ResolveFullTextQueryTokenExpanded(token, stageInfo)) {
+            settings->MutableQuerySettings()->AddTokens(resolved);
+        }
     }
 
     if (fullTextSource.HasTakeLimit()) {

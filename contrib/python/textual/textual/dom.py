@@ -10,13 +10,13 @@ import re
 import threading
 from functools import lru_cache, partial
 from inspect import getfile
-from operator import attrgetter
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Iterable,
+    Mapping,
     Sequence,
     Type,
     TypeVar,
@@ -26,6 +26,7 @@ from typing import (
 
 import rich.repr
 from rich.highlighter import ReprHighlighter
+from rich.style import NULL_STYLE as RICH_NULL_STYLE
 from rich.style import Style
 from rich.text import Text
 from rich.tree import Tree
@@ -40,8 +41,8 @@ from textual.css._error_tools import friendly_list
 from textual.css.constants import VALID_DISPLAY, VALID_VISIBILITY
 from textual.css.errors import DeclarationError, StyleValueError
 from textual.css.match import match
-from textual.css.parse import parse_declarations, parse_selectors
-from textual.css.query import InvalidQueryFormat, NoMatches, TooManyMatches
+from textual.css.parse import is_id_selector, parse_declarations, parse_selectors
+from textual.css.query import InvalidQueryFormat, NoMatches, TooManyMatches, WrongType
 from textual.css.styles import RenderStyles, Styles
 from textual.css.tokenize import IDENTIFIER
 from textual.css.tokenizer import TokenError
@@ -49,7 +50,7 @@ from textual.message_pump import MessagePump
 from textual.reactive import Reactive, ReactiveError, _Mutated, _watch
 from textual.style import Style as VisualStyle
 from textual.timer import Timer
-from textual.walk import walk_breadth_first, walk_depth_first
+from textual.walk import walk_breadth_first, walk_breadth_search_id, walk_depth_first
 from textual.worker_manager import WorkerManager
 
 if TYPE_CHECKING:
@@ -64,9 +65,6 @@ if TYPE_CHECKING:
     from textual.screen import Screen
     from textual.widget import Widget
     from textual.worker import Worker, WorkType, ResultType
-
-    # Unused & ignored imports are needed for the docs to link to these objects:
-    from textual.css.query import WrongType  # type: ignore  # noqa: F401
 
 from typing_extensions import Literal
 
@@ -128,8 +126,9 @@ class _ClassesDescriptor:
         else:
             class_names = set(classes)
         check_identifiers("class name", *class_names)
-        obj._classes = class_names
-        obj._update_styles()
+        if obj._classes != class_names:
+            obj._classes = class_names
+            obj.update_node_styles()
 
 
 @rich.repr.auto
@@ -183,7 +182,7 @@ class DOMNode(MessagePump):
     # Names of potential computed reactives
     _computes: ClassVar[frozenset[str]]
 
-    _PSEUDO_CLASSES: ClassVar[dict[str, Callable[[object], bool]]] = {}
+    _PSEUDO_CLASSES: ClassVar[dict[str, Callable[[App[Any]], bool]]] = {}
     """Pseudo class checks."""
 
     def __init__(
@@ -232,6 +231,7 @@ class DOMNode(MessagePump):
         ) = None
         self._pruning = False
         self._query_one_cache: LRUCache[QueryOneCacheKey, DOMNode] = LRUCache(1024)
+        self._trap_focus = False
 
         super().__init__()
 
@@ -411,6 +411,29 @@ class DOMNode(MessagePump):
         """
         return self._nodes
 
+    @property
+    def displayed_children(self) -> Sequence[Widget]:
+        """The displayed children (where `node.display==True`).
+
+        Returns:
+            A sequence of widgets.
+        """
+        return self._nodes.displayed
+
+    @property
+    def displayed_and_visible_children(self) -> Sequence[Widget]:
+        """The displayed children (where `node.display==True` and `node.visible==True`).
+
+        Returns:
+            A sequence of widgets.
+        """
+        return self._nodes.displayed_and_visible
+
+    @property
+    def is_empty(self) -> bool:
+        """Are there no displayed children?"""
+        return not any(child.display for child in self._nodes)
+
     def sort_children(
         self,
         *,
@@ -455,6 +478,20 @@ class DOMNode(MessagePump):
     def workers(self) -> WorkerManager:
         """The app's worker manager. Shortcut for `self.app.workers`."""
         return self.app.workers
+
+    def trap_focus(self, trap_focus: bool = True) -> None:
+        """Trap the focus.
+
+        When applied to a container, this will limit tab-to-focus to the children of that
+        container (once focus is within that container).
+
+        This can be useful for widgets that act like modal dialogs, where you want to restrict
+        the user to the controls within the dialog.
+
+        Args:
+            trap_focus: `True` to trap focus. `False` to restore default behavior.
+        """
+        self._trap_focus = trap_focus
 
     def run_worker(
         self,
@@ -580,7 +617,8 @@ class DOMNode(MessagePump):
             if name not in self._component_styles:
                 raise KeyError(f"No {name!r} key in COMPONENT_CLASSES")
             component_styles = self._component_styles[name]
-            styles.node = component_styles.node
+            assert component_styles.node is not None
+            styles._update_node(component_styles.node)
             styles.base.merge(component_styles.base)
             styles.inline.merge(component_styles.inline)
             styles._updates += 1
@@ -1038,7 +1076,9 @@ class DOMNode(MessagePump):
     @property
     def selection_style(self) -> Style:
         """The style of selected text."""
-        style = self.screen.get_component_rich_style("screen--selection")
+        style = self.screen.get_component_rich_style(
+            "screen--selection", default=RICH_NULL_STYLE
+        )
         return style
 
     @property
@@ -1100,7 +1140,7 @@ class DOMNode(MessagePump):
     def _get_title_style_information(
         self, background: Color
     ) -> tuple[Color, Color, VisualStyle]:
-        """Get a Visual Style object for for titles.
+        """Get a Visual Style object for titles.
 
         Args:
             background: The background color.
@@ -1123,7 +1163,7 @@ class DOMNode(MessagePump):
     def _get_subtitle_style_information(
         self, background: Color
     ) -> tuple[Color, Color, VisualStyle]:
-        """Get a Rich Style object for for titles.
+        """Get a Rich Style object for subtitles.
 
         Args:
             background: The background color.
@@ -1144,26 +1184,12 @@ class DOMNode(MessagePump):
 
     @property
     def background_colors(self) -> tuple[Color, Color]:
-        """The background color and the color of the parent's background.
-
-        Returns:
-            `(<background color>, <color>)`
-        """
-        base_background = background = BLACK
-        for node in reversed(self.ancestors_with_self):
-            styles = node.styles
-            base_background = background
-            background += styles.background.tint(styles.background_tint)
-        return (base_background, background)
-
-    @property
-    def _opacity_background_colors(self) -> tuple[Color, Color]:
         """Background colors adjusted for opacity.
 
         Returns:
             `(<background color>, <color>)`
         """
-        base_background = background = BLACK
+        base_background = background = Color(0, 0, 0, 0)
         opacity = 1.0
         for node in reversed(self.ancestors_with_self):
             styles = node.styles
@@ -1226,15 +1252,6 @@ class DOMNode(MessagePump):
         while (node := node._parent) is not None:
             add_node(node)
         return cast("list[DOMNode]", nodes)
-
-    @property
-    def displayed_children(self) -> list[Widget]:
-        """The child nodes which will be displayed.
-
-        Returns:
-            A list of nodes.
-        """
-        return list(filter(attrgetter("display"), self._nodes))
 
     def watch(
         self,
@@ -1469,6 +1486,24 @@ class DOMNode(MessagePump):
         else:
             query_selector = selector.__name__
 
+        if is_id_selector(query_selector):
+            cache_key = (base_node._nodes._updates, query_selector, expect_type)
+            cached_result = base_node._query_one_cache.get(cache_key)
+            if cached_result is not None:
+                return cached_result
+            if (
+                node := walk_breadth_search_id(
+                    base_node, query_selector[1:], with_root=False
+                )
+            ) is not None:
+                if expect_type is not None and not isinstance(node, expect_type):
+                    raise WrongType(
+                        f"Node matching {query_selector!r} is the wrong type; expected type {expect_type.__name__!r}, found {node}"
+                    )
+                base_node._query_one_cache[cache_key] = node
+                return node
+            raise NoMatches(f"No nodes match {query_selector!r} on {base_node!r}")
+
         try:
             selector_set = parse_selectors(query_selector)
         except TokenError:
@@ -1488,12 +1523,51 @@ class DOMNode(MessagePump):
             if not match(selector_set, node):
                 continue
             if expect_type is not None and not isinstance(node, expect_type):
-                continue
+                raise WrongType(
+                    f"Node matching {query_selector!r} is the wrong type; expected type {expect_type.__name__!r}, found {node}"
+                )
             if cache_key is not None:
                 base_node._query_one_cache[cache_key] = node
             return node
 
-        raise NoMatches(f"No nodes match {selector!r} on {self!r}")
+        raise NoMatches(f"No nodes match {query_selector!r} on {base_node!r}")
+
+    if TYPE_CHECKING:
+
+        @overload
+        def query_one_optional(self, selector: str) -> Widget | None: ...
+
+        @overload
+        def query_one_optional(self, selector: type[QueryType]) -> QueryType | None: ...
+
+        @overload
+        def query_one_optional(
+            self, selector: str, expect_type: type[QueryType]
+        ) -> QueryType | None: ...
+
+    def query_one_optional(
+        self,
+        selector: str | type[QueryType],
+        expect_type: type[QueryType] | None = None,
+    ) -> QueryType | Widget | None:
+        """Get a widget from this widget's children that matches a selector or widget type,
+        or `None` if there is no match.
+
+        Args:
+            selector: A selector or widget type.
+            expect_type: Require the object be of the supplied type, or None for any type.
+
+        Raises:
+            WrongType: If the wrong type was found.
+
+        Returns:
+            A widget matching the selector, or `None`.
+        """
+        try:
+            widget = self.query_one(selector, expect_type)
+        except NoMatches:
+            return None
+        return widget
 
     if TYPE_CHECKING:
 
@@ -1561,11 +1635,11 @@ class DOMNode(MessagePump):
             if not match(selector_set, node):
                 continue
             if expect_type is not None and not isinstance(node, expect_type):
-                continue
+                raise WrongType(
+                    f"Node matching {query_selector!r} is the wrong type; expected type {expect_type.__name__!r}, found {node}"
+                )
             for later_node in iter_children:
                 if match(selector_set, later_node):
-                    if expect_type is not None and not isinstance(node, expect_type):
-                        continue
                     raise TooManyMatches(
                         "Call to query_one resulted in more than one matched node"
                     )
@@ -1573,7 +1647,7 @@ class DOMNode(MessagePump):
                 base_node._query_one_cache[cache_key] = node
             return node
 
-        raise NoMatches(f"No nodes match {selector!r} on {self!r}")
+        raise NoMatches(f"No nodes match {query_selector!r} on {base_node!r}")
 
     if TYPE_CHECKING:
 
@@ -1592,7 +1666,7 @@ class DOMNode(MessagePump):
         self,
         selector: str | type[QueryType],
         expect_type: type[QueryType] | None = None,
-    ) -> DOMNode | None:
+    ) -> DOMNode:
         """Get an ancestor which matches a query.
 
         Args:
@@ -1689,6 +1763,34 @@ class DOMNode(MessagePump):
             self.remove_class(*class_names, update=update)
         return self
 
+    def update_classes(
+        self, classes: Mapping[str, bool], update: bool = True, animate: bool = True
+    ) -> Self:
+        """Update classes in an atomic batch.
+
+        Args:
+            classes: A mapping of class name on to a boolean where `True` adds
+                to the current classes, and `False` removes.
+            update: Also update styles.
+            animate: Enable any CSS animation?
+
+        Returns:
+            Self
+        """
+
+        add_classes: set[str] = set()
+        remove_classes: set[str] = set()
+        adds = (remove_classes.add, add_classes.add)
+        for class_name, add in classes.items():
+            adds[add](class_name)
+
+        new_classes = (self._classes | add_classes) - remove_classes
+        if self._classes != new_classes:
+            self._classes = new_classes
+            if update:
+                self.update_node_styles(animate=animate)
+        return self
+
     def set_classes(self, classes: str | Iterable[str]) -> Self:
         """Replace all classes.
 
@@ -1702,15 +1804,13 @@ class DOMNode(MessagePump):
         self.classes = classes
         return self
 
-    def _update_styles(self) -> None:
+    def update_node_styles(self, animate: bool = True) -> None:
         """Request an update of this node's styles.
 
-        Should be called whenever CSS classes / pseudo classes change.
+        Called by Textual whenever CSS classes / pseudo classes change.
         """
-        if not self.is_attached:
-            return
         try:
-            self.app.update_styles(self)
+            self.app.update_styles(self, animate=animate)
         except NoActiveAppError:
             pass
 
@@ -1725,12 +1825,11 @@ class DOMNode(MessagePump):
             Self.
         """
         check_identifiers("class name", *class_names)
-        old_classes = self._classes.copy()
-        self._classes.update(class_names)
-        if old_classes == self._classes:
+        if self._classes.issuperset(class_names):
             return self
+        self._classes.update(class_names)
         if update:
-            self._update_styles()
+            self.update_node_styles()
         return self
 
     def remove_class(self, *class_names: str, update: bool = True) -> Self:
@@ -1744,12 +1843,11 @@ class DOMNode(MessagePump):
             Self.
         """
         check_identifiers("class name", *class_names)
-        old_classes = self._classes.copy()
-        self._classes.difference_update(class_names)
-        if old_classes == self._classes:
+        if self._classes.isdisjoint(class_names):
             return self
+        self._classes.difference_update(class_names)
         if update:
-            self._update_styles()
+            self.update_node_styles()
         return self
 
     def toggle_class(self, *class_names: str) -> Self:
@@ -1766,7 +1864,7 @@ class DOMNode(MessagePump):
         self._classes.symmetric_difference_update(class_names)
         if old_classes == self._classes:
             return self
-        self._update_styles()
+        self.update_node_styles()
         return self
 
     def has_pseudo_class(self, class_name: str) -> bool:

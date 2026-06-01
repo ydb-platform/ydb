@@ -509,6 +509,42 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             tester.Execute();
         }
     }
+
+    class TDisableOnlineRO : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {   
+            settings.AppConfig.MutableFeatureFlags()->SetDisableOnlineRO(true);     
+        }
+
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            {
+                auto result = session.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/KV` ;
+                )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
+                result.GetIssues().PrintTo(Cerr);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                auto result = session.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
+                )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
+                result.GetIssues().PrintTo(Cerr);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Operation 'Upsert' can't be performed in read only transaction");
+            }
+        }
+    };
+
+    Y_UNIT_TEST(DisableOnlineRO) {
+        TDisableOnlineRO tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(true);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

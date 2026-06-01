@@ -57,7 +57,6 @@
 #include <util/system/file.h>
 #include <util/system/fs.h>
 
-#include <google/protobuf/text_format.h>
 
 namespace NYdb::NBackup {
 
@@ -511,8 +510,7 @@ TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
 }
 
 void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const NDump::NFiles::TFileInfo& fileInfo) {
-    TString protoStr;
-    google::protobuf::TextFormat::PrintToString(proto, &protoStr);
+    const auto protoStr = ProtoToString(proto);
     LOG_D("Write " << fileInfo.LogObjectType << " into " << folderPath.Child(fileInfo.FileName).GetPath().Quote());
     TFile outFile(folderPath.Child(fileInfo.FileName), CreateAlways | WrOnly);
     outFile.Write(protoStr.data(), protoStr.size());

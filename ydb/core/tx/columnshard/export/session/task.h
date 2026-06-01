@@ -18,7 +18,7 @@ public:
 
 private:
     using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
-    TIdentifier Identifier = TIdentifier(TInternalPathId{});
+    TIdentifier Identifier = TIdentifier(NColumnShard::TSchemeShardLocalPathId{});
     YDB_READONLY_DEF(NKikimrSchemeOp::TBackupTask, BackupTask);
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
     YDB_READONLY_DEF(std::vector<TNameTypeInfo>, Columns);

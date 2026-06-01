@@ -9,11 +9,9 @@ namespace {
 
 class TFileTableDataServiceDiscovery: public ITableDataServiceDiscovery {
 public:
-    TFileTableDataServiceDiscovery(const TFileTableDataServiceDiscoverySettings& settings): WorkersPath_(settings.Path) {
-        Start();
-    }
-
-    void Start() override {
+    TFileTableDataServiceDiscovery(TFileTableDataServiceDiscoverySettings&& settings)
+        : WorkersPath_(settings.Path)
+    {
         TFileInput readHosts(WorkersPath_);
         TString currentRow;
         std::vector<TString> connection;
@@ -29,18 +27,19 @@ public:
             workerConnections.emplace_back(host, port);
         }
         WorkerConnections_ = workerConnections;
-        HasStarted_ = true;
     }
 
-    void Stop() override {}
+    void Start() override {
+    }
+
+    void Stop() override {
+    }
 
     ui64 GetHostCount() const override {
-        CheckHasStarted();
         return WorkerConnections_.size();
     }
 
     TTableDataServiceServerConnection GetHost(ui64 index) const override {
-        CheckHasStarted();
         Y_ENSURE(index < WorkerConnections_.size(),
             "TDS host index " << index << " is out of range [0, " << WorkerConnections_.size() << ")");
         return WorkerConnections_[index];
@@ -50,19 +49,12 @@ public:
 private:
     const TString WorkersPath_;
     std::vector<TTableDataServiceServerConnection> WorkerConnections_;
-    bool HasStarted_ = false;
-
-    void CheckHasStarted() const {
-        if (!HasStarted_) {
-            ythrow yexception() << "File service discovery has not started yet";
-        }
-    }
 };
 
 }
 
-ITableDataServiceDiscovery::TPtr MakeFileTableDataServiceDiscovery(const TFileTableDataServiceDiscoverySettings& settings) {
-    return MakeIntrusive<TFileTableDataServiceDiscovery>(settings);
+ITableDataServiceDiscovery::TPtr MakeFileTableDataServiceDiscovery(TFileTableDataServiceDiscoverySettings settings) {
+    return MakeIntrusive<TFileTableDataServiceDiscovery>(std::move(settings));
 }
 
 } // namespace NYql::NFmr

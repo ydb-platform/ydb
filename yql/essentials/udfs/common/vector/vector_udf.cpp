@@ -94,10 +94,10 @@ private:
     }
 };
 
-static const auto CreateName = TStringRef::Of("Create");
-static const auto EmplaceName = TStringRef::Of("Emplace");
-static const auto SwapName = TStringRef::Of("Swap");
-static const auto GetResultName = TStringRef::Of("GetResult");
+const auto CreateName = TStringRef::Of("Create");
+const auto EmplaceName = TStringRef::Of("Emplace");
+const auto SwapName = TStringRef::Of("Swap");
+const auto GetResultName = TStringRef::Of("GetResult");
 
 class TVectorModule: public IUdfModule {
 public:

@@ -1,34 +1,40 @@
 #pragma once
 
-#include <yql/essentials/core/yql_statistics.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 
-namespace NKikimr::NKqp::NOpt {
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <library/cpp/json/writer/json_value.h>
+
+#include <util/generic/ptr.h>
+
+namespace NYql {
+
+struct TKikimrConfiguration;
+struct TKikimrQueryContext;
+class TKikimrTablesData;
+class TKikimrTableDescription;
+
+} // namespace NYql
+
+namespace NKikimr::NKqp {
+
+struct TUserRequestContext;
+struct TOptimizerHints;
+
+namespace NOpt {
 
 struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
-    TKqpOptimizeContext(const TString& cluster, const NYql::TKikimrConfiguration::TPtr& config,
+    TKqpOptimizeContext(const TString& cluster, const TIntrusivePtr<NYql::TKikimrConfiguration>& config,
         const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables,
         const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
-        bool usePessimisticLocks = false)
-        : Cluster(cluster)
-        , Config(config)
-        , QueryCtx(queryCtx)
-        , Tables(tables)
-        , UserRequestContext(userRequestContext)
-        , UsePessimisticLocks(usePessimisticLocks)
-    {
-        YQL_ENSURE(QueryCtx);
-        YQL_ENSURE(Tables);
-    }
+        bool usePessimisticLocks = false);
 
     TString Cluster;
-    const NYql::TKikimrConfiguration::TPtr Config;
+    const TIntrusivePtr<NYql::TKikimrConfiguration> Config;
     const TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     const TIntrusivePtr<NYql::TKikimrTablesData> Tables;
     const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
@@ -39,43 +45,17 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
+    NKikimr::NKqp::TCBOOptimizerStats CBOStats;
 
-    std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
-        if (Config->OptOverrideStatistics.Get()) {
-            if (!OverrideStatistics) {
-                auto jsonValue = new NJson::TJsonValue();
-                NJson::ReadJsonTree(*Config->OptOverrideStatistics.Get(), jsonValue, true);
-                OverrideStatistics = std::shared_ptr<NJson::TJsonValue>(jsonValue);
-            }
-            return OverrideStatistics;
+    std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics();
 
-        } else {
-            return std::shared_ptr<NJson::TJsonValue>();
-        }
-    }
+    NKikimr::NKqp::TOptimizerHints GetOptimizerHints();
 
-    NKikimr::NKqp::TOptimizerHints GetOptimizerHints() {
-        if (Config->OptimizerHints.Get()) {
-            if (!Hints) {
-                Hints = std::make_shared<NKikimr::NKqp::TOptimizerHints>(*Config->OptimizerHints.Get());
-            }
-            return *Hints;
-        }
+    bool IsDataQuery() const;
 
-        return NKikimr::NKqp::TOptimizerHints();
-    }
+    bool IsScanQuery() const;
 
-    bool IsDataQuery() const {
-        return QueryCtx->Type == NYql::EKikimrQueryType::Dml;
-    }
-
-    bool IsScanQuery() const {
-        return QueryCtx->Type == NYql::EKikimrQueryType::Scan;
-    }
-
-    bool IsGenericQuery() const {
-        return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
-    }
+    bool IsGenericQuery() const;
 };
 
 struct TKqpBuildQueryContext : TThrRefBase {
@@ -105,8 +85,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryEffectsTransformer(const TIntrus
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<NYql::IGraphTransformer>&& typeAnnTransformer,
-    NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr& config);
+    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, NYql::TTypeAnnotationContext& typesCtx, TIntrusivePtr<NYql::TKikimrConfiguration>& config);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpSinkPrecomputeTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 
@@ -115,9 +94,11 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhysicalQueryTransformer(const T
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryBlocksTransformer(TAutoPtr<NYql::IGraphTransformer> queryBlockTransformer);
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
-    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config);
+THolder<NYql::TVisitorTransformerBase> CreateKqpTypeAnnotationTransformer(const TString& cluster,
+    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TIntrusivePtr<NYql::TKikimrConfiguration> config);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NOpt
+
+} // namespace NKikimr::NKqp

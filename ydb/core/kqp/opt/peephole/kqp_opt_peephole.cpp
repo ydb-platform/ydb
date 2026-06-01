@@ -391,7 +391,7 @@ bool CanPropagateWideBlockThroughChannel(
 }
 
 TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprContext& ctx,
-    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, THashSet<ui64>& optimizedStages,
+    TTypeAnnotationContext& typesCtx, THashSet<ui64>& optimizedStages,
     TKikimrConfiguration::TPtr config, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
     THashMap<ui64 /*stage uid*/, TKqpProgram> programs;
@@ -465,7 +465,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                         bool allowNonDeterministicFunctions = !newInputProgram.Lambda().Body().Maybe<TKqpEffects>();
                         TExprNode::TPtr newInputProgramNode;
 
-                        auto status = PeepHoleOptimize(newInputProgram, newInputProgramNode, ctx, typeAnnTransformer, typesCtx, config,
+                        auto status = PeepHoleOptimize(newInputProgram, newInputProgramNode, ctx, typesCtx, config,
                             allowNonDeterministicFunctions, withFinalStageRules, disabledOpts);
                         if (status != TStatus::Ok) {
                             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
@@ -511,7 +511,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         const bool allowNonDeterministicFunctions = !program.Lambda().Body().Maybe<TKqpEffects>();
 
         TExprNode::TPtr newProgram;
-        auto status = PeepHoleOptimize(program, newProgram, ctx, typeAnnTransformer, typesCtx, config,
+        auto status = PeepHoleOptimize(program, newProgram, ctx, typesCtx, config,
             allowNonDeterministicFunctions, withFinalStageRules, disabledOpts);
         if (status != TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
@@ -566,14 +566,12 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 class TKqpTxPeepholeTransformer : public TSyncTransformerBase {
 public:
     TKqpTxPeepholeTransformer(
-        IGraphTransformer* typeAnnTransformer,
         TTypeAnnotationContext& typesCtx,
         TKikimrConfiguration::TPtr config,
         bool withFinalStageRules,
         TSet<TString> disabledOpts
     )
-        : TypeAnnTransformer(typeAnnTransformer)
-        , TypesCtx(typesCtx)
+        : TypesCtx(typesCtx)
         , Config(config)
         , WithFinalStageRules(withFinalStageRules)
         , DisabledOpts(disabledOpts)
@@ -594,7 +592,7 @@ public:
         auto tx = input.Cast<TKqpPhysicalTx>();
 
         THashSet<ui64> optimizedStages;
-        auto optimizedTx = PeepholeOptimize(tx, ctx, *TypeAnnTransformer, TypesCtx, optimizedStages, Config, WithFinalStageRules, DisabledOpts);
+        auto optimizedTx = PeepholeOptimize(tx, ctx, TypesCtx, optimizedStages, Config, WithFinalStageRules, DisabledOpts);
 
         if (!optimizedTx) {
             return TStatus::Error;
@@ -611,7 +609,6 @@ public:
     }
 
 private:
-    IGraphTransformer* TypeAnnTransformer;
     TTypeAnnotationContext& TypesCtx;
     TKikimrConfiguration::TPtr Config;
     bool Optimized = false;
@@ -621,16 +618,13 @@ private:
 
 class TKqpTxsPeepholeTransformer : public TSyncTransformerBase {
 public:
-    TKqpTxsPeepholeTransformer(TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
-        TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
-        : TypeAnnTransformer(std::move(typeAnnTransformer))
-    {
+    TKqpTxsPeepholeTransformer(TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config) {
         TxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("TxsPeephole", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxsPeephole")
-            .Add(*TypeAnnTransformer, "TypeAnnotation")
+            .AddTypeAnnotationTransformer()
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(typesCtx, config), "Peephole")
             .Build(false);
     }
 
@@ -686,13 +680,12 @@ private:
     }
 
     TAutoPtr<IGraphTransformer> TxTransformer;
-    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
 };
 
 } // anonymous namespace
 
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
-    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
+    TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
     bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
     TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
@@ -704,7 +697,7 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
     peepholeSettings.WithNonDeterministicRules = false;
 
     bool hasNonDeterministicFunctions;
-    auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, &typeAnnTransformer,
+    auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, nullptr,
         hasNonDeterministicFunctions, peepholeSettings);
     if (status == TStatus::Error) {
         return status;
@@ -719,23 +712,21 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpTxPeepholeTransformer(
-    NYql::IGraphTransformer* typeAnnTransformer,
     TTypeAnnotationContext& typesCtx,
     const TKikimrConfiguration::TPtr& config,
     bool withFinalStageRules,
     TSet<TString> disabledOpts
 )
 {
-    return new TKqpTxPeepholeTransformer(typeAnnTransformer, typesCtx, config, withFinalStageRules, disabledOpts);
+    return new TKqpTxPeepholeTransformer(typesCtx, config, withFinalStageRules, disabledOpts);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(
-    TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
     TTypeAnnotationContext& typesCtx,
     const TKikimrConfiguration::TPtr& config
 )
 {
-    return new TKqpTxsPeepholeTransformer(std::move(typeAnnTransformer), typesCtx, config);
+    return new TKqpTxsPeepholeTransformer(typesCtx, config);
 }
 
 } // namespace NKikimr::NKqp::NOpt

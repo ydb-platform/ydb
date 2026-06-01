@@ -102,18 +102,56 @@ jobs:
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: >
-        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
-        && echo VS environment prepared, getting toolchain...
-        && for /f "tokens=*" %%i in ('.\ya.bat tool c++ --print-toolchain-path') do set TOOLCHAIN_PATH=%%i\bin\clang-cl.exe
-        && call echo Using full compiler path: %%TOOLCHAIN_PATH%%
-        && call .\ya.bat make ${{ inputs.build-target }} -r -DUSE_SSE4=no -o .\
-        --c-compiler %%TOOLCHAIN_PATH%%
-        --cxx-compiler %%TOOLCHAIN_PATH%%
+      run: |
+        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS_PATH=%%i"
+
+        if "%VS_PATH%"=="" (
+          echo Visual Studio with C++ tools was not found
+          exit /b 1
+        )
+
+        echo Using Visual Studio from: [%VS_PATH%]
+
+        if not exist "%VS_PATH%\Common7\Tools\VsDevCmd.bat" (
+          echo VsDevCmd.bat was not found at "%VS_PATH%\Common7\Tools\VsDevCmd.bat"
+          exit /b 1
+        )
+
+        call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=amd64
+        if errorlevel 1 exit /b 1
+
+        echo VS environment prepared, getting toolchain...
+
+        for /f "tokens=*" %%i in ('.\ya.bat tool c++ --print-toolchain-path') do set "TOOLCHAIN_PATH=%%i\bin\clang-cl.exe"
+
+        if "%TOOLCHAIN_PATH%"=="" (
+          echo Failed to get clang-cl path from ya.bat
+          exit /b 1
+        )
+
+        echo Using full compiler path: [%TOOLCHAIN_PATH%]
+
+        call .\ya.bat make ${{ inputs.build-target }} -r -DUSE_SSE4=no -o .\ ^
+          --c-compiler "%TOOLCHAIN_PATH%" ^
+          --cxx-compiler "%TOOLCHAIN_PATH%"
 
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ${{ inputs.build-target }} -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
+    - name: Check built binary version command
+      run: |
+        BINARY_PATH="${{ inputs.build-target }}/${{ matrix.binary }}"
+
+        echo "Checking binary calling \"$BINARY_PATH version\" command"
+
+        if [ ! -f "$BINARY_PATH" ]; then
+          echo "Binary was not found: $BINARY_PATH"
+          exit 1
+        fi
+
+        chmod +x "$BINARY_PATH" 2>/dev/null || true
+
+        "$BINARY_PATH" version
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v6
       with:

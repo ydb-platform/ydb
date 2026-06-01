@@ -1274,6 +1274,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         %s
         READ: SELECT * FROM `/Root/ColumnTable` ORDER BY pk;
         EXPECTED: [[["a"];1u];[["b"];2u];[["a"];3u]]
+        ------
+        WAIT_BACKGROUND_PROCESSES:
+        TIMEOUT: 60
     )";
     Y_UNIT_TEST(DictCompactionAndActualization) {
         constexpr int cycles = 10;

@@ -474,7 +474,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPt
         mapElements.push_back(TMapElement(TInfoUnit(alias, iu.GetColumnName()), iu, input->Pos, &Ctx));
     }
 
-    return MakeIntrusive<TOpMap>(input, input->Pos, mapElements, false);
+    return MakeIntrusive<TOpMap>(input, input->Pos, mapElements, true);
 }
 
 } // namespace NKikimr::Nkqp

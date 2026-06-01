@@ -1983,10 +1983,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    //Y_UNIT_TEST(TPCH_YDB_PERF) {
-    //   RunTPCHBenchmark(/*columnstore*/ true, {1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18, 19}, /*new rbo*/ true);
+    Y_UNIT_TEST(TPCH_YDB_PERF) {
+       RunTPCHBenchmark(/*columnstore*/ true, {1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18, 19, 20}, /*new rbo*/ true);
        //RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ false);
-    //}
+    }
 
     void PrintStatus(std::unordered_map<ui32, bool>& queries, std::vector<TString>&& errors) {
         for (const auto &[id, result] : queries) {
@@ -2146,8 +2146,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
+        kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+
+        TKikimrRunner kikimr(kikimrSettings);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
@@ -2173,14 +2178,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
         RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
-    }
-
-    Y_UNIT_TEST(TPCDS_YQL_1) {
-        RunTPC_YqlTest(EBenchType::TPCDS, 1, true, true);
-    }
-
-    Y_UNIT_TEST(TPCDS_YQL_2) {
-        RunTPC_YqlTest(EBenchType::TPCDS, 2, true, true);
     }
 
     Y_UNIT_TEST(TPCDS_YQL) {

@@ -49,13 +49,23 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx,
     }
 }
 
-void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLevelSelects) {
+void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLevelSelects, THashSet<TExprNode*>& visited) {
+    if (visited.contains(input.Get())) {
+        return;
+    }
+
+    if (input->IsCallable("KqpOpRoot")) {
+        visited.insert(input.Get());
+        return;
+    }
+
     if (input->IsCallable("YqlSelect")) {
         topLevelSelects.insert(input.Get());
+        visited.insert(input.Get());
         return;
     }
     for (auto c: input->Children()) {
-        CollectTopLevelSelects(c, topLevelSelects);
+        CollectTopLevelSelects(c, topLevelSelects, visited);
     }
     return;
 }
@@ -67,7 +77,9 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
     TOptimizeExprSettings settings(&TypeCtx);
 
     THashSet<TExprNode*> topLevelSelects;
-    CollectTopLevelSelects(input, topLevelSelects);
+    THashSet<TExprNode*> visited;
+
+    CollectTopLevelSelects(input, topLevelSelects, visited);
 
     auto status = OptimizeExpr(
         output, output,

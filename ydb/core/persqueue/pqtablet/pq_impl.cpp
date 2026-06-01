@@ -2,6 +2,7 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 #include "fix_transaction_states.h"
+#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -56,16 +57,6 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
-static EMessageFormat FromProtoMessageFormat(NKikimrClient::EMessageFormat format) {
-    switch (format) {
-        case NKikimrClient::STANDARD:
-            return EMessageFormat::STANDARD;
-        case NKikimrClient::KAFKA_BATCH:
-            return EMessageFormat::KAFKA_BATCH;
-    }
-    Y_ABORT("Unknown NKikimrClient::EMessageFormat");
-}
-
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
         : Actor(actor)
@@ -1985,7 +1976,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         } else if (cmd.HasMessageCount() && (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT)) {
             errorStr = TStringBuilder() << "MessageCount must be >= 1 and <= " << MAX_MESSAGE_COUNT;
         } else if (cmd.HasMessageFormat() && (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS))) {
-            errorStr = "MessageFormat must be >= 0 and < 8";
+            errorStr = TStringBuilder() << "MessageFormat must be >= 0 and < " << (1 << MESSAGE_FORMAT_BITS);
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {

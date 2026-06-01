@@ -1,4 +1,5 @@
 #include "partition_util.h"
+#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 #include "partition_compactification.h"
 #include "partition_common.h"
 
@@ -338,16 +339,6 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
 
     ProcessTxsAndUserActs(ctx);
 }
-static NKikimrClient::EMessageFormat ToProtoMessageFormat(EMessageFormat format) {
-    switch (format) {
-        case EMessageFormat::STANDARD:
-            return NKikimrClient::STANDARD;
-        case EMessageFormat::KAFKA_BATCH:
-            return NKikimrClient::KAFKA_BATCH;
-    }
-    Y_ABORT("Unknown EMessageFormat");
-}
-
 template <typename T> // TCmdReadResult
 static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
     auto cc = read->AddResult();

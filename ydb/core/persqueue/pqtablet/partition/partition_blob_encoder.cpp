@@ -387,7 +387,10 @@ TKey WithHeadOffsetDelta(TKey&& key, const THead& head) {
         && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()
         && !head.GetBatches().empty())
     {
-        key.SetOffsetDelta(head.GetOffsetDelta());
+        const ui64 offsetDelta = head.GetOffsetDelta();
+        if (offsetDelta > 0) {
+            key.SetOffsetDelta(offsetDelta);
+        }
     }
     return std::move(key);
 }

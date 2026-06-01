@@ -153,6 +153,25 @@ Y_UNIT_TEST(BatchedMessagesWriteWithInconsistentMaxSeqNoFails) {
     PQGetPartInfo(0, 5, tc);
 }
 
+Y_UNIT_TEST(BatchedMessagesWriteWithPartialSeqNoOverlapFails) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_batch_partial_overlap";
+    CmdWriteBatched(0, sourceId, 1, TString(16, 'a'), 5, tc);
+    PQGetPartInfo(0, 5, tc);
+
+    CmdWriteBatched(0, sourceId, 5, TString(16, 'b'), 5, tc,
+        -1, false, std::nullopt, NPersQueue::NErrorCode::BAD_REQUEST);
+
+    PQGetPartInfo(0, 5, tc);
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteWithInvalidBatchFieldsFails) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

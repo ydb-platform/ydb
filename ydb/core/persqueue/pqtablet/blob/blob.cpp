@@ -266,7 +266,7 @@ TPosition TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
             return TPosition{Max<ui32>(), 0, 0};
         }
 
-        return partNo <= Blobs[pos].GetPartNo() ?
+        return partNo == Blobs[pos].GetPartNo() ?
             TPosition{pos, offset, partNo} :
             TPosition{Max<ui32>(), 0, 0};
     }

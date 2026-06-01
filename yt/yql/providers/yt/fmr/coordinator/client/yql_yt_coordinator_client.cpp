@@ -96,10 +96,11 @@ public:
         auto httpClient = TKeepAliveHttpClient(Host_, Port_);
         TStringStream outputStream;
 
+        TString serializedRequest = protoSendHeartbeatRequest.SerializeAsString();
         auto sendHeartbeatRequestFunc = [&]() {
             auto statusCode = httpClient.DoPost(
                 sendHearbeatRequestUrl,
-                protoSendHeartbeatRequest.SerializeAsString(),
+                serializedRequest,
                 &outputStream,
                 GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false)
             );

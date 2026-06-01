@@ -108,7 +108,7 @@ public:
         HttpServer_.Stop();
     }
 
-    TString GetUrl() const {
+    [[nodiscard]] TString GetUrl() const {
         return "http://localhost:" + ToString(Port_);
     }
 

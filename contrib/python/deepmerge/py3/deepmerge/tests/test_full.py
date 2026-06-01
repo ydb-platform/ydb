@@ -31,13 +31,13 @@ def test_merge_or_raise_raises_exception():
         merge_or_raise.merge(base, nxt)
     exc = exc_info.value
     assert exc.strategy_list_name == "type conflict"
-    assert exc.merge_args == (merge_or_raise, ["foo"], 0, "a string!")
-    assert exc.merge_kwargs == {}
+    assert exc.config == merge_or_raise
+    assert exc.path == ["foo"]
+    assert exc.base == 0
+    assert exc.nxt == "a string!"
 
 
-@pytest.mark.parametrize(
-    "base, nxt, expected", [("dooby", "fooby", "dooby"), (-10, "goo", -10)]
-)
+@pytest.mark.parametrize("base, nxt, expected", [("dooby", "fooby", "dooby"), (-10, "goo", -10)])
 def test_use_existing(base, nxt, expected):
     assert conservative_merger.merge(base, nxt) == expected
 

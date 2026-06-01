@@ -36,7 +36,7 @@ struct TColumnContext {
     TVector<TColumnId> Columns;
     THashMap<TString, THashSet<TString>> WithoutByTableAlias;
 
-    bool IsAsterisk() const;
+    [[nodiscard]] bool IsAsterisk() const;
     TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);
     TColumnContext Renamed(TStringBuf alias) &&;
 

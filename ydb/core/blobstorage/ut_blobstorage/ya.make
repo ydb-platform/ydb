@@ -79,6 +79,7 @@ RECURSE_FOR_TESTS(
     ut_donor
     ut_group_reconfiguration
     ut_huge
+    ut_startup_brokers
     ut_read_only_vdisk
     ut_osiris
     ut_phantom_blobs

@@ -298,7 +298,7 @@ public:
         for (const auto& tabletIdx : tabletIdIndex) {
             TTabletInfo& x = *tabletIdx.second;
             if (BadOnly) {
-                if (x.IsAlive()) {
+                if (x.IsAlive() && !x.RestartsOften()) {
                     continue;
                 }
                 if (x.IsLeader() && (x.AsLeader().IsLockedToActor() || x.AsLeader().IsExternalBoot())) {

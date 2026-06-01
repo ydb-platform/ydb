@@ -198,6 +198,7 @@ namespace NKikimr::NDDisk {
                 }
             }
 
+            Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
             Send(sourceDDiskId,
                 TPolicy::MakeReadQuery(sourceCreds, selector, segment),
                 IEventHandle::FlagTrackDelivery,
@@ -227,6 +228,9 @@ namespace NKikimr::NDDisk {
         ui64 syncId = SegmentManager.GetSync(ev->Cookie);
 
         if (syncId == Max<ui64>()) {
+            if (SyncReadCookiesInFlight.erase(ev->Cookie)) {
+                return;
+            }
             YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
                 {"Marker", "BSDD24"},
                 {"DDiskId", DDiskId},
@@ -236,11 +240,13 @@ namespace NKikimr::NDDisk {
 
         auto it = SyncsInFlight.find(syncId);
         if (it == SyncsInFlight.end()) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             return;
         }
         auto& sync = it->second;
 
         if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult request cookie out of range",
                 {"Marker", "BSDD25"},
                 {"DDiskId", DDiskId},
@@ -253,11 +259,13 @@ namespace NKikimr::NDDisk {
         auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
 
         if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             return;
         }
 
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             request.Status = record.GetStatus();
             request.ErrorReason << "[" << request.Selector.OffsetInBytes << ';'
                 << request.Selector.OffsetInBytes + request.Selector.Size
@@ -286,6 +294,7 @@ namespace NKikimr::NDDisk {
 
         std::vector<TSegmentManager::TSegment> segments;
         SegmentManager.PopRequest(ev->Cookie, &segments);
+        SyncReadCookiesInFlight.erase(ev->Cookie);
         Y_VERIFY(segments.size());
 
         TRope data = ev->Get()->GetPayload(0);

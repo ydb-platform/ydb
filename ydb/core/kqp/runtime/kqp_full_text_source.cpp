@@ -3200,16 +3200,21 @@ public:
     }
 
     void ScheduleReadRetry(ui64 readId, ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus,
-        bool isThrottled = false)
+        std::optional<TDuration> throttleDelay = std::nullopt)
     {
         auto maxRetries = MaxShardRetries();
-        if (!isThrottled && ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
-            RuntimeError(TStringBuilder() << "Max retries (" << maxRetries << ") exceeded for read " << readId
-                << " on shard " << shardId, errorStatus);
-            return;
+        TDuration delay;
+        if (!throttleDelay) {
+            if (ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
+                RuntimeError(TStringBuilder() << "Max retries (" << maxRetries << ") exceeded for read " << readId
+                    << " on shard " << shardId, errorStatus);
+                return;
+            }
+            delay = ReadsState.GetDelay(shardId, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
 
-        auto delay = ReadsState.GetDelay(shardId, allowInstantRetry);
         if (delay > TDuration::Zero()) {
             TlsActivationContext->Schedule(delay, new IEventHandle(this->SelfId(), this->SelfId(), new TEvPrivate::TEvRetrySingleRead(readId)));
         } else {
@@ -3231,8 +3236,10 @@ public:
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
-                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
-                ScheduleReadRetry(readId, shardId, false, NYql::NDqProto::StatusIds::OVERLOADED, isThrottled);
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                ScheduleReadRetry(readId, shardId, false, NYql::NDqProto::StatusIds::OVERLOADED, throttleDelay);
                 return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {

@@ -104,6 +104,7 @@ NActors::IActor* CreateRemoveConsumerActor(const NActors::TActorId& parentId, TR
 // Create Topic
 //
 struct TCreateTopicResponse {
+    TString Path;
     Ydb::StatusIds::StatusCode Status;
     TString ErrorMessage;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
@@ -112,11 +113,12 @@ struct TCreateTopicResponse {
 struct TEvCreateTopicResponse: public NActors::TEventLocal<TEvCreateTopicResponse, EEv::EvCreateTopicResponse>
                              , public TCreateTopicResponse {
     TEvCreateTopicResponse(
+        const TString& path,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         TString&& errorMessage = {},
         NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
     )
-        : TCreateTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
+        : TCreateTopicResponse(path, status, std::move(errorMessage), std::move(modifyScheme))
     {
     }
 };

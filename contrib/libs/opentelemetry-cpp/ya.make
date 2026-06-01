@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.26.0)
+VERSION(1.27.0)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.26.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.27.0.tar.gz)
 
 PEERDIR(
     contrib/libs/curl
@@ -33,6 +33,8 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 CFLAGS(
+    -DENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW
+    -DENABLE_OTLP_RETRY_PREVIEW
     -DOPENTELEMETRY_PROTO_API=
     GLOBAL -DOPENTELEMETRY_STL_VERSION=2023
     GLOBAL -DOPENTELEMETRY_ABI_VERSION_NO=2
@@ -82,6 +84,7 @@ SRCS(
     ext/src/http/client/curl/http_operation_curl.cc
     sdk/src/common/base64.cc
     sdk/src/common/disabled.cc
+    sdk/src/common/empty_attributes.cc
     sdk/src/common/env_variables.cc
     sdk/src/common/global_log_handler.cc
     sdk/src/common/random.cc
@@ -108,6 +111,7 @@ SRCS(
     sdk/src/logs/simple_log_record_processor_factory.cc
     sdk/src/metrics/aggregation/base2_exponential_histogram_aggregation.cc
     sdk/src/metrics/aggregation/base2_exponential_histogram_indexer.cc
+    sdk/src/metrics/aggregation/drop_aggregation.cc
     sdk/src/metrics/aggregation/histogram_aggregation.cc
     sdk/src/metrics/aggregation/lastvalue_aggregation.cc
     sdk/src/metrics/aggregation/sum_aggregation.cc
@@ -136,6 +140,7 @@ SRCS(
     sdk/src/metrics/view/instrument_selector_factory.cc
     sdk/src/metrics/view/meter_selector_factory.cc
     sdk/src/metrics/view/view_factory.cc
+    sdk/src/metrics/view/view_registry.cc
     sdk/src/metrics/view/view_registry_factory.cc
     sdk/src/resource/resource.cc
     sdk/src/resource/resource_detector.cc
@@ -143,6 +148,7 @@ SRCS(
     sdk/src/trace/batch_span_processor_factory.cc
     sdk/src/trace/batch_span_processor_options.cc
     sdk/src/trace/exporter.cc
+    sdk/src/trace/multi_recordable.cc
     sdk/src/trace/provider.cc
     sdk/src/trace/random_id_generator.cc
     sdk/src/trace/random_id_generator_factory.cc
@@ -154,6 +160,7 @@ SRCS(
     sdk/src/trace/samplers/trace_id_ratio_factory.cc
     sdk/src/trace/simple_processor_factory.cc
     sdk/src/trace/span.cc
+    sdk/src/trace/span_data.cc
     sdk/src/trace/tracer.cc
     sdk/src/trace/tracer_config.cc
     sdk/src/trace/tracer_context.cc

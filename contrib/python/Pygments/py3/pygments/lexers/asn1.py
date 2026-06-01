@@ -4,7 +4,7 @@
 
     Pygments lexers for ASN.1.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -136,7 +136,7 @@ class Asn1Lexer(RegexLexer):
             (r'--.*$', Comment.Single),
             (r'/\*', Comment.Multiline, 'comment'),
             #  Numbers:
-            (r'\d+\.\d*([eE][-+]?\d+)?', Number.Float),
+            (r'\d+\.\d+([eE][-+]?\d+)?', Number.Float),
             (r'\d+', Number.Integer),
             # Identifier:
             (r"&?[a-z][-a-zA-Z0-9]*[a-zA-Z0-9]\b", Name.Variable),
@@ -155,7 +155,7 @@ class Asn1Lexer(RegexLexer):
             # Type identifier:
             (r"&?[A-Z][-a-zA-Z0-9]*[a-zA-Z0-9]\b", Name.Type),
             # Operators:
-            (r"(::=|\.\.\.|\.\.|\[\[|\]\]|\||\^)", Operator),
+            (r"(::=|\.\.\.|\.\.|\[\[|\]\]|\||\^|-)", Operator),
             # Punctuation:
             (r"(\.|,|\{|\}|\(|\)|\[|\])", Punctuation),
             # String:

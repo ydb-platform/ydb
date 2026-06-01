@@ -585,7 +585,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         QueryTest("select \"Hello\"", false, "Hello");
     }
 
-    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit, const bool isExpectingGroup) {
+    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit,
+            const bool isExpectingGroup, const std::optional<TString> expectedGroupDiskSpace = {}) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -635,25 +636,64 @@ Y_UNIT_TEST_SUITE(Viewer) {
             Ctest << ex.what() << Endl;
         }
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
+
+        if (isExpectingGroup) {
+            const auto& storageGroups = json["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(storageGroups.size(), 1);
+            const auto& group = storageGroups[0];
+            if (expectedGroupDiskSpace) {
+                UNIT_ASSERT(group.GetMap().contains("DiskSpace"));
+                UNIT_ASSERT_VALUES_EQUAL(group["DiskSpace"].GetString(), *expectedGroupDiskSpace);
+            } else {
+                UNIT_ASSERT(!group.GetMap().contains("DiskSpace"));
+            }
+        }
     }
 
     Y_UNIT_TEST(StorageGroupOutputWithoutFilterNoDepends)
     {
-        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true);
-        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 90, 100, true);
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true, "Green");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 90, 100, true, "Red");
     }
 
     Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnVDiskSpaceStatus)
     {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 10, 100, false);
-        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Red, 10, 100, true);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
     }
 
     Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnUsage)
     {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 70, 100, false);
-        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
-        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true, "Green");
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true, "Green");
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputFlagMatchesWorstVDiskFlag)
+    {
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Grey, 10, 100, true, std::nullopt);
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true, "Green");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Yellow, 10, 100, true, "Yellow");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Orange, 10, 100, true, "Orange");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
+    }
+
+    Y_UNIT_TEST(StorageGroupDiskSpaceDoesNotDependOnUsage)
+    {
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 99;
+        vdisk.AvailableSize = 1;
+        vdisk.DiskSpace = NKikimrViewer::EFlag::Green;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 99.0, 1e-6);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrViewer::EFlag_Name(group.DiskSpace), "Green");
     }
 
     Y_UNIT_TEST(StorageGroupUsageWithDynamicSlotSize)

@@ -34,7 +34,6 @@ TDirectReadSessionActor::TDirectReadSessionActor(
     , Request(request)
     , Cookie(cookie)
     , ClientDC(clientDC.GetOrElse("other"))
-    , StartTimestamp(TInstant::Now())
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , InitDone(false)

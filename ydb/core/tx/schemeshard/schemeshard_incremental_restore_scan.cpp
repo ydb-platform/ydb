@@ -75,12 +75,12 @@ public:
                 {"tableOps", state.TableOperations.size()});
         }
 
-        YDB_LOG_CTX_INFO(ctx, "[IncrementalRestore] Checking completion:",
+        YDB_LOG_CTX_INFO(ctx, "Checking completion:",
             {"InProgressOperations.size()", state.InProgressOperations.size()},
             {"CompletedOperations.size()", state.CompletedOperations.size()},
             {"CurrentIncrementalIdx", state.CurrentIncrementalIdx},
             {"IncrementalBackups.size()", state.IncrementalBackups.size()});
-              
+
         if (!state.AreAllCurrentOperationsComplete()) {
             const TInstant now = ctx.Now();
             const i64 overall = Self->IncrementalRestoreSettings.MaxIncrementalRestoreOverallDurationSeconds;
@@ -142,11 +142,11 @@ public:
 private:
     ui64 OperationId;
     bool CompletedOperationsChanged = false;
-    
+
     void SetCompletedOperationsChanged(bool changed) {
         CompletedOperationsChanged = changed;
     }
-    
+
     TString SerializeOperationIds(const THashSet<TOperationId>& operations) {
         NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
         for (const auto& opId : operations) {
@@ -157,28 +157,28 @@ private:
         }
         return protoList.SerializeAsString();
     }
-    
+
     THashSet<TOperationId> DeserializeOperationIds(const TString& serializedData, const TActorContext& ctx) {
         THashSet<TOperationId> operations;
         if (serializedData.empty()) {
             return operations;
         }
-        
+
         NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
         if (!protoList.ParseFromString(serializedData)) {
             YDB_LOG_CTX_ERROR(ctx, "[IncrementalRestore] Failed to parse serialized operation IDs data");
             return operations;
         }
-        
+
         for (const auto& protoOp : protoList.GetSubOps()) {
             TTxId txId(protoOp.GetId().GetTxId());
             TSubTxId subTxId = protoOp.GetId().GetSubTxId();
             operations.insert(TOperationId(txId, subTxId));
         }
-        
+
         return operations;
     }
-    
+
     bool HandleRetryPath(TIncrementalRestoreState& state, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const TInstant now = ctx.Now();
         const i64 overall = Self->IncrementalRestoreSettings.MaxIncrementalRestoreOverallDurationSeconds;
@@ -512,7 +512,7 @@ private:
         auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
         Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
     }
-    
+
     void FinalizeIncrementalRestoreOperation(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, TIncrementalRestoreState& state) {
         YDB_LOG_CTX_INFO(ctx, "[IncrementalRestore] Enqueuing finalization of incremental restore",
             {"operation", OperationId});
@@ -542,7 +542,7 @@ private:
             ctx);
     }
 
-    void CollectTargetTablePaths(TIncrementalRestoreState& state, 
+    void CollectTargetTablePaths(TIncrementalRestoreState& state,
                                NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
         Y_UNUSED(state);
         auto opIt = Self->LongIncrementalRestoreOps.find(TOperationId(OperationId, 0));
@@ -551,7 +551,7 @@ private:
             for (const auto& tablePath : op.GetTablePathList()) {
                 finalize.AddTargetTablePaths(tablePath);
             }
-            
+
             for (auto& [pathId, pathInfo] : Self->PathsById) {
                 if (pathInfo->PathState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore) {
                     TString pathString = TPath::Init(pathId, Self).PathString();
@@ -579,9 +579,9 @@ private:
         auto opIt = Self->LongIncrementalRestoreOps.find(TOperationId(OperationId, 0));
         if (opIt != Self->LongIncrementalRestoreOps.end()) {
             const auto& op = opIt->second;
-            
+
             TString bcPathString = TPath::Init(state.BackupCollectionPathId, Self).PathString();
-            
+
             TString fullBackupPath = JoinPath({bcPathString, op.GetFullBackupTrimmedName()});
             for (const auto& tablePath : op.GetTablePathList()) {
                 TPath fullPath = TPath::Resolve(tablePath, Self);
@@ -589,7 +589,7 @@ private:
                 TString sourceTablePath = JoinPath({fullBackupPath, tableName});
                 finalize.AddBackupTablePaths(sourceTablePath);
             }
-            
+
             for (const auto& incrBackupName : op.GetIncrementalBackupTrimmedNames()) {
                 TString incrBackupPath = JoinPath({bcPathString, incrBackupName});
                 for (const auto& tablePath : op.GetTablePathList()) {
@@ -646,8 +646,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
     const auto& backupCollectionPathId = msg->BackupCollectionPathId;
     const auto& operationId = msg->OperationId;
     const auto& incrementalBackupNames = msg->IncrementalBackupNames;
-    
-    YDB_LOG_CTX_INFO(ctx, "[IncrementalRestore] Handle(TEvRunIncrementalRestore) starting sequential processing for incremental backups",
+
+    YDB_LOG_CTX_INFO(ctx, "Handle(TEvRunIncrementalRestore) starting sequential processing for incremental backups",
         {"size", incrementalBackupNames.size()},
         {"backupCollectionPathId", backupCollectionPathId},
         {"operationId", operationId},
@@ -685,8 +685,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
 
 void TSchemeShard::Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx) {
     ui64 operationId = ev->Get()->OperationId;
-    
-    YDB_LOG_CTX_INFO(ctx, "[IncrementalRestore] Handle(TEvProgressIncrementalRestore)",
+
+    YDB_LOG_CTX_INFO(ctx, "Handle(TEvProgressIncrementalRestore)",
         {"operationId", operationId},
         {"tablet", TabletID()});
 
@@ -828,7 +828,7 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
 
     auto tableInfoPtr = Tables.FindPtr(tablePathId);
     if (tableInfoPtr) {
-        for (const auto& [shardIdx, _] : (*tableInfoPtr)->GetPartitionStore()) {
+        for (const auto& shardIdx : (*tableInfoPtr)->GetPartitionStore() | std::views::keys) {
             tableOpState.ExpectedShards.insert(shardIdx);
         }
     }
@@ -864,12 +864,12 @@ void TSchemeShard::DispatchIncrementalRestoreShardRequests(
     auto opIt = state.TableOperations.find(subOpId);
     if (opIt != state.TableOperations.end()) {
         opIt->second.ExpectedShards.clear();
-        for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
+        for (const auto& shardIdx : (*srcTableInfoPtr)->GetPartitionStore() | std::views::keys) {
             opIt->second.ExpectedShards.insert(shardIdx);
         }
     }
 
-    for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
+    for (const auto& shardIdx : (*srcTableInfoPtr)->GetPartitionStore() | std::views::keys) {
         auto shardInfoIt = ShardInfos.find(shardIdx);
         if (shardInfoIt == ShardInfos.end()) {
             YDB_LOG_CTX_WARN(ctx, "[IncrementalRestore] DispatchIncrementalRestoreShardRequests: ShardInfo missing for",
@@ -1588,7 +1588,7 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     TTxId txId(msg->Record.GetTxId());
-    
+
     auto txToIncrRestoreIt = TxIdToIncrementalRestore.find(txId);
     if (txToIncrRestoreIt != TxIdToIncrementalRestore.end()) {
         return new TTxProgressIncrementalRestore(this, txToIncrRestoreIt->second);

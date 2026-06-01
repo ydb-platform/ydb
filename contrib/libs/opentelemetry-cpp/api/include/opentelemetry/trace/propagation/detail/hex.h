@@ -36,7 +36,7 @@ constexpr int8_t kHexDigits[256] = {
 
 inline int8_t HexToInt(char c)
 {
-  return kHexDigits[uint8_t(c)];
+  return kHexDigits[static_cast<uint8_t>(c)];
 }
 
 inline bool IsValidHex(nostd::string_view s)
@@ -57,8 +57,8 @@ inline bool HexToBinary(nostd::string_view hex, uint8_t *buffer, size_t buffer_s
     return false;
   }
 
-  int64_t hex_size     = int64_t(hex.size());
-  int64_t buffer_pos   = int64_t(buffer_size) - (hex_size + 1) / 2;
+  int64_t hex_size     = static_cast<int64_t>(hex.size());
+  int64_t buffer_pos   = static_cast<int64_t>(buffer_size) - (hex_size + 1) / 2;
   int64_t last_hex_pos = hex_size - 1;
 
   bool is_hex_size_odd = (hex_size % 2) == 1;

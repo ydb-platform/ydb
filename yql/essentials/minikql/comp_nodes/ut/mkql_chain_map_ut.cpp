@@ -286,13 +286,15 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
     TSetup<LLVM> setup(GetChain1MapThrottleFactory());
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto item1 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(10)}});
-    auto item2 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(20)}});
-    auto item3 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(30)}});
-    auto item4 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(40)}});
-    auto item5 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(50)}});
-    auto itemType = item1.GetStaticType();
-    auto list = pb.NewList(itemType, {item1, item2, item3, item4, item5});
+    using TInRow = NTest::TStructType<NTest::TStructMember<"dt", ui64>>;
+
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                         {{{10ULL}}},
+                                                         {{{20ULL}}},
+                                                         {{{30ULL}}},
+                                                         {{{40ULL}}},
+                                                         {{{50ULL}}},
+                                                     });
 
     auto throttledStream = ThrottleNarrowStream(pb, pb.Iterator(list, {}));
 

@@ -33,7 +33,9 @@ namespace NKikimr::NTestShard {
         }
 
         void Complete(const TActorContext& ctx) override {
-            ctx.Send(Sender, new TEvControlResponse, 0, Cookie);
+            auto response = std::make_unique<TEvControlResponse>();
+            response->Record.SetTabletId(Self->TabletID());
+            ctx.Send(Sender, response.release(), 0, Cookie);
             Self->Settings = Cmd;
             YDB_LOG_DEBUG("TTxInitialize::Complete",
                 {"Marker", "TS30"},

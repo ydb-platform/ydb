@@ -31,6 +31,8 @@
 #include <queue>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;
     class TPersistentBufferChunkMapLogRecord;
@@ -219,7 +221,7 @@ namespace NKikimr::NDDisk {
 
         TCounters Counters;
 
-    private:
+    public:
         struct TEvPrivate {
             enum {
                 EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -316,6 +318,7 @@ namespace NKikimr::NDDisk {
             };
         };
 
+    private:
         enum EWakeupTag {
             WakeupIoSubmitQueue = 1,
             WakeupUpdateFreeSpaceInfo = 2,
@@ -339,13 +342,6 @@ namespace NKikimr::NDDisk {
         const bool IsPersistentBufferActor = false;
 
     public:
-        NKikimrServices::TActivity::EType ActorActivityType() const {
-            if (IsPersistentBufferActor) {
-                return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
-            }
-            return NKikimrServices::TActivity::BS_DDISK;
-        }
-
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor = false);
@@ -466,6 +462,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev);
 
         void Handle(NPDisk::TEvCutLog::TPtr ev);
+        void Handle(TEvDeleteTabletChunks::TPtr ev);
 
         void Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev);
         void Handle(NPDisk::TEvChunkReadRawResult::TPtr ev);
@@ -473,7 +470,8 @@ namespace NKikimr::NDDisk {
         ui64 GetFirstLsnToKeep() const;
 
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
-            ui64 *startingPointLsnPtr, std::function<void()> callback);
+            ui64 *startingPointLsnPtr, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete = {});
 
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
@@ -517,14 +515,30 @@ namespace NKikimr::NDDisk {
             auto logError = [&](TStringBuf reason) {
                 YDB_LOG_CTX_COMP_DEBUG(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::CheckQuery validation failed",
                     {"reason", reason},
-                    {"DDiskId", DDiskId});
+                    {"DDiskId", DDiskId},
+                    {"EvType", ev.GetTypeRewrite()},
+                    {"Sender", ev.Sender},
+                    {"Cookie", ev.Cookie},
+                    {"ICSession", ev.InterconnectSession}
+                );
             };
 
             const TQueryCredentials creds(record.GetCredentials());
             if (!ValidateConnection(ev, creds)) {
-                logError(TStringBuilder() << "session mismatch"
+                TStringBuilder mismatchReason;
+                mismatchReason << "session mismatch"
                     << " tabletId# " << creds.TabletId
-                    << " generation# " << creds.Generation);
+                    << " generation# " << creds.Generation;
+                const auto connIt = Connections.find(creds.TabletId);
+                if (connIt != Connections.end()) {
+                    mismatchReason
+                        << " storedGeneration# " << connIt->second.Generation
+                        << " storedNodeId# "     << connIt->second.NodeId
+                        << " storedICSession# "  << connIt->second.InterconnectSessionId;
+                } else {
+                    mismatchReason << " (no stored session for tabletId)";
+                }
+                logError(mismatchReason);
                 SendReply(ev, std::make_unique<typename TEvent::TResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH));
                 registerError();
@@ -643,6 +657,7 @@ namespace NKikimr::NDDisk {
 
         ui64 NextSyncId = 1;
         THashMap<ui64, TSyncInFlight> SyncsInFlight; // syncId -> TSyncInFlight
+        THashSet<ui64> SyncReadCookiesInFlight;
         TSegmentManager SegmentManager;
 
         void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
@@ -696,7 +711,7 @@ namespace NKikimr::NDDisk {
             TActorId Session;
 
             NWilson::TSpan Span;
-            std::set<ui64> OperationCookies;
+            std::unordered_set<ui64> OperationCookies;
 
             ui64 TabletId;
             ui32 Generation;
@@ -705,9 +720,13 @@ namespace NKikimr::NDDisk {
             ui32 OffsetInBytes;
             ui32 Size;
             std::vector<TPersistentBufferSectorInfo> Sectors;
+
+            // map operationCookie to <lsn, generation> pairs that were erased by this operation
+            std::unordered_map<ui64, std::vector<std::tuple<ui64, ui32>>> Erases;
+
             std::map<ui64, TRope> DataParts;
             ui32 PartsCount;
-
+            std::vector<TPersistentBufferSectorInfo> OccupiedSectors;
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
             std::optional<TString> ErrorMessage = std::nullopt;
 
@@ -716,8 +735,14 @@ namespace NKikimr::NDDisk {
             TRope JoinData(ui32 sectorSize);
         };
 
+        struct TPersistentBufferEraseInflight {
+            ui64 EraseCookie;
+            std::vector<ui64> OperationsCookie;
+        };
+
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
         std::unordered_map<TPersistentBufferRecordId, std::vector<ui64>> PersistentBufferWriteInflightsByRecord;
+        std::unordered_map<TPersistentBufferRecordId, TPersistentBufferEraseInflight> PersistentBufferEraseInflightsByRecord;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
         std::vector<ui32> PersistentBufferChunks;
@@ -753,6 +778,10 @@ namespace NKikimr::NDDisk {
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);
         void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn);
+        void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, const TFastErase& fastErase);
+        void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
+        void HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
+        void HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie, bool resultStatus);
 
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);

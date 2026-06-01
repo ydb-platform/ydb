@@ -1,13 +1,15 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
+
+namespace {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -174,6 +176,7 @@ public:
 
 };
 
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
@@ -189,5 +192,4 @@ TAutoPtr<IGraphTransformer> CreateKqpRBOExplainPreparedTransformer(TIntrusivePtr
     return new TKqpRBOExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

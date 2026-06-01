@@ -465,6 +465,9 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (const TGetMasterConsistentStateOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ExitReadOnly, (NObjectClient::TCellId, const TExitReadOnlyOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, MasterExitReadOnly, (const TMasterExitReadOnlyOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, FreezeHydraPeer, (NHydra::TCellId, const std::string&, const TFreezeHydraPeerOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, TruncateChangelog, (NHydra::TCellId, const std::string&, const TTruncateChangelogOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, ScheduleRestart, (NHydra::TCellId, const std::string&, const TScheduleRestartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (const TResetDynamicallyPropagatedMasterCellsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (NObjectClient::TCellId, const TDiscombobulateNonvotingPeersOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SwitchLeader, (NObjectClient::TCellId, const std::string&, const TSwitchLeaderOptions&));

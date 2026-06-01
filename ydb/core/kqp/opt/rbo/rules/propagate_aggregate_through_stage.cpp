@@ -69,7 +69,7 @@ TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusiveP
         const auto& originalColName = originalTraits.OriginalColName;
         const auto& aggFunc = originalTraits.AggFunction;
         const auto& resultColName = originalTraits.ResultColName;
-        const auto newIntermediateName = TInfoUnit("_intermediate" + resultColName.GetFullName());
+        const auto newIntermediateName = TInfoUnit("_intermediate_" + resultColName.GetFullName());
         const auto [interAggFunc, finalAggFunc] = GetAggFunctions(aggFunc);
         intermediateTraits.emplace_back(originalColName, interAggFunc, newIntermediateName);
         finalTraits.emplace_back(newIntermediateName, finalAggFunc, resultColName);

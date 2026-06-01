@@ -10,6 +10,7 @@
 #include <ydb/core/security/certificate_check/cert_check.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/token_manager/token_manager.h>
+#include <ydb/core/security/util/counters.h>
 #include <ydb/core/security/util/net.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -2306,10 +2307,8 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::TICKET_PARSER_ACTOR; }
 
     void Bootstrap() {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = AppData()->Counters;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "auth");
-        NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "TicketParser");
-        GetDerived()->InitCounters(counters);
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ticketParserCounters = NSecurity::GetCountersForTicketParser(AppData()->Counters);
+        GetDerived()->InitCounters(ticketParserCounters);
 
         CreateServiceTokens();
 

@@ -1154,16 +1154,18 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     }
 
     for (auto &[kinds, subscription] : SubscriptionsByKinds) {
-        if (subscription->UpdateInProcess) {
-            subscription->UpdateInProcess = nullptr;
-            subscription->SubscribersToUpdate.clear();
-        }
-
         NKikimrConfig::TAppConfig trunc;
 
         bool hasAffectedKinds = false;
 
         if (subscription->Yaml && YamlConfigEnabled) {
+            if (!isYamlChanged && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
+                continue;
+            }
+            if (subscription->UpdateInProcess) {
+                subscription->UpdateInProcess = nullptr;
+                subscription->SubscribersToUpdate.clear();
+            }
             ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
@@ -1177,6 +1179,10 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 continue;
             }
 
+            if (subscription->UpdateInProcess) {
+                subscription->UpdateInProcess = nullptr;
+                subscription->SubscribersToUpdate.clear();
+            }
             ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, FilterKinds(kinds), BaseConfig);
         }
 

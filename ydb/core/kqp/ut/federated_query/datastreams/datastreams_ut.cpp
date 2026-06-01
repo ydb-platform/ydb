@@ -1137,6 +1137,36 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
     }
 
+    Y_UNIT_TEST_F(ReadSystemMetadataFields, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        constexpr char topicName[] = "inReadSystemMetadataFields";
+        CreateTopic(topicName, std::nullopt, true);
+
+        WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
+
+        auto results = ExecQuery(fmt::format(R"(
+            $input = SELECT
+                    CAST(SystemMetadata("partition_id") as String) as part_id,
+                    CAST(SystemMetadata("offset") as String) as offset,
+                    SystemMetadata("cluster") as cluster,
+                    value as value
+                FROM {topic} WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key Uint64 NOT NULL,
+                        value String NOT NULL
+                    )
+            );
+            SELECT part_id || "-" || offset || "-" || cluster || "-" || value FROM $input;)",
+            "topic"_a = topicName
+        ));
+        CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "0-0--value1");
+        });
+    }
+
     Y_UNIT_TEST_F(TableModeWithDisabledPredicatePushdown, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();

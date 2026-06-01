@@ -12,7 +12,7 @@
 
 #include <yt/yt/core/ytree/attributes.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/testing/common/network.h>
 
@@ -127,8 +127,8 @@ private:
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
     std::atomic<bool> TerminationFlag_ = false;
-    NThreading::TAtomicObject<TError> TerminationError_;
 
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     THashMap<std::pair<TString, TGuid>, TTestBusPtr> RequestToBus_;
 
     void HandleRequestResult(

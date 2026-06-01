@@ -368,6 +368,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+    , AvgQuotaMessages(TDuration::Minutes(1), 1000)
     , ReservedSize(0)
     , Channel(0)
     , NumChannels(numChannels)
@@ -508,6 +509,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(now);
     }
+    AvgQuotaMessages.Update(now);
 
     TryRunCompaction();
 
@@ -2103,6 +2105,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_GAPS_COUNT, gapsCount, METRIC_MAX_GAPS_COUNT);
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
@@ -2129,9 +2132,27 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
     PQ_ENSURE(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
 
+    ui64 bytesThrottledMicroseconds = 0;
+    ui64 messagesThrottledMicroseconds = 0;
+    bool hasWriteQuotaUsage = false;
+
     if (TotalPartitionWriteSpeed) {
-        ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, quotaUsage);
+        const ui64 avgQuotaBytes = AvgQuotaBytes[1].GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE, avgQuotaBytes);
+        bytesThrottledMicroseconds = avgQuotaBytes * 1000000 / TotalPartitionWriteSpeed / 60;
+        hasWriteQuotaUsage = true;
+    }
+
+    if (TotalPartitionWriteSpeedInMessages) {
+        const ui64 avgQuotaMessages = AvgQuotaMessages.GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, avgQuotaMessages);
+        messagesThrottledMicroseconds = avgQuotaMessages * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
+        hasWriteQuotaUsage = true;
+    }
+
+    if (hasWriteQuotaUsage) {
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE,
+            Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
     }
 
     ui64 storageSize = StorageSize(ctx);
@@ -3514,6 +3535,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     }
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+    TotalPartitionWriteSpeedInMessages = config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
 
     CreateCompacter();
     InitializeMLPConsumers();

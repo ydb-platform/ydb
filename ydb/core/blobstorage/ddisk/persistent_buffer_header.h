@@ -8,6 +8,7 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 HeaderChecksumOffset = 24;
         static constexpr ui32 HeaderChecksumSize = 8;
         static constexpr ui32 MaxBarriersPerHeader = 240;
+        static constexpr ui32 ErasesBufferSize = 3832;
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 
         struct TRecord {
@@ -30,9 +31,16 @@ namespace NKikimr::NDDisk {
             TBarrierRecord Barriers[MaxBarriersPerHeader];
         };
 
+        struct TErase {
+            ui64 TabletId;
+            ui32 EraseIdx;
+            char CompactLsns[ErasesBufferSize];
+        };
+
         enum EFlags : ui64 {
             NONE = 0,
             IS_BARRIER = 1,
+            IS_ERASE = 2,
         };
 
         ui8 Signature[16];
@@ -48,6 +56,7 @@ namespace NKikimr::NDDisk {
         union {
             TRecord Record;
             TBarrier Barrier;
+            TErase Erase;
         };
 
         ui32 Reserved[45];

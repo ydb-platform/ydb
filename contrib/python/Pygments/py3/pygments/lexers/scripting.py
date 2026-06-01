@@ -4,7 +4,7 @@
 
     Lexer for scripting and embedded languages.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -59,6 +59,12 @@ class LuaLexer(RegexLexer):
     _comment_single = r'(?:--.*$)'
     _space = r'(?:\s+(?!\s))'
     _s = rf'(?:{_comment_multiline}|{_comment_single}|{_space})'
+    # A lookahead-safe version of _s that avoids catastrophic backtracking.
+    # The _comment_multiline pattern contains [\w\W]*? which, when used
+    # inside a lookahead with a * quantifier, causes exponential blowup.
+    # This version skips only whitespace; comments between an identifier
+    # and a following [.:] or ( are rare enough to sacrifice.
+    _s_la = r'\s'
     _name = r'(?:[^\W\d]\w*)'
 
     tokens = {
@@ -100,8 +106,8 @@ class LuaLexer(RegexLexer):
             (r'(function)\b', Keyword.Reserved, 'funcname'),
 
             (words(all_lua_builtins(), suffix=r"\b"), Name.Builtin),
-            (fr'[A-Za-z_]\w*(?={_s}*[.:])', Name.Variable, 'varname'),
-            (fr'[A-Za-z_]\w*(?={_s}*\()', Name.Function),
+            (fr'[A-Za-z_]\w*(?={_s_la}*[.:])', Name.Variable, 'varname'),
+            (fr'[A-Za-z_]\w*(?={_s_la}*\()', Name.Function),
             (r'[A-Za-z_]\w*', Name.Variable),
 
             ("'", String.Single, combined('stringescape', 'sqs')),
@@ -112,15 +118,15 @@ class LuaLexer(RegexLexer):
             include('ws'),
             (r'\.\.', Operator, '#pop'),
             (r'[.:]', Punctuation),
-            (rf'{_name}(?={_s}*[.:])', Name.Property),
-            (rf'{_name}(?={_s}*\()', Name.Function, '#pop'),
+            (rf'{_name}(?={_s_la}*[.:])', Name.Property),
+            (rf'{_name}(?={_s_la}*\()', Name.Function, '#pop'),
             (_name, Name.Property, '#pop'),
         ],
 
         'funcname': [
             include('ws'),
             (r'[.:]', Punctuation),
-            (rf'{_name}(?={_s}*[.:])', Name.Class),
+            (rf'{_name}(?={_s_la}*[.:])', Name.Class),
             (_name, Name.Function, '#pop'),
             # inline function
             (r'\(', Punctuation, '#pop'),
@@ -180,7 +186,7 @@ class LuaLexer(RegexLexer):
                 continue
             yield index, token, value
 
-def _luau_make_expression(should_pop, _s):
+def _luau_make_expression(should_pop, _s, _s_la):
     temp_list = [
         (r'0[xX][\da-fA-F_]*', Number.Hex, '#pop'),
         (r'0[bB][\d_]*', Number.Bin, '#pop'),
@@ -195,7 +201,7 @@ def _luau_make_expression(should_pop, _s):
         (r'(\.)([a-zA-Z_]\w*)(?=%s*[({"\'])', bygroups(Punctuation, Name.Function), '#pop'),
         (r'(\.)([a-zA-Z_]\w*)', bygroups(Punctuation, Name.Variable), '#pop'),
 
-        (rf'[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*(?={_s}*[({{"\'])', Name.Other, '#pop'),
+        (rf'[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*(?={_s_la}*[({{"\'])', Name.Other, '#pop'),
         (r'[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*', Name, '#pop'),
     ]
     if should_pop:
@@ -244,6 +250,9 @@ class LuauLexer(RegexLexer):
     _comment_multiline = r'(?:--\[(?P<level>=*)\[[\w\W]*?\](?P=level)\])'
     _comment_single = r'(?:--.*$)'
     _s = r'(?:{}|{}|{})'.format(_comment_multiline, _comment_single, r'\s+')
+    # Lookahead-safe version — avoids catastrophic backtracking from
+    # [\w\W]*? inside _comment_multiline when combined with * quantifier.
+    _s_la = r'\s'
 
     tokens = {
         'root': [
@@ -283,7 +292,7 @@ class LuauLexer(RegexLexer):
             (r'[\])};]+', Punctuation),
 
             include('expression_static'),
-            *_luau_make_expression(False, _s),
+            *_luau_make_expression(False, _s, _s_la),
 
             (r'[\[.,]', Punctuation, 'expression'),
         ],
@@ -305,7 +314,7 @@ class LuauLexer(RegexLexer):
             (r'function\b', Keyword.Reserved, 'func_name'),
 
             include('expression_static'),
-            *_luau_make_expression(True, _s),
+            *_luau_make_expression(True, _s, _s_la),
 
             default('#pop'),
         ],
@@ -381,7 +390,7 @@ class LuauLexer(RegexLexer):
             include('ws'),
 
             (r'[.:]', Punctuation),
-            (rf'[a-zA-Z_]\w*(?={_s}*[.:])', Name.Class),
+            (rf'[a-zA-Z_]\w*(?={_s_la}*[.:])', Name.Class),
             (r'[a-zA-Z_]\w*', Name.Function),
 
             (r'<', Punctuation, 'closing_gt_type'),
@@ -546,13 +555,26 @@ class MoonScriptLexer(LuaLexer):
         'stringescape': [
             (r'''\\([abfnrtv\\"']|\d{1,3})''', String.Escape)
         ],
-        'sqs': [
-            ("'", String.Single, '#pop'),
-            ("[^']+", String)
+        'strings': [
+            (r'[^#\\\'"]+', String),
+            # note that strings are multi-line.
+            # hashmarks, quotes and backslashes must be parsed one at a time
+        ],
+        'interpoling_string': [
+            (r'\}', String.Interpol, "#pop"),
+            include('base')
         ],
         'dqs': [
-            ('"', String.Double, '#pop'),
-            ('[^"]+', String)
+            (r'"', String.Double, '#pop'),
+            (r'\\.|\'', String),  # double-quoted string don't need ' escapes
+            (r'#\{', String.Interpol, "interpoling_string"),
+            (r'#', String),
+            include('strings')
+        ],
+        'sqs': [
+            (r"'", String.Single, '#pop'),
+            (r'#|\\.|"', String),  # single quoted strings don't need " escapses
+            include('strings')
         ]
     }
 

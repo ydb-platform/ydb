@@ -1,6 +1,8 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -156,7 +158,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         .Done();
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlDeleteRowsIndex>()) {

@@ -7,7 +7,7 @@
 
     Run with `python -I` to regenerate.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -3254,7 +3254,7 @@ if __name__ == '__main__':  # pragma: no cover
     import tarfile
     from urllib.request import urlretrieve
 
-    PHP_MANUAL_URL     = 'http://us3.php.net/distributions/manual/php_manual_en.tar.gz'
+    PHP_MANUAL_URL     = 'https://us3.php.net/distributions/manual/php_manual_en.tar.gz'
     PHP_MANUAL_DIR     = './php-chunked-xhtml/'
     PHP_REFERENCE_GLOB = 'ref.*'
     PHP_FUNCTION_RE    = r'<a href="function\..*?\.html">(.*?)</a>'
@@ -3298,7 +3298,10 @@ if __name__ == '__main__':  # pragma: no cover
     def get_php_references():
         download = urlretrieve(PHP_MANUAL_URL)
         with tarfile.open(download[0]) as tar:
-            tar.extractall()
+            if hasattr(tarfile.TarFile, 'extraction_filter'):
+                tar.extractall(filter='data')
+            else:
+                tar.extractall()
         yield from glob.glob(f"{PHP_MANUAL_DIR}{PHP_REFERENCE_GLOB}")
         os.remove(download[0])
 
@@ -3318,7 +3321,7 @@ if __name__ == '__main__':  # pragma: no cover
         print('>> Downloading Function Index')
         modules = get_php_functions()
         total = sum(len(v) for v in modules.values())
-        print('%d functions found' % total)
+        print(f'{total} functions found')
         regenerate(__file__, modules)
         shutil.rmtree(PHP_MANUAL_DIR)
 

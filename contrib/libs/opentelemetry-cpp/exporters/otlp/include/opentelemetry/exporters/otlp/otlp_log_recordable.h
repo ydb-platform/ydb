@@ -35,8 +35,6 @@ namespace otlp
 class OtlpLogRecordable final : public opentelemetry::sdk::logs::Recordable
 {
 public:
-  ~OtlpLogRecordable() override = default;
-
   proto::logs::v1::LogRecord &log_record() noexcept { return proto_record_; }
   const proto::logs::v1::LogRecord &log_record() const noexcept { return proto_record_; }
 

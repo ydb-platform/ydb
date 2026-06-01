@@ -1,28 +1,29 @@
-import logging
 import itertools
-from typing import Generator, Sequence, Tuple
+import logging
+from collections.abc import Generator, Sequence
 
-from clickhouse_connect.driver.common import empty_gen, StreamContext
+from clickhouse_connect.driver import options
+from clickhouse_connect.driver.common import StreamContext, empty_gen
 from clickhouse_connect.driver.exceptions import StreamClosedError
 from clickhouse_connect.driver.types import Closable
-from clickhouse_connect.driver import options
 
 logger = logging.getLogger(__name__)
 
 
-# pylint: disable=too-many-instance-attributes
 class NumpyResult(Closable):
-    def __init__(self,
-                 block_gen: Generator[Sequence, None, None] = None,
-                 column_names: Tuple = (),
-                 column_types: Tuple = (),
-                 d_types: Sequence = (),
-                 source: Closable = None):
+    def __init__(
+        self,
+        block_gen: Generator[Sequence, None, None] = None,
+        column_names: tuple = (),
+        column_types: tuple = (),
+        d_types: Sequence = (),
+        source: Closable = None,
+    ):
         self.column_names = column_names
         self.column_types = column_types
         self.np_types = d_types
         self.source = source
-        self.query_id = ''
+        self.query_id = ""
         self.summary = {}
         self._block_gen = block_gen or empty_gen()
         self._numpy_result = None
@@ -101,9 +102,9 @@ class NumpyResult(Closable):
         chains = [chain(b) for b in zip(*bg)]
         new_df_series = []
         for c in chains:
-            series = [options.pd.Series(piece, copy=False) for piece in c if len(piece) > 0]
+            series = [options.pd.Series(piece) for piece in c if len(piece) > 0]
             if len(series) > 0:
-                new_df_series.append(options.pd.concat(series, copy=False, ignore_index=True))
+                new_df_series.append(options.pd.concat(series, ignore_index=True))
         self._df_result = options.pd.DataFrame(dict(zip(self.column_names, new_df_series)))
         self.close()
         return self

@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     describe_tool.cpp
+    docs_search_tool.cpp
     exec_query_tool.cpp
     exec_shell_tool.cpp
     explain_query_tool.cpp
@@ -12,8 +13,12 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/yaml-cpp
+    library/cpp/archive
     library/cpp/colorizer
     library/cpp/json/writer
+    library/cpp/resource
+    library/cpp/yaml/as
     ydb/library/yverify_stream
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/commands/interactive/common
@@ -24,4 +29,12 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
 )
 
+IF(YDB_CLI_AI_INCLUDE_DOCS)
+    INCLUDE(${ARCADIA_ROOT}/ydb/public/lib/ydb_cli/commands/interactive/ai/tools/docs_generate/ya.make.inc)
+ENDIF()
+
 END()
+
+RECURSE(
+    docs_generate
+)

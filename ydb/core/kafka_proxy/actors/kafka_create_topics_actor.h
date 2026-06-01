@@ -1,5 +1,6 @@
 #include "actors.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -14,12 +15,12 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
-    void Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(const NKikimr::NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev);
     void Reply(const TActorContext& ctx);
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvKafka::TEvTopicModificationResponse, Handle);
+            hFunc(NKikimr::NPQ::NSchema::TEvCreateTopicResponse, Handle);
         }
     }
 

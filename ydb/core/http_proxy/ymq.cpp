@@ -91,7 +91,6 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
@@ -155,7 +154,7 @@ namespace NKikimr::NHttpProxy {
                 const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
 
                 ReplyToHttpContext({
-                    .HttpCode = httpCode,
+                    .HttpCode = static_cast<ui32>(httpCode),
                     .ContentType = HttpContext.ContentType,
                     .Message = errorName,
                     .Body = NSQS::Serialize(HttpContext.ContentType, {
@@ -422,14 +421,12 @@ namespace NKikimr::NHttpProxy {
 
         private:
             TInstant StartTime;
-            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
             ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
-            THolder<NThreading::TFuture<void>> DiscoveryFuture;
             TProtoCall ProtoCall;
             TString Method;
             std::function<TString(TProtoRequest&)> QueueUrlExtractor;
@@ -501,7 +498,7 @@ namespace NKikimr::NHttpProxy {
             THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
-                    .HttpCode = httpCode,
+                    .HttpCode = static_cast<ui32>(httpCode),
                     .ContentType = contentType,
                     .Message = errorName,
                     .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{

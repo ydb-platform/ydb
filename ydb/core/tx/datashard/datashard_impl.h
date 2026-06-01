@@ -42,7 +42,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -1481,10 +1481,6 @@ class TDataShard
     void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev);
-
-    void HandleInactive(TEvents::TEvUndelivered::TPtr& ev);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -3213,9 +3209,7 @@ private:
     TIntrusiveList<TGlobalTxIdAwaiter> GlobalTxIdAwaiters;
     TVector<ui64> GlobalTxIdCache;
 
-    // If value is un-set then wait in StateInactive.
-    // Also it's fine if value is set and nullptr - it means: don't use the read factory.
-    std::optional<NKqp::NScheduler::TSchedulableReadFactoryPtr> SchedulableReadFactory;
+    NKqp::NScheduler::TSchedulableReadFactoryPtr SchedulableReadFactory;
 
 public:
     struct TBreakerInfo {
@@ -3315,8 +3309,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
-            hFunc(NKqp::NScheduler::TEvReadFactoryResponse, Handle);
-            hFunc(TEvents::TEvUndelivered, HandleInactive);
+            HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_COMP_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event",
@@ -3466,7 +3459,6 @@ protected:
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
-            IgnoreFunc(NKqp::NScheduler::TEvReadFactoryResponse); // ignore self-scheduled fail-safe response from previous stage
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     YDB_LOG_COMP_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event",

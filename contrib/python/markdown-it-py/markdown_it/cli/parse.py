@@ -21,6 +21,8 @@ def main(args: Sequence[str] | None = None) -> int:
     namespace = parse_args(args)
     if namespace.filenames:
         convert(namespace.filenames)
+    elif namespace.stdin:
+        convert_stdin()
     else:
         interactive()
     return 0
@@ -29,6 +31,18 @@ def main(args: Sequence[str] | None = None) -> int:
 def convert(filenames: Iterable[str]) -> None:
     for filename in filenames:
         convert_file(filename)
+
+
+def convert_stdin() -> None:
+    """
+    Parse a Markdown file and dump the output to stdout.
+    """
+    try:
+        rendered = MarkdownIt().render(sys.stdin.read())
+        print(rendered, end="")
+    except OSError:
+        sys.stderr.write("Cannot parse Markdown from the standard input.\n")
+        sys.exit(1)
 
 
 def convert_file(filename: str) -> None:
@@ -94,6 +108,9 @@ Batch:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("-v", "--version", action="version", version=version_str)
+    parser.add_argument(
+        "--stdin", action="store_true", help="read Markdown from standard input"
+    )
     parser.add_argument(
         "filenames", nargs="*", help="specify an optional list of files to convert"
     )

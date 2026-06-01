@@ -4,7 +4,7 @@
 
     Lexers for HTML, XML and related markup.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -202,7 +202,7 @@ class XmlLexer(RegexLexer):
     name = 'XML'
     aliases = ['xml']
     filenames = ['*.xml', '*.xsl', '*.rss', '*.xslt', '*.xsd',
-                 '*.wsdl', '*.wsf']
+                 '*.wsdl', '*.wsf', '*.xbrl', '*.pom']
     mimetypes = ['text/xml', 'application/xml', 'image/svg+xml',
                  'application/rss+xml', 'application/atom+xml']
     url = 'https://www.w3.org/XML'

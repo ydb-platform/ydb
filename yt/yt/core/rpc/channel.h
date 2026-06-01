@@ -104,7 +104,7 @@ struct IChannel
     /*!
      *  \param request A request to send.
      *  \param responseHandler An object that will handle a response.
-     *  \param timeout Request processing timeout.
+     *  \param options Request send options.
      *  \returns an object controlling the lifetime of the request;
      *  the latter could be |nullptr| if no control is supported by the implementation in general
      *  or for this particular request.

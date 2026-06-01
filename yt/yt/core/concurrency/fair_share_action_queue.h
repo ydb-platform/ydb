@@ -19,7 +19,7 @@ struct IFairShareActionQueue
 {
     virtual const IInvokerPtr& GetInvoker(int index) = 0;
 
-    virtual void Reconfigure(const THashMap<TString, double>& newBucketWeights) = 0;
+    virtual void Reconfigure(const THashMap<std::string, double>& newBucketWeights) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IFairShareActionQueue)
@@ -28,8 +28,8 @@ DEFINE_REFCOUNTED_TYPE(IFairShareActionQueue)
 
 IFairShareActionQueuePtr CreateFairShareActionQueue(
     std::string threadName,
-    const std::vector<TString>& queueNames,
-    const THashMap<TString, std::vector<TString>>& bucketToQueues = {},
+    const std::vector<std::string>& queueNames,
+    const THashMap<std::string, std::vector<std::string>>& bucketToQueues = {},
     NThreading::TThreadOptions threadOptions = {},
     NProfiling::IRegistryPtr registry = {});
 
@@ -41,7 +41,7 @@ struct IEnumIndexedFairShareActionQueue
 {
     virtual const IInvokerPtr& GetInvoker(EQueue queue) = 0;
 
-    virtual void Reconfigure(const THashMap<TString, double>& newBucketWeights) = 0;
+    virtual void Reconfigure(const THashMap<std::string, double>& newBucketWeights) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -51,7 +51,7 @@ struct TQuantizedExecutorOptions
 };
 
 IQuantizedExecutorPtr CreateQuantizedExecutor(
-    TString name,
+    std::string name,
     ICallbackProviderPtr callbackProvider,
     TQuantizedExecutorOptions options = {});
 

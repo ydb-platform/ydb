@@ -584,7 +584,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
         const NKikimrScheme::TEvModifySchemeTransactionResult* shardResult,
         const NYql::TIssue* issue,
-        const TActorContext& ctx)
+        const TActorContext& ctx,
+        const TString& path = {})
     {
         auto *result = new TEvTxUserProxy::TEvProposeTransactionStatus(status);
         if (issue) {
@@ -627,7 +628,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
                     // (xenoxeno) for compatibility with KQP and maybe others...
                     result->Record.SetSchemeShardStatus(NKikimrScheme::EStatus::StatusPathDoesNotExist);
-                    result->Record.SetSchemeShardReason("Path does not exist");
+                    if (path) {
+                        result->Record.SetSchemeShardReason(TStringBuilder() << "Path `" << path << "` does not exist");
+                    } else {
+                        result->Record.SetSchemeShardReason("Path does not exist");
+                    }
                     break;
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
                     result->Record.SetSchemeShardStatus(NKikimrScheme::EStatus::StatusNotAvailable);
@@ -1298,12 +1303,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                 TxProxyMon->ResolveKeySetWrongRequest->Inc();
-                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, nullptr, ctx, CanonizePath(entry.Path));
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
                 TxProxyMon->ResolveKeySetWrongRequest->Inc();
-                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, nullptr, ctx, CanonizePath(entry.Path));
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
@@ -1314,7 +1319,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
                 TxProxyMon->ResolveKeySetFail->Inc();
-                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, nullptr, ctx, CanonizePath(entry.Path));
                 break;
             }
 

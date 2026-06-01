@@ -1,8 +1,9 @@
-#include <ydb/core/base/table_index.h>
-#include <ydb/core/base/fulltext.h>
-
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
+
+#include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
@@ -92,7 +93,7 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
         .Done();
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlInsertRowsIndex>()) {

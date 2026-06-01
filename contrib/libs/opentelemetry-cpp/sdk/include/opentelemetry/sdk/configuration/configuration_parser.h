@@ -17,6 +17,12 @@
 #include "opentelemetry/sdk/configuration/boolean_array_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/boolean_attribute_value_configuration.h"
 #include "opentelemetry/sdk/configuration/cardinality_limits_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_always_off_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_always_on_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_parent_threshold_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_probability_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_rule_based_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/composable_sampler_configuration.h"
 #include "opentelemetry/sdk/configuration/configuration.h"
 #include "opentelemetry/sdk/configuration/console_log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/console_push_metric_exporter_configuration.h"
@@ -310,6 +316,42 @@ public:
       size_t depth) const;
 
   std::unique_ptr<TraceIdRatioBasedSamplerConfiguration> ParseTraceIdRatioBasedSamplerConfiguration(
+      const std::unique_ptr<DocumentNode> &node,
+      size_t depth) const;
+
+  std::unique_ptr<ComposableAlwaysOffSamplerConfiguration>
+  ParseComposableAlwaysOffSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                               size_t depth) const;
+
+  std::unique_ptr<ComposableAlwaysOnSamplerConfiguration>
+  ParseComposableAlwaysOnSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                              size_t depth) const;
+
+  std::unique_ptr<ComposableProbabilitySamplerConfiguration>
+  ParseComposableProbabilitySamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                                 size_t depth) const;
+
+  std::unique_ptr<ComposableParentThresholdSamplerConfiguration>
+  ParseComposableParentThresholdSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                                     size_t depth) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerRuleAttributeValuesConfiguration>
+  ParseComposableRuleBasedSamplerRuleAttributeValuesConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerRuleAttributePatternsConfiguration>
+  ParseComposableRuleBasedSamplerRuleAttributePatternsConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerRuleConfiguration>
+  ParseComposableRuleBasedSamplerRuleConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                                   size_t depth) const;
+
+  std::unique_ptr<ComposableRuleBasedSamplerConfiguration>
+  ParseComposableRuleBasedSamplerConfiguration(const std::unique_ptr<DocumentNode> &node,
+                                               size_t depth) const;
+
+  std::unique_ptr<ComposableSamplerConfiguration> ParseComposableSamplerConfiguration(
       const std::unique_ptr<DocumentNode> &node,
       size_t depth) const;
 

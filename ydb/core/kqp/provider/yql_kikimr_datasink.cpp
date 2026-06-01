@@ -1,14 +1,17 @@
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/services/metadata/optimization/abstract.h>
 
 namespace NYql {
 
@@ -16,8 +19,6 @@ namespace {
 
 using namespace NKikimr;
 using namespace NNodes;
-
-namespace {
 
 bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     THashSet<TStringBuf> columnNames;
@@ -43,8 +44,6 @@ bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
 
     return hasIntersection;
 }
-
-} // namespace
 
 class TKiSinkIntentDeterminationTransformer: public TKiSinkVisitorTransformer {
 public:
@@ -1918,7 +1917,7 @@ private:
     const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
 };
 
-} // namespace
+} // anonymous namespace
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;

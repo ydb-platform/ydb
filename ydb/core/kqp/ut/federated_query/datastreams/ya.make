@@ -14,6 +14,7 @@ ENDIF()
 SRCS(
     common.cpp
     datastreams_ut.cpp
+    datastreams_table_mode_ut.cpp
     streaming_ddl_ut.cpp
     streaming_sys_view_ut.cpp
 )

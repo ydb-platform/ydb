@@ -344,6 +344,17 @@ TEST(THttpOutputTest, Full)
             }
         },
         TTestCase{
+            EMessageType::Request,
+            "GET /v1/submissions/spytConnectServer HTTP/1.1\r\n"
+            "Host: [2a02:6b8:c10:faf:0:f408:0:5]:27003\r\n"
+            "\r\n",
+            [] (THttpOutput* out) {
+                out->SetHost("2a02:6b8:c10:faf:0:f408:0:5", "27003");
+                out->WriteRequest(EMethod::Get, "/v1/submissions/spytConnectServer");
+                FinishBody(out);
+            }
+        },
+        TTestCase{
             EMessageType::Response,
             "HTTP/1.1 200 OK\r\n"
             "Content-Length: 0\r\n"

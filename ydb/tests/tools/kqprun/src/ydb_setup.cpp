@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
 #include <ydb/services/persqueue_v1/services_initializer.h>
@@ -380,7 +380,8 @@ private:
         serverSettings
             .SetNodeCount(Settings_.NodeCount)
             .SetDataCenterCount(Settings_.DcCount)
-            .SetPqGateway(Settings_.PqGateway);
+            .SetPqGateway(Settings_.PqGateway)
+            .SetDataShardExportFactory(Settings_.DataShardExportFactory);
 
         serverSettings.StoragePoolTypes.clear();
         serverSettings.AddStoragePool("test", TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << ":test", Settings_.StorageGroupCount);

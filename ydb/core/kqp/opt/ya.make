@@ -36,6 +36,7 @@ PEERDIR(
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
+    ydb/library/json_index
 )
 
 YQL_LAST_ABI_VERSION()

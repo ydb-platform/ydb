@@ -31,6 +31,7 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(
                 source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()), true));
     const ui32 filteredRows = filter.GetFilteredCount().value_or(source->GetRecordsCount());
     source->MutableStageData().AddFilter(filter);
+    source->GetContext()->GetCommonContext()->GetCounters().OnPredicateFilterInvocation();
     ReportTracing(source, step, filteredRows);
     return true;
 }

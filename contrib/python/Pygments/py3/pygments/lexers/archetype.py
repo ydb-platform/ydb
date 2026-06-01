@@ -9,7 +9,7 @@
     Contributed by Thomas Beale <https://github.com/wolandscat>,
     <https://bitbucket.org/thomas_beale>.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -35,8 +35,8 @@ class AtomsLexer(RegexLexer):
             (r'([ \t]*)(--.*)$', bygroups(Whitespace, Comment)),
         ],
         'archetype_id': [
-            (r'([ \t]*)(([a-zA-Z]\w+(\.[a-zA-Z]\w+)*::)?[a-zA-Z]\w+(-[a-zA-Z]\w+){2}'
-             r'\.\w+[\w-]*\.v\d+(\.\d+){,2}((-[a-z]+)(\.\d+)?)?)',
+            (r'([ \t]*)(([a-zA-Z]\w{1,100}(\.[a-zA-Z]\w{1,100})*::)?[a-zA-Z]\w{1,100}(-[a-zA-Z]\w{1,100}){2}'
+             r'\.\w{1,100}[\w-]*\.v\d+(\.\d+){,2}((-[a-z]+)(\.\d+)?)?)',
              bygroups(Whitespace, Name.Decorator)),
         ],
         'date_constraints': [
@@ -293,7 +293,7 @@ class AdlLexer(AtomsLexer):
             # numbers and version ids
             (r'\d+(\.\d+)*', Literal),
             # Guids
-            (r'(\d|[a-fA-F])+(-(\d|[a-fA-F])+){3,}', Literal),
+            (r'[0-9a-fA-F]{1,36}(-[0-9a-fA-F]{1,36}){3,}', Literal),
             (r'\w+', Name.Class),
             (r'"', String, 'string'),
             (r'=', Operator),

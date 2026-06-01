@@ -339,8 +339,7 @@ void TDataShardUserDb::InsertFulltext(
     auto txObserver = GetReadTxObserver(tableId);
     InvisibleRowSkips = 0;
 
-    NFulltext::TDeltaReader reader;
-    reader.Reset(0, rowSegment, withRelevance, UINT64_MAX);
+    NFulltext::TDeltaReader reader(rowSegment, withRelevance);
 
     ui64 maxGen = UINT64_MAX;
     auto insertSegments = [&](bool unlimited, ui64 lastMaxId, ui64 lastGen, bool added, NFulltext::IDeltaReader& reader) {
@@ -442,7 +441,7 @@ void TDataShardUserDb::InsertFulltext(
             auto rowValues = iter->GetValues().Cells();
             auto nextAdded = rowValues[0].AsValue<bool>();
             segments.emplace_back((const ui8*)rowValues[1].Data(), (const ui8*)rowValues[1].Data() + rowValues[1].Size());
-            merger.Add(nextAdded, 0, segments[segments.size()-1], UINT64_MAX);
+            merger.Add(nextAdded, segments[segments.size()-1]);
             UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, NStreamScan::MakeKey(existingKey, userTable.KeyColumnTypes), {}, userCtx);
             ui64 keyBytes = CalculateKeyBytes(existingKey);
             Counters.NEraseRow++;
@@ -454,8 +453,7 @@ void TDataShardUserDb::InsertFulltext(
     ui64 docId = 0;
     ui32 freq = 0;
     ui64 zero = 0;
-    ui64 lastId = 0;
-    size_t lastPos = 0;
+    reader.Save();
     while (reader.Read(docId, freq)) {
         ui64 maxId = 0, gen = 0;
         auto minKey = TVector<const TRawTypeValue>{
@@ -470,10 +468,9 @@ void TDataShardUserDb::InsertFulltext(
             // Copy the rest of reader to new segment(s)
             // The last new segment should have maxid == endMaxId and gen = endGen
             // Previous new segments should have maxid < endMaxId and gen == UINT64_MAX
-            reader.Reset(lastId, rowSegment.Slice(lastPos), withRelevance, UINT64_MAX);
+            reader.Restore();
             insertSegments(false, endMaxId, endGen, rowAdded, reader);
-            lastPos += reader.GetPos();
-            lastId = reader.GetLastId();
+            reader.Save();
             continue;
         }
         maxGen = (maxId == endMaxId ? endGen : UINT64_MAX);
@@ -482,6 +479,8 @@ void TDataShardUserDb::InsertFulltext(
         while (reader.Read(docId, freq) && docId <= maxId) {
             count++;
         }
+        reader.Restore();
+        reader.SetMaxId(maxId);
         gen = gen-count-gFulltextSegmentPenalty;
         if (gen <= maxGen-gFulltextMaxDelta) {
             // Amount of changes exceeded the limit
@@ -489,7 +488,7 @@ void TDataShardUserDb::InsertFulltext(
             TVector<TVector<ui8>> segments;
             NFulltext::TMultiDeltaReader merger;
             merger.Reset(withRelevance);
-            merger.Add(rowAdded, lastId, rowSegment.Slice(lastPos), maxId);
+            merger.Add(rowAdded, &reader);
             if (!scanMaxId(maxId, minKey, segments, merger)) {
                 return;
             }
@@ -498,17 +497,13 @@ void TDataShardUserDb::InsertFulltext(
             // All previous new segments should have maxid < maxId and gen == UINT64_MAX
             merger.Start();
             insertSegments(false, maxId, maxGen, true, merger);
-            lastPos += merger.GetPos(0);
-            lastId = merger.GetLastId(0);
         } else {
             // Copy from reader to a single new segment up to maxId
             // The new segment should have maxid == maxId and gen == gen
-            reader.Reset(lastId, rowSegment.Slice(lastPos), withRelevance, maxId);
             insertSegments(true/*unlimited*/, maxId, gen, rowAdded, reader);
-            lastPos += reader.GetPos();
-            lastId = reader.GetLastId();
+            reader.Save();
         }
-        reader.Reset(lastId, rowSegment.Slice(lastPos), withRelevance, maxId);
+        reader.SetMaxId(UINT64_MAX);
     }
 }
 

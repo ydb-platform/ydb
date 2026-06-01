@@ -343,20 +343,14 @@ protected:
             // and all their ranges are unique, so we can just concatenate all lists by token
             Y_ENSURE(row[0].AsValue<bool>());
             TConstArrayRef<ui8> inBuf((ui8*)row[1].AsBuf().data(), row[1].AsBuf().size());
-            size_t inPos = 0;
-            ui64 maxId = 0;
-            while (true) {
-                auto prev = Delta.GetCount();
-                inPos += Delta.AddCompressed(maxId, inBuf.Slice(inPos), MaxSegmentDocuments);
-                LastTokenRows += (Delta.GetCount() - prev);
-                if (inPos < inBuf.size()) {
-                    if (inPos > 0) {
-                        // Save maxId to resume delta stream from the middle
-                        maxId = Delta.GetMaxId();
-                    }
+            TDeltaReader rdr(inBuf, WithFreq);
+            ui64 docId = 0;
+            ui32 freq = 0;
+            while (rdr.Read(docId, freq)) {
+                LastTokenRows++;
+                Delta.Add(docId, freq);
+                if (Delta.GetCount() >= MaxSegmentDocuments) {
                     UploadSegment(false);
-                } else {
-                    break;
                 }
             }
         }

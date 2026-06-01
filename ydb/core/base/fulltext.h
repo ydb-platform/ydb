@@ -30,16 +30,13 @@ class TDeltaWriter {
     ui64 MinId = 0;
     ui64 MaxId = 0;
     ui64 Count = 0;
-    ui64 TotalFreq = 0;
     bool WithFreq = false;
 public:
     void Reset(bool withFreq);
     void Add(ui64 DocId, ui32 Freq);
-    size_t AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, size_t maxSize);
     ui64 GetMinId() const;
     ui64 GetMaxId() const;
     ui64 GetCount() const;
-    ui64 GetTotalFreq() const;
     TConstArrayRef<ui8> GetBuf() const;
 };
 
@@ -54,17 +51,22 @@ class TDeltaReader: public IDeltaReader {
     size_t Pos = 0;
     ui64 LastId = 0;
     bool WithFreq = false;
-    ui64 MaxId = 0;
+    ui64 MaxId = UINT64_MAX;
+    size_t SavedPos = 0;
+    ui64 SavedLastId = 0;
 public:
-    void Reset(ui64 firstId, TConstArrayRef<ui8> buf, bool withFreq, ui64 maxId);
+    TDeltaReader(TConstArrayRef<ui8> buf, bool withFreq);
     bool Read(ui64& docId, ui32& freq) override;
     size_t GetPos() const;
     ui64 GetLastId() const;
+    void Save();
+    void Restore();
+    void SetMaxId(ui64 maxId);
 };
 
 class TMultiDeltaReader: public IDeltaReader {
     struct TReaderRef {
-        TDeltaReader Reader;
+        TDeltaReader *Reader;
         bool Added = false;
     };
     struct TItem {
@@ -72,6 +74,7 @@ class TMultiDeltaReader: public IDeltaReader {
         i32 Freq = 0;
         ui32 RdrId = 0;
     };
+    TVector<std::unique_ptr<TDeltaReader>> OwnedReaders;
     TVector<TReaderRef> Readers;
     TVector<TItem> Items;
     TItem NextItem = { 0, 0, 0 };
@@ -85,11 +88,10 @@ class TMultiDeltaReader: public IDeltaReader {
     void SelectNext();
 public:
     void Reset(bool withFreq);
-    void Add(bool added, ui64 firstId, TConstArrayRef<ui8> buf, ui64 maxId);
+    void Add(bool added, TDeltaReader* rdr);
+    void Add(bool added, TConstArrayRef<ui8> buf);
     void Start();
     bool Read(ui64& docId, ui32& freq);
-    size_t GetPos(size_t n) const;
-    ui64 GetLastId(size_t n) const;
 };
 
 }

@@ -40,8 +40,9 @@ public:
         Response->Record.MutableResponse()->add_config(Self->MainYamlConfig);
 
         for (const auto& [database, config] : Self->DatabaseYamlConfigs) {
-            Response->Record.MutableResponse()->add_identity()->set_database(database);
-            Response->Record.MutableResponse()->add_identity()->set_version(config.Version);
+            auto& dbIdentity = *Response->Record.MutableResponse()->add_identity();
+            dbIdentity.set_database(database);
+            dbIdentity.set_version(config.Version);
             Response->Record.MutableResponse()->add_config(config.Config);
         }
 

@@ -2273,9 +2273,26 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     ClusterInfo->SetPriorityToCheck(request.Priority);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
-    if (rec.HasMaxPermissions()) {
+
+    if (auto mit = State->MaintenanceRequests.find(rec.GetRequestId());
+        mit != State->MaintenanceRequests.end())
+    {
+        const auto &task = State->MaintenanceTasks.at(mit->second);
+        if (task.MaxInflightActions > 0) {
+            const ui32 aliveCount = task.Permissions.size();
+            const ui32 quota = task.MaxInflightActions > aliveCount
+                ? task.MaxInflightActions - aliveCount
+                : 0;
+            request.Request.SetMaxPermissions(quota);
+        } else {
+            request.Request.ClearMaxPermissions();
+        }
+    } else if (rec.HasMaxPermissions()) {
         request.Request.SetMaxPermissions(rec.GetMaxPermissions());
+    } else {
+        request.Request.ClearMaxPermissions();
     }
+
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, rec.GetRequestId(), ctx);
     ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();

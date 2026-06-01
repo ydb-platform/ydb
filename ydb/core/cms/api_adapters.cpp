@@ -828,14 +828,6 @@ public:
         cmsRequest->Record.SetRequestId(task.RequestId);
         cmsRequest->Record.SetAvailabilityMode(request.Request.GetAvailabilityMode());
 
-        if (task.MaxInflightActions > 0) {
-            const ui32 aliveCount = static_cast<ui32>(task.Permissions.size());
-            const ui32 quota = task.MaxInflightActions > aliveCount
-                ? task.MaxInflightActions - aliveCount
-                : 0;
-            cmsRequest->Record.SetMaxPermissions(quota);
-        }
-
         Send(CmsActorId, std::move(cmsRequest));
         Become(&TThis::StateWork);
     }

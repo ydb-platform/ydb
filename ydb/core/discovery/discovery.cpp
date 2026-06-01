@@ -361,7 +361,7 @@ namespace NDiscoveryPrivate {
 
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle",
-                {"#_ev->Get()->ToString()", ev->Get()->ToString()});
+                {"event", ev->Get()->ToString()});
 
             THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
 
@@ -429,7 +429,7 @@ namespace NDiscoveryPrivate {
 
         void HandleOnInitialization(TEvPrivate::TEvRequest::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on initialization",
-                {"#_ev->Get()->ToString()", ev->Get()->ToString()});
+                {"event", ev->Get()->ToString()});
 
             const auto* msg = ev->Get();
 
@@ -438,7 +438,7 @@ namespace NDiscoveryPrivate {
 
         void HandleOnWork(TEvPrivate::TEvRequest::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on work",
-                {"#_ev->Get()->ToString()", ev->Get()->ToString()});
+                {"event", ev->Get()->ToString()});
 
             const auto* msg = ev->Get();
 
@@ -467,14 +467,14 @@ namespace NDiscoveryPrivate {
 
         void HandleOnInitialization(TEvNodeWardenStorageConfig::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on initialization",
-                {"#_ev->Get()->ToString()", ev->Get()->ToString()});
+                {"event", ev->Get()->ToString()});
             BridgeInfo = ev->Get()->BridgeInfo;
             TryFinishInitialization();
         }
 
         void HandleOnWork(TEvNodeWardenStorageConfig::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on work",
-                {"#_ev->Get()->ToString()", ev->Get()->ToString()});
+                {"event", ev->Get()->ToString()});
             BridgeInfo = ev->Get()->BridgeInfo;
         }
 

@@ -20,7 +20,7 @@ ui32 PackMessageMetadata(ui32 messageCount, EMessageFormat messageFormat) {
     AFL_ENSURE(messageCount >= 1 && messageCount <= MAX_MESSAGE_COUNT)("messageCount", messageCount);
     const ui32 format = static_cast<ui32>(messageFormat);
     AFL_ENSURE(format < (1u << MESSAGE_FORMAT_BITS))("messageFormat", format);
-    return messageCount | (format << MESSAGE_COUNT_BITS);
+    return (messageCount << MESSAGE_FORMAT_BITS) | format;
 }
 
 ui32 PackMessageMetadata(const TClientBlob& blob) {
@@ -28,11 +28,11 @@ ui32 PackMessageMetadata(const TClientBlob& blob) {
 }
 
 std::pair<ui32, EMessageFormat> UnpackMessageMetadata(ui32 metadata) {
-    ui32 messageCount = metadata & MAX_MESSAGE_COUNT;
+    ui32 messageCount = metadata >> MESSAGE_FORMAT_BITS;
     if (messageCount == 0) {
         messageCount = 1;
     }
-    const ui32 messageFormat = metadata >> MESSAGE_COUNT_BITS;
+    const ui32 messageFormat = metadata & ((1u << MESSAGE_FORMAT_BITS) - 1);
     return {messageCount, static_cast<EMessageFormat>(messageFormat)};
 }
 

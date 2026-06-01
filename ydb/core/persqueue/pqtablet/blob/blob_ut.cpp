@@ -329,6 +329,26 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
     }
 
 
+    Y_UNIT_TEST(MessageMetadataStoresFormatInLowerBits) {
+        TBuffer buffer;
+        buffer.Reserve(8_MB);
+
+        auto ts = TInstant::Seconds(100);
+        TClientBlob blob(
+            TString("src"), 42, TString("payload"), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", 7, EMessageFormat::KAFKA_BATCH);
+
+        Serialize(blob, buffer);
+
+        const char* data = buffer.data();
+        data += sizeof(ui32); // total size
+        data += sizeof(ui64); // seqNo
+        data += sizeof(ui8);  // flags
+        const ui32 messageMetadata = ReadUnaligned<ui32>(data);
+
+        UNIT_ASSERT_VALUES_EQUAL(messageMetadata, (7u << MESSAGE_FORMAT_BITS) | static_cast<ui32>(EMessageFormat::KAFKA_BATCH));
+    }
+
     Y_UNIT_TEST(SerializeAndDeserializeMessageMetadata) {
         TBuffer buffer;
         buffer.Reserve(8_MB);

@@ -1135,6 +1135,48 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         # Nothing actually got committed.
         assert "COMMIT" not in result.stdout
 
+    def test_draft_tcl_keywords_from_pr_41859_not_supported(self):
+        """Legacy TCL from the draft PR must not open or commit interactive transactions."""
+        # Not recognized as BEGIN — goes to YQL, no TCL BEGIN acknowledgement.
+        result = self.run_interactive_session(
+            ["START TRANSACTION", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "BEGIN" not in result.stdout
+
+        # Parsed as BEGIN with unknown mode token WORK.
+        result = self.run_interactive_session(
+            ["BEGIN WORK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "unknown" in combined.lower() or "malformed" in combined.lower()
+        assert "BEGIN" not in result.stdout
+
+        # END / COMMIT WORK / ROLLBACK WORK are not COMMIT/ROLLBACK aliases.
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "END", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "COMMIT" not in result.stdout
+
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "COMMIT WORK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "COMMIT" not in result.stdout
+
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "ROLLBACK WORK", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        assert "ROLLBACK" not in result.stdout
+
     def test_begin_word_boundary(self):
         """An identifier starting with the letters BEGIN must not be parsed as BEGIN."""
         result = self.run_interactive_session(

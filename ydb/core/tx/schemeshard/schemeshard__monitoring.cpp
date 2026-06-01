@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -172,6 +174,50 @@ const TCgi::TParam TCgi::Resume = TStringBuf("Resume");
 const TCgi::TParam TCgi::Cancel = TStringBuf("Cancel");
 const TCgi::TParam TCgi::Action = TStringBuf("Action");
 
+namespace {
+
+bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi) {
+    if (cgi.Has(TCgi::Action)) {
+        return false;
+    }
+    if (!cgi.Has(TCgi::Page)) {
+        return true;
+    }
+    const TString& page = cgi.Get(TCgi::Page);
+    if (page == TCgi::TPages::MainPage
+        || page == TCgi::TPages::TransactionList
+        || page == TCgi::TPages::TransactionInfo
+        || page == TCgi::TPages::PathInfo
+        || page == TCgi::TPages::ShardInfoByTabletId
+        || page == TCgi::TPages::ShardInfoByShardIdx
+        || page == TCgi::TPages::BuildIndexInfo)
+    {
+        return true;
+    }
+    return false;
+}
+
+bool CheckSchemeShardDevUiAccess(
+    bool securePathMode,
+    TStringBuf pathInfo,
+    const TString& userToken,
+    const TCgiParameters& cgi,
+    const TActorId& sender)
+{
+    if (!securePathMode) {
+        return true;
+    }
+    if (IsPublicSchemeShardDevUiRequest(cgi)) {
+        return true;
+    }
+    if (!IsTabletDevUiSecurePath(pathInfo) || !IsAdministrator(AppData(), userToken)) {
+        TActivationContext::Send(new IEventHandle(sender, TActorId(), new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN)));
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
 public:
@@ -754,12 +800,18 @@ private:
             << "<div class='col-md-4'><input class='btn btn-default' type='submit' value='" << value << "'" << AttrDisabled(enabled) << "></div>" << Endl;
     }
 
+    TStringBuf TabletDevUiAppPath() const {
+        return AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+            : TStringBuf("app");
+    }
+
     void ActionForceDropUnsafe(const TPathId pathId, TStringStream& str) const {
         // Duplicate params in query string in addition to form-urlencoded body
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp).
-        const TString actionUrl = TStringBuilder() << "app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+        const TString actionUrl = TStringBuilder() << TabletDevUiAppPath() << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::ForceDropUnsafe)
             << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
             << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
@@ -1009,7 +1061,7 @@ private:
 
             {
                 str << "<legend>";
-                str << "<a href='app?"
+                str << "<a href='" << TabletDevUiAppPath() << "?"
                     << TCgi::TabletID.AsCgiParam(Self->TabletID())
                     << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
                     << "'> Administration settings </a>";
@@ -2021,6 +2073,12 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
 
     if (!ev)
         return true;
+
+    const TCgiParameters& cgi = ev->Get()->Cgi();
+    const bool securePathMode = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath();
+    if (!CheckSchemeShardDevUiAccess(securePathMode, ev->Get()->PathInfo(), ev->Get()->GetUserToken(), cgi, ev->Sender)) {
+        return true;
+    }
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: " << ev->Get()->Cgi().Print());
     Execute(new TTxMonitoring(this, ev), ctx);

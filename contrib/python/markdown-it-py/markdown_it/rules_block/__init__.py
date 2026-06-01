@@ -8,6 +8,7 @@ __all__ = (
     "html_block",
     "lheading",
     "list_block",
+    "make_fence_rule",
     "paragraph",
     "reference",
     "table",
@@ -15,7 +16,7 @@ __all__ = (
 
 from .blockquote import blockquote
 from .code import code
-from .fence import fence
+from .fence import fence, make_fence_rule
 from .heading import heading
 from .hr import hr
 from .html_block import html_block

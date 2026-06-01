@@ -1,0 +1,212 @@
+--- a/include/grpc/impl/compression_types.h	(de7348e31353cb4a0b4009f6d1152c8e6757c35e)
++++ b/include/grpc/impl/compression_types.h	(d5ff55b44b178a3ac81661a25551b4a442dfd640)
+@@ -61,6 +61,7 @@ typedef enum {
+   GRPC_COMPRESS_NONE = 0,
+   GRPC_COMPRESS_DEFLATE,
+   GRPC_COMPRESS_GZIP,
++  GRPC_COMPRESS_ZSTD,
+   /* TODO(ctiller): snappy */
+   GRPC_COMPRESS_ALGORITHMS_COUNT
+ } grpc_compression_algorithm;
+--- a/include/grpcpp/server_builder.h	(de7348e31353cb4a0b4009f6d1152c8e6757c35e)
++++ b/include/grpcpp/server_builder.h	(d5ff55b44b178a3ac81661a25551b4a442dfd640)
+@@ -201,7 +201,7 @@ class ServerBuilder {
+   }
+
+   /// Set the support status for compression algorithms. All algorithms are
+-  /// enabled by default.
++  /// enabled by default except zstd.
+   ///
+   /// Incoming calls compressed with an unsupported algorithm will fail with
+   /// \a GRPC_STATUS_UNIMPLEMENTED.
+--- a/src/core/lib/compression/compression.cc	(de7348e31353cb4a0b4009f6d1152c8e6757c35e)
++++ b/src/core/lib/compression/compression.cc	(d5ff55b44b178a3ac81661a25551b4a442dfd640)
+@@ -73,8 +73,9 @@ grpc_compression_algorithm grpc_compression_algorithm_for_level(
+
+ void grpc_compression_options_init(grpc_compression_options* opts) {
+   memset(opts, 0, sizeof(*opts));
+-  // all enabled by default
++  // all enabled by default, except zstd - it should be enabled explicitly.
+   opts->enabled_algorithms_bitset = (1u << GRPC_COMPRESS_ALGORITHMS_COUNT) - 1;
++  grpc_core::ClearBit(&opts->enabled_algorithms_bitset, GRPC_COMPRESS_ZSTD);
+ }
+
+ void grpc_compression_options_enable_algorithm(
+--- a/src/core/lib/compression/compression_internal.cc	(de7348e31353cb4a0b4009f6d1152c8e6757c35e)
++++ b/src/core/lib/compression/compression_internal.cc	(d5ff55b44b178a3ac81661a25551b4a442dfd640)
+@@ -49,6 +49,8 @@ const char* CompressionAlgorithmAsString(grpc_compression_algorithm algorithm) {
+       return "deflate";
+     case GRPC_COMPRESS_GZIP:
+       return "gzip";
++    case GRPC_COMPRESS_ZSTD:
++      return "zstd";
+     case GRPC_COMPRESS_ALGORITHMS_COUNT:
+     default:
+       return nullptr;
+@@ -89,7 +91,7 @@ class CommaSeparatedLists {
+  private:
+   static constexpr size_t kNumLists = 1 << GRPC_COMPRESS_ALGORITHMS_COUNT;
+   // Experimentally determined (tweak things until it runs).
+-  static constexpr size_t kTextBufferSize = 86;
++  static constexpr size_t kTextBufferSize = 218;
+   y_absl::string_view lists_[kNumLists];
+   char text_buffer_[kTextBufferSize];
+ };
+@@ -105,6 +107,8 @@ y_absl::optional<grpc_compression_algorithm> ParseCompressionAlgorithm(
+     return GRPC_COMPRESS_DEFLATE;
+   } else if (algorithm == "gzip") {
+     return GRPC_COMPRESS_GZIP;
++  } else if (algorithm == "zstd") {
++    return GRPC_COMPRESS_ZSTD;
+   } else {
+     return y_absl::nullopt;
+   }
+--- a/src/core/lib/compression/message_compress.cc	(de7348e31353cb4a0b4009f6d1152c8e6757c35e)
++++ b/src/core/lib/compression/message_compress.cc	(d5ff55b44b178a3ac81661a25551b4a442dfd640)
+@@ -24,6 +24,8 @@
+
+ #include <zconf.h>
+ #include <zlib.h>
++#include <zstd.h>
++#include <memory>
+
+ #include <grpc/slice_buffer.h>
+ #include <grpc/support/alloc.h>
+@@ -142,6 +144,103 @@ static int zlib_decompress(grpc_slice_buffer* input, grpc_slice_buffer* output,
+   return r;
+ }
+
++struct CompressTraits {
++  static std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> CreateContext() {
++    return std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)>(
++       ZSTD_createCCtx(),
++       &ZSTD_freeCCtx);
++  }
++
++  static size_t ProcessPart(
++       ZSTD_CCtx* context,
++       ZSTD_outBuffer* zstd_output,
++       ZSTD_inBuffer* zstd_input,
++       bool is_last_chunk) {
++    const ZSTD_EndDirective end_directive = is_last_chunk ? ZSTD_e_end : ZSTD_e_continue;
++    return ZSTD_compressStream2(context, zstd_output, zstd_input, end_directive);
++  }
++};
++
++struct DecompressTraits {
++  static std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> CreateContext() {
++    return std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)>(
++       ZSTD_createDCtx(),
++       &ZSTD_freeDCtx);
++  }
++
++  static size_t ProcessPart(
++       ZSTD_DCtx* context,
++       ZSTD_outBuffer* zstd_output,
++       ZSTD_inBuffer* zstd_input,
++       bool /* is_last_chunk */) {
++    return ZSTD_decompressStream(context, zstd_output, zstd_input);
++  }
++};
++
++template<typename Traits>
++static bool zstd_common(grpc_slice_buffer* input, grpc_slice_buffer* output) {
++  const auto context_ptr = Traits::CreateContext();
++  if (!context_ptr) {
++    gpr_log(GPR_INFO, "Failed create zstd context");
++    return false;
++  }
++  for (size_t i = 0; i < input->count; i++) {
++    const bool is_last_chunk = (i == input->count - 1);
++    ZSTD_inBuffer zstd_input;
++    zstd_input.src = GRPC_SLICE_START_PTR(input->slices[i]);
++    zstd_input.size = GRPC_SLICE_LENGTH(input->slices[i]);
++    zstd_input.pos = 0;
++    bool should_continue = true;
++    while (should_continue) {
++      grpc_slice outbuf = GRPC_SLICE_MALLOC(OUTPUT_BLOCK_SIZE);
++      ZSTD_outBuffer zstd_output;
++      zstd_output.dst = GRPC_SLICE_START_PTR(outbuf);
++      zstd_output.size = GRPC_SLICE_LENGTH(outbuf);
++      zstd_output.pos = 0;
++      size_t const process_result = Traits::ProcessPart(context_ptr.get(), &zstd_output, &zstd_input, is_last_chunk);
++      if (ZSTD_isError(process_result)) {
++        gpr_log(GPR_INFO, "zstd error code (%d)", ZSTD_getErrorCode(process_result));
++        grpc_core::CSliceUnref(outbuf);
++        return false;
++      }
++      const auto out_data_left = zstd_output.size - zstd_output.pos;
++      outbuf.data.refcounted.length -= out_data_left;
++      grpc_slice_buffer_add_indexed(output, outbuf);
++
++      should_continue = is_last_chunk ? (process_result != 0) : (zstd_input.pos != zstd_input.size);
++    }
++  }
++  return true;
++}
++
++static int zstd_compress(grpc_slice_buffer* input, grpc_slice_buffer* output) {
++  const size_t count_before = output->count;
++  const size_t length_before = output->length;
++  if (!zstd_common<CompressTraits>(input, output) || output->length >= input->length) {
++    for (size_t i = count_before; i < output->count; i++) {
++      grpc_core::CSliceUnref(output->slices[i]);
++    }
++    output->count = count_before;
++    output->length = length_before;
++    return 0;
++  }
++  return 1;
++}
++
++static int zstd_decompress(grpc_slice_buffer* input, grpc_slice_buffer* output) {
++  const size_t count_before = output->count;
++  const size_t length_before = output->length;
++  if (!zstd_common<DecompressTraits>(input, output)) {
++    for (size_t i = count_before; i < output->count; i++) {
++      grpc_core::CSliceUnref(output->slices[i]);
++    }
++    output->count = count_before;
++    output->length = length_before;
++    return 0;
++  }
++  return 1;
++}
++
+ static int copy(grpc_slice_buffer* input, grpc_slice_buffer* output) {
+   size_t i;
+   for (i = 0; i < input->count; i++) {
+@@ -161,6 +260,8 @@ static int compress_inner(grpc_compression_algorithm algorithm,
+       return zlib_compress(input, output, 0);
+     case GRPC_COMPRESS_GZIP:
+       return zlib_compress(input, output, 1);
++    case GRPC_COMPRESS_ZSTD:
++      return zstd_compress(input, output);
+     case GRPC_COMPRESS_ALGORITHMS_COUNT:
+       break;
+   }
+@@ -186,6 +287,8 @@ int grpc_msg_decompress(grpc_compression_algorithm algorithm,
+       return zlib_decompress(input, output, 0);
+     case GRPC_COMPRESS_GZIP:
+       return zlib_decompress(input, output, 1);
++    case GRPC_COMPRESS_ZSTD:
++      return zstd_decompress(input, output);
+     case GRPC_COMPRESS_ALGORITHMS_COUNT:
+       break;
+   }
+--- a/src/cpp/server/server_builder.cc	(de7348e31353cb4a0b4009f6d1152c8e6757c35e)
++++ b/src/cpp/server/server_builder.cc	(d5ff55b44b178a3ac81661a25551b4a442dfd640)
+@@ -71,9 +71,12 @@ ServerBuilder::ServerBuilder()
+     plugins_.emplace_back(value());
+   }
+
+-  // all compression algorithms enabled by default.
++  // all compression algorithms enabled by default, except zstd,
++  // which must be enabled explicitly.
+   enabled_compression_algorithms_bitset_ =
+       (1u << GRPC_COMPRESS_ALGORITHMS_COUNT) - 1;
++
++  grpc_core::ClearBit(&enabled_compression_algorithms_bitset_, GRPC_COMPRESS_ZSTD);
+   memset(&maybe_default_compression_level_, 0,
+          sizeof(maybe_default_compression_level_));
+   memset(&maybe_default_compression_algorithm_, 0,

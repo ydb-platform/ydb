@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: markdown-it-py
-Version: 4.1.0
+Version: 4.2.0
 Summary: Python port of markdown-it. Markdown parsing, done right!
 Keywords: markdown,lexer,parser,commonmark,markdown-it
 Author-email: Chris Sewell <chrisj_sewell@hotmail.com>

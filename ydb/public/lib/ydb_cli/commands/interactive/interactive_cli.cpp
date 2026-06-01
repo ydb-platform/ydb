@@ -94,6 +94,7 @@ std::vector<ISessionRunner::TPtr> SetupSessions(
         .CompleterLazyDriver = std::move(completerLazyDriver),
         .Database = config.Database,
         .EnableAiInteractive = config.EnableAiInteractive,
+        .EnableInteractiveTransactions = config.EnableInteractiveTransactions,
     }));
 
     if (config.EnableAiInteractive) {

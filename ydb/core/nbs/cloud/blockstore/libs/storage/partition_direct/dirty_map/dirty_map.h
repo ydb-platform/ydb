@@ -190,6 +190,11 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
+    enum class EEraseType
+    {
+        Standard,
+        Belated
+    };
     TBlocksDirtyMap(
         const TVChunkConfig& vChunkConfig,
         ui32 blockSize,
@@ -208,6 +213,7 @@ public:
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
+    [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
     void WriteFinished(
         ui64 lsn,
@@ -222,6 +228,11 @@ public:
         THostIndex host,
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
+
+    void UpdateBelatedEraseQueue(
+        THostMask completedWrites,
+        ui64 lsn,
+        TBlockRange64 range);
 
     // Sets a mark on the ddisk to which offset it contains data and can be read
     // from it.
@@ -238,6 +249,7 @@ public:
     [[nodiscard]] size_t GetInflightCount() const;
     [[nodiscard]] size_t GetFlushPendingCount() const;
     [[nodiscard]] size_t GetErasePendingCount() const;
+    [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
@@ -312,6 +324,17 @@ private:
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
     TSet<ui64> ReadyToErase;
+
+    struct TInfoEraseBelated
+    {
+        ui64 Lsn{};
+        THostMask Hosts;
+        TBlockRange64 Range;
+
+        bool operator<(const TInfoEraseBelated& other) const;
+    };
+
+    TSet<TInfoEraseBelated> ReadyToEraseBelated;
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

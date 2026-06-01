@@ -16,11 +16,6 @@ const TString TEST_POOL_ID = "test_pool";
 //
 // Parameters:
 //   readLimitMs           — ReadLimit for the test pool (nullopt = unlimited).
-//   blockSchedulerFactory — Drop every TEvGetReadFactory event so the leader
-//                           shard never receives a real factory from the scheduler.
-//                           The constructor then advances simulated time by 2 s to
-//                           let the shard's built-in 1-second fail-safe timer fire,
-//                           completing mediator-state init with a null factory.
 //   withFollower          — Create the table with one follower and route all
 //                           SendRead() calls through a ForceFollower pipe.
 //                           Followers never request a scheduler factory themselves,
@@ -41,7 +36,6 @@ struct TSchedulerTestHelper {
     bool WithFollower = false;
 
     explicit TSchedulerTestHelper(std::optional<ui64> readLimitMs = std::nullopt,
-                                  bool blockSchedulerFactory = false,
                                   bool withFollower = false,
                                   ui32 numShards = 1)
         : WithFollower(withFollower)
@@ -66,19 +60,6 @@ struct TSchedulerTestHelper {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_INFO);
         runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE_SCHEDULER, NLog::PRI_TRACE);
-
-        if (blockSchedulerFactory) {
-            // Drop TEvGetReadFactory so the scheduler never sends a real factory
-            // to the leader shard.  The leader will rely on its 1-second fail-safe
-            // timer instead.  Follower shards never send this event at all, so
-            // dropping it has no effect on their behaviour.
-            runtime.SetObserverFunc([](TAutoPtr<IEventHandle>& ev) {
-                if (ev->GetTypeRewrite() == NKqp::NScheduler::TEvGetReadFactory::EventType) {
-                    return TTestActorRuntimeBase::EEventAction::DROP;
-                }
-                return TTestActorRuntimeBase::EEventAction::PROCESS;
-            });
-        }
 
         {
             auto ev = std::make_unique<TEvAddDatabase>(TEST_DATABASE_ID);
@@ -121,12 +102,6 @@ struct TSchedulerTestHelper {
             } else {
                 ClientIds.push_back(LeaderClientIds.back());
             }
-        }
-
-        if (blockSchedulerFactory) {
-            // Advance simulated time past the 1-second fail-safe timer so the
-            // leader shard completes mediator-state restoration with a null factory.
-            runtime.SimulateSleep(TDuration::Seconds(2));
         }
     }
 
@@ -222,7 +197,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     //   quota machinery entirely (SchedulableReadFactory is never set on followers).
     Y_UNIT_TEST_TWIN(ShouldReadWithSchedulerPoolId, WithFollower) {
         TSchedulerTestHelper helper(/*readLimitMs=*/std::nullopt,
-                                    /*blockSchedulerFactory=*/false,
                                     /*withFollower=*/WithFollower);
         helper.Upsert(1, 100);
 
@@ -264,7 +238,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     Y_UNIT_TEST_TWIN(ShouldContinuationReadWithSchedulerPoolId, WithFollower) {
         constexpr ui32 kRows = 5;
         TSchedulerTestHelper helper(/*readLimitMs=*/std::nullopt,
-                                    /*blockSchedulerFactory=*/false,
                                     /*withFollower=*/WithFollower);
         helper.UpsertMany(1, kRows);
 
@@ -298,7 +271,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     // serves the same data successfully, demonstrating the bypass.
     Y_UNIT_TEST_TWIN(ShouldReadWhenQuotaExhausted, WithFollower) {
         TSchedulerTestHelper helper(/*readLimitMs=*/0u,
-                                    /*blockSchedulerFactory=*/false,
                                     /*withFollower=*/WithFollower);
         helper.Upsert(1, 100);
 
@@ -356,7 +328,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     // True for both leader and follower.
     Y_UNIT_TEST_TWIN(ShouldReadWithoutPoolIdUnaffectedByScheduler, WithFollower) {
         TSchedulerTestHelper helper(/*readLimitMs=*/std::nullopt,
-                                    /*blockSchedulerFactory=*/false,
                                     /*withFollower=*/WithFollower);
         helper.Upsert(3, 300);
 
@@ -375,11 +346,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     // When the datashard receives a read request with a pool ID that is not registered
     // in ComputeScheduler, the read must succeed without quota enforcement.
     //
-    // For the leader: SchedulableRead is nullptr, quota check is bypassed.
+    // For the leader: factory returns nullptr for the unknown pool (no read query is registered), so quota check is bypassed.
     // For the follower: quota is never applied regardless of pool registration.
     Y_UNIT_TEST_TWIN(ShouldReadWithUnknownPoolId, WithFollower) {
         TSchedulerTestHelper helper(/*readLimitMs=*/std::nullopt,
-                                    /*blockSchedulerFactory=*/false,
                                     /*withFollower=*/WithFollower);
         helper.Upsert(1, 100);
 
@@ -391,34 +361,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         UNIT_ASSERT_C(result, "Expected read to succeed with unknown pool ID");
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
-        auto cells = result->GetCells(0);
-        UNIT_ASSERT_VALUES_EQUAL(cells.size(), 4u);
-        UNIT_ASSERT_VALUES_EQUAL(cells[3].AsValue<ui32>(), 100u);
-    }
-
-    // When the datashard never receives a factory response from the scheduler
-    // (e.g. the scheduler is temporarily unavailable), it falls back to reading
-    // without quota after the built-in 1-second fail-safe timer fires.
-    // Reads with a PoolId must still succeed on both leader and follower.
-    //
-    // Note: followers never request a factory in the first place, so they are
-    // always in this "no-factory" state.  The blockSchedulerFactory flag here
-    // affects only the leader; it verifies that the leader's fallback path also
-    // works correctly.
-    Y_UNIT_TEST_TWIN(ShouldReadSuccessfullyWhenSchedulerDoesNotRespond, WithFollower) {
-        TSchedulerTestHelper helper(/*readLimitMs=*/std::nullopt,
-                                    /*blockSchedulerFactory=*/true,
-                                    /*withFollower=*/WithFollower);
-        helper.Upsert(1, 100);
-
-        auto request = helper.MakeReadRequest(1);
-        AddKeyQuery(*request, {1, 1, 1});
-
-        auto result = helper.SendRead(request.release());
-        UNIT_ASSERT_C(result, "Expected read to succeed when scheduler did not respond");
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
-
         auto cells = result->GetCells(0);
         UNIT_ASSERT_VALUES_EQUAL(cells.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(cells[3].AsValue<ui32>(), 100u);

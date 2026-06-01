@@ -2,6 +2,35 @@
 
 The `table_service_config` section contains configuration parameters for the table service, including spilling settings.
 
+## resource_manager {#resource-manager}
+
+The `resource_manager` subsection contains resource management parameters for the table service.
+
+### Vector index level cache
+
+The level table (`indexImplLevelTable`) of a [`vector_kmeans_tree`](../../dev/vector-indexes-kmeans-tree-type.md#index-structure) vector index stores the centroids that {{ ydb-short-name }} reads on every step down the cluster tree during a vector search. To avoid re-reading these centroids from distributed storage on each query, {{ ydb-short-name }} can cache them in memory on each database node.
+
+The cache is per-node, uses LRU eviction, and grows incrementally up to the configured cap.
+
+```yaml
+table_service_config:
+  resource_manager:
+    kqp_level_cache_max_size_bytes: 0
+    kqp_level_cache_increase_batch_size_bytes: 33554432
+```
+
+#### resource_manager.kqp_level_cache_max_size_bytes
+
+**Type:** `uint64`  
+**Default:** `0` (cache disabled)  
+**Description:** Maximum size of the vector index level table cache, in bytes, per database node. Setting this to a non-zero value enables the cache.
+
+#### resource_manager.kqp_level_cache_increase_batch_size_bytes
+
+**Type:** `uint64`  
+**Default:** `33554432` (32 MiB)  
+**Description:** Granularity of incremental memory allocation for the level cache. The cache grows by this amount at a time, up to `kqp_level_cache_max_size_bytes`, and shrinks by the same amount when the cap is reduced.
+
 ## spilling_service_config
 
 [Spilling](../../concepts/query_execution/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM.

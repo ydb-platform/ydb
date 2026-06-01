@@ -1,15 +1,14 @@
 import logging
 
-from typing import Tuple, Dict
-from clickhouse_connect.datatypes.base import TypeDef, ClickHouseType, type_map
+from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, type_map
 from clickhouse_connect.driver.exceptions import InternalError
-from clickhouse_connect.driver.parser import parse_enum, parse_callable, parse_columns
+from clickhouse_connect.driver.parser import parse_callable, parse_columns, parse_enum
 
 logger = logging.getLogger(__name__)
-type_cache: Dict[str, ClickHouseType] = {}
+type_cache: dict[str, ClickHouseType] = {}
 
 
-def parse_name(name: str) -> Tuple[str, str, TypeDef]:
+def parse_name(name: str) -> tuple[str, str, TypeDef]:
     """
     Converts a ClickHouse type name into the base class and the definition (TypeDef) needed for any
     additional instantiation
@@ -20,34 +19,34 @@ def parse_name(name: str) -> Tuple[str, str, TypeDef]:
     base = name
     wrappers = []
     keys = tuple()
-    if base.startswith('LowCardinality'):
-        wrappers.append('LowCardinality')
+    if base.startswith("LowCardinality"):
+        wrappers.append("LowCardinality")
         base = base[15:-1]
-    if base.startswith('Nullable'):
-        wrappers.append('Nullable')
+    if base.startswith("Nullable"):
+        wrappers.append("Nullable")
         base = base[9:-1]
-    if base.startswith('Enum'):
+    if base.startswith("Enum"):
         keys, values = parse_enum(base)
-        base = base[:base.find('(')]
-    elif base.startswith('Nested'):
+        base = base[: base.find("(")]
+    elif base.startswith("Nested"):
         keys, values = parse_columns(base[6:])
-        base = 'Nested'
-    elif base.startswith('Tuple'):
+        base = "Nested"
+    elif base.startswith("Tuple"):
         keys, values = parse_columns(base[5:])
-        base = 'Tuple'
-    elif base.startswith('Variant'):
+        base = "Tuple"
+    elif base.startswith("Variant"):
         keys, values = parse_columns(base[7:])
-        base = 'Variant'
-    elif base.startswith('JSON') and len(base) > 4 and base[4] == '(':
+        base = "Variant"
+    elif base.startswith("JSON") and len(base) > 4 and base[4] == "(":
         keys, values = parse_columns(base[4:])
-        base = 'JSON'
-    elif base == 'Point':
-        values = ('Float64', 'Float64')
+        base = "JSON"
+    elif base == "Point":
+        values = ("Float64", "Float64")
     else:
         try:
             base, values, _ = parse_callable(base)
         except IndexError:
-            raise InternalError(f'Can not parse ClickHouse data type: {name}') from None
+            raise InternalError(f"Can not parse ClickHouse data type: {name}") from None
     return base, name, TypeDef(tuple(wrappers), keys, values)
 
 
@@ -63,7 +62,7 @@ def get_from_name(name: str) -> ClickHouseType:
         try:
             ch_type = type_map[base].build(type_def)
         except KeyError:
-            err_str = f'Unrecognized ClickHouse type base: {base} name: {name}'
+            err_str = f"Unrecognized ClickHouse type base: {base} name: {name}"
             logger.error(err_str)
             raise InternalError(err_str) from None
         type_cache[name] = ch_type

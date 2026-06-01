@@ -57,6 +57,10 @@ message TReplyStatus {
         // - not enough free space in the persistent buffer
         // - the per-tablet space occupation limit in the persistent buffer has been reached
         OVERFILL = 10;
+
+        // The request can't be executed right now, the caller must retry later. Possible causes:
+        // - chunk deletion requested while chunk allocation is in progress
+        BUSY = 11;
     }
 }
 
@@ -160,6 +164,16 @@ message TEvReadResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     TReadResult ReadResult = 3;
+}
+
+message TEvDeleteTabletChunks {
+    TQueryCredentials Credentials = 1;
+}
+
+message TEvDeleteTabletChunksResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+
 }
 
 message TEvWritePersistentBuffer {
@@ -302,6 +316,7 @@ message TEvListPersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     repeated TPersistentBufferRecord Records = 3;
+    uint64 BarrierLsn = 4;
 }
 
 message TDirectBlockGroupAllocation {

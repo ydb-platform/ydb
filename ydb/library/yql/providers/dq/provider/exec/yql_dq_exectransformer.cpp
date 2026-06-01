@@ -1398,7 +1398,7 @@ private:
                 << maxTasksPerOperation, ctx, true));
         }
 
-        YQL_ENSURE(stagesCount <= maxTasksPerOperation);
+        YQL_ENSURE(stagesCount <= maxTasksPerOperation, "Too many stages: " << stagesCount << " > " << maxTasksPerOperation);
 
         try {
             while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {

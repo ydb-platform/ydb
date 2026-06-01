@@ -57,6 +57,46 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException, "Unsupported property: another_property");
     }
 
+    Y_UNIT_TEST(ValidateYdbSourceRequiresDatabase) {
+        NKikimrSchemeOp::TExternalDataSourceDescription proto;
+        proto.SetSourceType("Ydb");
+
+        auto source = NExternalSource::CreateExternalDataSource(
+            "Ydb",
+            {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"},
+            {"database_name", "use_tls", "database_id", "shared_reading"},
+            {});
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->ValidateExternalDataSource(proto.SerializeAsString()),
+            NExternalSource::TExternalSourceException,
+            "Ydb source must provide a non-empty database_name or database_id");
+
+        proto.MutableProperties()->MutableProperties()->insert({"database_name", ""});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->ValidateExternalDataSource(proto.SerializeAsString()),
+            NExternalSource::TExternalSourceException,
+            "Ydb source must provide a non-empty database_name or database_id");
+
+        proto.MutableProperties()->MutableProperties()->clear();
+        proto.MutableProperties()->MutableProperties()->insert({"database_id", ""});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->ValidateExternalDataSource(proto.SerializeAsString()),
+            NExternalSource::TExternalSourceException,
+            "Ydb source must provide a non-empty database_name or database_id");
+
+        proto.MutableProperties()->MutableProperties()->clear();
+        proto.MutableProperties()->MutableProperties()->insert({"database_name", "/local"});
+        UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
+
+        proto.MutableProperties()->MutableProperties()->clear();
+        proto.MutableProperties()->MutableProperties()->insert({"database_id", "etn0123456789"});
+        UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
+
+        proto.MutableProperties()->MutableProperties()->insert({"database_name", "/local"});
+        UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
+    }
+
     Y_UNIT_TEST(ValidateLocation) {
         NKikimrSchemeOp::TExternalDataSourceDescription proto;
         auto source = CreateTestSource();

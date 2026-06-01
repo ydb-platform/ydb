@@ -1,6 +1,15 @@
 /*
  * convert.h
  *
+ * This header declares conversion helpers between the different Roaring
+ * container representations: array, bitset, and run containers. These
+ * routines are used when an operation produces data better represented in a
+ * different form, or when the library wants to switch to the most space-
+ * efficient container type.
+ *
+ * In addition to direct conversions, the file also provides helpers that
+ * choose between candidate result representations based on cardinality and
+ * storage efficiency.
  */
 
 #ifndef INCLUDE_CONTAINERS_CONVERT_H_

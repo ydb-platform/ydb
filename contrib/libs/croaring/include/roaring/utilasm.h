@@ -1,6 +1,15 @@
 /*
  * utilasm.h
  *
+ * This file provides optional inline-assembly helpers for low-level bit
+ * manipulation on supported x86/x64 targets. These macros are used to map a
+ * few performance-sensitive operations, such as shifting, testing, setting,
+ * and clearing bits, to specific machine instructions when inline assembly is
+ * enabled.
+ *
+ * The intent is to centralize these architecture-specific primitives behind a
+ * small interface so the rest of the codebase can use them conditionally while
+ * keeping the generic implementation paths separate.
  */
 
 #ifndef INCLUDE_UTILASM_H_

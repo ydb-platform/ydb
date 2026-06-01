@@ -1959,6 +1959,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.CreateTopics({ TTopicConfig("topic-994-test", 1) });
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-994-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, TOPIC_ALREADY_EXISTS);
         }
 
         {

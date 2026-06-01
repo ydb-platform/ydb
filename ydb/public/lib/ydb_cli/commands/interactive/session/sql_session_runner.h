@@ -17,6 +17,7 @@ struct TSqlSessionSettings {
 
     TString Database;
     bool EnableAiInteractive = false;
+    bool EnableInteractiveTransactions = false;
 };
 
 ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings);

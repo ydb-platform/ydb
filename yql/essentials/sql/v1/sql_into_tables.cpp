@@ -1,6 +1,8 @@
 #include "sql_into_tables.h"
 #include "sql_values.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 #include <util/string/join.h>
 
 using namespace NYql;
@@ -245,9 +247,7 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     if (isMapReduce) {
         if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                    pos, "REPLACE", MakeLangVersion(2025, 4)))
-            {
+            if (!Ctx_.EnsureAvailable(pos, NYql::NFeature::ReplaceInto)) {
                 return false;
             }
         }

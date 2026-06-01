@@ -27,24 +27,6 @@ YT_DECLARE_THREAD_LOCAL(THazardThreadState*, HazardThreadState);
 
 void InitHazardThreadState();
 
-template <class T, bool = std::derived_from<T, TRefCountedBase>>
-struct THazardPtrTraits
-{
-    Y_FORCE_INLINE static void* GetBasePtr(T* object)
-    {
-        return object;
-    }
-};
-
-template <class T>
-struct THazardPtrTraits<T, true>
-{
-    Y_FORCE_INLINE static void* GetBasePtr(TRefCountedBase* object)
-    {
-        return object;
-    }
-};
-
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,9 +46,15 @@ template <class T>
 THazardPtr<T>::THazardPtr(THazardPtr&& other) noexcept
     : Ptr_(other.Ptr_)
     , HazardPtr_(other.HazardPtr_)
+#ifndef NDEBUG
+    , ProtectedPtr_(other.ProtectedPtr_)
+#endif
 {
     other.Ptr_ = nullptr;
     other.HazardPtr_ = nullptr;
+#ifndef NDEBUG
+    other.ProtectedPtr_ = nullptr;
+#endif
 }
 
 template <class T>
@@ -76,47 +64,78 @@ THazardPtr<T>& THazardPtr<T>::operator=(THazardPtr&& other) noexcept
         Reset();
         Ptr_ = other.Ptr_;
         HazardPtr_ = other.HazardPtr_;
+#ifndef NDEBUG
+        ProtectedPtr_ = other.ProtectedPtr_;
+#endif
         other.Ptr_ = nullptr;
         other.HazardPtr_ = nullptr;
+#ifndef NDEBUG
+        other.ProtectedPtr_ = nullptr;
+#endif
     }
     return *this;
 }
 
+namespace NDetail {
+
+inline std::atomic<void*>* FindEmptyHazardSlot()
+{
+    auto& hazardPointers = NYT::NDetail::HazardPointers();
+    for (auto it = hazardPointers.begin(); it != hazardPointers.end(); ++it) {
+        auto& ptr = *it;
+        if (!ptr.load(std::memory_order::relaxed)) {
+            return &ptr;
+        }
+    }
+    // Too many hazard pointers are being used in a single thread concurrently.
+    // Try increasing MaxHazardPointersPerThread.
+    YT_ABORT();
+}
+
+} // namespace NDetail
+
 template <class T>
 template <class TPtrLoader>
 THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader, T* ptr)
+    requires (!std::derived_from<T, TRefCountedBase> ||
+        requires(TRefCountedBase* b) { static_cast<T*>(b); })
 {
-    if (!ptr) {
+    return Acquire(
+        [&] { return TTaggedPtr<T>{ptrLoader(), 0}; },
+        TTaggedPtr<T>{ptr, 0});
+}
+
+template <class T>
+template <class TPtrLoader>
+THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader, TTaggedPtr<T> taggedPtr)
+{
+    if (!taggedPtr.Ptr) {
         return {};
     }
 
-    auto& hazardPointers = NYT::NDetail::HazardPointers();
-
-    auto* hazardPtr = [&] {
-        for (auto it = hazardPointers.begin(); it !=  hazardPointers.end(); ++it) {
-            auto& ptr = *it;
-            if (!ptr.load(std::memory_order::relaxed)) {
-                return &ptr;
-            }
-        }
-        // Too many hazard pointers are being used in a single thread concurrently.
-        // Try increasing MaxHazardPointersPerThread.
-        YT_ABORT();
-    }();
+    auto* hazardPtr = NYT::NDetail::FindEmptyHazardSlot();
 
     if (!NYT::NDetail::HazardThreadState()) [[unlikely]] {
         NYT::NDetail::InitHazardThreadState();
     }
 
+    // The canonical hazard-slot value is the typed pointer adjusted by the
+    // cached vbase offset; never read from |*taggedPtr.Ptr|.
+    auto computeBasePtr = [] (TTaggedPtr<T> p) -> void* {
+        return reinterpret_cast<char*>(p.Ptr) + p.Tag;
+    };
+
+    void* protectedPtr;
     void* checkPtr;
     do {
-        hazardPtr->store(NYT::NDetail::THazardPtrTraits<T>::GetBasePtr(ptr), std::memory_order::release);
+        protectedPtr = computeBasePtr(taggedPtr);
+        hazardPtr->store(protectedPtr, std::memory_order::release);
         std::atomic_thread_fence(std::memory_order::seq_cst);
-        checkPtr = ptr;
-        ptr = ptrLoader();
-    } while (ptr != checkPtr);
+        checkPtr = protectedPtr;
+        taggedPtr = ptrLoader();
+    } while (computeBasePtr(taggedPtr) != checkPtr);
 
-    return THazardPtr(ptr, hazardPtr);
+    return THazardPtr(taggedPtr.Ptr, hazardPtr, protectedPtr);
 }
 
 template <class T>
@@ -133,7 +152,8 @@ void THazardPtr<T>::Reset() noexcept
 #ifdef NDEBUG
         HazardPtr_->store(nullptr, std::memory_order::release);
 #else
-        YT_VERIFY(HazardPtr_->exchange(nullptr) == NYT::NDetail::THazardPtrTraits<T>::GetBasePtr(Ptr_));
+        YT_VERIFY(HazardPtr_->exchange(nullptr) == ProtectedPtr_);
+        ProtectedPtr_ = nullptr;
 #endif
         Ptr_ = nullptr;
         HazardPtr_ = nullptr;
@@ -173,9 +193,12 @@ THazardPtr<T>::operator bool() const
 }
 
 template <class T>
-THazardPtr<T>::THazardPtr(T* ptr, std::atomic<void*>* hazardPtr)
+THazardPtr<T>::THazardPtr(T* ptr, std::atomic<void*>* hazardPtr, [[maybe_unused]] void* protectedPtr)
     : Ptr_(ptr)
     , HazardPtr_(hazardPtr)
+#ifndef NDEBUG
+    , ProtectedPtr_(protectedPtr)
+#endif
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

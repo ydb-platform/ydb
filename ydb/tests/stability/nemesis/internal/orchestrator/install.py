@@ -296,6 +296,8 @@ StartLimitBurst=15
 [Service]
 Restart=always
 RestartSec=10
+TimeoutStopSec=60
+KillMode=control-group
 Environment=NEMESIS_USER=robot-nemesis
 Environment=NEMESIS_TYPE=orchestrator
 Environment=STATIC_LOCATION={root}/static
@@ -344,6 +346,8 @@ StartLimitBurst=15
 [Service]
 Restart=always
 RestartSec=10
+TimeoutStopSec=60
+KillMode=control-group
 Environment=NEMESIS_USER=robot-nemesis
 Environment=NEMESIS_TYPE=agent
 Environment=APP_HOST=::

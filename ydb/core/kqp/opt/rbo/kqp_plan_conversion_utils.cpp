@@ -84,8 +84,7 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
 }
 
 bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
-    auto maybeForceOptional = mapElement.ForceOptional();
-    return maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True";
+    return mapElement.ForceOptional().StringValue() == "True";
 }
 
 bool GetOrdered(const TKqpOpMap& map) {
@@ -341,10 +340,51 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
     return MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters);
 }
 
+TExprNode::TPtr MaybeForceColumnToOptional(const TTypeAnnotationNode* unionAllType, TExprNode::TPtr input, TExprContext& ctx) {
+    Y_ENSURE(unionAllType);
+    auto inputType = input->GetTypeAnn();
+    Y_ENSURE(inputType);
+
+    Y_ENSURE(TMaybeNode<TKqpOpMap>(input), "Input is not a KqpOpMap.");
+    auto unionAllStructType = unionAllType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    const auto unionAllSize = unionAllStructType->GetItems().size();
+    Y_ENSURE(unionAllSize == inputStructType->GetItems().size());
+    auto map = TExprBase(input).Cast<TKqpOpMap>();
+    Y_ENSURE(unionAllSize == map.MapElements().Size(), "Invalid number of input fields.");
+
+    TVector<TExprNode> mapElements;
+    for (ui32 i = 0; i < unionAllSize; ++i) {
+        const auto mapElement = map.MapElements().Item(i).Ptr();
+        const TString fieldName = TString(mapElement->ChildPtr(1)->Content());
+        auto inputFieldType = inputStructType->FindItemType(fieldName);
+        Y_ENSURE(inputFieldType, TStringBuilder() << "Cannot find type for item " << fieldName;);
+        auto unionAllFieldType = unionAllStructType->FindItemType(fieldName);
+        Y_ENSURE(unionAllFieldType, TStringBuilder() << "Cannot find tyep for item " << fieldName;);
+        // In case union all field type is optional but the same field for input is not - force optional.
+        if (unionAllFieldType->IsOptionalOrNull() && !inputFieldType->IsOptionalOrNull()) {
+            mapElement->ChildRef(3) = Build<TCoAtom>(ctx, input->Pos()).Value("True").Done().Ptr();
+        }
+    }
+
+    return input;
+}
+
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
     auto opUnionAll = TKqpOpUnionAll(node);
-    auto leftInput = ExprNodeToOperator(opUnionAll.LeftInput().Ptr());
-    auto rightInput = ExprNodeToOperator(opUnionAll.RightInput().Ptr());
+
+    auto leftInputPtr = opUnionAll.LeftInput().Ptr();
+    auto rightInputPtr = opUnionAll.RightInput().Ptr();
+    if (TMaybeNode<TKqpOpMap>(leftInputPtr)) {
+        leftInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), leftInputPtr, Ctx);
+    }
+    if (TMaybeNode<TKqpOpMap>(rightInputPtr)) {
+        rightInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), rightInputPtr, Ctx) ;
+    }
+
+    auto leftInput = ExprNodeToOperator(leftInputPtr);
+    auto rightInput = ExprNodeToOperator(rightInputPtr);
 
     return MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos());
 }

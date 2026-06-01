@@ -160,11 +160,9 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
     }
 
     // -----------------------------------------------------------------------
-    // Erase: when Compact produces IS_ERASE_COMPACT, the header returned by
-    // Erase() does NOT carry IS_ERASE_COMPACT (Erase() resets Flags to IS_ERASE
-    // after Compact fills the buffer).  The compact flag lives only in the
-    // CompactLsns buffer encoding; AddErase() reads it from the stored header.
-    // This test verifies the full Erase → AddErase round-trip with compact data.
+    // Erase/AddErase round-trip with compact data.
+    // When Compact() chooses delta encoding, it sets IS_ERASE_COMPACT; Erase() then adds IS_ERASE on top,
+    // so the persisted header may carry both flags and AddErase() relies on IS_ERASE_COMPACT to decode.
     // -----------------------------------------------------------------------
 
     Y_UNIT_TEST(EraseAddEraseRoundTripWithCompactData) {
@@ -239,6 +237,8 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT(ok);
         UNIT_ASSERT(header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT);
 
+        // AddErase requires IS_ERASE to be set (Compact only sets IS_ERASE_COMPACT).
+        header.Flags |= TPersistentBufferHeader::IS_ERASE;
         header.RecordLsn = 1;
         header.Erase.TabletId = 2000;
 
@@ -415,6 +415,283 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         auto result = mgr.Erase(tabletId, lsns, alloc);
         UNIT_ASSERT(!result.has_value());
+    }
+
+    // -----------------------------------------------------------------------
+    // RestoreErases: LSNs <= barrier are removed from erase.Lsns and NOT
+    // applied to persistentBuffers (barrier already covers them).
+    // LSNs > barrier remain in erase.Lsns and ARE applied.
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(RestoreErasesFiltersLsnsBehindBarrier) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 1001;
+
+        // Set up a barrier at LSN=30 for the tablet via AddBarrier + RestoreBarriers.
+        {
+            TPersistentBufferHeader bh{};
+            memset(&bh, 0, sizeof(bh));
+            memcpy(bh.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+            bh.Flags = TPersistentBufferHeader::IS_BARRIER;
+            bh.RecordLsn = 1;
+            bh.PersistentBufferUniqueId = 1;
+            bh.NodeId = 1; bh.PDiskId = 1; bh.SlotId = 1;
+            bh.Barrier.BarrierIdx = 0;
+            bh.Barrier.Barriers[0] = {tabletId, /*Lsn=*/30};
+            mgr.AddBarrier(&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
+
+            // RestoreBarriers needs records > barrier to keep the tablet alive.
+            std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbsForBarrier;
+            TPersistentBuffer buf;
+            buf.Records[40] = {};
+            buf.Records[50] = {};
+            pbsForBarrier[{tabletId, 0}] = std::move(buf);
+            mgr.RestoreBarriers(pbsForBarrier, alloc);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 30u);
+
+        // Set up an erase record with LSNs: 10, 20, 30, 40, 50.
+        {
+            TPersistentBufferHeader eh{};
+            memset(&eh, 0, sizeof(eh));
+            eh.Flags = TPersistentBufferHeader::IS_ERASE;
+            eh.RecordLsn = 1;
+            eh.PersistentBufferUniqueId = 1;
+            eh.NodeId = 1; eh.PDiskId = 1; eh.SlotId = 1;
+            eh.Erase.TabletId = tabletId;
+            ui64 lsns[] = {10, 20, 30, 40, 50};
+            for (int i = 0; i < 5; i++) {
+                memcpy(eh.Erase.CompactLsns + i * 8, &lsns[i], 8);
+            }
+            mgr.AddErase(&eh, /*chunkIdx=*/0, /*sectorIdx=*/2);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 5u);
+
+        // persistentBuffers only has records > barrier (records <= 30 already
+        // removed by RestoreBarriers in real usage).
+        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        {
+            TPersistentBuffer buf;
+            buf.Records[40] = {};
+            buf.Records[50] = {};
+            pbs[{tabletId, 0}] = std::move(buf);
+        }
+
+        mgr.RestoreErases(pbs, alloc);
+
+        // LSNs 10, 20, 30 were filtered out (≤ barrier=30) from erase.Lsns,
+        // so they are NOT applied. LSNs 40 and 50 were applied as erases.
+        // After erasing 40 and 50, the buffer is empty → tablet removed.
+        UNIT_ASSERT_C(pbs.find({tabletId, 0}) == pbs.end(),
+            "Tablet must be removed: records 40 and 50 were erased by RestoreErases");
+    }
+
+    // -----------------------------------------------------------------------
+    // RestoreErases: barrier covers ALL erase LSNs — nothing is applied,
+    // erase entry is kept (tablet still has records above barrier)
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(RestoreErasesBarrierCoversAllEraseLsns) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 1002;
+
+        // Barrier at LSN=100 covers all erase LSNs {10, 20, 30}.
+        {
+            TPersistentBufferHeader bh{};
+            memset(&bh, 0, sizeof(bh));
+            memcpy(bh.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+            bh.Flags = TPersistentBufferHeader::IS_BARRIER;
+            bh.RecordLsn = 1;
+            bh.PersistentBufferUniqueId = 1;
+            bh.NodeId = 1; bh.PDiskId = 1; bh.SlotId = 1;
+            bh.Barrier.BarrierIdx = 0;
+            bh.Barrier.Barriers[0] = {tabletId, /*Lsn=*/100};
+            mgr.AddBarrier(&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
+
+            std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbsForBarrier;
+            TPersistentBuffer buf;
+            buf.Records[200] = {};
+            pbsForBarrier[{tabletId, 0}] = std::move(buf);
+            mgr.RestoreBarriers(pbsForBarrier, alloc);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 100u);
+
+        // Erase LSNs all ≤ barrier=100.
+        {
+            TPersistentBufferHeader eh{};
+            memset(&eh, 0, sizeof(eh));
+            eh.Flags = TPersistentBufferHeader::IS_ERASE;
+            eh.RecordLsn = 1;
+            eh.PersistentBufferUniqueId = 1;
+            eh.NodeId = 1; eh.PDiskId = 1; eh.SlotId = 1;
+            eh.Erase.TabletId = tabletId;
+            ui64 lsns[] = {10, 20, 30};
+            for (int i = 0; i < 3; i++) {
+                memcpy(eh.Erase.CompactLsns + i * 8, &lsns[i], 8);
+            }
+            mgr.AddErase(&eh, /*chunkIdx=*/0, /*sectorIdx=*/2);
+        }
+
+        // persistentBuffers has only record at LSN=200 (above barrier).
+        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        {
+            TPersistentBuffer buf;
+            buf.Records[200] = {};
+            pbs[{tabletId, 0}] = std::move(buf);
+        }
+
+        mgr.RestoreErases(pbs, alloc);
+
+        // All erase LSNs were filtered (≤ barrier=100), so record 200 is untouched.
+        auto pbIt = pbs.find({tabletId, 0});
+        UNIT_ASSERT_C(pbIt != pbs.end(), "Tablet must still exist");
+        UNIT_ASSERT_C(pbIt->second.Records.count(200), "Record 200 must remain untouched");
+    }
+
+    // -----------------------------------------------------------------------
+    // RestoreErases: no barrier — all erase LSNs are applied
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(RestoreErasesNoBarrierAppliesAllLsns) {
+        auto mgr = MakeManager();
+
+        const ui64 tabletId = 1003;
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 0u);
+
+        // Erase record with LSNs: 5, 15, 25.
+        {
+            TPersistentBufferHeader eh{};
+            memset(&eh, 0, sizeof(eh));
+            eh.Flags = TPersistentBufferHeader::IS_ERASE;
+            eh.RecordLsn = 1;
+            eh.PersistentBufferUniqueId = 1;
+            eh.NodeId = 1; eh.PDiskId = 1; eh.SlotId = 1;
+            eh.Erase.TabletId = tabletId;
+            ui64 lsns[] = {5, 15, 25};
+            for (int i = 0; i < 3; i++) {
+                memcpy(eh.Erase.CompactLsns + i * 8, &lsns[i], 8);
+            }
+            mgr.AddErase(&eh, /*chunkIdx=*/0, /*sectorIdx=*/3);
+        }
+
+        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        {
+            TPersistentBuffer buf;
+            for (ui64 lsn : {5ULL, 15ULL, 25ULL, 35ULL}) {
+                buf.Records[lsn] = {};
+            }
+            pbs[{tabletId, 0}] = std::move(buf);
+        }
+
+        auto alloc = MakeAllocator(1024, 0);
+        mgr.RestoreErases(pbs, alloc);
+
+        // LSNs 5, 15, 25 must be erased; LSN 35 must remain.
+        auto pbIt = pbs.find({tabletId, 0});
+        UNIT_ASSERT_C(pbIt != pbs.end(), "Tablet must still exist (LSN 35 remains)");
+        auto& records = pbIt->second.Records;
+        UNIT_ASSERT_C(!records.count(5),  "LSN 5 must be erased");
+        UNIT_ASSERT_C(!records.count(15), "LSN 15 must be erased");
+        UNIT_ASSERT_C(!records.count(25), "LSN 25 must be erased");
+        UNIT_ASSERT_C(records.count(35),  "LSN 35 must remain");
+    }
+
+    // -----------------------------------------------------------------------
+    // Compact raw path: duplicates between oldLsns and newLsns are skipped
+    // (no double-write), Uncompact returns the correct unique set
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(CompactRawPathSkipsDuplicates) {
+        auto mgr = MakeManager();
+
+        // oldLsns and newLsns share LSNs 20 and 30.
+        std::unordered_set<ui64> oldLsns = {10, 20, 30};
+        std::unordered_set<ui64> newLsns = {20, 30, 40};
+
+        TPersistentBufferHeader header{};
+        memset(&header, 0, sizeof(header));
+        bool ok = mgr.Compact(oldLsns, newLsns, header);
+        UNIT_ASSERT(ok);
+
+        // 4 unique LSNs fit in raw storage — IS_ERASE_COMPACT must NOT be set.
+        UNIT_ASSERT_C(
+            !(header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT),
+            "IS_ERASE_COMPACT must not be set for 4 unique LSNs");
+
+        bool isCompact = (header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT) != 0;
+        auto recovered = mgr.Uncompact(header.Erase.CompactLsns, isCompact);
+
+        // Must recover exactly {10, 20, 30, 40}.
+        UNIT_ASSERT_VALUES_EQUAL_C(recovered.size(), 4u,
+            "Exactly 4 unique LSNs must be recovered, got " << recovered.size());
+        for (ui64 lsn : {10ULL, 20ULL, 30ULL, 40ULL}) {
+            UNIT_ASSERT_C(recovered.count(lsn), "LSN " << lsn << " missing after Uncompact");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Compact raw path: oldLsns == newLsns entirely — only unique ones written
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(CompactRawPathAllDuplicates) {
+        auto mgr = MakeManager();
+
+        std::unordered_set<ui64> oldLsns = {5, 15, 25, 35};
+        std::unordered_set<ui64> newLsns = {5, 15, 25, 35};
+
+        TPersistentBufferHeader header{};
+        memset(&header, 0, sizeof(header));
+        bool ok = mgr.Compact(oldLsns, newLsns, header);
+        UNIT_ASSERT(ok);
+
+        UNIT_ASSERT_C(
+            !(header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT),
+            "IS_ERASE_COMPACT must not be set for 4 unique LSNs");
+
+        bool isCompact = (header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT) != 0;
+        auto recovered = mgr.Uncompact(header.Erase.CompactLsns, isCompact);
+        UNIT_ASSERT_VALUES_EQUAL_C(recovered.size(), 4u,
+            "Exactly 4 unique LSNs must be recovered, got " << recovered.size());
+        for (ui64 lsn : {5ULL, 15ULL, 25ULL, 35ULL}) {
+            UNIT_ASSERT_C(recovered.count(lsn), "LSN " << lsn << " missing after Uncompact");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Compact LEB128 path: duplicates between oldLsns and newLsns are skipped
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(CompactLeb128PathSkipsDuplicates) {
+        auto mgr = MakeManager();
+
+        // oldLsns: 1..300, newLsns: 250..550 — overlap at 250..300 (51 duplicates).
+        // Unique count = 550, sum = 601 > MaxRawLsns(479) → forces LEB128 path.
+        std::unordered_set<ui64> oldLsns;
+        std::unordered_set<ui64> newLsns;
+        for (ui64 i = 1; i <= 300; i++) oldLsns.insert(i);
+        for (ui64 i = 250; i <= 550; i++) newLsns.insert(i);
+
+        TPersistentBufferHeader header{};
+        memset(&header, 0, sizeof(header));
+        bool ok = mgr.Compact(oldLsns, newLsns, header);
+        UNIT_ASSERT(ok);
+        UNIT_ASSERT_C(
+            header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT,
+            "IS_ERASE_COMPACT must be set for 550 unique LSNs");
+
+        bool isCompact = (header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT) != 0;
+        auto recovered = mgr.Uncompact(header.Erase.CompactLsns, isCompact);
+
+        // Must recover exactly 550 unique LSNs (1..550).
+        UNIT_ASSERT_VALUES_EQUAL_C(recovered.size(), 550u,
+            "Exactly 550 unique LSNs must be recovered, got " << recovered.size());
+        for (ui64 i = 1; i <= 550; i++) {
+            UNIT_ASSERT_C(recovered.count(i), "LSN " << i << " missing after Uncompact");
+        }
     }
 
 } // Y_UNIT_TEST_SUITE

@@ -180,6 +180,9 @@ namespace NKikimr::NDDisk {
                 pos += 8;
             }
             for (auto& lsn : newLsns) {
+                if (oldLsns.count(lsn)) {
+                    continue;
+                }
                 memcpy(&header.Erase.CompactLsns[pos], &lsn, 8);
                 pos += 8;
             }
@@ -202,6 +205,9 @@ namespace NKikimr::NDDisk {
         ++it;
         for (; it != lsns.end(); ++it) {
             ui64 delta = *it - prev;
+            if (delta == 0) {
+                continue;
+            }
             prev = *it;
             // Encode delta as variable-length (LEB128-style)
             while (delta >= 0x80) {
@@ -318,6 +324,18 @@ namespace NKikimr::NDDisk {
     void TPersistentBufferBarriersManager::RestoreErases(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
         for (auto it = Erases.begin(); it != Erases.end();) {
             auto& [tid, erase] = *it;
+
+            // Remove erase LSNs that are already covered by the barrier for this tablet.
+            // GetBarrier returns 0 when no barrier exists, so nothing is removed in that case.
+            const ui64 barrierLsn = GetBarrier(tid);
+            auto lsnIt = erase.Lsns.begin();
+            while (lsnIt != erase.Lsns.end()) {
+                if (*lsnIt <= barrierLsn) {
+                    lsnIt = erase.Lsns.erase(lsnIt);
+                } else {
+                    ++lsnIt;
+                }
+            }
 
             auto pbIt = persistentBuffers.lower_bound({tid, 0});
             bool hasRecords = pbIt != persistentBuffers.end() && std::get<0>(pbIt->first) == tid;

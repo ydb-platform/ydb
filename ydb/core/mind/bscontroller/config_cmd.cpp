@@ -1,6 +1,7 @@
 #include "impl.h"
 #include "config.h"
 #include "select_groups.h"
+#include "blob_checker_events.h"
 
 namespace NKikimr::NBsController {
 
@@ -182,6 +183,11 @@ namespace NKikimr::NBsController {
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
                             Self->Send(Self->SelfHealId, ev.release());
+                        }
+                        for (ui64 value : settings.GetBlobCheckerPeriodicitySeconds()) {
+                            TDuration duration = TDuration::Seconds(value);
+                            db.Table<T>().Key(true).Update<T::BlobCheckerPeriodicity>(duration);
+                            Self->UpdateBlobCheckerSettings(duration);
                         }
                         return;
                     }

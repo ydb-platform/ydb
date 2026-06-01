@@ -257,8 +257,8 @@ TBlocksDirtyMap::TBlocksDirtyMap(
 
 void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
 {
-    const THostMask added = vChunkConfig.GetDDisks().Exclude(DesiredPBuffers);
-    const THostMask removed = DesiredPBuffers.Exclude(vChunkConfig.GetDDisks());
+    const THostMask added = vChunkConfig.GetDDisks().Exclude(DesiredDDisks);
+    const THostMask removed = DesiredDDisks.Exclude(vChunkConfig.GetDDisks());
 
     DesiredPBuffers = vChunkConfig.GetDesiredPBuffers();
     DesiredDDisks = vChunkConfig.GetDDisks();

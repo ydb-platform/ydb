@@ -2468,10 +2468,16 @@ message THiveConfig {
     }
 
     message THiveTabletAllowedMetrics {
+        enum EAllowedMetricValue {
+            Default = 0;  // Not configured, take from hive defaults
+            Disabled = 1; // Explicitly disabled
+            Enabled = 2;  // Explicitly enabled
+        }
+
         repeated NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
-        optional bool CPU = 2;
-        optional bool Memory = 3;
-        optional bool Network = 4;
+        optional EAllowedMetricValue CPU = 2;
+        optional EAllowedMetricValue Memory = 3;
+        optional EAllowedMetricValue Network = 4;
     }
 
     optional uint64 MaxTabletsScheduled = 2 [default = 100];

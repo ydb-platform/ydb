@@ -691,11 +691,14 @@ void THive::BuildCurrentConfig() {
         DefaultDataCentersPreference[tabletPreference.GetType()] = tabletPreference.GetDataCentersPreference();
     }
     TabletTypeAllowedMetricsDefaults.clear();
-    auto setComputeMetric = [](TVector<i64>& metrics, i64 metricId, bool enabled) {
+    auto setComputeMetric = [](TVector<i64>& metrics, i64 metricId, auto value) {
+        if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Default) {
+            return;
+        }
         auto it = Find(metrics, metricId);
-        if (enabled && it == metrics.end()) {
+        if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Enabled && it == metrics.end()) {
             metrics.emplace_back(metricId);
-        } else if (!enabled && it != metrics.end()) {
+        } else if (value == NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics::Disabled && it != metrics.end()) {
             metrics.erase(it);
         }
     };

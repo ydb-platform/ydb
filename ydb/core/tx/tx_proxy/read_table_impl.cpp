@@ -2670,7 +2670,7 @@ private:
                     shardRange.To.GetCells(), shardRange.ToInclusive,
                     oldShard->Ranges.front().From.GetCells(), oldShard->Ranges.front().FromInclusive))
             {
-                TXLOG_T("Ignoring new shard ShardId# " << oldShard->ShardId << " (nothing to read)");
+                TXLOG_T("Ignoring new shard ShardId# " << (oldShard ? oldShard->ShardId : 0) << " (nothing to read)");
 
                 // We don't want to read anything from current shard
                 state.ShardPosition = ShardList.end();

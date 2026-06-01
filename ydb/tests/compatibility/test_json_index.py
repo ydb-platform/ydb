@@ -67,10 +67,10 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
         for json_type in ['Json', 'JsonDocument']:
             table_name = f"table_{json_type.lower()}"
             index_name = f"idx_{json_type.lower()}"
-            queries.extend(self._get_queries_for(table_name, index_name))
+            queries.extend(self._get_queries_for(table_name, index_name, json_type))
         return queries
 
-    def _get_queries_for(self, table_name, index_name):
+    def _get_queries_for(self, table_name, index_name, json_type):
         queries = []
         for _ in range(self.query_count):
             predicate = json.get_random_predicate()
@@ -86,17 +86,17 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
 
             queries.append(f"""
                 INSERT INTO `{table_name}` (`pk`, `json_data`)
-                VALUES ({key}, JsonDocument('{json.get_random_json()}'))
+                VALUES ({key}, {json_type}('{json.get_random_json()}'))
             """)
 
             queries.append(f"""
-                UPDATE `{table_name}` SET `json_data` = JsonDocument('{json.get_random_json()}')
+                UPDATE `{table_name}` SET `json_data` = {json_type}('{json.get_random_json()}')
                 WHERE pk = {key}
             """)
 
             queries.append(f"""
                 UPSERT INTO `{table_name}` (`pk`, `json_data`)
-                VALUES ({key}, JsonDocument('{json.get_random_json()}'))
+                VALUES ({key}, {json_type}('{json.get_random_json()}'))
             """)
 
             queries.append(f"""
@@ -106,7 +106,7 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
 
     def _do_queries(self, queries):
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for [query] in queries:
+            for query in queries:
                 session_pool.execute_with_retries(query)
 
     def select_from_index(self):

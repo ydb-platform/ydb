@@ -194,6 +194,7 @@ namespace NActors {
         }
 
         SetOutputStuckFlag(true);
+        Proxy->Metrics->UpdateNumEventsInQueueHistogram(NumEventsInQueue);
         ++NumEventsInQueue;
         if (State == EState::Idle) {
             UpdateState(EState::Utilized);

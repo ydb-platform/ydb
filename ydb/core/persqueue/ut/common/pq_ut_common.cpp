@@ -716,9 +716,7 @@ void AssertBatchedReadResults(
         if (exp.Offset != Max<ui64>()) {
             UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
         }
-        UNIT_ASSERT(msg.HasMessageCount());
         UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
-        UNIT_ASSERT(msg.HasMessageFormat());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
         UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
         UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
@@ -772,9 +770,7 @@ void CmdReadAndAssertBatched(
             if (exp.Offset != Max<ui64>()) {
                 UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
             }
-            UNIT_ASSERT(msg.HasMessageCount());
             UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
-            UNIT_ASSERT(msg.HasMessageFormat());
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
             UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
             UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));

@@ -465,14 +465,13 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
         TCoLambda lambda = stage.Program();
         TVector<TCoArgument> newArgs;
+        TNodeOnNodeOwnedMap argsMap;
         newArgs.reserve(stage.Inputs().Size());
 
         // Propagate "WideFromBlock" through connections.
         // TODO(ilezhankin): this peephole optimization should be implemented instead as
         //       the original whole-graph transformer |CreateDqBuildWideBlockChannelsTransformer|.
         if (config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
-            TNodeOnNodeOwnedMap argsMap;
-
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
             // Workaround to mitigate https://github.com/ydb-platform/ydb/issues/20440
@@ -543,20 +542,21 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                     argsMap.emplace(oldArg.Raw(), newArg.Ptr());
                 }
             }
-
-            // Rebuild lambda with new arguments.
-            lambda = Build<TCoLambda>(ctx, lambda.Pos())
-                .Args(newArgs)
-                .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
-            .Done();
         } else {
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
+                YQL_ENSURE(argsMap.emplace(oldArg.Raw(), newArg.Ptr()).second);
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
             }
         }
+
+        // Rebuild lambda with new arguments.
+        lambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args(newArgs)
+            .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
+            .Done();
 
         TVector<const TTypeAnnotationNode*> argTypes;
         for (const auto& arg : newArgs) {

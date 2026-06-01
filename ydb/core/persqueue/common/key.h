@@ -367,9 +367,7 @@ private:
         SetPartNo(partNo);
         SetCount(count);
         SetInternalPartsCount(InternalPartsCount);
-        if (offsetDelta.Defined()) {
-            SetOffsetDelta(offsetDelta);
-        }
+        SetOffsetDelta(offsetDelta);
         SetSuffix(suffix);
     }
 

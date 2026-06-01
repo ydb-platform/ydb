@@ -7,7 +7,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/core/tx/datashard/datashard.h>

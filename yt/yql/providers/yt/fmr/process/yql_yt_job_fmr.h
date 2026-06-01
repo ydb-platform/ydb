@@ -24,15 +24,14 @@ namespace NYql::NFmr {
 struct TVanillaInfo {
     TStaticVanillaPeerTrackerSettings Tracker;
     ui16 TdsPort = 8002;
+    ui32 TdsMinIndex = 1;
 
     void Save(IOutputStream* s) const {
-        ::Save(s, Tracker);
-        ::Save(s, TdsPort);
+        ::SaveMany(s, Tracker, TdsPort, TdsMinIndex);
     }
 
     void Load(IInputStream* s) {
-        ::Load(s, Tracker);
-        ::Load(s, TdsPort);
+        ::LoadMany(s, Tracker, TdsPort, TdsMinIndex);
     }
 };
 
@@ -140,6 +139,8 @@ private:
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.
     ITableDataServiceDiscovery::TPtr Discovery_;
+    // Non-serialized: owns the static peer tracker created for subprocess vanilla TDS discovery.
+    std::unique_ptr<IVanillaPeerTracker> VanillaPeerTracker_;
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams
     TFmrRawTableQueueReader::TPtr QueueReader_;

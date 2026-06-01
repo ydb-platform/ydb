@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/indir.h>
+#include <ydb/core/mind/bscontroller/impl.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -1178,6 +1179,19 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
             UNIT_ASSERT_VALUES_EQUAL(groupIds.size(), numGroups);
         }
+    }
+
+    Y_UNIT_TEST(EmptyPhysicalGroupIsNotListableAndDoesNotCrashResourceCalculation) {
+        TBlobStorageController::TGroupInfo group(TGroupId::FromValue(0x8200000f), 2, 0,
+            TBlobStorageGroupType::Erasure4Plus2Block, 0, NKikimrBlobStorage::TVDiskKind::Default,
+            0, 0, TString(), TString(), 0, 0, false, true, 0, TBridgePileId(), TBoxStoragePoolId(1, 1),
+            0, 0, 0, false);
+
+        UNIT_ASSERT(!group.Listable());
+
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters params;
+        UNIT_ASSERT(!group.FillInGroupParameters(&params, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL(params.GetGroupSizeInUnits(), 0);
     }
 
     Y_UNIT_TEST(AddDriveSerial) {

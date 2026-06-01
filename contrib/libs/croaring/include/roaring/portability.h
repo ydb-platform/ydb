@@ -1,6 +1,15 @@
 /*
  * portability.h
  *
+ * This header centralizes compiler-, platform-, and architecture-specific
+ * portability definitions used throughout CRoaring. It provides feature
+ * detection, calling-convention and attribute macros, intrinsic and inline
+ * assembly enablement, endianness helpers, alignment annotations, atomic
+ * reference-count support, and other low-level compatibility glue.
+ *
+ * The goal is to keep these conditional definitions in one place so the rest
+ * of the codebase can rely on a more uniform interface across GCC, Clang,
+ * MSVC, x86/x64, ARM/NEON, and other supported environments.
  */
 
 /**
@@ -155,7 +164,7 @@ extern "C" {  // portability definitions are in global scope, not a namespace
 #define CROARING_IS_E2K 1
 #endif
 
-#if !CROARING_REGULAR_VISUAL_STUDIO && !defined(CROARING_IS_E2K)
+#if !CROARING_REGULAR_VISUAL_STUDIO && !defined(CROARING_IS_E2K) && !__FILC__
 /* Non-Microsoft C/C++-compatible compiler, assumes that it supports inline
  * assembly */
 #define CROARING_INLINE_ASM 1

@@ -9,6 +9,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/explain_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/docs_search_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
@@ -50,6 +51,10 @@ CRITICAL EXECUTION RULES:
    - The user's connection parameters are provided in the [CONTEXT] below.
    - You MUST use ONLY those parameters when using ydb cli in exec_shell tool.
    - NEVER add `-p`, `--profile`, `--endpoint`, etc., unless they are explicitly in the [CONTEXT].
+
+5. **VALIDATE YQL BEFORE EXECUTING IT**: If you are not 100% certain a YQL query is valid (unfamiliar built-in, complex JOIN/window, multi-statement script, first use of an idiom in this session), you MUST run `explain_query` BEFORE `exec_query`. `explain_query` does not execute the query and does not prompt the user, so you can iterate on errors silently. Only call `exec_query` after `explain_query` succeeds — this way the user is prompted once, for a query already known to be valid.
+
+6. **CONSULT THE DOCS WHEN UNSURE**: If you are not 100% certain how a YQL feature, built-in function, YDB scheme entity, recipe, configuration option, or YDB CLI command works, you MUST use `docs_search` BEFORE composing a query, running a tool, or answering the user. Treat the docs as authoritative; your prior knowledge of YDB-specific behaviour may be outdated.
 
 STRATEGY FOR ANY REQUEST:
 1. Can I use native tools (`list_directory`, `describe`, `exec_query`)? If yes, use them.
@@ -284,8 +289,13 @@ void TModelHandler::SetupTools(const TSettings& settings) {
         {"explain_query", CreateExplainQueryTool({.LazyDriver = settings.LazyDriver})},
         {"describe", CreateDescribeTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
         {"ydb_help", CreateYdbHelpTool({.UsageInfoGetter = settings.UsageInfoGetter})},
+        {"docs_search", CreateDocsSearchTool()},
         {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt})},
     }) {
+        if (!tool) {
+            continue;
+        }
+
         const auto autoAction = settings.ConfigurationManager->GetToolAutoAction(name);
         if (autoAction == TInteractiveConfigurationManager::EToolAutoAction::Hide) {
             YDB_CLI_LOG(Warning, "Skipping tool " << name << " because it is hidden by configuration");

@@ -896,8 +896,15 @@ struct TCommonAppOptions {
                 }
 
                 if (!nodeId) {
-                    throw TInitializationException("YDB-CFG10") << "cannot detect node ID for " << env.HostName() << ":" << InterconnectPort
-                        << " and for " << env.FQDNHostName() << ":" << InterconnectPort << Endl;
+                    const TString hostname = env.HostName();
+                    const TString fqdn = env.FQDNHostName();
+                    TStringBuilder msg;
+                    msg << "no static node entry for " << hostname << ":" << InterconnectPort;
+                    if (fqdn != hostname) {
+                        msg << " or " << fqdn << ":" << InterconnectPort;
+                    }
+                    msg << " in cluster configuration";
+                    throw TInitializationException("YDB-CFG10") << msg;
                 }
                 return nodeId;
             } else {

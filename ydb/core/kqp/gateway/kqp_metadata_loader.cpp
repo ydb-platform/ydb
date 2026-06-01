@@ -1124,9 +1124,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 auto locked = ptr.lock();
                 if (!locked) {
-                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED, "lock failed")));
+                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed")));
                     return;
                 }
+
                 const bool resolveEntityInsideDataSource = (cluster != locked->Cluster);
                 // resolveEntityInsideDataSource => entry.Kind == EKind::KindExternalDataSource
                 if (resolveEntityInsideDataSource && entry.Kind != EKind::KindExternalDataSource) {
@@ -1150,7 +1151,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, locked](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
@@ -1175,10 +1176,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
                                     externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
                                     externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
-                                    .Subscribe([promise, externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
+                                        .Subscribe([promise, externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
                                             TTableMetadataResult wrapper;
                                             try {
-                                                auto& dynamicMetadata = result.GetValue();
+                                                const auto& dynamicMetadata = result.GetValue();
                                                 if (!dynamicMetadata->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *dynamicMetadata)) {
                                                     wrapper.SetSuccess();
                                                     wrapper.Metadata = externalDataSourceMetadata.Metadata;
@@ -1219,6 +1220,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 bool useTls = useTlsStr == "true"sv;
 
                                 auto path = databaseName + "/" + *externalPath;
+                                auto locked = ptr.lock();
+                                if (!locked) {
+                                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed during external source metadata loading")));
+                                    return;
+                                }
 
                                 GetSchemeEntryType(
                                     locked->FederatedQuerySetup,
@@ -1293,8 +1299,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, userToken, queryName, enableOnlineAddUniqueIndex));
                     }
                 }
-            }
-            catch (yexception& e) {
+            } catch (const yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
         }
@@ -1349,7 +1354,6 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 result.Metadata->StatsLoaded = response.Success;
                 promise.SetValue(result);
         });
-
     });
 }
 

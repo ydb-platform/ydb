@@ -1,5 +1,3 @@
-import six
-
 from abc import ABCMeta, abstractmethod
 
 
@@ -8,22 +6,22 @@ def _with_type(x):
 
 
 def _is_utf8(s):
-    if not isinstance(s, six.string_types):
+    if not isinstance(s, (str, bytes)):
         return False
 
-    if isinstance(s, six.binary_type):
+    if isinstance(s, bytes):
         try:
             s.decode("utf-8", errors="strict")
             return True
         except UnicodeDecodeError:
             return False
-    return isinstance(s, six.text_type)
+    return isinstance(s, str)
 
 
 def _as_utf8(s):
-    if isinstance(s, six.text_type):
+    if isinstance(s, str):
         return s
-    elif isinstance(s, six.binary_type):
+    elif isinstance(s, bytes):
         return s.decode("utf-8", errors="strict")
     else:
         raise TypeError("expected string or binary type, but got {}".format(type(s)))
@@ -42,7 +40,7 @@ def quote_string(s):
     return u"'{}'".format(s.replace("\\", "\\\\").replace("'", "\\'"))
 
 
-class Type(six.with_metaclass(ABCMeta)):
+class Type(metaclass=ABCMeta):
     REQUIRED_ATTRS = ["name", "yt_type_name"]
 
     def __init__(self, attrs):
@@ -86,7 +84,7 @@ class Primitive(Type):
         return self.yt_type_name_v1
 
 
-class Generic(six.with_metaclass(ABCMeta)):
+class Generic(metaclass=ABCMeta):
     def __init__(self, name, yt_type_name=None):
         assert _is_utf8(name), "Name must be UTF-8, got {}".format(_with_type(name))
         self.name = name

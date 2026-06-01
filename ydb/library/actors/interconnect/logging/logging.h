@@ -33,6 +33,11 @@
 #define LOG_ERROR_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_ERROR, __VA_ARGS__)
 #define LOG_WARN_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_WARN, __VA_ARGS__)
 #define LOG_NOTICE_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_NOTICE, __VA_ARGS__)
+#define LOG_NOTICE_IC_SOURCELESS(...)                                                        \
+    do {                                                                                     \
+        auto& ctx = ::NActors::TActivationContext::AsActorContext();                         \
+        LOG_NOTICE_SOURCELESS(ctx, ::NActorsServices::INTERCONNECT, __VA_ARGS__);            \
+    } while (false)
 #define LOG_INFO_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_INFO, __VA_ARGS__)
 #define LOG_DEBUG_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_DEBUG, __VA_ARGS__)
 #define LOG_TRACE_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_TRACE, __VA_ARGS__)

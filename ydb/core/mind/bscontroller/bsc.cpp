@@ -142,10 +142,16 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
         return res;
     } else {
         bool res = true;
+        params->SetGroupSizeInUnits(GroupSizeInUnits);
+        if (VDisksInGroup.empty()
+            || !Topology
+            || !Topology->GetTotalVDisksNum()
+            || !Topology->GetTotalFailDomainsNum()) {
+            return false;
+        }
         res &= FillInResources(params->MutableAssuredResources(), true);
         res &= FillInResources(params->MutableCurrentResources(), false);
         res &= FillInVDiskResources(params);
-        params->SetGroupSizeInUnits(GroupSizeInUnits);
         return res;
     }
 }

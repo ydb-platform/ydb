@@ -8,7 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/fulltext.h>
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>

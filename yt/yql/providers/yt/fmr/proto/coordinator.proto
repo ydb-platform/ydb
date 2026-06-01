@@ -41,6 +41,7 @@ message TStartOperationRequest {
     repeated TFileInfo Files = 8;
     repeated TYtResourceInfo YtResources = 9;
     repeated TFmrResourceOperationInfo FmrResources = 10;
+    optional TYtResourceInfo FmrJob = 11;
 }
 
 message TStartOperationResponse {
@@ -62,7 +63,7 @@ message TGetOperationResponse {
     EOperationStatus Status = 1;
     repeated TFmrError ErrorMessages = 2;
     repeated TTableStats TableStats = 3;
-    repeated string OperationResultsYson = 4;
+    repeated bytes OperationResultsYson = 4;
     TJobCounters JobCounters = 5;
 }
 

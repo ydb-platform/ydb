@@ -515,7 +515,7 @@ class YDBWrapper:
                         result = next(it)
                         batch_count += 1
                         batch_size = len(result.result_set.rows) if result.result_set.rows else 0
-                        results = results + result.result_set.rows
+                        results.extend(result.result_set.rows)
                         rows_affected += batch_size
 
                         if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:

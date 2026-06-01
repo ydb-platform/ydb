@@ -97,7 +97,7 @@ function loadSlowOperations() {
         return;
 
     SlowOperationsState.loading = true;
-    var url = '../cms/api/datashard/json/getslowopprofiles?tabletid=' + TabletId;
+    var url = makeMonUrl('/cms/api/datashard/json/getslowopprofiles?tabletid=' + TabletId);
     $.get(url).done(onSlowOperationsLoaded).fail(onSlowOperationsFailed);
 }
 

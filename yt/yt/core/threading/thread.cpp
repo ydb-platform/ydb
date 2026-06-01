@@ -267,15 +267,6 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
 {
 #if defined(__linux__) && defined(__x86_64__)
     ::syscall(SYS_arch_prctl, ARCH_GET_FS, &FSBase_);
-
-    if (auto* logFile = TryGetShutdownLogFile()) {
-        ::fprintf(logFile, "%s\t*** Entered thread trampoline (ThreadName: %s, ThreadId: %d, FSBase: %lx)\n",
-            GetInstant().ToString().c_str(),
-            ThreadName_.c_str(),
-            GetCurrentThreadId(),
-            FSBase_
-        );
-    }
 #endif
 
     auto this_ = MakeStrong(this);
@@ -290,6 +281,12 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
     [[maybe_unused]] TSignalHandlerStackGuard signalHandlerStackGuard;
 
     StartedEvent_.NotifyAll();
+
+    YT_LOG_DEBUG(
+        "Initializing thread (ThreadName: %v, ThreadId: %v, FSBase: %v)",
+        ThreadName_,
+        GetCurrentThreadId(),
+        FSBase_);
 
     class TExitInterceptor
     {

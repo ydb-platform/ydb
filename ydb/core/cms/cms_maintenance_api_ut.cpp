@@ -620,6 +620,57 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         }
     }
 
+    Y_UNIT_TEST(MaxInflightActionsSurvivesCmsRestart) {
+        TCmsTestEnv env(8);
+
+        auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
+            /* maxInflightActions = */ 3u,
+            MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(3), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(4), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(5), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(6), TDuration::Minutes(10))),
+            MakeActionGroup(MakeLockAction(env.GetNodeId(7), TDuration::Minutes(10)))
+        );
+
+        auto countStatuses = [](const Ydb::Maintenance::MaintenanceTaskResult& r) {
+            TVector<Ydb::Maintenance::ActionUid> performed;
+            ui32 pending = 0;
+            for (const auto& group : r.action_group_states()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.action_states().size(), 1);
+                const auto& state = group.action_states(0);
+                if (state.status() == ActionState::ACTION_STATUS_PERFORMED) {
+                    performed.push_back(state.action_uid());
+                } else if (state.status() == ActionState::ACTION_STATUS_PENDING) {
+                    ++pending;
+                }
+            }
+            return std::make_pair(std::move(performed), pending);
+        };
+
+        auto [createPerformed, createPending] = countStatuses(createResult);
+        UNIT_ASSERT_VALUES_EQUAL(createPerformed.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(createPending, 5);
+
+        env.RestartCms();
+
+        auto refreshAfterRestart = env.CheckMaintenanceTaskRefresh("task-1", Ydb::StatusIds::SUCCESS);
+        auto [postRestartPerformed, postRestartPending] = countStatuses(refreshAfterRestart);
+        UNIT_ASSERT_VALUES_EQUAL(postRestartPerformed.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(postRestartPending, 5);
+
+        env.CheckCompleteAction(postRestartPerformed[0], Ydb::StatusIds::SUCCESS);
+        env.CheckCompleteAction(postRestartPerformed[1], Ydb::StatusIds::SUCCESS);
+
+        auto refreshAfterCompletion = env.CheckMaintenanceTaskRefresh("task-1", Ydb::StatusIds::SUCCESS);
+        auto [completionPerformed, completionPending] = countStatuses(refreshAfterCompletion);
+        UNIT_ASSERT_VALUES_EQUAL(completionPerformed.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(completionPending, 3);
+    }
+
     Y_UNIT_TEST(DisableMaintenance) {
         TCmsTestEnv env(16);
 

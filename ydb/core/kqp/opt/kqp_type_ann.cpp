@@ -2861,7 +2861,7 @@ TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) 
 
     for (const auto& item: typeItems) {
         auto columnName = TString(item->GetName());
-        if (auto it = columnName.find(".") != TString::npos) {
+        if (auto it = columnName.find("."); it != TString::npos) {
             columnName = columnName.substr(it+1);
         }
 

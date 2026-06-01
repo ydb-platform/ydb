@@ -919,6 +919,7 @@ message TTopicDataResponse {
             string Value = 2;
         }
         repeated TMetadataItem MessageMetadata = 11;
+        bytes Ip = 12;
     }
 
     uint64 StartOffset = 1;

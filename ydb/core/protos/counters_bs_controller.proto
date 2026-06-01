@@ -100,6 +100,7 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_READ_DDISK_POOL_USEC = 52 [(CounterOpts) = {Name: "ReadDDiskPool"}];
     COUNTER_CONFIGCMD_DELETE_DDISK_POOL_USEC = 53 [(CounterOpts) = {Name: "DeleteDDiskPool"}];
     COUNTER_CONFIGCMD_MOVE_DDISK_USEC = 54 [(CounterOpts) = {Name: "MoveDDisk"}];
+    COUNTER_CONFIGCMD_DELETE_SPECIFIC_GROUPS_USEC = 55 [(CounterOpts) = {Name: "DeleteSpecificGroup"}];
 }
 
 enum EPercentileCounters {

@@ -918,6 +918,26 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     auto rowType = itemType->Cast<TStructExprType>();
+
+    const bool isStructOfRows = rowType->GetSize() == 2 && [&]() {
+            THashSet<TStringBuf> names;
+            for (const auto& item : rowType->GetItems()) {
+                names.insert(item->GetName());
+                if (item->GetItemType()->GetKind() != NYql::ETypeAnnotationKind::Struct) {
+                    return false;
+                }
+            }
+            return names.contains("new") && names.contains("old");
+        }();
+    if (isStructOfRows) {
+        for (const auto& item : rowType->GetItems()) {
+            if (item->GetName() == "new") {
+                rowType = item->GetItemType()->Cast<TStructExprType>();
+                break;
+            }
+        }
+    }
+
     for (const auto& column : columns) {
         if (!rowType->FindItem(column.Value())) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()

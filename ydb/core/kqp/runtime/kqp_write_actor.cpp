@@ -2534,6 +2534,7 @@ public:
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
 
+        AFL_ENSURE(Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_FLAT);
         TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
@@ -2911,6 +2912,8 @@ struct TWriteSettings {
     bool IsOlap;
     THashSet<TStringBuf> DefaultColumns;
     bool SkipMissingRows;
+    enum class EInputRowFormat { Flat, StructOfRows };
+    EInputRowFormat InputRowFormat = EInputRowFormat::Flat;
 
     struct TIndex {
         TTableId TableId;
@@ -3303,6 +3306,7 @@ public:
             }
 
             if (settings.NeedLookup) {
+                AFL_ENSURE(settings.InputRowFormat == TWriteSettings::EInputRowFormat::Flat);
                 AFL_ENSURE(!settings.IsOlap);
                 auto& lookupInfo = LookupInfos[settings.TableId.PathId];
                 if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
@@ -5559,7 +5563,15 @@ public:
             Settings.GetWriteIndexes().end());
 
         TGuard guard(*Alloc);
-        if (Settings.GetIsOlap()) {
+        if (Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS) {
+            AFL_ENSURE(!Settings.GetNeedLookup());
+            AFL_ENSURE(!Settings.GetIsOlap());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> lookupColumnsMetadata(
+                Settings.GetLookupColumns().begin(),
+                Settings.GetLookupColumns().end());
+
+            Batcher = CreateStructOfRowsDataBatcher(columnsMetadata, lookupColumnsMetadata, std::move(writeIndex), Alloc);
+        } else if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
             Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
@@ -5714,6 +5726,9 @@ private:
                 .IsOlap = Settings.GetIsOlap(),
                 .DefaultColumns = std::move(defaultColumns),
                 .SkipMissingRows = Settings.GetSkipMissingRows(),
+                .InputRowFormat = Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS
+                    ? TWriteSettings::EInputRowFormat::StructOfRows
+                    : TWriteSettings::EInputRowFormat::Flat,
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .QuerySpanId = Settings.GetQuerySpanId(),

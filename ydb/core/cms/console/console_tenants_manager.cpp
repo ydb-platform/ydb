@@ -1182,9 +1182,9 @@ public:
     }
 };
 
-class TInitiaiteShrinkPool : public TActorBootstrapped<TInitiaiteShrinkPool> {
+class TInitiateShrinkPool : public TActorBootstrapped<TInitiateShrinkPool> {
 private:
-    using TBase = TActorBootstrapped<TInitiaiteShrinkPool>;
+    using TBase = TActorBootstrapped<TInitiateShrinkPool>;
 
     TActorId OwnerId;
     TTenantsManager::TTenant::TPtr Tenant;
@@ -1197,7 +1197,7 @@ public:
         return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
     }
 
-    TInitiaiteShrinkPool(TActorId ownerId,
+    TInitiateShrinkPool(TActorId ownerId,
                          TTenantsManager::TTenant::TPtr tenant,
                          TTenantsManager::TStoragePool::TPtr pool)
         : OwnerId(ownerId)
@@ -1207,7 +1207,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        BLOG_D("TInitiaiteShrinkPool(" << Pool->Config.GetName() << ")::Bootstrap");
+        BLOG_D("TInitiateShrinkPool(" << Pool->Config.GetName() << ")::Bootstrap");
 
         Become(&TThis::StateWork);
         SendRequest(ctx);
@@ -1251,7 +1251,7 @@ public:
                 break;
             default:
                 LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                            "TInitiaiteShrinkPool got error reply"
+                            "TInitiateShrinkPool got error reply"
                             << ", reply# " << ev->Get()->Record.ShortDebugString());
                 ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, ev->Get()->Record.GetError()), ctx);
                 break;
@@ -1285,12 +1285,16 @@ public:
     void ReplyAndDie(IEventBase *resp,
                      const TActorContext &ctx)
     {
+        if (HivePipe) {
+            NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), HivePipe);
+        }
         ctx.Send(OwnerId, resp);
         Die(ctx);
     }
 };
 
-class TDecommitGroups : public TActorBootstrapped<TDecommitGroups> {private:
+class TDecommitGroups : public TActorBootstrapped<TDecommitGroups> {
+private:
     using TBase = TActorBootstrapped<TDecommitGroups>;
 
     TActorId OwnerId;
@@ -1404,6 +1408,9 @@ public:
     void ReplyAndDie(const TActorContext &ctx)
     {
         ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvGroupsDecommitted(Tenant, Pool, std::move(SuccessGroups)));
+        if (BSControllerPipe) {
+            NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), BSControllerPipe);
+        }
         TBase::Die(ctx);
     }
 
@@ -2266,6 +2273,9 @@ void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorCont
     if (!tenant->HasPoolsToCreate()) {
         if (tenant->State == TTenant::CREATING_POOLS)
             TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::CREATING_SUBDOMAIN), ctx);
+        else if (tenant->State == TTenant::REMOVING_GROUPS) {
+            TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::RUNNING), ctx);
+        }
         return;
     }
 
@@ -2277,7 +2287,7 @@ void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorCont
     for (auto &pr : tenant->StoragePools) {
         if (pr.second->State != TStoragePool::ALLOCATED && !pr.second->Worker) {
             if (pr.second->AllocatedNumGroups > pr.second->GetGroups() || pr.second->State == TStoragePool::SHRINKING) {
-                pr.second->Worker = ctx.RegisterWithSameMailbox(new TInitiaiteShrinkPool(SelfId(), tenant, pr.second));
+                pr.second->Worker = ctx.RegisterWithSameMailbox(new TInitiateShrinkPool(SelfId(), tenant, pr.second));
             } else {
                 pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::ALLOCATE));
             }
@@ -2908,7 +2918,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
     auto poolRowset = db.Table<Schema::TenantPools>().Range().Select<Schema::TenantPools::TColumns>();
     auto slotRowset = db.Table<Schema::TenantUnits>().Range().Select<Schema::TenantUnits::TColumns>();
     auto registeredRowset = db.Table<Schema::RegisteredUnits>().Range().Select<Schema::RegisteredUnits::TColumns>();
-    auto decommitRowset = db.Table<Schema::DecommitedGroups>().Range().Select<Schema::DecommitedGroups::TColumns>();
+    auto decommitRowset = db.Table<Schema::DecommittedGroups>().Range().Select<Schema::DecommittedGroups::TColumns>();
 
     if (!tenantRowset.IsReady()
         || !removedRowset.IsReady()
@@ -3115,7 +3125,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
     while (!decommitRowset.EndOfSet()) {
         // TODO: remove old entries after some time
-        DecommitedGroups.insert(decommitRowset.GetValue<Schema::DecommitedGroups::GroupId>());
+        DecommittedGroups.insert(decommitRowset.GetValue<Schema::DecommittedGroups::GroupId>());
         if (!decommitRowset.EndOfSet()) {
             return false;
         }
@@ -3947,10 +3957,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvGroupsDecommitted::TPtr &ev, const T
     auto pool = ev->Get()->Pool;
     auto groups = std::move(ev->Get()->Groups);
 
-    TxProcessor->ProcessTx(CreateDecommitGroups(tenant, pool, groups), ctx);
-    if (!tenant->HasPoolsToCreate()) {
-        TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::RUNNING), ctx);
-    }
+    TxProcessor->ProcessTx(CreateTxDecommitGroups(tenant, pool, groups), ctx);
 }
 
 void TTenantsManager::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
@@ -4036,12 +4043,13 @@ void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const 
     if (!tenant) {
         return;
     }
-    auto pool = tenant->StoragePools[poolKind];
-    if (!pool) {
+    auto poolIt = tenant->StoragePools.find(poolKind);
+    if (poolIt == tenant->StoragePools.end()) {
         return;
     }
+    auto pool = poolIt->second;
 
-    auto newGroups = ev->Get()->Record.GetGroupsToRemove() | std::views::filter([&](ui32 group) { return !DecommitedGroups.contains(group); });
+    auto newGroups = ev->Get()->Record.GetGroupsToRemove() | std::views::filter([&](ui32 group) { return !DecommittedGroups.contains(group); });
     TVector<ui32> groups(newGroups.begin(), newGroups.end());
 
     ctx.RegisterWithSameMailbox(new TDecommitGroups(SelfId(), tenant, pool, std::move(groups)));

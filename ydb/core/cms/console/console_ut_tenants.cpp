@@ -1007,6 +1007,20 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS,
                           {{"hdd", 3, 3}, {"hdd-1", 5, 6}, {"hdd-2", 1, 1}}, {});
 
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd-2", 1}});
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS,
+                          {{"hdd", 3, 3}, {"hdd-1", 5, 6}, {"hdd-2", 2, 2}}, {});
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd-1", 7, 5}});
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 3, 3}, {"hdd-1", 7, 7}, {"hdd-2", 2, 2}}, {});
+
         // Wrong unit kind.
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"unknown", 1}});
@@ -1014,9 +1028,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"hdd-3", 0}});
 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 6);
-        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 4);
-        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 2);
+        // Double remove of same group
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
+                              {{"hdd", 1, 3}, {"hdd", 1, 3}});
+
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 9);
+        CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 6);
+        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 3);
     }
 
     Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForRunning) {

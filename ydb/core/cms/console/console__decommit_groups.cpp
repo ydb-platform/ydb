@@ -22,8 +22,8 @@ public:
         auto now = ctx.Now();
         size_t decommitNumGroups = 0;
         for (auto group : Groups) {
-            if (Self->DecommitedGroups.insert(group).second) {
-                db.Table<Schema::DecommitedGroups>().Key(group).Update<Schema::DecommitedGroups::DecommitTime>(now.MilliSeconds());
+            if (Self->DecommittedGroups.insert(group).second) {
+                db.Table<Schema::DecommittedGroups>().Key(group).Update<Schema::DecommittedGroups::DecommitTime>(now.MilliSeconds());
                 ++decommitNumGroups;
             }
         }
@@ -45,8 +45,8 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
                     "TTxDecommitGroups complete for " << Pool->Config.GetName());
 
-        Self->Counters.Inc(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,
-                           AllocatedNumGroups - Pool->AllocatedNumGroups);
+        Self->Counters.Dec(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,
+                           Pool->AllocatedNumGroups - AllocatedNumGroups);
 
         Pool->State = State;
         Pool->AllocatedNumGroups = AllocatedNumGroups;
@@ -64,9 +64,9 @@ private:
     ui64 AllocatedNumGroups;
 };
 
-ITransaction *TTenantsManager::CreateDecommitGroups(TTenant::TPtr tenant,
-                                                    TStoragePool::TPtr pool,
-                                                    TVector<ui32> groups)
+ITransaction *TTenantsManager::CreateTxDecommitGroups(TTenant::TPtr tenant,
+                                                      TStoragePool::TPtr pool,
+                                                      TVector<ui32> groups)
 {
     return new TTxDecommitGroups(this, tenant, pool, std::move(groups));
 }

@@ -781,7 +781,7 @@ public:
                                           TStoragePool::TPtr pool,
                                           TActorId worker);
     ITransaction *CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev);
-    ITransaction *CreateDecommitGroups(TTenant::TPtr tenant, TStoragePool::TPtr pool, TVector<ui32> groups);
+    ITransaction *CreateTxDecommitGroups(TTenant::TPtr tenant, TStoragePool::TPtr pool, TVector<ui32> groups);
 
     void ClearState();
     void SetConfig(const NKikimrConsole::TTenantsConfig &config);
@@ -1071,7 +1071,7 @@ private:
     TSlotStats SlotStats;
     TCounters Counters;
     NKikimrConfig::TFeatureFlags FeatureFlags;
-    THashSet<ui32> DecommitedGroups;
+    THashSet<ui32> DecommittedGroups;
 };
 
 } // namespace NKikimr::NConsole

@@ -70,7 +70,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdatePoolState complete for " << Pool->Config.GetName());
+                    "TTxUpdatePoolState complete for " << Pool->Config.GetName() << ", tenant state " << Tenant->State);
 
         if (Update) {
             Self->Counters.Inc(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,
@@ -85,6 +85,8 @@ public:
                 Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::CREATING_SUBDOMAIN), ctx);
             else if (Tenant->State == TTenant::REMOVING_POOLS && !Tenant->HasPoolsToDelete())
                 Self->TxProcessor->ProcessTx(Self->CreateTxRemoveTenantDone(Tenant), ctx);
+            else if (Tenant->State == TTenant::REMOVING_GROUPS && !Tenant->HasPoolsToCreate())
+                Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::RUNNING), ctx);
             else if (Tenant->State == TTenant::RUNNING)
                 Self->ProcessTenantActions(Tenant, ctx);
         }

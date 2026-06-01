@@ -163,7 +163,7 @@ public:
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                             Sprintf("Pool '%s' is borrowed, cannot alter", kind.data()), ctx);
             }
-            if (poolIt->second->GetGroups() <= unit.count()) {
+            if (poolIt->second->GetGroups() + PoolsToChange[kind] <= unit.count()) {
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Not enough units of kind '%s' to remove",
                                      kind.data()),
@@ -436,7 +436,11 @@ public:
                     Tenant->StoragePools.emplace(std::make_pair(kind, pool));
                 }
 
-                Self->Counters.Inc(kind, COUNTER_REQUESTED_STORAGE_UNITS, size);
+                if (size >= 0) {
+                    Self->Counters.Inc(kind, COUNTER_REQUESTED_STORAGE_UNITS, size);
+                } else {
+                    Self->Counters.Dec(kind, COUNTER_REQUESTED_STORAGE_UNITS, -size);
+                }
             }
             if (SchemaOperationQuotas) {
                 Tenant->SchemaOperationQuotas.ConstructInPlace(*SchemaOperationQuotas);

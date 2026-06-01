@@ -1091,15 +1091,17 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert "--tx-mode" in combined
         assert "COMMIT" not in result.stdout
 
-    def test_inconsistent_reads_modifier_rejected(self):
-        """The INCONSISTENT READS modifier is no longer supported in BEGIN."""
+    def test_begin_rejects_trailing_tokens(self):
+        """Extra tokens after a supported mode must not open a transaction."""
         result = self.run_interactive_session(
-            ["BEGIN online-ro INCONSISTENT READS", "exit"],
+            ["BEGIN serializable-rw extra", "exit"],
             self.tmp_path,
         )
         assert result.exit_code == 0
         combined = result.stdout + result.stderr
         assert "unknown" in combined.lower() or "malformed" in combined.lower()
+        assert "COMMIT" not in result.stdout
+        assert "Supported modes:" in combined
 
     # ------------------------------------------------------------------
     # Negative parsing: rejected forms

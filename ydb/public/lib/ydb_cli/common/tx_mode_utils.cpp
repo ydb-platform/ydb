@@ -197,6 +197,15 @@ bool IsOneShotOnlyTxMode(TStringBuf mode) {
     return normalized == "online-ro" || normalized == "stale-ro";
 }
 
+bool HasTrailingBeginTokens(TStringBuf line) {
+    const auto tokens = TokenizeUpper(line);
+    const size_t skip = MatchBeginPrefix(tokens);
+    if (skip == 0 || skip >= tokens.size()) {
+        return false;
+    }
+    return skip + 1 < tokens.size();
+}
+
 bool IsBeginCommand(TStringBuf line) {
     const auto tokens = TokenizeUpper(line);
     return MatchBeginPrefix(tokens) > 0;

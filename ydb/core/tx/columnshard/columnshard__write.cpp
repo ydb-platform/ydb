@@ -538,8 +538,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
     if (overloadStatus.Status != EOverloadStatus::None) {
         const NKikimrDataEvents::TEvWriteResult::EStatus writeStatus =
-            overloadStatus.Status == EOverloadStatus::Disk ? NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
-                                                           : NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
+            overloadStatus.Status == outOfSpace ? NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
+                                                : NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
         LWPROBE(EvWriteResult, TabletID(), source.ToString(), record.GetTxId(), cookie, "immediate error", false, "overload data error");
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(),
             "", false, operation.GetIsBulk(), ToString(writeStatus), "overload data error " + ToString(overloadStatus.Status));

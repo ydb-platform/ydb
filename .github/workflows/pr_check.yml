@@ -330,12 +330,28 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const body = 'Only safe paths were changed, so build and test jobs were skipped.';
-            await github.rest.issues.createComment({
+            const marker = '<!-- pr-check-safe-skip -->';
+            const body = `${marker}\nOnly safe paths were changed, so build and test jobs were skipped.`;
+            const { data: comments } = await github.rest.issues.listComments({
               ...context.repo,
               issue_number: context.issue.number,
-              body,
+              per_page: 100,
             });
+            const existing = comments.find((comment) => comment.body && comment.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
     needs:

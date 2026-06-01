@@ -197,6 +197,14 @@ message IncrementalBackupMetadata {
 message IncrementalBackupResult {
 }
 
+message BackupMetadata {
+    BackupProgress.Progress progress = 1;
+    int32 progress_percent = 2 [(Ydb.value) = "[0; 100]"];
+}
+
+message BackupResult {
+}
+
 message RestoreProgress {
     enum Progress {
         PROGRESS_UNSPECIFIED = 0;

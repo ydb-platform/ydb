@@ -65,6 +65,8 @@ class TGetOperationRPC
             return "[GetBackupCollectionRestore]";
         case TOperationId::COMPACTION:
             return "[GetForcedCompaction]";
+        case TOperationId::FULL_BACKUP:
+            return "[GetFullBackup]";
         default:
             return "[Untagged]";
         }
@@ -84,6 +86,8 @@ class TGetOperationRPC
             return new NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::COMPACTION:
             return new NSchemeShard::TEvForcedCompaction::TEvGetRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::FULL_BACKUP:
+            return new NSchemeShard::TEvBackup::TEvGetFullBackupRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
@@ -117,6 +121,7 @@ public:
             case TOperationId::INCREMENTAL_BACKUP:
             case TOperationId::RESTORE:
             case TOperationId::COMPACTION:
+            case TOperationId::FULL_BACKUP:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }
@@ -148,6 +153,7 @@ public:
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
+            HFunc(NSchemeShard::TEvBackup::TEvGetFullBackupResponse, Handle);
 
         default:
             return StateBase(ev);
@@ -323,6 +329,17 @@ private:
 
         TEvGetOperationRequest::TResponse resp;
         *resp.mutable_operation() = TBackupCollectionRestoreConv::ToOperation(record.GetBackupCollectionRestore());
+        Reply(resp, ctx);
+    }
+
+    void Handle(NSchemeShard::TEvBackup::TEvGetFullBackupResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvGetFullBackupResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TEvGetOperationRequest::TResponse resp;
+        *resp.mutable_operation() = TFullBackupConv::ToOperation(record.GetFullBackup());
         Reply(resp, ctx);
     }
 

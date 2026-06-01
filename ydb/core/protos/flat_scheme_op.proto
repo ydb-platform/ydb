@@ -458,6 +458,10 @@ message TTableDescription {
      *       regardless of the detailed metrics settings at the database level.
      */
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
+
+    // If set, overrides path-id allocation in CopyTable::Propose. Pre-assigned
+    // by the control op so destination ids are known before sub-ops run.
+    optional NKikimrProto.TPathID TargetPathId = 52;
 }
 
 message TCompressionOptions {
@@ -1310,6 +1314,13 @@ message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
+// Control op for a BackupCollection full backup (runs first in the CCT decomposition).
+message TCreateFullBackupOp {
+    // Total CopyTable sub-ops expected (base tables + index impl tables).
+    // Used to detect when the control op is fully terminal.
+    optional uint32 ExpectedItemCount = 1;
+}
+
 message TTruncateTable {
     optional string TableName = 1;
 }
@@ -1456,6 +1467,14 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally dropes cdc stream on src table consistently with taking snapshot
     optional TDropCdcStream DropSrcCdcStream = 10;
     map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
+
+    // If set, overrides path-id allocation in CopyTable::Propose. Pre-assigned
+    // by the control op so destination ids are known before sub-ops run.
+    optional NKikimrProto.TPathID TargetPathId = 12;
+
+    // Pre-assigned destination TPathIds for index impl table copies, keyed by
+    // "<indexName>/<implTableName>". Parallel to IndexImplTableCdcStreams.
+    map<string, NKikimrProto.TPathID> IndexImplTableTargetPathIds = 13;
 }
 
 message TConsistentTableCopyingConfig {
@@ -2082,6 +2101,8 @@ message TModifyScheme {
     optional TTruncateTable TruncateTable = 92;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 93;
+
+    optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
     // Some entries are grouped by semantics, so are out of order
 }

@@ -42,4 +42,35 @@ struct TIncrementalBackupConv: public TOperationConv<NKikimrBackup::TIncremental
 
 }; // TBackupConv
 
+struct TFullBackupConv: public TOperationConv<NKikimrBackup::TFullBackup> {
+    static Ydb::TOperationId MakeOperationId(const ui64 id) {
+        Ydb::TOperationId operationId;
+        operationId.SetKind(Ydb::TOperationId::FULL_BACKUP);
+        NOperationId::AddOptionalValue(operationId, "id", ToString(id));
+        return operationId;
+    }
+
+    static Operation ToOperation(const NKikimrBackup::TFullBackup& in) {
+        auto operation = TOperationConv::ToOperation(in);
+
+        if (operation.status() == Ydb::StatusIds::SUCCESS) {
+            operation.set_ready(in.GetProgress() == Ydb::Backup::BackupProgress::PROGRESS_DONE);
+        } else if (operation.status() != Ydb::StatusIds::CANCELLED) {
+            return operation;
+        }
+
+        operation.set_id(NOperationId::ProtoToString(MakeOperationId(in.GetId())));
+        Ydb::Backup::BackupMetadata metadata;
+        metadata.set_progress(in.GetProgress());
+        metadata.set_progress_percent(in.GetProgressPercent());
+        operation.mutable_metadata()->PackFrom(metadata);
+
+        Ydb::Backup::BackupResult result;
+        operation.mutable_result()->PackFrom(result);
+
+        return operation;
+    }
+
+}; // TFullBackupConv
+
 } // namespace NKikimr::NGRpcService

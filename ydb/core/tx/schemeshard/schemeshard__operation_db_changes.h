@@ -52,6 +52,9 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<ui64> IncrementalBackups;
 
+    // Full-backup control op ids to flush on Apply(); same shape as IncrementalBackups.
+    TDeque<ui64> FullBackups;
+
     TDeque<TPathId> StreamingQueries;
 
     //PQ part
@@ -164,6 +167,10 @@ public:
 
     void PersistLongIncrementalBackupOp(ui64 id) {
         IncrementalBackups.emplace_back(id);
+    }
+
+    void PersistFullBackupOp(ui64 id) {
+        FullBackups.emplace_back(id);
     }
 
     void PersistStreamingQuery(const TPathId& pathId) {

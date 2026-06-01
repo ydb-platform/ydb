@@ -148,6 +148,16 @@ void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
     IncrementalBackups.emplace(id, nullptr);
 }
 
+void TMemoryChanges::GrabNewFullBackupOp(TSchemeShard* ss, ui64 id) {
+    Y_ABORT_UNLESS(!ss->FullBackups.contains(id));
+    FullBackups.emplace(id, nullptr);
+}
+
+void TMemoryChanges::GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId) {
+    Y_ABORT_UNLESS(!ss->BCPathToFullBackup.contains(bcPathId));
+    BCPathToFullBackup.emplace(bcPathId, std::nullopt);
+}
+
 void TMemoryChanges::GrabNewSecret(TSchemeShard* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->Secrets, Secrets);
 }
@@ -353,6 +363,26 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->IncrementalBackups.erase(id);
         }
         IncrementalBackups.pop();
+    }
+
+    while (FullBackups) {
+        const auto& [id, elem] = FullBackups.top();
+        if (elem) {
+            ss->FullBackups[id] = elem;
+        } else {
+            ss->FullBackups.erase(id);
+        }
+        FullBackups.pop();
+    }
+
+    while (BCPathToFullBackup) {
+        const auto& [bcPathId, prevId] = BCPathToFullBackup.top();
+        if (prevId.has_value()) {
+            ss->BCPathToFullBackup[bcPathId] = *prevId;
+        } else {
+            ss->BCPathToFullBackup.erase(bcPathId);
+        }
+        BCPathToFullBackup.pop();
     }
 
     while (Secrets) {

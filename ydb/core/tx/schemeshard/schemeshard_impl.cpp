@@ -222,6 +222,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ResumeImports(opts.ImportsIds, ctx);
     ResumeCdcStreamScans(opts.CdcStreamScans, ctx);
     ResumeIncrementalBackups(opts.IncrementalBackupIds, ctx);
+    ResumeFullBackups(opts.FullBackupIds, ctx);
 
     ParentDomainLink.SendSync(ctx);
 
@@ -1868,6 +1869,11 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
     case TTxState::TxIncrementalRestoreFinalize:
         return TPathElement::EPathState::EPathStateAlter; // Finalization is an alter operation to normalize path states
+    case TTxState::TxCreateFullBackupOp:
+        // The control op must not flip the backup-collection path to
+        // EPathStateCreate; concurrent-backup exclusion is enforced via
+        // BCPathToFullBackup, not path-state.
+        return oldState;
     }
     return oldState;
 }
@@ -5694,6 +5700,11 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvBackup::TEvGetBackupCollectionRestoreRequest, Handle);
         HFuncTraced(TEvBackup::TEvForgetBackupCollectionRestoreRequest, Handle);
         HFuncTraced(TEvBackup::TEvListBackupCollectionRestoresRequest, Handle);
+
+        HFuncTraced(TEvBackup::TEvGetFullBackupRequest, Handle);
+        HFuncTraced(TEvBackup::TEvForgetFullBackupRequest, Handle);
+        HFuncTraced(TEvBackup::TEvListFullBackupsRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvFullBackupItemDone, Handle);
         // } // NBackup
 
 
@@ -7657,6 +7668,11 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
     }
     if (TxIdToIndexBuilds.contains(txId)) {
         Execute(CreateTxReply(txId), ctx);
+        executed = true;
+    }
+    if (FullBackups.contains(ui64(txId))) {
+        // Control op completed; finalize the tracked record.
+        Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
         executed = true;
     }
     if (BackgroundCleaningTxToDirPathId.contains(txId)) {

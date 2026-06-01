@@ -104,6 +104,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     case TOperationId::INCREMENTAL_BACKUP:
         return GetOperation<NBackup::TIncrementalBackupResponse>(client, OperationId, OutputFormat);
+    case TOperationId::FULL_BACKUP:
+        return GetOperation<NBackup::TFullBackupResponse>(client, OperationId, OutputFormat);
     case TOperationId::RESTORE:
         return GetOperation<NBackup::TBackupCollectionRestoreResponse>(client, OperationId, OutputFormat);
     case TOperationId::COMPACTION:
@@ -146,6 +148,7 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
         {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},
+        {"fullbackup", &ListOperations<NBackup::TFullBackupResponse>},
         {"restore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
         {"compaction", &ListOperations<NTable::TCompactionOperation>},
     };

@@ -123,11 +123,6 @@
                 "ColumnType": "Uint64"
             },
             {
-                "ColumnId": 122,
-                "ColumnName": "AllowedDataCenterIds",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 123,
                 "ColumnName": "BalancerPolicy",
                 "ColumnType": "Uint64"
@@ -141,6 +136,11 @@
                 "ColumnId": 124,
                 "ColumnName": "StoppedByTenant",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 125,
+                "ColumnName": "NewAllowedDataCenterIds",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 11,
@@ -209,10 +209,10 @@
                     4,
                     121,
                     5,
-                    122,
                     123,
                     7,
                     124,
+                    125,
                     11,
                     13,
                     17,
@@ -606,8 +606,8 @@
                 "ColumnType": "Bool"
             },
             {
-                "ColumnId": 12,
-                "ColumnName": "AllowedDataCenterIds",
+                "ColumnId": 13,
+                "ColumnName": "NewAllowedDataCenterIds",
                 "ColumnType": "String"
             }
         ],
@@ -626,7 +626,7 @@
                     9,
                     10,
                     11,
-                    12
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

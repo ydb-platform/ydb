@@ -518,7 +518,6 @@ en:
   - from: /devops/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
 
-en:
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md

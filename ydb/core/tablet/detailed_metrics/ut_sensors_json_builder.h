@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ut_helpers.h"
+
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -142,6 +144,40 @@ public:
             labelsRecord[key] = value;
         }
 
+        return *this;
+    }
+
+    TSensorsJsonBuilder& AddGroup(const TMetricsGroup& group) {
+        for (const auto& [name, item] : group) {
+            switch (item.Type) {
+                case TMetricsGroupItem::Undefined:
+                    Y_ABORT("Undefined sensor type");
+                case TMetricsGroupItem::Gauge:
+                    AddGauge(name, item.Value);
+                    break;
+                case TMetricsGroupItem::Rate:
+                    AddRate(name, item.Value);
+                    break;
+                case TMetricsGroupItem::Hist:
+                    AddCpuHistogram(name, item.Buckets);
+                    break;
+                }
+        }
+        return *this;
+    }
+
+    TSensorsJsonBuilder& AddNestedGroup(const TString &labelKey, const TString &labelValue, const TMetricsGroup& group) {
+        if (group.empty()) {
+            return *this;
+        }
+        return StartNested(labelKey, labelValue).AddGroup(group).EndNested();
+    }
+
+    template<typename Pred, typename Gen>
+    TSensorsJsonBuilder& AddNestedIf(const TString &labelKey, const TString &labelValue, Pred pred, Gen gen) {
+        if (pred()) {
+            return gen(StartNested(labelKey, labelValue)).EndNested();
+        }
         return *this;
     }
 

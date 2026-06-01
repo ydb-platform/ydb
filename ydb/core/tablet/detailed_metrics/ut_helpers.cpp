@@ -83,7 +83,7 @@ TActorId InitializeTabletCountersAggregator(
     return aggregatorId;
 }
 
-void SendDataShardMetrics(
+TMetricsGroup SendDataShardMetrics(
     TTestBasicRuntime& runtime,
     const TActorId& aggregatorId,
     const TActorId& edgeActorId,
@@ -98,17 +98,19 @@ void SendDataShardMetrics(
         metricsOffset = tabletId;
     }
 
+    TMetricsGroup result;
+
     // Populate executor counters with some fake values
     auto executorCounters = MakeHolder<TExecutorCounters>();
     auto executorCountersBaseline = MakeHolder<TExecutorCounters>();
 
     executorCounters->RememberCurrentStateAsBaseline(*executorCountersBaseline);
 
-    executorCounters->Simple()[TExecutorCounters::DB_UNIQUE_ROWS_TOTAL] = 10000 + (*metricsOffset);
-    executorCounters->Simple()[TExecutorCounters::DB_UNIQUE_DATA_BYTES] = 20000 + (*metricsOffset);
+    result.Add("table.datashard.row_count", executorCounters->Simple()[TExecutorCounters::DB_UNIQUE_ROWS_TOTAL] = 10000 + (*metricsOffset));
+    result.Add("table.datashard.size_bytes", executorCounters->Simple()[TExecutorCounters::DB_UNIQUE_DATA_BYTES] = 20000 + (*metricsOffset));
 
-    executorCounters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(30000 + (*metricsOffset));
-    executorCounters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(40000 + (*metricsOffset));
+    result.Add("table.datashard.cache_hit.bytes", executorCounters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(30000 + (*metricsOffset)));
+    result.Add("table.datashard.cache_miss.bytes", executorCounters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(40000 + (*metricsOffset)));
 
     // Populate DataShard counters with some fake values
     auto tabletCounters = CreateAppCountersByTabletType(TTabletTypes::DataShard);
@@ -116,18 +118,18 @@ void SendDataShardMetrics(
 
     tabletCounters->RememberCurrentStateAsBaseline(*tabletCountersBaseline);
 
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW].Increment(50000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW_BYTES].Increment(60000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW].Increment(10070000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS].Increment(20080000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW_BYTES].Increment(30090000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES].Increment(40100000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_ERASE_ROW].Increment(110000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_ERASE_ROW_BYTES].Increment(120000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_UPLOAD_ROWS].Increment(130000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_UPLOAD_ROWS_BYTES].Increment(140000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_SCANNED_ROWS].Increment(150000 + (*metricsOffset));
-    tabletCounters->Cumulative()[NDataShard::COUNTER_SCANNED_BYTES].Increment(160000 + (*metricsOffset));
+    result.Add("table.datashard.write.rows", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW].Increment(50000 + (*metricsOffset)));
+    result.Add("table.datashard.write.bytes", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW_BYTES].Increment(60000 + (*metricsOffset)));
+    result.Add("table.datashard.read.rows", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW].Increment(10070000 + (*metricsOffset)));
+    result.Add("table.datashard.read.rows", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS].Increment(20080000 + (*metricsOffset)));
+    result.Add("table.datashard.read.bytes", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW_BYTES].Increment(30090000 + (*metricsOffset)));
+    result.Add("table.datashard.read.bytes", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES].Increment(40100000 + (*metricsOffset)));
+    result.Add("table.datashard.erase.rows", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_ERASE_ROW].Increment(110000 + (*metricsOffset)));
+    result.Add("table.datashard.erase.bytes", tabletCounters->Cumulative()[NDataShard::COUNTER_ENGINE_HOST_ERASE_ROW_BYTES].Increment(120000 + (*metricsOffset)));
+    result.Add("table.datashard.bulk_upsert.rows", tabletCounters->Cumulative()[NDataShard::COUNTER_UPLOAD_ROWS].Increment(130000 + (*metricsOffset)));
+    result.Add("table.datashard.bulk_upsert.bytes", tabletCounters->Cumulative()[NDataShard::COUNTER_UPLOAD_ROWS_BYTES].Increment(140000 + (*metricsOffset)));
+    result.Add("table.datashard.scan.rows", tabletCounters->Cumulative()[NDataShard::COUNTER_SCANNED_ROWS].Increment(150000 + (*metricsOffset)));
+    result.Add("table.datashard.scan.bytes", tabletCounters->Cumulative()[NDataShard::COUNTER_SCANNED_BYTES].Increment(160000 + (*metricsOffset)));
 
     // Send these counters to the Tablet Counters Aggregator
     runtime.Send(
@@ -159,9 +161,11 @@ void SendDataShardMetrics(
     executorCounters->RememberCurrentStateAsBaseline(*executorCountersBaseline);
     tabletCounters->RememberCurrentStateAsBaseline(*tabletCountersBaseline);
 
-    executorCounters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(
+    result.Add("table.datashard.consumed_cpu_us", executorCounters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(
         cpuLoadPercentage * 10000 + (*metricsOffset)
-    );
+    ));
+    ui64 bucket = (cpuLoadPercentage * 10000 + (*metricsOffset) + 99999) / 100000 * 10;
+    result.AddHist("table.datashard.used_core_percents", {{bucket, 1}});
 
     runtime.AdvanceCurrentTime(TDuration::Seconds(1));
     runtime.Send(
@@ -180,6 +184,31 @@ void SendDataShardMetrics(
             )
         )
     );
+
+    return result;
+}
+
+TMetricsGroup EmptyDataShardMetrics() {
+    TMetricsGroup result;
+
+    result.Add("table.datashard.row_count", TTabletSimpleCounter{});
+    result.Add("table.datashard.size_bytes", TTabletSimpleCounter{});
+    result.Add("table.datashard.cache_hit.bytes", TTabletCumulativeCounter{});
+    result.Add("table.datashard.cache_miss.bytes", TTabletCumulativeCounter{});
+    result.Add("table.datashard.write.rows", TTabletCumulativeCounter{});
+    result.Add("table.datashard.write.bytes", TTabletCumulativeCounter{});
+    result.Add("table.datashard.read.rows", TTabletCumulativeCounter{});
+    result.Add("table.datashard.read.bytes", TTabletCumulativeCounter{});
+    result.Add("table.datashard.erase.rows", TTabletCumulativeCounter{});
+    result.Add("table.datashard.erase.bytes", TTabletCumulativeCounter{});
+    result.Add("table.datashard.bulk_upsert.rows", TTabletCumulativeCounter{});
+    result.Add("table.datashard.bulk_upsert.bytes", TTabletCumulativeCounter{});
+    result.Add("table.datashard.scan.rows", TTabletCumulativeCounter{});
+    result.Add("table.datashard.scan.bytes", TTabletCumulativeCounter{});
+    result.Add("table.datashard.consumed_cpu_us", TTabletCumulativeCounter{});
+    result.AddHist("table.datashard.used_core_percents", {});
+
+    return result;
 }
 
 void SendForgetDataShardTablet(

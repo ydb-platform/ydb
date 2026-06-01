@@ -1,17 +1,87 @@
 #pragma once
 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/string.h>
 
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
 #include <optional>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace NKikimr {
 
 namespace NDetailedMetricsTests {
+
+struct TMetricsGroupItem {
+    enum Type {
+        Undefined,
+        Gauge,
+        Rate,
+        Hist,
+    };
+    Type Type = Undefined;
+    ui64 Value = 0;
+    std::unordered_map<ui64, ui64> Buckets;
+
+    void Merge(const TMetricsGroupItem& other, bool isDelta) {
+        UNIT_ASSERT(Type == other.Type || Type == Undefined);
+        if (isDelta && Type == Gauge) {
+            Value = other.Value;
+        } else {
+            Value += other.Value;
+        }
+        Type = other.Type;
+        if (isDelta) {
+            Buckets.clear();
+        }
+        for (const auto& [key, value] : other.Buckets) {
+            Buckets[key] += value;
+        }
+    }
+};
+
+struct TMetricsGroup : public std::map<TString, TMetricsGroupItem> {
+    void Add(const TString& name, const TTabletSimpleCounter& counter) {
+        (*this)[name].Merge({.Type = TMetricsGroupItem::Gauge, .Value = counter.Get()}, true);
+    }
+
+    void Add(const TString& name, const TTabletCumulativeCounter& counter) {
+        (*this)[name].Merge({.Type = TMetricsGroupItem::Rate, .Value = counter.Get()}, true);
+    }
+
+    void AddHist(const TString& name, const std::unordered_map<ui64, ui64>& buckets) {
+        (*this)[name].Merge({.Type = TMetricsGroupItem::Hist, .Buckets = buckets}, true);
+    }
+
+    TMetricsGroup& operator+=(const TMetricsGroup& other) {
+        for (const auto& [name, value] : other) {
+            (*this)[name].Merge(value, true);
+        }
+        return *this;
+    }
+
+    TMetricsGroup operator+(const TMetricsGroup& other) const {
+        TMetricsGroup result(*this);
+        result += other;
+        return result;
+    }
+
+    TMetricsGroup& operator|=(const TMetricsGroup& other) {
+        for (const auto& [name, value] : other) {
+            (*this)[name].Merge(value, false);
+        }
+        return *this;
+    }
+
+    TMetricsGroup operator|(const TMetricsGroup& other) const {
+        TMetricsGroup result(*this);
+        result |= other;
+        return result;
+    }
+};
 
 /**
  * Normalizes the given JSON to be well formatted with all keys sorted.
@@ -67,7 +137,7 @@ NActors::TActorId InitializeTabletCountersAggregator(
  * @param[in] tableMetricsConfig The metrics configuration for the table (if needed)
  * @param[in] metricsOffset The offset for all metrics values (if not set, tabletId is used)
  */
-void SendDataShardMetrics(
+TMetricsGroup SendDataShardMetrics(
     NActors::TTestBasicRuntime& runtime,
     const NActors::TActorId& aggregatorId,
     const NActors::TActorId& edgeActorId,
@@ -77,6 +147,8 @@ void SendDataShardMetrics(
     TEvTabletCounters::TTableMetricsConfig* tableMetricsConfig = nullptr,
     std::optional<ui64> metricsOffset = {}
 );
+
+TMetricsGroup EmptyDataShardMetrics();
 
 /**
  * Send a message to the Tablet Counters Aggregator to forget the given Data Shard tablet.

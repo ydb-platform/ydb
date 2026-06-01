@@ -259,7 +259,7 @@ template <auto HASH, size_t LENGTH>
 std::string CalculateThumbprint(const std::string& cert) {
     std::string hash(LENGTH, '\0');
     HASH(reinterpret_cast<const unsigned char*>(cert.data()), cert.size(),
-        std::launder(reinterpret_cast<unsigned char*>(hash.data())));
+        reinterpret_cast<unsigned char*>(hash.data()));
     return hash;
 }
 

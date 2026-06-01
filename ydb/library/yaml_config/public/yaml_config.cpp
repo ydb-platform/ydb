@@ -409,15 +409,15 @@ bool TIncompatibilityRule::TLabelPattern::Matches(
     if (Name != actualLabelName) {
         return false;
     }
-    
+
     bool baseMatch = false;
-    
+
     // If Values is monostate, match any value
     if (std::holds_alternative<std::monostate>(Values)) {
         baseMatch = true;
     } else {
         const auto& valueSet = std::get<THashSet<TString>>(Values);
-        
+
         if (label.Type == TLabel::EType::Empty) {
             // Empty label matches either empty string or $unset marker in pattern
             baseMatch = valueSet.contains("") || valueSet.contains(TIncompatibilityRules::UNSET_LABEL_MARKER);
@@ -426,19 +426,19 @@ bool TIncompatibilityRule::TLabelPattern::Matches(
             baseMatch = valueSet.contains(label.Value);
         }
     }
-    
+
     // Apply negation if needed
     return Negated ? !baseMatch : baseMatch;
 }
 
 TIncompatibilityRules TIncompatibilityRules::GetDefaultRules() {
     TIncompatibilityRules rules;
-    
+
     auto addRequiredLabelRule = [&](const TString& labelName) {
         TIncompatibilityRule rule;
         rule.RuleName = TString("builtin_") + labelName + "_must_have_value";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern;
         pattern.Name = labelName;
         THashSet<TString> valueSet;
@@ -446,23 +446,23 @@ TIncompatibilityRules TIncompatibilityRules::GetDefaultRules() {
         valueSet.insert("");
         pattern.Values = std::move(valueSet);
         pattern.Negated = false;
-        
+
         rule.Patterns.push_back(std::move(pattern));
         rules.AddRule(std::move(rule));
     };
-    
+
     auto addMustBeDefinedRule = [&](const TString& labelName) {
         TIncompatibilityRule rule;
         rule.RuleName = TString("builtin_") + labelName + "_must_be_defined";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern;
         pattern.Name = labelName;
         THashSet<TString> valueSet;
         valueSet.insert(UNSET_LABEL_MARKER);
         pattern.Values = std::move(valueSet);
         pattern.Negated = false;
-        
+
         rule.Patterns.push_back(std::move(pattern));
         rules.AddRule(std::move(rule));
     };
@@ -472,101 +472,101 @@ TIncompatibilityRules TIncompatibilityRules::GetDefaultRules() {
     addRequiredLabelRule("node_host");
     addRequiredLabelRule("node_id");
     addRequiredLabelRule("rev");
-    
+
     addMustBeDefinedRule("node_type");
     addMustBeDefinedRule("tenant");
-    
+
     {
         TIncompatibilityRule rule;
         rule.RuleName = "builtin_static_with_nonempty_tenant";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "dynamic";
         THashSet<TString> valueSet1;
         valueSet1.insert("false");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = "tenant";
         THashSet<TString> valueSet2;
         valueSet2.insert("");
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = true;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     }
-    
+
     {
         TIncompatibilityRule rule;
         rule.RuleName = "builtin_static_with_nonempty_node_type";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "dynamic";
         THashSet<TString> valueSet1;
         valueSet1.insert("false");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = "node_type";
         THashSet<TString> valueSet2;
         valueSet2.insert("");
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = true;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     }
-    
+
     auto addStaticNodeCloudLabelRule = [&](const TString& labelName) {
         TIncompatibilityRule rule;
         rule.RuleName = TString("builtin_static_with_") + labelName;
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "dynamic";
         THashSet<TString> valueSet1;
         valueSet1.insert("false");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = labelName;
         THashSet<TString> valueSet2;
         valueSet2.insert(UNSET_LABEL_MARKER);
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = true;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     };
-    
+
     addStaticNodeCloudLabelRule("enable_auth");
     addStaticNodeCloudLabelRule("flavour");
     addStaticNodeCloudLabelRule("node_name");
     addStaticNodeCloudLabelRule("shared");
     addStaticNodeCloudLabelRule("ydb_postgres");
     addStaticNodeCloudLabelRule("ydbcp");
-    
+
     {
         TIncompatibilityRule rule;
         rule.RuleName = "builtin_dynamic_without_valid_tenant";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "dynamic";
         THashSet<TString> valueSet1;
         valueSet1.insert("true");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = "tenant";
         THashSet<TString> valueSet2;
@@ -574,146 +574,146 @@ TIncompatibilityRules TIncompatibilityRules::GetDefaultRules() {
         valueSet2.insert("");
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = false;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     }
-    
+
     {
         TIncompatibilityRule rule;
         rule.RuleName = "builtin_dynamic_without_flavour";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "dynamic";
         THashSet<TString> valueSet1;
         valueSet1.insert("true");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = "flavour";
         THashSet<TString> valueSet2;
         valueSet2.insert(UNSET_LABEL_MARKER);
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = false;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     }
-    
+
     {
         TIncompatibilityRule rule;
         rule.RuleName = "builtin_dynamic_without_ydbcp";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "dynamic";
         THashSet<TString> valueSet1;
         valueSet1.insert("true");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = "ydbcp";
         THashSet<TString> valueSet2;
         valueSet2.insert(UNSET_LABEL_MARKER);
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = false;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     }
-    
+
     {
         TIncompatibilityRule rule;
         rule.RuleName = "builtin_cloud_node_without_enable_auth";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "dynamic";
         THashSet<TString> valueSet1;
         valueSet1.insert("true");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = "node_type";
         THashSet<TString> valueSet2;
         valueSet2.insert("");
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern3;
         pattern3.Name = "enable_auth";
         THashSet<TString> valueSet3;
         valueSet3.insert(UNSET_LABEL_MARKER);
         pattern3.Values = std::move(valueSet3);
         pattern3.Negated = false;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rule.Patterns.push_back(std::move(pattern3));
         rules.AddRule(std::move(rule));
     }
-    
+
     {
         TIncompatibilityRule rule;
         rule.RuleName = "builtin_slot_type_static";
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "node_type";
         THashSet<TString> valueSet1;
         valueSet1.insert("slot");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = "dynamic";
         THashSet<TString> valueSet2;
         valueSet2.insert("false");
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = false;
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     }
-    
+
     auto addSlotNodeCloudLabelRule = [&](const TString& labelName) {
         TIncompatibilityRule rule;
         rule.RuleName = TString("builtin_slot_with_") + labelName;
         rule.Source = TIncompatibilityRule::ESource::BuiltIn;
-        
+
         TIncompatibilityRule::TLabelPattern pattern1;
         pattern1.Name = "node_type";
         THashSet<TString> valueSet1;
         valueSet1.insert("slot");
         pattern1.Values = std::move(valueSet1);
         pattern1.Negated = false;
-        
+
         TIncompatibilityRule::TLabelPattern pattern2;
         pattern2.Name = labelName;
         THashSet<TString> valueSet2;
         valueSet2.insert(UNSET_LABEL_MARKER);
         pattern2.Values = std::move(valueSet2);
         pattern2.Negated = true;  // IS set (NOT unset)
-        
+
         rule.Patterns.push_back(std::move(pattern1));
         rule.Patterns.push_back(std::move(pattern2));
         rules.AddRule(std::move(rule));
     };
-    
+
     addSlotNodeCloudLabelRule("enable_auth");
     addSlotNodeCloudLabelRule("node_name");
     addSlotNodeCloudLabelRule("shared");
     addSlotNodeCloudLabelRule("ydb_postgres");
 
-    
+
     return rules;
 }
 
@@ -733,29 +733,29 @@ bool TIncompatibilityRules::IsCompatible(
         if (DisabledRules.contains(ruleName)) {
             continue;
         }
-        
+
         bool allPatternsMatch = true;
         for (const auto& pattern : rule.Patterns) {
             bool found = false;
-            
+
             for (size_t i = 0; i < combination.size(); ++i) {
                 if (pattern.Matches(combination[i], labelNames[i].first)) {
                     found = true;
                     break;
                 }
             }
-            
+
             if (!found) {
                 allPatternsMatch = false;
                 break;
             }
         }
-        
+
         if (allPatternsMatch) {
             return false;
         }
     }
-    
+
     return true;
 }
 
@@ -764,19 +764,19 @@ bool TIncompatibilityRules::IsCompatible(const TMap<TString, TString>& labels) c
         if (DisabledRules.contains(ruleName)) {
             continue;
         }
-        
+
         bool allPatternsMatch = true;
         for (const auto& pattern : rule.Patterns) {
             auto it = labels.find(pattern.Name);
-            
+
             bool baseMatch = false;
-            
+
             // If Values is monostate, match any value
             if (std::holds_alternative<std::monostate>(pattern.Values)) {
             baseMatch = (it != labels.end());  // Only match if label exists
         } else {
             const auto& valueSet = std::get<THashSet<TString>>(pattern.Values);
-            
+
             if (it == labels.end()) {
                 // Label is completely missing - matches $unset marker only
                 baseMatch = valueSet.contains(TIncompatibilityRules::UNSET_LABEL_MARKER);
@@ -788,20 +788,20 @@ bool TIncompatibilityRules::IsCompatible(const TMap<TString, TString>& labels) c
                 baseMatch = valueSet.contains(it->second);
             }
         }
-        
+
         bool matches = pattern.Negated ? !baseMatch : baseMatch;
-        
+
         if (!matches) {
             allPatternsMatch = false;
             break;
         }
     }
-    
+
         if (allPatternsMatch) {
             return false;
         }
     }
-    
+
     return true;
 }
 
@@ -809,7 +809,7 @@ void TIncompatibilityRules::MergeWith(const TIncompatibilityRules& userRules) {
     for (const auto& ruleName : userRules.DisabledRules) {
         DisabledRules.insert(ruleName);
     }
-    
+
     for (const auto& [name, rule] : userRules.RulesByName) {
         AddRule(rule);
     }
@@ -817,13 +817,13 @@ void TIncompatibilityRules::MergeWith(const TIncompatibilityRules& userRules) {
 
 TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
     TIncompatibilityRules userRules;
-    
+
     if (!root.Map().Has("incompatibility_overrides")) {
         return userRules;
     }
-    
+
     auto overrides = root.Map().at("incompatibility_overrides");
-    
+
     if (overrides.Map().Has("disable_all_builtin_rules")) {
         auto value = overrides.Map().at("disable_all_builtin_rules").Scalar();
         if (value == "true") {
@@ -833,7 +833,7 @@ TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
             }
         }
     }
-    
+
     if (overrides.Map().Has("disable_rules")) {
         auto disableRules = overrides.Map().at("disable_rules");
         if (disableRules.Type() == NFyaml::ENodeType::Sequence) {
@@ -842,32 +842,32 @@ TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
             }
         }
     }
-    
+
     if (overrides.Map().Has("custom_rules")) {
         auto customRules = overrides.Map().at("custom_rules");
         if (customRules.Type() == NFyaml::ENodeType::Sequence) {
             for (auto ruleIt = customRules.Sequence().begin(); ruleIt != customRules.Sequence().end(); ++ruleIt) {
                 TIncompatibilityRule rule;
                 auto ruleMap = ruleIt->Map();
-                
+
                 rule.RuleName = ruleMap.at("name").Scalar();
                 rule.Source = TIncompatibilityRule::ESource::UserDefined;
-                
+
                 if (ruleMap.Has("patterns")) {
                     auto patterns = ruleMap.at("patterns");
                     if (patterns.Type() == NFyaml::ENodeType::Sequence) {
                         for (auto patternIt = patterns.Sequence().begin(); patternIt != patterns.Sequence().end(); ++patternIt) {
                             TIncompatibilityRule::TLabelPattern pattern;
                             auto patternMap = patternIt->Map();
-                            
+
                             pattern.Name = patternMap.at("label").Scalar();
-                            
+
                             // Check for negation
                             if (patternMap.Has("negated")) {
                                 TString negatedStr = patternMap.at("negated").Scalar();
                                 pattern.Negated = (negatedStr == "true");
                             }
-                            
+
                             // Helper to process value strings
                             // Keep $unset as-is, map $empty to empty string
                             auto processValue = [](const TString& valueStr) -> TString {
@@ -877,7 +877,7 @@ TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
                                     return valueStr;  // Includes $unset as-is
                                 }
                             };
-                            
+
                             // Parse value or value_in
                             if (patternMap.Has("value_in")) {
                                 // Multiple values
@@ -897,17 +897,17 @@ TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
                             }
                             // else: neither value nor value_in specified
                             // pattern.Values remains std::monostate (default-constructed)
-                            
+
                             rule.Patterns.push_back(std::move(pattern));
                         }
                     }
                 }
-                
+
                 userRules.AddRule(std::move(rule));
             }
         }
     }
-    
+
     return userRules;
 }
 
@@ -1211,7 +1211,7 @@ void ResolveUniqueDocs(
             auto resolvedDoc = states.back().Doc.Clone();
             RemoveTags(resolvedDoc);
             auto resolvedConfig = resolvedDoc.Root().Map().at("config");
-            
+
             size_t h = Hash(resolvedConfig);
             if (seenHashes.emplace(h).second) {
                 onDocument(TDocumentConfig{std::move(resolvedDoc), resolvedConfig});
@@ -1305,7 +1305,7 @@ description: Implicit DatabaseConfig node
 selector: {}
 )"));
     auto node = databaseConfigRoot.Map()["config"].Copy(config);
-    selectors.at(0).Map().Append(config.Buildf("config"), node);
+    selectors.at(selectors.size() - 1).Map().Append(config.Buildf("config"), node);
 }
 
 // Storage-only keys that should not be included in dynamic node configs

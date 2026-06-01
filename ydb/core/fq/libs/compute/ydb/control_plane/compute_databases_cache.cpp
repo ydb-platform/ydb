@@ -181,7 +181,7 @@ private:
     bool InFlight = false;
     bool Ready = false;
     const TDuration DatabasesCacheReloadPeriod = TDuration::Seconds(30);
-    const TString& Database;
+    const TString Database;
 };
 
 std::unique_ptr<NActors::IActor> CreateComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& database) {

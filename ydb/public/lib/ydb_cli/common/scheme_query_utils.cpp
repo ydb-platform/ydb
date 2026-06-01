@@ -76,7 +76,6 @@ const THashSet<TString>& SchemeQueryTopLevelCompletionKeywords() {
         "IMPORT",
         "RESTORE",
         "REVOKE",
-        "SHOW CREATE",
         "TRUNCATE TABLE",
         "USE",
     };
@@ -111,7 +110,27 @@ bool LooksLikeSchemeQueryStatement(TStringBuf statement) {
     if (i >= tokens.size()) {
         return false;
     }
+    if (tokens[i] == "SHOW" && i + 1 < tokens.size() && tokens[i + 1] == "CREATE") {
+        return false;
+    }
     return SchemeQueryLeadingKeywords().contains(tokens[i]);
+}
+
+bool IsShowCreateStatementPrefix(TStringBuf textBeforeCursor) {
+    const size_t lastSemi = textBeforeCursor.rfind(';');
+    if (lastSemi != TStringBuf::npos) {
+        textBeforeCursor = textBeforeCursor.SubStr(lastSemi + 1);
+    }
+    textBeforeCursor = StripOuterWhitespace(textBeforeCursor);
+    if (textBeforeCursor.empty()) {
+        return false;
+    }
+    const auto tokens = TokenizeUpper(textBeforeCursor);
+    const size_t i = SkipExplainPrefix(tokens);
+    if (i >= tokens.size() || tokens[i] != "SHOW") {
+        return false;
+    }
+    return i + 1 == tokens.size() || (i + 2 <= tokens.size() && tokens[i + 1] == "CREATE");
 }
 
 } // anonymous namespace
@@ -145,6 +164,9 @@ bool IsSchemeQueryCompletionContext(TStringBuf textBeforeCursor) {
 }
 
 bool IsExcludedSchemeQueryCompletionKeyword(TStringBuf keywordContent, TStringBuf textBeforeCursor) {
+    if (IsShowCreateStatementPrefix(textBeforeCursor)) {
+        return false;
+    }
     if (IsSchemeQueryCompletionContext(textBeforeCursor)) {
         return true;
     }

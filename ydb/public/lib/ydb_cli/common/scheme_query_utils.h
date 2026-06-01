@@ -4,10 +4,10 @@
 
 namespace NYdb::NConsoleClient {
 
-// True if the line starts with a YDB scheme (DDL) statement.
+// True if the line starts with a YDB scheme (DDL) statement that must not run
+// inside an interactive transaction.
 //
-// Recognizes the leading keyword after optional EXPLAIN [QUERY PLAN].
-// Used to block DDL inside interactive transactions before sending to the server.
+// SHOW CREATE TABLE/VIEW is intentionally allowed (read-only DDL).
 bool LooksLikeSchemeQuery(TStringBuf line);
 
 // Text of the current statement (segment after the last ';' before the cursor).

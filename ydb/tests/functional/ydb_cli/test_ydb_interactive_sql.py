@@ -1354,7 +1354,7 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
         child.send("\r")
 
     def test_no_ddl_completion_inside_transaction(self):
-        """Inside a transaction TAB must not propose CREATE / ALTER / DROP."""
+        """Inside a transaction TAB must hide destructive DDL but keep SHOW CREATE."""
         child = self.spawn_interactive()
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
@@ -1365,7 +1365,11 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             child.send("\t")
             # Replxx may split rendered keywords with ANSI escapes (ELECT ... S ... HOW CREATE).
             self._expect_keyword(child, "ELECT")
-            self._expect_no_keyword(child, "HOW CREATE")
+            self._expect_keyword(child, "HOW CREATE")
+            child.sendcontrol("u")
+            child.send("CRE")
+            child.send("\t")
+            self._expect_no_keyword(child, "CREATE")
         finally:
             self._discard_and_exit(child)
             child.close()

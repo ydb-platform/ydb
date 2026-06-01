@@ -330,8 +330,8 @@ public:
                  << "\nDDL statements (CREATE, ALTER, DROP, etc.) cannot be executed inside an"
                     " interactive transaction."
                  << Colors.OldColor() << Endl;
-            Cerr << "COMMIT or ROLLBACK the transaction first, then run the DDL outside of a"
-                    " transaction."
+            Cerr << "SHOW CREATE TABLE/VIEW is allowed. COMMIT or ROLLBACK the transaction first,"
+                    " then run other DDL outside of a transaction."
                  << Endl;
             return;
         }
@@ -437,9 +437,9 @@ private:
                 text("]: rollback the current transaction.")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                text("DDL (CREATE, ALTER, DROP, ...) is not supported inside a transaction; a failed"
-                     " query ends the transaction on the server — the CLI clears local state"
-                     " automatically.")
+                text("Destructive DDL (CREATE, ALTER, DROP, ...) is not supported inside a"
+                     " transaction; SHOW CREATE TABLE/VIEW is allowed. A failed query ends the"
+                     " transaction on the server — the CLI clears local state automatically.")
             })));
         }
 

@@ -28,6 +28,13 @@ Y_UNIT_TEST_SUITE(SchemeQueryUtils) {
         UNIT_ASSERT(!LooksLikeSchemeQuery("EXPLAIN SELECT 1;"));
     }
 
+    Y_UNIT_TEST(ShowCreateAllowed) {
+        UNIT_ASSERT(!LooksLikeSchemeQuery("SHOW CREATE TABLE `/local/t`;"));
+        UNIT_ASSERT(!LooksLikeSchemeQuery("SHOW CREATE VIEW `/local/v`;"));
+        UNIT_ASSERT(!IsExcludedSchemeQueryCompletionKeyword("SHOW CREATE", ""));
+        UNIT_ASSERT(!IsExcludedSchemeQueryCompletionKeyword("CREATE", "SHOW "));
+    }
+
     Y_UNIT_TEST(MultiStatementWithDdl) {
         UNIT_ASSERT(LooksLikeSchemeQuery(
             "SELECT 1; CREATE TABLE t (id Uint64, PRIMARY KEY (id))"));
@@ -39,7 +46,6 @@ Y_UNIT_TEST_SUITE(SchemeQueryUtils) {
         UNIT_ASSERT(IsSchemeQueryCompletionContext("ALTER "));
         UNIT_ASSERT(!IsSchemeQueryCompletionContext("SELECT "));
         UNIT_ASSERT(IsExcludedSchemeQueryCompletionKeyword("CREATE", ""));
-        UNIT_ASSERT(IsExcludedSchemeQueryCompletionKeyword("SHOW CREATE", ""));
         UNIT_ASSERT(!IsExcludedSchemeQueryCompletionKeyword("SELECT", ""));
         UNIT_ASSERT(IsExcludedSchemeQueryCompletionKeyword("TABLE", "ALTER "));
     }

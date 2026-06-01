@@ -526,10 +526,52 @@ private:
     IColumnDataExtractor::TPtr Inner_;
 };
 
+class TVariantColumnDataExtractor : public IColumnDataExtractor {
+public:
+    TVariantColumnDataExtractor(std::vector<IColumnDataExtractor::TPtr> children, TType* type)
+    {
+        Y_UNUSED(children, type);
+    }
+
+    void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        Y_UNUSED(value, columnsData, columnsNullBitmap, tempStorage);
+        NotImplemented();
+    }
+
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        Y_UNUSED(values, count, columnsData, columnsNullBitmap, tempStorage);
+        NotImplemented();
+    }
+
+    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) override {
+        Y_UNUSED(columnsData, columnsNullBitmap, tupleIndex, holderFactory);
+        NotImplemented();
+    }
+
+    ui32 GetElementSize() override {
+        NotImplemented();
+    }
+
+    NPackedTuple::EColumnSizeType GetElementSizeType() override {
+        NotImplemented();
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        Y_UNUSED(extractors);
+        NotImplemented();
+    }
+
+private:
+    [[noreturn]] void NotImplemented() const {
+        THROW yexception() << "TVariantColumnDataExtractor: Variant type is not supported in scalar layout converter";
+    }
+};
+
 // ------------------------------------------------------------
 
 struct TColumnDataExtractorTraits {
     using TResult = IColumnDataExtractor;
+    using TVariant = TVariantColumnDataExtractor;
     template <bool Nullable>
     using TTuple = TTupleColumnDataExtractor<Nullable>;
     template <typename T, bool Nullable>

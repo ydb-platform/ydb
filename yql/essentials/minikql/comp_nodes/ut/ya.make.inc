@@ -37,6 +37,7 @@ SET(ORIG_SOURCES
     mkql_block_getelem_ut.cpp
     mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
+    mkql_block_variant_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp
@@ -100,6 +101,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/sql/pg
+    yql/essentials/utils/random_data_generator
 )
 
 IF (ARCH_X86_64)

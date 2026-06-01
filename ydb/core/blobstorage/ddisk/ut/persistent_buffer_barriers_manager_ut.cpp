@@ -239,7 +239,6 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT(ok);
         UNIT_ASSERT(header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT);
 
-        header.Flags |= TPersistentBufferHeader::IS_ERASE;
         header.RecordLsn = 1;
         header.Erase.TabletId = 2000;
 

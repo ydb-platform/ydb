@@ -168,11 +168,12 @@ namespace NKikimr::NDDisk {
 
     bool TPersistentBufferBarriersManager::Compact(const std::unordered_set<ui64>& oldLsns, const std::unordered_set<ui64>& newLsns, TPersistentBufferHeader& header) {
         ui32 resPos = 0;
-        if (oldLsns.size() + newLsns.size() == 0) {
+        ui32 cnt = oldLsns.size() + newLsns.size();
+        if (cnt == 0 || cnt > TPersistentBufferHeader::ErasesBufferLsnCount) {
             return false;
         }
 
-        if ((oldLsns.size() + newLsns.size()) * sizeof(ui64) <= TPersistentBufferHeader::ErasesBufferSize) {
+        if (cnt * sizeof(ui64) <= TPersistentBufferHeader::ErasesBufferSize) {
             ui32 pos = 0;
             for (auto& lsn : oldLsns) {
                 memcpy(&header.Erase.CompactLsns[pos], &lsn, 8);
@@ -285,7 +286,7 @@ namespace NKikimr::NDDisk {
         erase.ChunkIdx = space[0].ChunkIdx;
         erase.SectorIdx = space[0].SectorIdx;
 
-        header.Flags = TPersistentBufferHeader::IS_ERASE;
+        header.Flags |= TPersistentBufferHeader::IS_ERASE;
         header.RecordLsn = ++erase.HeaderLsn;
         header.PersistentBufferUniqueId = PersistentBufferUniqueId;
         header.NodeId = NodeId;

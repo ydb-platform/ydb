@@ -9,6 +9,7 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 HeaderChecksumSize = 8;
         static constexpr ui32 MaxBarriersPerHeader = 240;
         static constexpr ui32 ErasesBufferSize = 3832;
+        static constexpr ui32 ErasesBufferLsnCount = 3800;
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 
         struct TRecord {

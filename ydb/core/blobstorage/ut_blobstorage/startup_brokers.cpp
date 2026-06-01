@@ -49,13 +49,26 @@ namespace {
             ui64 maxInProgressLocalRecoveryCount, ui64 maxInProgressLocalRecoveryPerPDiskCount,
             ui64 maxInProgressStartupDataSyncCount, ui64 maxInProgressStartupDataSyncPerPDiskCount)
     {
-        env.SetIcbControl(nodeId, "VDiskControls.MaxInProgressLocalRecoveryCount",
+        auto& icb = *env.Runtime->GetNode(nodeId)->AppData->Icb;
+
+        auto setControl = [&](TString name, ui64 value) {
+            TAtomic ignoredPrevValue = 0;
+            icb.SetValue(name, value, ignoredPrevValue);
+
+            TAtomic actualValue = 0;
+            bool exists = false;
+            icb.GetValue(name, actualValue, exists);
+            UNIT_ASSERT_C(exists, "missing ICB control " << name);
+            UNIT_ASSERT_VALUES_EQUAL(actualValue, static_cast<TAtomic>(value));
+        };
+
+        setControl("VDiskControls.MaxInProgressLocalRecoveryCount",
             maxInProgressLocalRecoveryCount);
-        env.SetIcbControl(nodeId, "VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount",
+        setControl("VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount",
             maxInProgressLocalRecoveryPerPDiskCount);
-        env.SetIcbControl(nodeId, "VDiskControls.MaxInProgressStartupDataSyncCount",
+        setControl("VDiskControls.MaxInProgressStartupDataSyncCount",
             maxInProgressStartupDataSyncCount);
-        env.SetIcbControl(nodeId, "VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount",
+        setControl("VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount",
             maxInProgressStartupDataSyncPerPDiskCount);
     }
 

@@ -2,10 +2,8 @@
 
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
-#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
@@ -150,36 +148,6 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         }
     }
     ContinueProcessing();
-}
-
-void TColumnShardScan::TryDispatchStepContinuation(const ui64 sourceId) {
-    auto it = PendingStepContinuations.find(sourceId);
-    if (it == PendingStepContinuations.end()) {
-        return;
-    }
-
-    auto& pending = it->second;
-    if (!pending.HasContinuation || !pending.Suspended || !pending.Source || !pending.Cursor) {
-        return;
-    }
-
-    auto task = std::make_shared<NCommon::TStepAction>(std::move(pending.Source), std::move(*pending.Cursor), ScanActorId, false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, pending.ConveyorProcessId);
-    PendingStepContinuations.erase(it);
-}
-
-void TColumnShardScan::HandleScan(NColumnShard::TEvContinueStepAction::TPtr& ev) {
-    auto& pending = PendingStepContinuations[ev->Get()->GetSourceId()];
-    pending.Source = ev->Get()->ExtractSource();
-    pending.Cursor = ev->Get()->ExtractCursor();
-    pending.ConveyorProcessId = ev->Get()->GetConveyorProcessId();
-    pending.HasContinuation = true;
-    TryDispatchStepContinuation(ev->Get()->GetSourceId());
-}
-
-void TColumnShardScan::HandleScan(NColumnShard::TEvStepActionSuspended::TPtr& ev) {
-    PendingStepContinuations[ev->Get()->GetSourceId()].Suspended = true;
-    TryDispatchStepContinuation(ev->Get()->GetSourceId());
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {

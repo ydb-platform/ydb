@@ -1,7 +1,6 @@
 #include "conveyor_task.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/step_action_events.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -16,8 +15,6 @@ void IDataTasksProcessor::ITask::DoExecute(const std::shared_ptr<NConveyor::ITas
         NActors::TActivationContext::AsActorContext().Send(OwnerId,
             new NColumnShard::TEvPrivate::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr), std::move(Guard),
                 GetSourceId(), GetBlobBytes(), GetRawBytes(), GetFilteredRows(), GetTotalRows(), GetTotalReservedBytes()));
-    } else if (GetSourceId()) {
-        NActors::TActivationContext::AsActorContext().Send(OwnerId, std::make_unique<NColumnShard::TEvStepActionSuspended>(GetSourceId()));
     }
 }
 

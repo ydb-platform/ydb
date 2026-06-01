@@ -11,7 +11,6 @@ SRCS(
     fetching.cpp
     iterator.cpp
     source.cpp
-    step_action_events.cpp
 )
 
 PEERDIR(

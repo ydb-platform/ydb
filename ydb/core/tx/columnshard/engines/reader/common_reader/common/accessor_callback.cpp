@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -20,7 +21,8 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
 
     AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
     Source->SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
-    ScheduleContinueStepAction(std::move(Source), std::move(Step));
+    auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(Source), std::move(Step), ScanActorId, false);
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessId);
 }
 
 TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(

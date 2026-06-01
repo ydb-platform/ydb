@@ -73,8 +73,6 @@ public:
         const bool changeSyncSection);
 };
 
-void ScheduleContinueStepAction(std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor);
-
 class TProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

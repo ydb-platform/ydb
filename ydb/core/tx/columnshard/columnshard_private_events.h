@@ -62,8 +62,6 @@ struct TEvPrivate {
         EvExportSaveCursor,
 
         EvTaskProcessedResult,
-        EvContinueStepAction,
-        EvStepActionSuspended,
         EvPingSnapshotsUsage,
         EvWritePortionResult,
         EvStartCompaction,

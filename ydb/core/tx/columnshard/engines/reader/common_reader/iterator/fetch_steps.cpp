@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
@@ -91,7 +92,9 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         Step.Next();
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc"));
-    ScheduleContinueStepAction(std::move(data), std::move(Step));
+    auto convProcId = data->GetContext()->GetCommonContext()->GetConveyorProcessId();
+    auto task = std::make_shared<TStepAction>(std::move(data), std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId(), false);
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcId);
     return true;
 }
 

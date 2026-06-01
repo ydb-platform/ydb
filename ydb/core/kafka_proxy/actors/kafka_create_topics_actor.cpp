@@ -49,142 +49,6 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampT
     return result;
 }
 
-class TCreateTopicActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx> {
-    using TBase = NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx>;
-public:
-
-    TCreateTopicActor(
-            TActorId requester,
-            TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-            TString topicPath,
-            TString databaseName,
-            ui32 partitionsNumber,
-            std::optional<ui64> retentionMs,
-            std::optional<ui64> retentionBytes,
-            std::optional<ECleanupPolicy> cleanupPolicy,
-            std::optional<TString> timestampType)
-        : TBase(new TKafkaTopicRequestCtx(
-            userToken,
-            topicPath,
-            databaseName,
-            [this](EKafkaErrors status, const std::string& message, const google::protobuf::Message&) {
-                this->SendResult(status, TString{message});
-            })
-        )
-        , Requester(requester)
-        , TopicPath(topicPath)
-        , PartionsNumber(partitionsNumber)
-        , RetentionMs(retentionMs)
-        , RetentionBytes(retentionBytes)
-        , CleanupPolicy(cleanupPolicy)
-        , TimestampType(timestampType)
-    {
-        KAFKA_LOG_D(LogMessage(databaseName));
-    };
-
-    ~TCreateTopicActor() = default;
-
-    void SendResult(EKafkaErrors status, const TString& message) {
-        THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
-        response->Status = status;
-        response->TopicPath = TopicPath;
-        response->Message = message;
-        Send(Requester, response.Release());
-        Send(SelfId(), new TEvents::TEvPoison());
-    }
-
-    void FillProposeRequest(
-            NKikimr::TEvTxUserProxy::TEvProposeTransaction &proposal,
-            const TActorContext &ctx,
-            const TString &workingDir,
-            const TString &name
-    ) {
-        NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-        modifyScheme.SetWorkingDir(workingDir);
-
-        auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
-        pqDescr->SetPartitionPerTablet(1);
-        if (CleanupPolicy.value_or(ECleanupPolicy::UNKNOWN) == ECleanupPolicy::COMPACT) {
-            pqDescr->MutablePQTabletConfig()->SetEnableCompactification(true);
-        }
-
-        Ydb::Topic::CreateTopicRequest topicRequest;
-        topicRequest.mutable_partitioning_settings()->set_min_active_partitions(PartionsNumber);
-        if (RetentionMs.has_value()) {
-            topicRequest.mutable_retention_period()->set_seconds(RetentionMs.value() / 1000);
-        }
-        if (RetentionBytes.has_value()) {
-            topicRequest.set_retention_storage_mb(RetentionBytes.value() / 1_MB);
-        }
-        topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
-
-        if (TimestampType.has_value()) {
-            topicRequest.mutable_attributes()->insert({"_timestamp_type", TimestampType.value()});
-        }
-
-        TString error;
-        TYdbPqCodes codes = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(
-                name,
-                topicRequest,
-                modifyScheme,
-                NKikimr::AppData(ctx),
-                error,
-                workingDir,
-                proposal.Record.GetDatabaseName()
-        );
-        if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
-            return ReplyWithError(codes.YdbCode, codes.PQCode, error);
-        }
-    };
-
-    void Bootstrap(const NActors::TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        SendProposeRequest(ctx);
-        Become(&TCreateTopicActor::StateWork);
-    };
-
-    void StateWork(TAutoPtr<IEventHandle>& ev) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult, TActorBase::Handle);
-        default:
-            TBase::StateWork(ev);
-        }
-    }
-
-    void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev){ Y_UNUSED(ev); }
-
-private:
-    const TActorId Requester;
-    const TString TopicPath;
-    const std::shared_ptr<TString> SerializedToken;
-    const ui32 PartionsNumber;
-    std::optional<ui64> RetentionMs;
-    std::optional<ui64> RetentionBytes;
-    std::optional<ECleanupPolicy> CleanupPolicy;
-    std::optional<TString> TimestampType;
-
-    TStringBuilder LogMessage(TString& databaseName) {
-        TStringBuilder stringBuilder = TStringBuilder()
-            << "Create topics actor. DatabaseName: " << databaseName
-            << ". TopicPath: " << TopicPath
-            << ". PartitionsNumber: " << PartionsNumber;
-        if (RetentionMs.has_value()) {
-            stringBuilder << ". RetentionMs: " << RetentionMs.value();
-        }
-        if (RetentionBytes.has_value()) {
-            stringBuilder << ". RetentionBytes: " << RetentionBytes.value();
-        }
-        if (CleanupPolicy.has_value() && CleanupPolicy.value() == ECleanupPolicy::COMPACT) {
-            stringBuilder << ". CleaunpPolicy: compact";
-        }
-        if (TimestampType.has_value()) {
-            stringBuilder << ". TimestampType: " << TimestampType.value();
-        }
-
-        return stringBuilder;
-    }
-};
-
 NActors::IActor* CreateKafkaCreateTopicsActor(
         const TContext::TPtr context,
         const ui64 correlationId,
@@ -263,17 +127,33 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             convertedRetentions.Bytes
         );
 
-        ctx.Register(new TCreateTopicActor(
-            SelfId(),
-            Context->UserToken,
-            topic.Name.value(),
-            Context->DatabasePath,
-            topic.NumPartitions == -1 ? NKikimr::AppData(ctx)->KafkaProxyConfig.GetTopicCreationDefaultPartitions() : topic.NumPartitions,
-            convertedRetentions.Ms,
-            convertedRetentions.Bytes,
-            cleanupPolicy,
-            messageTimestampType
-        ));
+        Ydb::Topic::CreateTopicRequest request;
+        request.set_path(topic.Name.value());
+        request.mutable_partitioning_settings()->set_min_active_partitions(
+            topic.NumPartitions == -1 ? NKikimr::AppData(ctx)->KafkaProxyConfig.GetTopicCreationDefaultPartitions() : topic.NumPartitions
+        );
+        if (convertedRetentions.Ms.has_value()) {
+            request.mutable_retention_period()->set_seconds(convertedRetentions.Ms.value() / 1000);
+        }
+        if (convertedRetentions.Bytes.has_value()) {
+            request.set_retention_storage_mb(convertedRetentions.Bytes.value() / 1_MB);
+        }
+        request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
+        if (cleanupPolicy.has_value()) {
+            request.mutable_attributes()->insert(
+                {"_cleanup_policy", cleanupPolicy.value() == ECleanupPolicy::COMPACT ? "compact" : "delete"}
+            );
+        }
+        if (messageTimestampType.has_value()) {
+            request.mutable_attributes()->insert({"_timestamp_type", messageTimestampType.value()});
+        }
+
+        ctx.RegisterWithSameMailbox(NKikimr::NPQ::NSchema::CreateCreateTopicActor(SelfId(), NKikimr::NPQ::NSchema::TCreateTopicSettings{
+            .Database = Context->DatabasePath,
+            .Request = std::move(request),
+            .UserToken = Context->UserToken,
+            .IfNotExists = false,
+        }));
 
         InflyTopics++;
     }
@@ -285,13 +165,32 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
 };
 
-void TKafkaCreateTopicsActor::Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx) {
+void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
-    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->TopicPath << " response received." << std::to_string(eventPtr->Status));
-    TopicNamesToResponses[eventPtr->TopicPath] = eventPtr;
+
+    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status));
+
+    EKafkaErrors status;
+    switch(eventPtr->Status) {
+        case Ydb::StatusIds::SCHEME_ERROR:
+            status = INVALID_REQUEST;
+            break;
+        case Ydb::StatusIds::ALREADY_EXISTS:
+            status = TOPIC_ALREADY_EXISTS;
+            break;
+        default:
+            status = ConvertErrorCode(eventPtr->Status);
+    }
+
+    auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+    response->TopicPath = eventPtr->Path;
+    response->Status = status;
+    response->Message = std::move(eventPtr->ErrorMessage);
+
+    TopicNamesToResponses[eventPtr->Path] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(response.Release());
     InflyTopics--;
     if (InflyTopics == 0) {
-        Reply(ctx);
+        Reply(ActorContext());
     }
 };
 

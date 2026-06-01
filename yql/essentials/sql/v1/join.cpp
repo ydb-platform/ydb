@@ -499,6 +499,8 @@ public:
                 linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("MapJoin"))));
             } else if (TJoinLinkSettings::EStrategy::ForceGrace == descr.LinkSettings.Strategy) {
                 linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("GraceJoin"))));
+            } else if (TJoinLinkSettings::EStrategy::ForceStar == descr.LinkSettings.Strategy) {
+                linkOptions = L(linkOptions, Q(Y(Q("force_star"))));
             }
             if (leftAny) {
                 linkOptions = L(linkOptions, Q(Y(Q("left"), Q("any"))));

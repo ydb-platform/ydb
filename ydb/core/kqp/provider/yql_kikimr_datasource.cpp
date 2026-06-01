@@ -2,22 +2,22 @@
 #include "rewrite_io_utils.h"
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/generic/is_in.h>
 
@@ -238,7 +238,7 @@ public:
         , Types(types)
         , ExternalSourceFactory(externalSourceFactory)
         , IsInternalCall(isInternalCall)
-        {}
+    {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -974,7 +974,7 @@ private:
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
 };
 
-} // namespace
+} // anonymous namespace
 
 IGraphTransformer::TStatus TKiSourceVisitorTransformer::DoTransform(TExprNode::TPtr input,
     TExprNode::TPtr& output, TExprContext& ctx)

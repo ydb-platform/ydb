@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Sequence, Any
+from collections.abc import Sequence
+from typing import Any
 
 Matrix = Sequence[Sequence[Any]]
 
@@ -11,7 +12,7 @@ class Closable(ABC):
 
 
 class ByteSource(Closable):
-    last_message:bytes = None
+    last_message: bytes = None
 
     @abstractmethod
     def read_leb128(self) -> int:

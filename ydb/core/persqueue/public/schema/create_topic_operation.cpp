@@ -37,7 +37,7 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        Send(ParentId, new TEvCreateTopicResponse(Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
+        Send(ParentId, new TEvCreateTopicResponse(Settings.Strategy->GetTopicName(), Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
     }
 
 private:
@@ -136,7 +136,7 @@ private:
             errorCode = Ydb::StatusIds::SUCCESS;
             errorMessage = "";
         }
-        Send(ParentId, new TEvCreateTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+        Send(ParentId, new TEvCreateTopicResponse(Settings.Strategy->GetTopicName(), errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
         PassAway();
     }
 

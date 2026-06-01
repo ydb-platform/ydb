@@ -11,7 +11,7 @@
 - [JavaScript](../example-js.md)
 - [Python](../python/index.md)
 
-{% node info %}
+{% note info %}
 
 Дополнительную информацию о том, как работают эти примеры приложений, можно найти в [справочной документации {{ ydb-short-name }} SDK](../../../reference/ydb-sdk/index.md).
 

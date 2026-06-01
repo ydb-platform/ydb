@@ -1224,6 +1224,10 @@ private:
         return Inner_->DownloadTable(std::move(options));
     }
 
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        return Inner_->UploadFilesToCache(std::move(options));
+    }
+
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {
         return Inner_->GetYtTokenResolver();
     }

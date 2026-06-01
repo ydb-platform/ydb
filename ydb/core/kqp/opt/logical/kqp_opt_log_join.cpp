@@ -4,8 +4,11 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -131,7 +134,6 @@ TExprBase DeduplicateByMembers(const TExprBase& expr,  const TMaybeNode<TCoLambd
                 .Build()
             .Done();
 }
-
 
 [[maybe_unused]]
 bool IsKqlPureExpr(const TExprBase& expr) {
@@ -469,7 +471,6 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
 
     return builtJoin;
 }
-
 
 TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!join.RightLabel().Maybe<TCoAtom>()) {

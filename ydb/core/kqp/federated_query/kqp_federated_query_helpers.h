@@ -47,6 +47,11 @@ namespace NKikimr::NKqp {
 
     NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
 
+    struct TScriptExecutionSettings {
+        bool EnableBackgroundLeaseChecks = true;
+        TDuration LeaseCheckStartupTimeout = TDuration::Seconds(15);
+    };
+
     struct TKqpFederatedQuerySetup {
         // This Driver must be declared FIRST in this struct.
         // Placing it first (destruction is in reverse order) ensures
@@ -68,22 +73,27 @@ namespace NKikimr::NKqp {
         NYql::TPqGatewayConfig PqGatewayConfig;
         NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
+        TScriptExecutionSettings ScriptExecutionSettings = {};
     };
 
     struct IKqpFederatedQuerySetupFactory {
         using TPtr = std::shared_ptr<IKqpFederatedQuerySetupFactory>;
         virtual void Cleanup();
         virtual std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) = 0;
+        virtual void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) = 0;
         virtual ~IKqpFederatedQuerySetupFactory() = default;
     };
 
-    struct TKqpFederatedQuerySetupFactoryNoop: public IKqpFederatedQuerySetupFactory {
+    struct TKqpFederatedQuerySetupFactoryNoop : public IKqpFederatedQuerySetupFactory {
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return std::nullopt;
         }
+
+        void SetScriptExecutionSettings(const TScriptExecutionSettings&) override {
+        }
     };
 
-    struct TKqpFederatedQuerySetupFactoryDefault: public IKqpFederatedQuerySetupFactory {
+    struct TKqpFederatedQuerySetupFactoryDefault : public IKqpFederatedQuerySetupFactory {
         TKqpFederatedQuerySetupFactoryDefault(){};
 
         TKqpFederatedQuerySetupFactoryDefault(
@@ -92,6 +102,8 @@ namespace NKikimr::NKqp {
             const NKikimrConfig::TAppConfig& appConfig);
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) override;
+
+        void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) override;
 
         void Cleanup() override;
 
@@ -113,9 +125,10 @@ namespace NKikimr::NKqp {
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
         std::optional<TLocalTopicClientSettings> LocalTopicClientSettings;
+        TScriptExecutionSettings ScriptExecutionSettings;
     };
 
-    struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory {
+    struct TKqpFederatedQuerySetupFactoryMock : public IKqpFederatedQuerySetupFactory {
         TKqpFederatedQuerySetupFactoryMock() = delete;
 
         TKqpFederatedQuerySetupFactoryMock(
@@ -154,13 +167,18 @@ namespace NKikimr::NKqp {
         {
         }
 
+        void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) override {
+            ScriptExecutionSettings = settings;
+        }
+
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
                 Driver, HttpGateway, ConnectorClient, CredentialsFactory,
                 DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
                 ComputationFactory, S3ReadActorFactoryConfig,
-                DqTaskTransformFactory, PqGatewayConfig, PqGatewayFactory, ActorSystemPtr};
+                DqTaskTransformFactory, PqGatewayConfig, PqGatewayFactory, ActorSystemPtr,
+                ScriptExecutionSettings};
         }
 
         void Cleanup() override {
@@ -185,6 +203,7 @@ namespace NKikimr::NKqp {
         NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
+        TScriptExecutionSettings ScriptExecutionSettings;
     };
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

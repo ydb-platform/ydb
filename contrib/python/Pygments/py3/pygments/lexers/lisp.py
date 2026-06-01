@@ -4,7 +4,7 @@
 
     Lexers for Lispy languages.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -441,7 +441,7 @@ class CommonLispLexer(RegexLexer):
             (r'(#s)(\()', bygroups(Literal.Other, Punctuation), 'body'),
 
             # path
-            (r'#p?"(\\.|[^"])*"', Literal.Other),
+            (r'#p?"(\\.|[^"\\])*"', Literal.Other),
 
             # reference
             (r'#\d+=', Operator),
@@ -2756,19 +2756,22 @@ class FennelLexer(RegexLexer):
     name = 'Fennel'
     url = 'https://fennel-lang.org'
     aliases = ['fennel', 'fnl']
-    filenames = ['*.fnl']
+    filenames = ['*.fnl', '*.fnlm']
+    mimetypes = ['text/x-fennel']
     version_added = '2.3'
 
-    # this list is current as of Fennel version 0.10.0.
+    # this list is current as of Fennel version 1.5.3
     special_forms = (
-        '#', '%', '*', '+', '-', '->', '->>', '-?>', '-?>>', '.', '..',
-        '/', '//', ':', '<', '<=', '=', '>', '>=', '?.', '^', 'accumulate',
-        'and', 'band', 'bnot', 'bor', 'bxor', 'collect', 'comment', 'do', 'doc',
-        'doto', 'each', 'eval-compiler', 'for', 'hashfn', 'icollect', 'if',
-        'import-macros', 'include', 'length', 'let', 'lshift', 'lua',
-        'macrodebug', 'match', 'not', 'not=', 'or', 'partial', 'pick-args',
-        'pick-values', 'quote', 'require-macros', 'rshift', 'set',
-        'set-forcibly!', 'tset', 'values', 'when', 'while', 'with-open', '~='
+        '#', '%', '*', '+', '-', '->', '->>', '-?>', '-?>>', '.', '..', '/',
+        '//', ':', '<', '<=', '=', '>', '>=', '?.', '^', 'accumulate', 'and',
+        'assert-repl', 'band', 'bnot', 'bor', 'bxor', 'case', 'case-try',
+        'collect', 'comment', 'do', 'doto', 'each', 'eval-compiler',
+        'faccumulate', 'fcollect', 'for', 'hashfn', 'icollect',
+        'if', 'import-macros', 'include', 'length', 'let',
+        'lshift', 'lua', 'macrodebug', 'match', 'match-try',
+        'not', 'not=', 'or', 'partial', 'pick-args', 'pick-values', 'quote',
+        'require-macros', 'rshift', 'set', 'set-forcibly!', 'tail!', 'tset',
+        'unquote', 'values', 'when', 'while', 'with-open', '~='
     )
 
     declarations = (
@@ -2826,6 +2829,9 @@ class FennelLexer(RegexLexer):
 
             # the # symbol is shorthand for a lambda function
             (r'#', Punctuation),
+
+            # backtick is used for quoting macros
+            (r'`', Punctuation),
         ]
     }
 

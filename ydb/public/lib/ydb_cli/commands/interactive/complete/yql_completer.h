@@ -31,6 +31,17 @@ namespace NYdb::NConsoleClient {
 
     IYQLCompleter::TPtr MakeYQLCompleter(const TYQLCompleterConfig& config);
 
-    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig);
+    struct TCompositeCompleterConfig {
+        // Commands matched on the leading '/' (case-sensitive prefix).
+        std::vector<TString> SlashCommands;
+        // TCL-style command lines (BEGIN, COMMIT, ROLLBACK, ...) used as
+        // case-insensitive completion candidates whenever the current input
+        // looks like a transaction control command.
+        std::vector<TString> TclCommands;
+        // YQL completer used for everything else; nullopt disables YQL completion.
+        std::optional<TYQLCompleterConfig> YqlCompleterConfig;
+    };
+
+    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const TCompositeCompleterConfig& config);
 
 } // namespace NYdb::NConsoleClient

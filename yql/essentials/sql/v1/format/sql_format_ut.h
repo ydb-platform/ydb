@@ -529,6 +529,28 @@ Y_UNIT_TEST(TypeSelection) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(NullAsType) {
+    TCases cases = {
+        {"select cast(x as null)",
+         "SELECT\n\tCAST(x AS null)\n;\n"},
+        {"select cast(x as NULL)",
+         "SELECT\n\tCAST(x AS NULL)\n;\n"},
+        {"select cast(x as null?)",
+         "SELECT\n\tCAST(x AS null?)\n;\n"},
+        {"select list<null>",
+         "SELECT\n\tlist<null>\n;\n"},
+        {"select Optional<NULL>",
+         "SELECT\n\tOptional<NULL>\n;\n"},
+        {"select NULL",
+         "SELECT\n\tNULL\n;\n"},
+        {"select null",
+         "SELECT\n\tNULL\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(AlterTable) {
     TCases cases = {
         {"alter table user add user int32",

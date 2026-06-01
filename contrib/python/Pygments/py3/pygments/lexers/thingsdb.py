@@ -4,7 +4,7 @@
 
     Lexers for the ThingsDB language.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -52,7 +52,7 @@ class ThingsDBLexer(RegexLexer):
             # name constants
             (r'(FULL|USER|GRANT|CHANGE|JOIN|RUN|QUERY|'
              r'DEBUG|INFO|WARNING|ERROR|CRITICAL|'
-             r'NO_IDS|INT_MIN|INT_MAX)\b', Name.Constant),
+             r'NO_IDS|INT_MIN|INT_MAX|MATH_E|MATH_PI)\b', Name.Constant),
 
             # regular expressions
             (r'(/[^/\\]*(?:\\.[^/\\]*)*/i?)', String.Regex),
@@ -75,7 +75,7 @@ class ThingsDBLexer(RegexLexer):
              r'one|clear|contains|ends_with|name|lower|replace|reverse|'
              r'starts_with|split|test|trim|trim_left|trim_right|upper|del|ren|'
              r'to_type|to_thing|get|id|keys|reduce|set|some|value|values|wrap|'
-             r'unshift|unwrap|search)'
+             r'unshift|unwrap|search|set_name|bit_count)'
              r'(\()',
              bygroups(Name.Function, Name.Function, Punctuation), 'arguments'),
             (r'(alt_raise|assert|base64_encode|base64_decode|bool|bytes|'
@@ -89,7 +89,7 @@ class ThingsDBLexer(RegexLexer):
              r'json_load|list|log|import|export|root|mod_enum|mod_type|new|'
              r'new_type|now|raise|rand|range|randint|randstr|refs|rename_enum|'
              r'set|set_enum|set_type|str|thing|timeval|try|type|type_assert|'
-             r'type_count|type_info|types_info|nse|wse|backup_info|'
+             r'type_all|type_count|type_info|types_info|nse|wse|backup_info|'
              r'backups_info|backups_ok|counters|del_backup|has_backup|'
              r'new_backup|node_info|nodes_info|reset_counters|restart_module|'
              r'set_log_level|shutdown|has_module|del_module|module_info|'
@@ -105,7 +105,10 @@ class ThingsDBLexer(RegexLexer):
              r'run|assert_err|auth_err|bad_data_err|cancelled_err|'
              r'rename_type|forbidden_err|lookup_err|max_quota_err|node_err|'
              r'num_arguments_err|operation_err|overflow_err|syntax_err|'
-             r'collection_info|type_err|value_err|zero_div_err)'
+             r'collection_info|type_err|value_err|zero_div_err|whitelist_add|'
+             r'whitelist_del|round|abs|ceil|cos|exp|floor|log10|log2|'
+             r'loge|pow|sin|sqrt|tan|is_module|commit|history|set_history|'
+             r'del_history|ano)'
              r'(\()',
              bygroups(Name.Function, Punctuation),
              'arguments'),

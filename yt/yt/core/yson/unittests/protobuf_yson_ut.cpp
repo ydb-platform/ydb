@@ -1074,7 +1074,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         // Basic usage of custom resolver with state.
         TProtobufWriterOptions options;
         int unknownKeyCount = 0;
-        options.UnknownYsonFieldModeResolver = [&unknownKeyCount] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [&unknownKeyCount] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/nested_message/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             } else if (path == "/nested_message1/nested_message/unknown_map/first_unknown_key" || path == "/nested_message1/nested_message/unknown_map/second_unknown_key") {
@@ -1147,7 +1147,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         TString protobufString;
         StringOutputStream protobufOutput(&protobufString);
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/unknown_map1") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1203,7 +1203,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1231,7 +1231,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     {
         // Don't fail if Forward is returned on empty map or empty list.
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1264,7 +1264,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         // Fail if leaf is scalar and returns Forward.
         {
             TProtobufWriterOptions options;
-            options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+            options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
                 if (path == "/nested_message1/unknown_map") {
                     return NYson::EUnknownYsonFieldsMode::Forward;
                 }
@@ -1288,7 +1288,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         {
             // Fail on forwarded scalar value on the top level.
             TProtobufWriterOptions options;
-            options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+            options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
                 if (path == "/nested_message1/unknown_map") {
                     return NYson::EUnknownYsonFieldsMode::Forward;
                 }
@@ -1316,7 +1316,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1384,7 +1384,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
         TString protobufString;
         StringOutputStream protobufOutput(&protobufString);
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) -> NYson::EUnknownYsonFieldsMode {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) -> NYson::EUnknownYsonFieldsMode {
             if (path == "/nested_message1/unknown_map1") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1443,7 +1443,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             if (path == "/forwarded_attr") {
                 return NYson::EUnknownYsonFieldsMode::Forward;
             }
@@ -1500,7 +1500,7 @@ TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
     }
     {
         TProtobufWriterOptions options;
-        options.UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        options.UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             if (path == R"(/nested_message1/unknown_field\x01)") {
                 return EUnknownYsonFieldsMode::Forward;
             }
@@ -3083,7 +3083,7 @@ TEST(TStrictEnumValueCheckTest, ProtoToYsonUnknownChecked)
 TEST(TProtobufWriterOptionsTest, CreateChildOptions)
 {
     TProtobufWriterOptions options{
-        .UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+        .UnknownYsonFieldModeResolver = [] (NYPath::TYPathBuf path) {
             return path.StartsWith("/foo")
                 ? EUnknownYsonFieldsMode::Keep
                 : EUnknownYsonFieldsMode::Fail;

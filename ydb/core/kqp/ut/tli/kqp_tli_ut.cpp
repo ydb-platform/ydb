@@ -4,6 +4,8 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/core/testlib/actors/wait_events.h>
+#include <ydb/core/tx/time_cast/time_cast.h>
 
 #include <algorithm>
 #include <memory>
@@ -634,6 +636,62 @@ namespace {
 
         void CreateAndSeedTablesWithSecondKey(int count) {
             CreateAndSeedTablesWithSecondKeyInSession(*BreakerSession, count);
+        }
+    };
+
+    // Test context with manual event dispatching for better control over order of query execution.
+    struct TTliManualDispatchTestContext {
+        TKikimrRunner Kikimr;
+        TQueryClient Client;
+        TSession Session;
+        TSession VictimSession;
+
+        TTliManualDispatchTestContext(TStringStream& ss, bool logEnabled = true)
+            : Kikimr(MakeKikimrSettings(ss).SetUseRealThreads(false))
+            , Client(Kikimr.RunCall([&] () { return Kikimr.GetQueryClient(); }))
+            , Session(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
+            , VictimSession(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
+        {
+            ConfigureKikimrForTli(Kikimr, logEnabled);
+        }
+
+        void CreateTable(const TString& tableName) {
+            Kikimr.RunCall([&] () { return CreateTableInSession(Session, tableName); });
+        }
+
+        void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
+            Kikimr.RunCall([&] () { return SeedTableInSession(Session, tableName, rows); });
+        }
+
+        void CreateAndSeedTables(int count) {
+            Kikimr.RunCall([&] () { return CreateAndSeedTablesInSession(Session, count); });
+        }
+
+        void CreateAndSeedTablesWithSecondKey(int count) {
+            Kikimr.RunCall([&] () { return CreateAndSeedTablesWithSecondKeyInSession(Session, count); });
+        }
+
+        void ExecuteQuery(const TString& query, bool waitForMediatorStep = false) {
+            if (waitForMediatorStep) {
+                NActors::TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate> waiter(*Kikimr.GetTestServer().GetRuntime());
+                waiter.Wait(TDuration::Seconds(5));
+            }
+            NKqp::AssertSuccessResult(Kikimr.RunCall([&] () {
+                return Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            }));
+        }
+
+        TTransaction BeginTx(TSession& session, const TString& query) {
+            auto result = Kikimr.RunCall([&] () { return session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+            return *tx;
+        }
+
+        std::pair<EStatus, TString> CommitTxWithIssues(TTransaction& tx) {
+            auto result = Kikimr.RunCall([&] () { return tx.Commit().GetValueSync(); });
+            return {result.GetStatus(), result.GetIssues().ToString()};
         }
     };
 
@@ -1304,6 +1362,45 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: try to commit - should be aborted due to MVCC conflict detection
         auto [status, issues] = CommitTxWithIssues(*victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
+
+        // Verify issue and TLI logs using common verification function
+        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
+    }
+
+    // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
+    // Tests that BreakerQuerySpanId and VictimQuerySpanId linkage is maintained even with
+    // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
+    Y_UNIT_TEST(ConcurrentUpsertSelectManualDispatch) {
+        TStringStream ss;
+        auto ctx = std::make_unique<TTliManualDispatchTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
+
+        // Seed with initial data in the key range 1-10
+        for (ui64 i = 2; i <= 10; ++i) {
+            ctx->SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%" PRIu64, i)}});
+        }
+
+        // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
+        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) "
+                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/Table1` "
+                                           "WHERE Key >= 1u AND Key <= 5u";
+
+        // Breaker transaction: simple UPSERT to key 3 (overlaps with victim's range)
+        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (3u, \"BreakerValue\")";
+
+        // Victim: start transaction with UPSERT...SELECT (reads keys 1-5, then writes them)
+        // Note: with OLTP sink, the lock is NOT created immediately here (deferred lock creation)
+        auto victimTx = ctx->BeginTx(ctx->VictimSession, victimUpsertSelect);
+
+        // Breaker: write to key 3
+        // At this point, victim's lock doesn't exist yet (deferred lock creation)
+        // The breaker's write is tracked for later TLI linkage via RecentWritesForTli cache
+        ctx->ExecuteQuery(breakerUpsert, true);
+
+        // Victim: try to commit - should be aborted due to MVCC conflict detection
+        auto [status, issues] = ctx->CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 

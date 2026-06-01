@@ -714,9 +714,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds2, ColumnStore) {
+    Y_UNIT_TEST(FiveWayJoinWithComplexPreds2) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, ColumnStore
+            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, false
         );
     }
 
@@ -726,9 +726,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, ColumnStore) {
+    Y_UNIT_TEST(FourWayJoinWithPredsAndEquivAndLeft) {
        ExecuteJoinOrderTestGenericQueryWithStats(
-        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", false, ColumnStore
+        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", false, false
         );
     }
 
@@ -761,91 +761,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/tpcds23.sql", "stats/tpcds1000s.json", false, true
         );
-    }
-
-    bool CheckNoSortings(const TString& plan) {
-        return !plan.Contains("Top") && !plan.Contains("SortBy");
-    }
-
-    bool CheckSorting(const TString& plan) {
-        return !CheckNoSortings(plan);
-    }
-
-    // tests, that check redudant sortings removal : if RemoveLimit is on we delete limit from the query to check
-    // if a sort operator was deleted, otherwise we want topsort deleted
-    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByPKAlias, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_pk_alias.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByAliasIndexDesc, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_alias_index_desc.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin1, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_1.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin2, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_2.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin3, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_3.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin4, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_4.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPrefixWithAttrEquiToPK, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_attr_equiv_to_pk.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPKWithLookupJoin, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk_with_lookupjoin.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsWithLookupJoinByPrefix, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_by_prefix.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPrefixWithConstant, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_constant.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsByPK, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(Sortings4Year, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_4_year.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsComplexOrderBy, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_complex_order_by.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsPropagateThroughMapJoin, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_propagate_through_map_join.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckNoSortings(plan));
-    }
-
-    Y_UNIT_TEST_TWIN(SortingsDifferentDirs, RemoveLimitOperator) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_different_dirs.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
-        UNIT_ASSERT(CheckSorting(plan));
     }
 
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
@@ -891,11 +806,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST_TWIN(TestJoinHint1BlockHash, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint1_block_hash.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
     }
-
-    Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Map)", 1, false, ColumnStore);
-    }
-
+    
     Y_UNIT_TEST(BytesHintForceGraceJoin) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/bytes_hint_force_grace_join.sql", "stats/basic.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);

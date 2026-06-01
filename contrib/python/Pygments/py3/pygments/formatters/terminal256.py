@@ -10,7 +10,7 @@
 
     Formatter version 1.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -169,19 +169,19 @@ class Terminal256Formatter(Formatter):
         self.xterm_colors.append((0x00, 0xff, 0xff))  # 14
         self.xterm_colors.append((0xff, 0xff, 0xff))  # 15
 
-        # colors 16..232: the 6x6x6 color cube
+        # colors 16..231: the 6x6x6 color cube
 
         valuerange = (0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff)
 
-        for i in range(217):
+        for i in range(216):
             r = valuerange[(i // 36) % 6]
             g = valuerange[(i // 6) % 6]
             b = valuerange[i % 6]
             self.xterm_colors.append((r, g, b))
 
-        # colors 233..253: grayscale
+        # colors 232..255: grayscale
 
-        for i in range(1, 22):
+        for i in range(24):
             v = 8 + i * 10
             self.xterm_colors.append((v, v, v))
 
@@ -189,7 +189,7 @@ class Terminal256Formatter(Formatter):
         distance = 257*257*3  # "infinity" (>distance from #000000 to #ffffff)
         match = 0
 
-        for i in range(0, 254):
+        for i in range(0, 256):
             values = self.xterm_colors[i]
 
             rd = r - values[0]

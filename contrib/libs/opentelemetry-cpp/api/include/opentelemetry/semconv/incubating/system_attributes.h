@@ -63,6 +63,12 @@ static constexpr const char *kSystemFilesystemState = "system.filesystem.state";
 static constexpr const char *kSystemFilesystemType = "system.filesystem.type";
 
 /**
+  The Linux HugePages memory state
+ */
+static constexpr const char *kSystemMemoryLinuxHugepagesState =
+    "system.memory.linux.hugepages.state";
+
+/**
   The Linux Slab memory state
  */
 static constexpr const char *kSystemMemoryLinuxSlabState = "system.memory.linux.slab.state";
@@ -171,6 +177,15 @@ static constexpr const char *kHfsplus = "hfsplus";
 static constexpr const char *kExt4 = "ext4";
 
 }  // namespace SystemFilesystemTypeValues
+
+namespace SystemMemoryLinuxHugepagesStateValues
+{
+
+static constexpr const char *kFree = "free";
+
+static constexpr const char *kUsed = "used";
+
+}  // namespace SystemMemoryLinuxHugepagesStateValues
 
 namespace SystemMemoryLinuxSlabStateValues
 {

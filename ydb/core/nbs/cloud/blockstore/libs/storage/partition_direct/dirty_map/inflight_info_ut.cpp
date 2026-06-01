@@ -142,12 +142,6 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             inflightInfo.RequestErase(THostIndex{2}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{3}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{4}));
 
         // Confirm erases
         UNIT_ASSERT_VALUES_EQUAL(
@@ -209,12 +203,6 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             inflightInfo.RequestErase(THostIndex{2}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{3}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{4}));
 
         // Confirm erases
         UNIT_ASSERT_VALUES_EQUAL(

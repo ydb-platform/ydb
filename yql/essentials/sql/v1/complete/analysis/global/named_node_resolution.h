@@ -33,7 +33,7 @@ public:
 
     virtual ~INamedNodes() = default;
 
-    virtual const TNamedNode* Resolve(const TNamedNodeRef& ref) const = 0;
+    [[nodiscard]] virtual const TNamedNode* Resolve(const TNamedNodeRef& ref) const = 0;
     virtual void Dump(IOutputStream& out) const = 0;
 };
 

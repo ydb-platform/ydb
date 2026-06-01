@@ -1,7 +1,9 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/sql/v1/source.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/sql/v1/context.h>
+#include <yql/essentials/sql/v1/source.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -56,7 +58,7 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
     }
 }
 
-}
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
     Y_UNIT_TEST(TestFillAuthPropertiesNone) {

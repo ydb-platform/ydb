@@ -72,16 +72,16 @@ public:
     virtual ~TLogContextListItem() {
     }
 
-    const TString* begin() const {
+    [[nodiscard]] const TString* begin() const {
         auto* ptr = reinterpret_cast<const ui8*>(this);
         return reinterpret_cast<const TString*>(ptr + HeaderSize_);
     }
 
-    const TString* end() const {
+    [[nodiscard]] const TString* end() const {
         return begin() + NamesCount;
     }
 
-    bool HasNext() const {
+    [[nodiscard]] bool HasNext() const {
         return Next != this;
     }
 
@@ -124,7 +124,7 @@ public:
         HasSessionId_ = hasSessionId_;
     }
 
-    bool HasSessionId() const {
+    [[nodiscard]] bool HasSessionId() const {
         return HasSessionId_;
     }
 

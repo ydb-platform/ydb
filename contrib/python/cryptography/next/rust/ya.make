@@ -14,6 +14,14 @@ VERSION(41.0.6)
 ORIGINAL_SOURCE(https://github.com/pyca/cryptography/archive/refs/tags/41.0.6.tar.gz)
 
 IF (FALSE)
+ELSEIF (OS_LINUX AND ARCH_X86_64 AND NOT MUSL AND SANITIZER_TYPE == "memory")
+    COPY_FILE(a/x86_64-unknown-linux-gnu-msan/release/libcryptography_rust.a libcryptography_rust.a)
+    SRCS(
+        msan.cpp
+    )
+    CFLAGS(
+        -fsanitize-memory-track-origins=2
+    )
 ELSEIF (OS_LINUX AND ARCH_X86_64 AND NOT MUSL)
     COPY_FILE(a/x86_64-unknown-linux-gnu/release/libcryptography_rust.a libcryptography_rust.a)
 ELSEIF (OS_LINUX AND ARCH_X86_64 AND MUSL)

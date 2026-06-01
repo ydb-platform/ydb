@@ -1,7 +1,11 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -9,7 +13,11 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
 using TStatus = IGraphTransformer::TStatus;
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
     return CreateFunctorTransformer(
@@ -123,16 +131,11 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrus
                             auto stageParentsIt = parentsMap.find(stage.Raw());
                             YQL_ENSURE(stageParentsIt != parentsMap.end());
                             if (stageParentsIt->second.size() != 1) {
-                                bool hasOutput = false;
                                 bool hasTableEffect = false;
                                 for (const auto& parent : stageParentsIt->second) {
                                     YQL_ENSURE(TExprBase(parent).Maybe<TDqOutput>()
                                             || TExprBase(parent).Maybe<TKqpSinkEffect>());
-                                    if (TExprBase(parent).Maybe<TDqOutput>()) {
-                                        YQL_ENSURE(!hasOutput, "Stage #" << PrintKqpStageOnly(stage, ctx)
-                                            << " has multiple outputs");
-                                        hasOutput = true;
-                                    } else if (auto sinkEffect = TExprBase(parent).Maybe<TKqpSinkEffect>()) {
+                                   if (auto sinkEffect = TExprBase(parent).Maybe<TKqpSinkEffect>()) {
                                         YQL_ENSURE(stage.Outputs(), "Stage #" << PrintKqpStageOnly(stage, ctx)
                                             << " has no outputs");
                                         const auto outputs = stage.Outputs().Cast();

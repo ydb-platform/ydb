@@ -10,10 +10,6 @@ SUBSCRIBER(g:cpp-contrib)
 
 VERSION(22.1.5)
 
-PEERDIR(
-    contrib/libs/afl/llvm_mode
-)
-
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()

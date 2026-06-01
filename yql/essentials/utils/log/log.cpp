@@ -72,7 +72,7 @@ public:
     }
 
 private:
-    inline size_t Avail() const noexcept {
+    [[nodiscard]] inline size_t Avail() const noexcept {
         return End_ - Current_;
     }
 

@@ -1,7 +1,5 @@
 import cyson
 
-import six
-
 import sys
 
 
@@ -11,8 +9,7 @@ class FakeYsonModule:
 
     @staticmethod
     def loads(yson):
-        reader = cyson.Reader if six.text_type not in six.string_types else cyson.UnicodeReader
-        return cyson.loads(yson, Reader=reader)
+        return cyson.loads(yson, Reader=cyson.UnicodeReader)
 
     @staticmethod
     def dumps(yson, yson_format="text"):

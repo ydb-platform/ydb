@@ -1,7 +1,11 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
-namespace NKikimr {
-namespace NKqp {
+#include <yql/essentials/core/yql_type_annotation.h>
+
+namespace NKikimr::NKqp {
+
+namespace {
 
 bool IsSuitableToDisableOlapBlocks(const TIntrusivePtr<IOperator>& input, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
     if (columnsLimit == 0 || input->GetKind() != EOperator::Limit || typesCtx.BlockEngineMode == NYql::EBlockEngineMode::Disable) {
@@ -9,6 +13,8 @@ bool IsSuitableToDisableOlapBlocks(const TIntrusivePtr<IOperator>& input, TTypeA
     }
     return true;
 }
+
+} // anonymous namespace
 
 TIntrusivePtr<IOperator> TDisableBlocksOnColumnsLimitRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
@@ -25,5 +31,4 @@ TIntrusivePtr<IOperator> TDisableBlocksOnColumnsLimitRule::SimpleMatchAndApply(c
     return input;
 }
 
-} // namespace NKqp
-}
+} // namespace NKikimr::NKqp

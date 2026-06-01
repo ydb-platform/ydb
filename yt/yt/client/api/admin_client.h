@@ -214,6 +214,22 @@ struct TCollectCoverageResult
     TString CoverageMap;
 };
 
+struct TFreezeHydraPeerOptions
+    : public TTimeoutOptions
+{
+    int Term;
+};
+
+struct TTruncateChangelogOptions
+    : public TTimeoutOptions
+{
+    i64 LastSequenceNumber;
+};
+
+struct TScheduleRestartOptions
+    : public TTimeoutOptions
+{ };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IAdminClient
@@ -235,6 +251,21 @@ struct IAdminClient
 
     virtual TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options = {}) = 0;
+
+    virtual TFuture<void> FreezeHydraPeer(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TFreezeHydraPeerOptions& options = {}) = 0;
+
+    virtual TFuture<void> TruncateChangelog(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TTruncateChangelogOptions& options = {}) = 0;
+
+    virtual TFuture<void> ScheduleRestart(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TScheduleRestartOptions& options = {}) = 0;
 
     virtual TFuture<void> ResetDynamicallyPropagatedMasterCells(
         const TResetDynamicallyPropagatedMasterCellsOptions& options = {}) = 0;

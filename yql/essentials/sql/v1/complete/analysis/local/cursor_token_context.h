@@ -24,8 +24,8 @@ struct TRichParsedToken {
     size_t Index = 0;
     size_t Position = 0;
 
-    bool IsLiteral() const;
-    size_t End() const;
+    [[nodiscard]] bool IsLiteral() const;
+    [[nodiscard]] size_t End() const;
 };
 
 struct TCursorTokenContext {
@@ -33,8 +33,8 @@ struct TCursorTokenContext {
     TVector<size_t> TokenPositions;
     TCursor Cursor;
 
-    TMaybe<TRichParsedToken> Enclosing() const;
-    TMaybe<TRichParsedToken> MatchCursorPrefix(const TVector<TStringBuf>& pattern) const;
+    [[nodiscard]] TMaybe<TRichParsedToken> Enclosing() const;
+    [[nodiscard]] TMaybe<TRichParsedToken> MatchCursorPrefix(const TVector<TStringBuf>& pattern) const;
 };
 
 bool GetStatement(

@@ -4,7 +4,7 @@
 
     Lexers for Devicetree language.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -63,15 +63,19 @@ class DevicetreeLexer(RegexLexer):
                     '#size-cells', 'reg', 'virtual-reg', 'ranges', 'dma-ranges',
                     'device_type', 'name'), suffix=r'\b'), Keyword.Reserved),
             (r'([~!%^&*+=|?:<>/#-])', Operator),
-            (r'[()\[\]{},.]', Punctuation),
-            (r'[a-zA-Z_][\w-]*(?=(?:\s*,\s*[a-zA-Z_][\w-]*|(?:' + _ws + r'))*\s*[=;])',
+            (r'[(){},.\]]', Punctuation),
+            (r'\[', Punctuation, 'bytestring'),
+            (r'[a-zA-Z_][\w-]*(?=(?:\s*,' + _ws + r'[a-zA-Z_][\w-]*)*' + _ws + r'[=;])',
              Name),
             (r'[a-zA-Z_]\w*', Name.Attribute),
         ],
         'root': [
             include('whitespace'),
             include('macro'),
-
+            # Overlay/fragment: &label { ... } or &{/path/to/node} { ... }
+            (r'(&)(?:([A-Za-z_]\w*)|(\{)([^}]+)(\}))(' + _ws + r')(\{)',
+             bygroups(Operator, Name.Function, Punctuation, Name.Namespace,
+                      Punctuation, Comment.Multiline, Punctuation), 'node'),
             # Nodes
             (r'([^/*@\s&]+|/)(@?)((?:0x)?[0-9a-fA-F,]*)(' + _ws + r')(\{)',
              bygroups(Name.Function, Operator, Number.Integer,
@@ -87,7 +91,10 @@ class DevicetreeLexer(RegexLexer):
         'node': [
             include('whitespace'),
             include('macro'),
-
+            # Overlay/fragment: &label { ... } or &{/path/to/node} { ... }
+            (r'(&)(?:([A-Za-z_]\w*)|(\{)([^}]+)(\}))(' + _ws + r')(\{)',
+             bygroups(Operator, Name.Function, Punctuation, Name.Namespace,
+                      Punctuation, Comment.Multiline, Punctuation), '#push'),
             (r'([^/*@\s&]+|/)(@?)((?:0x)?[0-9a-fA-F,]*)(' + _ws + r')(\{)',
              bygroups(Name.Function, Operator, Number.Integer,
                       Comment.Multiline, Punctuation), '#push'),
@@ -104,5 +111,10 @@ class DevicetreeLexer(RegexLexer):
             (r'[^\\"\n]+', String),  # all other characters
             (r'\\\n', String),  # line continuation
             (r'\\', String),  # stray backslash
+        ],
+        'bytestring': [
+            (r'\]', Punctuation, '#pop'),
+            (r'[0-9a-fA-F]{2}', Number.Hex),
+            (r'\s+', Whitespace),
         ],
     }

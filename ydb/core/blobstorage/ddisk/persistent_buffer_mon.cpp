@@ -361,6 +361,7 @@ namespace NKikimr {
                                         TABLEH() {str << "TabletId";}
                                         TABLEH() {str << "Generation";}
                                         TABLEH() {str << "Barrier";}
+                                        TABLEH() {str << "Fast erases";}
                                         TABLEH() {str << "Lsns count";}
                                         TABLEH() {str << "Total space";}
                                         TABLEH() {str << "First lsn";}
@@ -379,6 +380,7 @@ namespace NKikimr {
                                             } else {
                                                 TABLED() {str << "No barrier";}
                                             }
+                                            TABLED() {str << ti.FastErasesCount;}
                                             TABLED() {str << ti.LsnsCount;}
                                             TABLED() {str << beautySize(ti.Size) << " of " << beautySize(b->PerTabletStorageLimit);}
                                             TABLED() {str << ti.FirstLsn;}

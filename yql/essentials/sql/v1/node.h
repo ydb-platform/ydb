@@ -392,7 +392,12 @@ protected:
 
 class TLangVerProxyNode: public IProxyNode {
 public:
-    TLangVerProxyNode(TPosition pos, TNodePtr parent, TString feature, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)
+    TLangVerProxyNode(
+        TPosition pos,
+        TNodePtr parent,
+        TString feature,
+        NYql::TLangVersion minLangVer,
+        NYql::TLangVersion maxLangVer)
         : IProxyNode(pos, std::move(parent))
         , Feature_(std::move(feature))
         , MinLangVer_(minLangVer)
@@ -411,7 +416,13 @@ private:
     NYql::TLangVersion MaxLangVer_;
 };
 
-inline TNodeResult WrapWithLangVerProxy(TPosition pos, TNodeResult node, const TString& feature, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer) {
+inline TNodeResult WrapWithLangVerProxy(
+    TPosition pos,
+    TNodeResult node,
+    const TString& feature,
+    NYql::TLangVersion minLangVer,
+    NYql::TLangVersion maxLangVer)
+{
     if (node && (minLangVer != NYql::UnknownLangVersion || maxLangVer != NYql::UnknownLangVersion)) {
         return TNonNull(TNodePtr(new TLangVerProxyNode(pos, *node, feature, minLangVer, maxLangVer)));
     }

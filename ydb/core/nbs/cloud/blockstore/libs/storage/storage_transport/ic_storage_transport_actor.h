@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ddisk_helpers.h"
 #include "ic_storage_transport_events.h"
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
@@ -38,8 +39,13 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
-    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>>
-        WriteToManyPBuffersRequests;
+    struct TWriteToManyPBuffersReqInfo
+    {
+        std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers> Request;
+        TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> WaitingReplies;
+    };
+
+    THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
 public:
     TICStorageTransportActor() = default;

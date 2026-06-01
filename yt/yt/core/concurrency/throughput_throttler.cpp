@@ -564,7 +564,7 @@ IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
 
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
-    const TString& name,
+    const std::string& name,
     TLogger logger,
     NProfiling::TProfiler profiler)
 {
@@ -697,7 +697,7 @@ IReconfigurableThroughputThrottlerPtr GetUnlimitedThrottler()
 }
 
 IReconfigurableThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
-    const TString& name,
+    const std::string& name,
     NProfiling::TProfiler profiler)
 {
     profiler = profiler.WithPrefix("/" + CamelCaseToUnderscoreCase(name));

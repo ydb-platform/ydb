@@ -15,7 +15,7 @@
     official: https://learn.microsoft.com/en-us/minecraft/creator/reference/content/schemasreference/
     community example: https://www.mcbe-dev.net/addons/data-driven/manifest.html
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -99,7 +99,8 @@ class SNBTLexer(RegexLexer):
 
 
 class MCFunctionLexer(RegexLexer):
-    """Lexer for the mcfunction scripting language used in Minecraft
+    """Lexer for the mcfunction scripting language used in Minecraft.
+
     Modelled somewhat after the `GitHub mcfunction grammar <https://github.com/Arcensoth/language-mcfunction>`_.
     """
 

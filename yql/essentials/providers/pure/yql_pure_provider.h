@@ -6,15 +6,20 @@ namespace NYql {
 
 struct TTypeAnnotationContext;
 
+struct TPureProviderSettings {
+    THashMap<TString, TString> SecureParams;
+};
+
 struct TPureState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TPureState>;
 
     TTypeAnnotationContext* Types;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
+    TPureProviderSettings Setting;
 };
 
 TIntrusivePtr<IDataProvider> CreatePureProvider(const TPureState::TPtr& state);
 
-TDataProviderInitializer GetPureDataProviderInitializer();
+TDataProviderInitializer GetPureDataProviderInitializer(TPureProviderSettings settings = {});
 
 } // namespace NYql

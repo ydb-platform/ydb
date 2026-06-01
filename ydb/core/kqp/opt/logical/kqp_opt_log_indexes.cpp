@@ -1,11 +1,14 @@
+#include "kqp_opt_log_json_index.h"
+
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
-#include <ydb/core/kqp/opt/logical/kqp_opt_log_json_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
 #include <util/generic/hash.h>
@@ -140,8 +143,6 @@ bool IsTableExistsKeySelector(NNodes::TCoLambda keySelector, const TKikimrTableD
 
     return true;
 }
-
-
 
 bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& indexDesc, TVector<TString>* columns) {
     return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
@@ -1108,7 +1109,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     return TExprBase{read};
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (auto indexRead = TReadMatch::MatchIndexedRead(node, kqpCtx)) {
@@ -1125,7 +1126,6 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
 
     return node;
 }
-
 
 TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlStreamLookupIndex>()) {
@@ -1337,7 +1337,6 @@ TExprBase KqpRewriteTopSortOverFlatMap(const TExprBase& node, TExprContext& ctx)
         .Done();
 }
 
-
 namespace {
 
 bool StringOrAtomOrParameter(const TExprBase& exprBase) {
@@ -1353,8 +1352,7 @@ bool DoubleOrParameter(const TExprBase& exprBase) {
     return true;
 }
 
-}
-
+} // anonymous namespace
 
 TExprNode::TPtr BuildPostfiltersForMatch(TExprContext& ctx, TPositionHandle pos, TExprNode::TPtr pattern, TExprNode::TPtr column)  {
     auto patternExpr = ctx.Builder(pos)
@@ -1503,7 +1501,6 @@ struct TFulltextQuery {
     static TFulltextQuery Match(TExprNode::TPtr node, TExprContext& ctx,
         const THashSet<TString>& indexedColumns = {})
     {
-
         if (node->Content() == "FulltextMatch" || node->Content() == "FulltextScore") {
             if (!EnsureArgsCount(*node, 2, ctx)) {
                 return {};
@@ -1691,7 +1688,6 @@ void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitP
         }
     }
 }
-
 
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName, bool isNgram,
     const THashSet<TString>& indexedColumns = {})
@@ -2335,7 +2331,6 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
             .Done();
     }
 }
-
 
 TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
                                     const TParentsMap& parentsMap)

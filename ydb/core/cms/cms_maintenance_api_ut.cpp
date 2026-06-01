@@ -1,4 +1,5 @@
 #include "cms_ut_common.h"
+#include "cms_maintenance_api_ut_enums.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -13,9 +14,22 @@ using namespace Ydb::Maintenance;
 
 namespace {
 
-void RunRollingRestartSimulation(ui32 totalNodes, ui32 cap) {
+Ydb::Maintenance::AvailabilityMode ToAvailabilityMode(EAvailabilityCase mode) {
+    switch (mode) {
+        case EAvailabilityCase::Strong:
+            return Ydb::Maintenance::AVAILABILITY_MODE_STRONG;
+        case EAvailabilityCase::KeepAvailable:
+            return Ydb::Maintenance::AVAILABILITY_MODE_WEAK;
+        case EAvailabilityCase::Force:
+            return Ydb::Maintenance::AVAILABILITY_MODE_FORCE;
+    }
+}
+
+void RunRollingRestartSimulation(ui32 totalNodes, ui32 cap, EAvailabilityCase availabilityCase) {
     Y_ABORT_UNLESS(totalNodes > 0);
     Y_ABORT_UNLESS(cap > 0);
+
+    const auto availabilityMode = ToAvailabilityMode(availabilityCase);
 
     TCmsTestEnv env(totalNodes);
 
@@ -23,8 +37,7 @@ void RunRollingRestartSimulation(ui32 totalNodes, ui32 cap) {
     ev->Record.SetUserSID("test-user");
     auto* req = ev->Record.MutableRequest();
     req->mutable_task_options()->set_task_uid("task-1");
-    req->mutable_task_options()->set_availability_mode(
-        Ydb::Maintenance::AVAILABILITY_MODE_FORCE);
+    req->mutable_task_options()->set_availability_mode(availabilityMode);
     req->mutable_task_options()->set_max_inflight_actions(cap);
     for (ui32 i = 0; i < totalNodes; ++i) {
         auto group = MakeActionGroup(
@@ -65,11 +78,21 @@ void RunRollingRestartSimulation(ui32 totalNodes, ui32 cap) {
         const ui32 total = performed.size() + pending;
 
         UNIT_ASSERT_VALUES_EQUAL_C(total, totalNodes - totalCompleted,
-            "iter=" << iterations);
-        UNIT_ASSERT_VALUES_EQUAL_C(performed.size(), Min<ui32>(cap, total),
-            "iter=" << iterations);
+            "iter=" << iterations << " mode=" << ToString(availabilityCase));
+
+        if (availabilityCase == EAvailabilityCase::Force) {
+            UNIT_ASSERT_VALUES_EQUAL_C(performed.size(), Min<ui32>(cap, total),
+                "iter=" << iterations << " mode=" << ToString(availabilityCase));
+        } else {
+            UNIT_ASSERT_C(performed.size() <= Min<ui32>(cap, total),
+                "cap exceeded: performed=" << performed.size()
+                << " cap=" << cap << " total=" << total
+                << " iter=" << iterations
+                << " mode=" << ToString(availabilityCase));
+        }
         UNIT_ASSERT_C(!performed.empty(),
-            "no progress: nothing PERFORMED at iter=" << iterations);
+            "no progress: nothing PERFORMED at iter=" << iterations
+            << " mode=" << ToString(availabilityCase));
 
         const ui32 toComplete = 1 + rng.Uniform(performed.size());
         for (ui32 i = 0; i < toComplete; ++i) {
@@ -83,7 +106,8 @@ void RunRollingRestartSimulation(ui32 totalNodes, ui32 cap) {
 
         ++iterations;
         UNIT_ASSERT_C(iterations <= totalNodes,
-            "too many iterations: " << iterations);
+            "too many iterations: " << iterations
+            << " mode=" << ToString(availabilityCase));
     }
 
     UNIT_ASSERT_VALUES_EQUAL(totalCompleted, totalNodes);
@@ -556,16 +580,20 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT_VALUES_EQUAL(refreshPending, 5 - 2);
     }
 
-    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchNormal) {
-        RunRollingRestartSimulation(100, 5);
+    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchNormal, EAvailabilityCase) {
+        RunRollingRestartSimulation(100, 5, Arg<0>());
     }
 
-    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchMin) {
-        RunRollingRestartSimulation(100, 1);
+    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchMin, EAvailabilityCase) {
+        RunRollingRestartSimulation(100, 1, Arg<0>());
     }
 
-    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchFull) {
-        RunRollingRestartSimulation(100, 100);
+    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchFull, EAvailabilityCase) {
+        RunRollingRestartSimulation(100, 100, Arg<0>());
+    }
+
+    Y_UNIT_TEST(MaxInflightActionsRollingRestartBatchOverCap, EAvailabilityCase) {
+        RunRollingRestartSimulation(10, 20, Arg<0>());
     }
 
     Y_UNIT_TEST(MaxInflightActionsZeroMeansUnlimited) {

@@ -555,6 +555,21 @@ class TCreateMaintenanceTask
             }
         }
 
+        if (request.task_options().max_inflight_actions() > 0) {
+            const bool hasSingleCompositeActionGroup = request.action_groups().size() == 1
+                && request.action_groups(0).actions().size() > 1;
+            if (hasSingleCompositeActionGroup) {
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS,
+                    "max_inflight_actions is not applicable to a single composite action group:"
+                    << " actions within one group are granted atomically");
+            }
+            if (static_cast<ui32>(request.action_groups().size())
+                    < request.task_options().max_inflight_actions()) {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS,
+                    "max_inflight_actions is greater than the number of action groups");
+            }
+        }
+
         return true;
     }
 

@@ -21,6 +21,7 @@ ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/kqp/ut/olap/storage KqpOlapDictionary.DictCompactionAndActualization
+ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut THiveTestWithTenants.TestSetDown
@@ -41,6 +42,7 @@ ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
+ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut_rdma XdcRdmaTest/XdcRdmaTestCqMode.SendMix/POLLING
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse py3test.sole chunk
@@ -153,6 +155,7 @@ ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[True-False-kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[True-True-kikimr0]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks[True-1-no_shared-kikimr0]
+ydb/tests/functional/api test_read_table.py.TestReadTableWithTabletKills.test_read_table_async_simple[read_table]
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics

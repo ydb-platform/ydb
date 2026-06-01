@@ -166,6 +166,13 @@ void TDDiskState::Init(ui64 totalBlockCount, ui64 operationalBlockCount)
     SetReadWatermark(operationalBlockCount);
 }
 
+void TDDiskState::SwitchOffline()
+{
+    State = EState::Disabled;
+    FlushableBlockCount = 0;
+    OperationalBlockCount = 0;
+}
+
 TDDiskState::EState TDDiskState::GetState() const
 {
     return State;
@@ -242,34 +249,31 @@ TBlocksDirtyMap::TBlocksDirtyMap(
     ui64 blockCount)
     : BlockSize(blockSize)
     , BlockCount(blockCount)
-    , DesiredPBuffers(vChunkConfig.PBufferHosts.GetPrimary())
-    , DesiredDDisks(vChunkConfig.DDiskHosts.GetPrimary())
+    , DDiskStates(vChunkConfig.GetHostCount())
+    , PBufferCounters(vChunkConfig.GetHostCount())
 {
-    const size_t pbufferHostCount = vChunkConfig.PBufferHosts.HostCount();
-    const size_t ddiskHostCount = vChunkConfig.DDiskHosts.HostCount();
-    Y_ABORT_UNLESS(pbufferHostCount > 0);
-    Y_ABORT_UNLESS(pbufferHostCount <= MaxHostCount);
-    Y_ABORT_UNLESS(ddiskHostCount > 0);
-    Y_ABORT_UNLESS(ddiskHostCount <= MaxHostCount);
-    PBufferCounters.resize(pbufferHostCount);
-
-    DDiskStates.resize(ddiskHostCount);
-    for (auto& state: DDiskStates) {
-        state.Init(BlockCount, BlockCount);
-    }
+    UpdateConfig(vChunkConfig);
 }
 
-void TBlocksDirtyMap::UpdateConfig(
-    THostMask desiredPBuffers,
-    THostMask desiredDDisks,
-    THostMask disabled)
+void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
 {
-    Y_ABORT_UNLESS(disabled.LogicalAnd(desiredPBuffers).Empty());
-    Y_ABORT_UNLESS(disabled.LogicalAnd(desiredDDisks).Empty());
+    const THostMask added = vChunkConfig.GetDDisks().Exclude(DesiredDDisks);
+    const THostMask removed = DesiredDDisks.Exclude(vChunkConfig.GetDDisks());
 
-    DesiredPBuffers = desiredPBuffers;
-    DesiredDDisks = desiredDDisks;
-    DisabledHosts = disabled;
+    DesiredPBuffers = vChunkConfig.GetDesiredPBuffers();
+    DesiredDDisks = vChunkConfig.GetDDisks();
+    DisabledHosts = vChunkConfig.GetDisabledHosts();
+
+    for (auto indx: added) {
+        const auto watermark = vChunkConfig.GetWatermark(indx);
+        DDiskStates[indx].Init(
+            BlockCount,
+            watermark ? *watermark / BlockSize : BlockCount);
+    }
+
+    for (auto indx: removed) {
+        DDiskStates[indx].SwitchOffline();
+    }
 }
 
 TBlocksDirtyMap::~TBlocksDirtyMap()
@@ -414,7 +418,8 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
                 continue;
             }
 
-            const THostIndex source = val.RequestFlush(destination);
+            const THostIndex source =
+                val.RequestFlush(destination, DisabledHosts);
             if (source != InvalidHostIndex) {
                 result.AddHint(source, destination, item->Key, item->Range);
             }
@@ -816,7 +821,19 @@ TString TBlocksDirtyMap::DebugPrintDDiskState() const
 {
     TStringBuilder result;
     for (THostIndex h = 0; h < DDiskStates.size(); ++h) {
-        result << "H" << ui32(h) << DDiskStates[h].DebugPrint() << ";";
+        result << PrintHostIndex(h);
+
+        const bool disabled = DisabledHosts.Get(h);
+        const bool desired = DesiredDDisks.Get(h);
+        if (disabled) {
+            result << "-";
+        } else if (desired) {
+            result << "*";
+        } else {
+            result << "+";
+        }
+
+        result << DDiskStates[h].DebugPrint() << ";";
     }
     return result;
 }

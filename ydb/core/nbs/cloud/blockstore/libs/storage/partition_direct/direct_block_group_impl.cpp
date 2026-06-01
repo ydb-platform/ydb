@@ -29,18 +29,6 @@ constexpr auto DefaultOracleThinkInterval = TDuration::Seconds(1);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString DoDump(
-    const TVector<THostStat>& statistics,
-    const TVector<THostState>& states)
-{
-    TStringBuilder sb;
-    for (size_t i = 0; i < states.size(); ++i) {
-        sb << " H" << i << ": " << states[i].DebugPrint() << " "
-           << statistics[i].DebugPrint() << "\n";
-    }
-    return sb;
-}
-
 TListPBufferResponse MakeListPBufferResponse(
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& response)
 {
@@ -87,9 +75,14 @@ TDirectBlockGroup::TDirectBlockGroup(
     , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
-    , HostStatistics(DirectBlockGroupHostCount)
-    , HostStates(DirectBlockGroupHostCount)
-    , Oracle(StorageConfig, this, HostStatistics, HostStates)
+    , LogTitle(
+          GetCycleCount(),
+          TLogTitle::TDirectBlockGroup{
+              .TabletId = TabletId,
+              .Generation = generation,
+              .DirectBlockGroupIndex = DirectBlockGroupIndex,
+          })
+    , Oracle(StorageConfig, this)
 {
     Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);
     Y_ASSERT(ddisksIds.size() == DirectBlockGroupHostCount);
@@ -165,6 +158,7 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
 void TDirectBlockGroup::Run(IPartitionDirectService* service)
 {
     Service = service;
+    LogTitle.SetDiskId(Service->GetVolumeConfig()->DiskId);
 
     ScheduleOracleThinking();
 
@@ -945,7 +939,10 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
-void TDirectBlockGroup::SetHostState(THostIndex hostIndex, EHostState state)
+void TDirectBlockGroup::SetHostState(
+    THostIndex hostIndex,
+    EHostState oldState,
+    EHostState newState)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -954,13 +951,12 @@ void TDirectBlockGroup::SetHostState(THostIndex hostIndex, EHostState state)
         NKikimrServices::NBS_PARTITION,
         "Host[%ld] state changed: %s -> %s",
         static_cast<ui64>(hostIndex),
-        ToString(HostStates[hostIndex].State).c_str(),
-        ToString(state).c_str());
+        ToString(oldState).c_str(),
+        ToString(newState).c_str());
 
-    HostStates[hostIndex].State = state;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
-            vChunk->SetHostState(hostIndex, state);
+            vChunk->SetHostState(hostIndex, newState);
         }
     }
 }
@@ -1111,7 +1107,7 @@ void TDirectBlockGroup::OnRequest(THostIndex hostIndex, EOperation operation)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    HostStatistics[hostIndex].OnRequest(operation);
+    Oracle.OnRequestStarted(hostIndex, operation, TInstant::Now());
 }
 
 void TDirectBlockGroup::OnResponse(
@@ -1123,12 +1119,13 @@ void TDirectBlockGroup::OnResponse(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (HasError(error)) {
-        HostStatistics[hostIndex].OnError(TInstant::Now(), operation);
+        Oracle.OnRequestFailed(hostIndex, operation, TInstant::Now());
     } else {
-        HostStatistics[hostIndex].OnSuccess(
+        Oracle.OnRequestSucceeded(
+            hostIndex,
+            operation,
             TInstant::Now(),
-            executionTime,
-            operation);
+            executionTime);
     }
 }
 
@@ -1150,26 +1147,22 @@ void TDirectBlockGroup::OnMultiFlushResponse(
             return HasError(error);
         });
 
+    const auto now = TInstant::Now();
     if (hasError) {
-        HostStatistics[ddiskHostIndex].OnError(TInstant::Now(), operation);
+        Oracle.OnRequestFailed(ddiskHostIndex, operation, now);
     } else {
-        HostStatistics[ddiskHostIndex].OnSuccess(
-            TInstant::Now(),
-            executionTime,
-            operation);
-        HostStatistics[pbufferHostIndex].OnSuccess(
-            TInstant::Now(),
-            executionTime,
-            operation);
+        Oracle
+            .OnRequestSucceeded(ddiskHostIndex, operation, now, executionTime);
+        Oracle.OnRequestSucceeded(
+            pbufferHostIndex,
+            operation,
+            now,
+            executionTime);
     }
 }
 
 void TDirectBlockGroup::Thinking()
 {
-    for (THostIndex hostIndex = 0; hostIndex < HostStates.size(); ++hostIndex) {
-        HostStates[hostIndex].PBufferUsedSize =
-            GetHostPBufferUsedSize(hostIndex);
-    }
     Oracle.Think(TInstant::Now());
 }
 
@@ -1195,7 +1188,7 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
 
     TStringBuilder sb;
     sb << "DBG[" << DirectBlockGroupIndex << "]\n";
-    sb << DoDump(HostStatistics, HostStates);
+    sb << Oracle.Dump();
 
     TDBGDumpResponse result;
     result.DirectBlockGroupIndex = DirectBlockGroupIndex;

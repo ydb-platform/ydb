@@ -13,40 +13,13 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
-constexpr size_t HostCount = 5;
-constexpr size_t PrimaryCount = 3;
 
 TVChunkConfig MakeTestVChunkConfig()
 {
-    return TVChunkConfig::Make(
+    return TVChunkConfig::MakeDefault(
         /*vChunkIndex=*/0,
-        HostCount,
-        PrimaryCount);
-}
-
-void ApplyStatuses(
-    TBlocksDirtyMap& map,
-    TVector<EHostRole> assignments,
-    TVector<EHostState> states)
-{
-    Y_ABORT_UNLESS(assignments.size() == HostCount);
-    Y_ABORT_UNLESS(states.size() == HostCount);
-
-    THostMask desired;
-    THostMask disabled;
-    for (THostIndex i = 0; i < assignments.size(); ++i) {
-        if (assignments[i] == EHostRole::Primary &&
-            states[i] == EHostState::Enabled)
-        {
-            desired.Set(i);
-        } else if (
-            assignments[i] == EHostRole::None ||
-            states[i] == EHostState::Disabled)
-        {
-            disabled.Set(i);
-        }
-    }
-    map.UpdateConfig(desired, desired, disabled);
+        DirectBlockGroupHostCount,
+        DefaultPrimaryCount);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,9 +32,6 @@ TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
     }
     return lsns;
 }
-
-using enum EHostRole;
-using enum EHostState;
 
 THostMask MakePrimaryHosts()
 {
@@ -97,11 +67,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 {
     Y_UNIT_TEST(ShouldReadWithoutWrites)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3+{Disabled,0,0};"
+            "H4+{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
 
         // We should be able to get read hints (default DesiredDDisks =
         // primary).
@@ -111,21 +89,190 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "0{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
-        // Disable host 0, demote host 4 to disabled, promote host 3 to
-        // primary.
-        ApplyStatuses(
-            dirtyMap,
-            {HandOff, Primary, Primary, Primary, HandOff},
-            {Disabled, Enabled, Enabled, Enabled, Disabled});
+        // Disable host 0
+        vchunkConfig.DisableHost(0);
+        dirtyMap.UpdateConfig(vchunkConfig);
+
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
-            "0{[H1,H2,H3][10..19][0..9]};",
+            "0{[H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldRespectWatermarksWhenConstruct)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
+        vchunkConfig.SetWatermark(2, 40 * DefaultBlockSize);
+
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh,30,30};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Fresh,40,40};"
+            "H3+{Disabled,0,0};"
+            "H4+{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST(ShouldRespectWatermarksForAddedDDisks)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
+        vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Fresh,40,40};"
+            "H4+{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST(ShouldSwitchOffline)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        // Offline H1
+        vchunkConfig.EvacuateHost(1);
+
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1-{Disabled,0,0};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Fresh,0,0};"
+            "H4+{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Offline H0
+        vchunkConfig.EvacuateHost(0);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Disabled,0,0};"
+            "H1-{Disabled,0,0};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Fresh,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Can't switch H2 offline
+        vchunkConfig.EvacuateHost(2);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Disabled,0,0};"
+            "H1-{Disabled,0,0};"
+            "H2-{Operational,32768,32768};"
+            "H3*{Fresh,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Offline H3
+        vchunkConfig.EvacuateHost(3);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Disabled,0,0};"
+            "H1-{Disabled,0,0};"
+            "H2-{Operational,32768,32768};"
+            "H3-{Disabled,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Offline H4
+        vchunkConfig.EvacuateHost(4);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Disabled,0,0};"
+            "H1-{Disabled,0,0};"
+            "H2-{Operational,32768,32768};"
+            "H3-{Disabled,0,0};"
+            "H4-{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Enable H4
+        vchunkConfig.EnableHost(4);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Disabled,0,0};"
+            "H1-{Disabled,0,0};"
+            "H2-{Operational,32768,32768};"
+            "H3-{Disabled,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Enable H0
+        vchunkConfig.EnableHost(0);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh,0,0};"
+            "H1-{Disabled,0,0};"
+            "H2-{Operational,32768,32768};"
+            "H3-{Disabled,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Enable H1
+        vchunkConfig.EnableHost(1);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh,0,0};"
+            "H1+{Disabled,0,0};"
+            "H2-{Operational,32768,32768};"
+            "H3-{Disabled,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Enable H2
+        vchunkConfig.EnableHost(2);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh,0,0};"
+            "H1+{Disabled,0,0};"
+            "H2*{Operational,32768,32768};"
+            "H3-{Disabled,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Enable H3
+        vchunkConfig.EnableHost(3);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh,0,0};"
+            "H1+{Disabled,0,0};"
+            "H2*{Operational,32768,32768};"
+            "H3+{Disabled,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Can't switch H2 offline
+        vchunkConfig.EvacuateHost(2);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh,0,0};"
+            "H1+{Disabled,0,0};"
+            "H2-{Operational,32768,32768};"
+            "H3+{Disabled,0,0};"
+            "H4*{Fresh,0,0};",
+            dirtyMap.DebugPrintDDiskState());
     }
 
     Y_UNIT_TEST(ShouldNotReadFromFresh)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
@@ -135,11 +282,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.MarkFresh(THostIndex{2}, 40 * DefaultBlockSize);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Fresh,30,30};"
-            "H1{Operational,32768,32768};"
-            "H2{Fresh,40,40};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Fresh,30,30};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Fresh,40,40};"
+            "H3+{Disabled,0,0};"
+            "H4+{Disabled,0,0};",
             dirtyMap.DebugPrintDDiskState());
 
         // Read below fresh watermark
@@ -170,7 +317,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldReadAfterWriteFinished)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
@@ -190,11 +337,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "123{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
-        // Disable host 0, promote host 3 to primary.
-        ApplyStatuses(
-            dirtyMap,
-            {HandOff, Primary, Primary, Primary, HandOff},
-            {Disabled, Enabled, Enabled, Enabled, Enabled});
+        // Disable host 0.
+        vchunkConfig.DisableHost(0);
+        dirtyMap.UpdateConfig(vchunkConfig);
 
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         // WriteConfirmed mask is {0,1,2}; host 0 is disabled, so it is
@@ -220,7 +365,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldReadAfterWriteFinishedFromLastLsn)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
@@ -245,11 +390,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "124{[H0,H1,H3][10..19][0..9]};",
             readHint.DebugPrint());
 
-        // Disable host 0, promote host 3 to primary.
-        ApplyStatuses(
-            dirtyMap,
-            {HandOff, Primary, Primary, Primary, HandOff},
-            {Disabled, Enabled, Enabled, Enabled, Enabled});
+        // Disable host 0
+        vchunkConfig.DisableHost(0);
+        dirtyMap.UpdateConfig(vchunkConfig);
 
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -414,18 +557,23 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
-        // Enable additional Hand-off: hosts 0,1,2,3 are primary, host 4 is
-        // hand-off.
-        ApplyStatuses(
-            dirtyMap,
-            {Primary, Primary, Primary, Primary, HandOff},
-            {Enabled, Enabled, Enabled, Enabled, Enabled});
+        // Promote hand-off H3 to primary.
+        vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
+        dirtyMap.UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Fresh,1024,1024};"
+            "H4+{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
 
         // Written to 2 primary and 1 hand-off
         const THostMask requested =
@@ -467,18 +615,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithOneDisabled)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
+
+        // Host 0 disabled, hosts 1,2,3 primary, host 4 hand-off.
+        vchunkConfig.PromoteHost(3);
+        TString error;
+        vchunkConfig.EvacuateHost(0);
+        UNIT_ASSERT_VALUES_EQUAL("", error);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
+
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
-
-        // Enable Hand-off-0 instead of DDisk0: host 0 disabled,
-        // hosts 1,2,3 primary, host 4 hand-off.
-        ApplyStatuses(
-            dirtyMap,
-            {HandOff, Primary, Primary, Primary, HandOff},
-            {Disabled, Enabled, Enabled, Enabled, Enabled});
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -519,17 +668,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithTwoDisabled)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
+
+        // Hosts 0,1 disabled; hosts 2,3,4 are primary.
+        TString error;
+        vchunkConfig.EvacuateHost(0);
+        UNIT_ASSERT_VALUES_EQUAL("", error);
+        vchunkConfig.EvacuateHost(1);
+        UNIT_ASSERT_VALUES_EQUAL("", error);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
+        vchunkConfig.SetWatermark(4, DefaultBlockSize * 1024);
+
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
-
-        // Hosts 0,1 disabled; hosts 2,3,4 are primary.
-        ApplyStatuses(
-            dirtyMap,
-            {HandOff, HandOff, Primary, Primary, Primary},
-            {Disabled, Disabled, Enabled, Enabled, Enabled});
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Disabled,0,0};"
+            "H1-{Disabled,0,0};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Fresh,1024,1024};"
+            "H4*{Fresh,1024,1024};",
+            dirtyMap.DebugPrintDDiskState());
 
         // Written to one primary and two hand-off
         const THostMask requested =
@@ -570,20 +730,25 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldNotFlushAndEraseFromDisabled)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
+        // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
+        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
+
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Disabled,0,0};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Fresh,1024,1024};"
+            "H4+{Disabled,0,0};",
+            dirtyMap.DebugPrintDDiskState());
 
-        // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
-        ApplyStatuses(
-            dirtyMap,
-            {HandOff, Primary, Primary, Primary, HandOff},
-            {Disabled, Enabled, Enabled, Enabled, Enabled});
-
-        // Written to all 3 primary PBuffers (hosts 0,1,2). Host 0 is
-        // disabled, but the data is still on its PBuffer.
+        // Written to all 3 primary PBuffers (hosts 0,1,2). Host 0 is disabled,
+        // but the data is still on its PBuffer.
         const THostMask requested =
             MakeHostMask(true, true, true, false, false);
         const THostMask confirmed = requested;
@@ -596,8 +761,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap.MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H3:123[10..19];"
             "H1->H1:123[10..19];"
+            "H1->H3:123[10..19];"
             "H2->H2:123[10..19];",
             flushHint.DebugPrint());
 
@@ -624,18 +789,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldNotFlushOverWriteWatermark)
     {
-        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto vchunkConfig = MakeTestVChunkConfig();
+        // Enable 4 DDisks (hosts 0,1,2,3 primary)
+        // Available DDisks is enough for a quorum.
+        vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
         TBlocksDirtyMap dirtyMap(
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
-
-        // Enable 4 DDisks (hosts 0,1,2,3 primary). Available DDisks is
-        // enough for a quorum.
-        ApplyStatuses(
-            dirtyMap,
-            {Primary, Primary, Primary, Primary, HandOff},
-            {Enabled, Enabled, Enabled, Enabled, Enabled});
 
         dirtyMap.SetFlushWatermark(THostIndex{2}, 100 * DefaultBlockSize);
 

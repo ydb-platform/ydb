@@ -455,8 +455,8 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
                          res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()),
-                         res.HasMessageCount() ? res.GetMessageCount() : 1,
-                         res.HasMessageFormat() ? FromProtoMessageFormat(res.GetMessageFormat()) : EMessageFormat::STANDARD);
+                         res.GetMessageCount(),
+                         FromProtoMessageFormat(res.GetMessageFormat()));
 
         if (res.HasTotalParts()) {
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};

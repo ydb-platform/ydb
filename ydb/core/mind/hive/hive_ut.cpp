@@ -3810,7 +3810,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         constexpr int NODES = 3;
         TTestBasicRuntime runtime(NODES, false);
         Setup(runtime, true, 1, [](TAppPrepare& app) {
-            app.HiveConfig.SetTabletRestartsMaxCount(4);
+            // Do not postpone the final leader boot in this test:
+            // Gen 1. Initial boot
+            // Gen 2. Blocked follower promotion
+            // Gen 3. Direct leader reboot
+            app.HiveConfig.SetTabletRestartsMaxCount(3);
         });
 
         TVector<ui64> tabletIds;
@@ -3851,22 +3855,29 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
 
             if (killDuringPromotion) {
+                NTabletPipe::TClientConfig poisonPipeConfig;
+                poisonPipeConfig.ForceLocal = true;
+                poisonPipeConfig.ForceFollower = true;
+
                 for (int i = 0; i < NODES; ++i) {
                     if (i == leaderNode) {
                         continue;
                     }
-                    TActorId sender = runtime.AllocateEdgeActor(i);
-                    runtime.SendToPipe(tabletId, sender, new TEvents::TEvPoisonPill, i, pipeConfig);
-                }
-            }
 
-            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+                    TActorId sender = runtime.AllocateEdgeActor(i);
+                    runtime.SendToPipe(tabletId, sender, new TEvents::TEvPoisonPill, i, poisonPipeConfig);
+                }
+
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvTablet::EvTabletDead, NODES - 1);
+                UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::MilliSeconds(100)));
+            }
 
             blockPromote.Stop().Unblock();
         }
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, killDuringPromotion ? 3 : 1);
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, killDuringPromotion ? 3 : 2);
             runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
         }
         std::unordered_set<std::pair<TTabletId, TFollowerId>> activeTablets;

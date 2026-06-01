@@ -64,7 +64,7 @@ struct TClientBlob {
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
 
-struct TCursor {
+struct TPosition {
     ui32 BlobIdx;
     ui64 Offset;
     ui16 PartNo;
@@ -117,7 +117,7 @@ struct TBatch {
 
     void SerializeTo(TString& res) const;
 
-    TCursor FindPos(const ui64 offset, const ui16 partNo) const;
+    TPosition FindPos(const ui64 offset, const ui16 partNo) const;
 };
 
 void Serialize(const TClientBlob& blob, TBuffer& res);

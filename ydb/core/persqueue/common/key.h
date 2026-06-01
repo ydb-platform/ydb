@@ -143,7 +143,8 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
 
 // {char type; ui32 partition; ui64 offset; ui16 partNo; ui32 count, ui16 internalPartsCount}
 // optional: _<offsetDelta 10 chars>
-// optional suffix: | or ?
+// optional suffix byte: Head ('|'), FastWrite ('?'), or legacy '\0'
+// Serialized size is KeySize() or KeySizeWithOffsetDelta(), optionally +1 for suffix.
 // offset, partNo - index of first rec
 // count - diff of last record offset and first record offset in blob
 // internalPartsCount - number of internal parts
@@ -306,6 +307,13 @@ public:
 
     static constexpr ui32 KeySizeWithOffsetDelta() {
         return KeySize() + OffsetDeltaFieldSize();
+    }
+
+    static bool IsValidSerializedSize(const size_t size) {
+        return size == KeySize()
+            || size == KeySize() + 1
+            || size == KeySizeWithOffsetDelta()
+            || size == KeySizeWithOffsetDelta() + 1;
     }
 
     bool operator==(const TKey& key) const

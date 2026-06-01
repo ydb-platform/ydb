@@ -237,10 +237,10 @@ ui32 TBatch::GetPackedSize() const {
     return sizeof(ui16) + PackedData.size() + Header.ByteSize();
 }
 
-TCursor TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
+TPosition TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
     AFL_ENSURE(!Packed);
     if (offset < GetOffset() || (offset == GetOffset() && partNo < GetPartNo())) {
-        return TCursor{Max<ui32>(), 0, 0};
+        return TPosition{Max<ui32>(), 0, 0};
     }
 
     if (!HasOffsetDelta()) {
@@ -256,25 +256,25 @@ TCursor TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
         }
 
         if (pos >= Blobs.size()) {
-            return TCursor{Max<ui32>(), 0, 0};
+            return TPosition{Max<ui32>(), 0, 0};
         }
 
         if (!Blobs[pos].PartData && partNo == 0) {
-            return TCursor{pos, offset, partNo};
+            return TPosition{pos, offset, partNo};
         } else if (!Blobs[pos].PartData) {
-            return TCursor{Max<ui32>(), 0, 0};
+            return TPosition{Max<ui32>(), 0, 0};
         }
 
         return partNo <= Blobs[pos].GetPartNo() ?
-            TCursor{pos, offset, partNo} :
-            TCursor{Max<ui32>(), 0, 0};
+            TPosition{pos, offset, partNo} :
+            TPosition{Max<ui32>(), 0, 0};
     }
 
     ui64 curOffset = GetOffset();
     ui16 curPartNo = GetPartNo();
     for (size_t i = 0; i < Blobs.size(); ++i) {
         if (curOffset <= offset && curOffset + Blobs[i].GetLogicalOffsetSpan() > offset && curPartNo == partNo) {
-            return TCursor{static_cast<ui32>(i), curOffset, curPartNo};
+            return TPosition{static_cast<ui32>(i), curOffset, curPartNo};
         }
         if (Blobs[i].IsLastPart()) {
             curOffset += Blobs[i].GetLogicalOffsetSpan();
@@ -283,7 +283,7 @@ TCursor TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
             ++curPartNo;
         }
     }
-    return TCursor{Max<ui32>(), 0, 0};
+    return TPosition{Max<ui32>(), 0, 0};
 }
 
 

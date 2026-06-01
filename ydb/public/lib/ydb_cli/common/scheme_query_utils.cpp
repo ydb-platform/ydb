@@ -76,6 +76,7 @@ const THashSet<TString>& SchemeQueryTopLevelCompletionKeywords() {
         "IMPORT",
         "RESTORE",
         "REVOKE",
+        "SHOW CREATE",
         "TRUNCATE TABLE",
         "USE",
     };

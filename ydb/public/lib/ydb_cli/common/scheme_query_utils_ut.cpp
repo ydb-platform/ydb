@@ -39,6 +39,7 @@ Y_UNIT_TEST_SUITE(SchemeQueryUtils) {
         UNIT_ASSERT(IsSchemeQueryCompletionContext("ALTER "));
         UNIT_ASSERT(!IsSchemeQueryCompletionContext("SELECT "));
         UNIT_ASSERT(IsExcludedSchemeQueryCompletionKeyword("CREATE", ""));
+        UNIT_ASSERT(IsExcludedSchemeQueryCompletionKeyword("SHOW CREATE", ""));
         UNIT_ASSERT(!IsExcludedSchemeQueryCompletionKeyword("SELECT", ""));
         UNIT_ASSERT(IsExcludedSchemeQueryCompletionKeyword("TABLE", "ALTER "));
     }

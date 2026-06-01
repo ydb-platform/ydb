@@ -1334,6 +1334,14 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
         )
         child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
 
+    def _expect_no_keyword(self, child, keyword: str, *, timeout: float = 1):
+        pattern = ".*".join(keyword)
+        try:
+            child.expect(pattern, timeout=timeout)
+            raise AssertionError(f"{keyword!r} must not appear in completions")
+        except pexpect.TIMEOUT:
+            pass
+
     def _wait_for_ready_after_begin(self, child):
         """Wait until BEGIN finished and replxx is ready for the next line."""
         child.expect("BEGIN", timeout=15)
@@ -1355,12 +1363,9 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             self._wait_for_ready_after_begin(child)
             child.send("S")
             child.send("\t")
-            child.expect("SELECT", timeout=self.COMPLETION_TIMEOUT)
-            try:
-                child.expect("CREATE", timeout=1)
-                raise AssertionError("CREATE must not be suggested inside a transaction")
-            except pexpect.TIMEOUT:
-                pass
+            # Replxx may split rendered keywords with ANSI escapes (ELECT ... S ... HOW CREATE).
+            self._expect_keyword(child, "ELECT")
+            self._expect_no_keyword(child, "HOW CREATE")
         finally:
             self._discard_and_exit(child)
             child.close()

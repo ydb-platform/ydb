@@ -22,6 +22,8 @@ inline NKikimrClient::EMessageFormat ToProtoMessageFormat(EMessageFormat format)
             return NKikimrClient::STANDARD;
         case EMessageFormat::KAFKA_BATCH:
             return NKikimrClient::KAFKA_BATCH;
+        case EMessageFormat::COUNT:
+            break;
     }
     Y_ABORT("Unknown EMessageFormat");
 }

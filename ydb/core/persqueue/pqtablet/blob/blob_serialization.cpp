@@ -15,11 +15,11 @@ namespace {
 const ui32 CHUNK_SIZE_PLACEMENT = 0xCCCCCCCC;
 
 static_assert(MESSAGE_COUNT_BITS + MESSAGE_FORMAT_BITS == 32);
+static_assert(static_cast<ui32>(EMessageFormat::COUNT) <= (1u << MESSAGE_FORMAT_BITS));
 
 ui32 PackMessageMetadata(ui32 messageCount, EMessageFormat messageFormat) {
     AFL_ENSURE(messageCount >= 1 && messageCount <= MAX_MESSAGE_COUNT)("messageCount", messageCount);
     const ui32 format = static_cast<ui32>(messageFormat);
-    AFL_ENSURE(format < (1u << MESSAGE_FORMAT_BITS))("messageFormat", format);
     return (messageCount << MESSAGE_FORMAT_BITS) | format;
 }
 

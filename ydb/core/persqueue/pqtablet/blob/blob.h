@@ -16,6 +16,7 @@ class TBlobSerializer;
 enum class EMessageFormat : ui8 {
     STANDARD = 0,
     KAFKA_BATCH = 1,
+    COUNT,
 };
 
 static constexpr ui32 MESSAGE_FORMAT_BITS = 3;

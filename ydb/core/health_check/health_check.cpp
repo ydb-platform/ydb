@@ -1008,7 +1008,7 @@ public:
         --Requests;
         YDB_LOG_TRACE("RequestDone",
             {"name", name},
-            {"Requests", Requests});
+            {"RemainRequests", Requests});
         if (Requests == 0) {
             ReplyAndPassAway();
         }

@@ -199,4 +199,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     grpc_request_check_actor_ut
+    grpc_request_tracing_ut
 )

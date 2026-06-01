@@ -1969,9 +1969,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
             errorStr = "MaxSeqNo must be >= 0";
-        } else if (cmd.HasMessageCount() && (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT)) {
+        } else if (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT) {
             errorStr = TStringBuilder() << "MessageCount must be >= 1 and <= " << MAX_MESSAGE_COUNT;
-        } else if (cmd.HasMessageFormat() && (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS))) {
+        } else if (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS)) {
             errorStr = TStringBuilder() << "MessageFormat must be >= 0 and < " << (1 << MESSAGE_FORMAT_BITS);
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";

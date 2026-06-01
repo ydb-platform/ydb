@@ -57,8 +57,7 @@ namespace NKikimr {
                 for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, total) < part; ++reserve, ++total) {
                     TGroupMapper::TGroupDefinition group;
                     try {
-                        AllocateOrSanitizeGroup(TGroupId::Zero(), group, {}, {}, 1u, 0, false, {},
-                            &TGroupGeometryInfo::AllocateGroup);
+                        AllocateGroupWithFallbackToInactive(TGroupId::Zero(), group, 1u, 0, {});
                     } catch (const TExFitGroupError&) {
                         throw TExError() << "group reserve constraint hit";
                     }
@@ -141,22 +140,8 @@ namespace NKikimr {
                 }
             }
 
-            TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
-                ////////////////////////////////////////////////////////////////////////////////////////////
-                // ALLOCATE GROUP ID FOR THE NEW GROUP
-                ////////////////////////////////////////////////////////////////////////////////////////////
-                TGroupId groupId = AllocateGroupId();
-
-                ////////////////////////////////////////////////////////////////////////////////////////////////
-                // CREATE MORE GROUPS
-                ////////////////////////////////////////////////////////////////////////////////////////////////
-                TGroupMapper::TGroupDefinition group;
-                i64 requiredSpace = Min<i64>();
-                if (!ExpectedSlotSize.empty()) {
-                    requiredSpace = ExpectedSlotSize.front();
-                    ExpectedSlotSize.pop_front();
-                }
-                ui32 groupSizeInUnits = StoragePool.DefaultGroupSizeInUnits;
+            void AllocateGroupWithFallbackToInactive(TGroupId groupId, TGroupMapper::TGroupDefinition& group,
+                    ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) {
                 try {
                     AllocateOrSanitizeGroup(groupId, group, {}, {}, groupSizeInUnits, requiredSpace, false, bridgePileId,
                         &TGroupGeometryInfo::AllocateGroup);
@@ -184,6 +169,25 @@ namespace NKikimr {
                         throw;
                     }
                 }
+            }
+
+            TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
+                ////////////////////////////////////////////////////////////////////////////////////////////
+                // ALLOCATE GROUP ID FOR THE NEW GROUP
+                ////////////////////////////////////////////////////////////////////////////////////////////
+                TGroupId groupId = AllocateGroupId();
+
+                ////////////////////////////////////////////////////////////////////////////////////////////////
+                // CREATE MORE GROUPS
+                ////////////////////////////////////////////////////////////////////////////////////////////////
+                TGroupMapper::TGroupDefinition group;
+                i64 requiredSpace = Min<i64>();
+                if (!ExpectedSlotSize.empty()) {
+                    requiredSpace = ExpectedSlotSize.front();
+                    ExpectedSlotSize.pop_front();
+                }
+                ui32 groupSizeInUnits = StoragePool.DefaultGroupSizeInUnits;
+                AllocateGroupWithFallbackToInactive(groupId, group, groupSizeInUnits, requiredSpace, bridgePileId);
 
                 // scan all comprising PDisks for PDiskCategory
                 TMaybe<TPDiskCategory> desiredPDiskCategory;
@@ -259,8 +263,8 @@ namespace NKikimr {
 
                     // TODO(alexvru): calculate required space
                     Geometry.ResizeGroup(group);
-                    AllocateOrSanitizeGroup(groupId, group, {}, {}, groupInfo->GroupSizeInUnits, Min<i64>(), false,
-                        groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
+                    AllocateGroupWithFallbackToInactive(groupId, group, groupInfo->GroupSizeInUnits, Min<i64>(),
+                            groupInfo->BridgePileId);
 
                     CreateVSlotsForGroup(groupInfo, group, {});
                     return;

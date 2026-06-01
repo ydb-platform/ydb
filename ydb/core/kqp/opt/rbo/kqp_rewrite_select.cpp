@@ -1074,8 +1074,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated);
     }
 
-    //Y_ENSURE(false, "lets stop here");
-
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
     TVector<TExprNode::TPtr> setItemsResults;
     for (ui32 i = 0; i < setItems->ChildrenSize(); ++i) {
@@ -1306,7 +1304,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                         .Add(types)
                     .Build()
                     .Done().Ptr();
-                // clang-format on f
+                // clang-format on
             }
         }
 
@@ -1611,6 +1609,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                         }
                     }
 
+                    // clang-format off
                     auto mapLambda = Build<TCoLambda>(ctx, node->Pos())
                         .Args({"arg"})
                         .Body<TCoMember>()
@@ -1618,7 +1617,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                             .Name(inputColumn)
                         .Build()
                         .Done().Ptr();
-
+                        // clang-format on
 
                     processResultColumn(outputColumn, mapLambda);
                 }
@@ -1742,15 +1741,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         auto offset = GetSetting(node->Head(), "offset");
         opResult = BuildLimit(opResult, limit, offset, ctx, node->Pos());
     }
-
-    /*
-    if (generateRoot) {
-        VisitExpr(opResult, [&](const TExprNode::TPtr& node) {
-            node->SetTypeAnn(nullptr);
-            return true;
-        });
-    }
-    */
 
     if (!generateRoot) {
         auto res =  NormalizeMemberNames(opResult, ctx, node->Pos());

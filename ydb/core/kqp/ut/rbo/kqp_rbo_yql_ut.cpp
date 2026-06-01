@@ -2082,8 +2082,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
-        TOFStream stream(SRC_("tpc_success.txt"));
-
         std::unordered_map<ui32, bool> queriesCurrentStatus;
         std::vector<bool> queriesExpectedStatus;
         std::vector<TString> errors;
@@ -2105,8 +2103,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             q = toDecimal + "\n" + toDecimalMax + "\n" + round + "\n" + q;
 
             Cerr << "Executing benchmark query " << qId << "\n";
-            stream << "Executing benchmark query " << qId << "\n";
-            stream.Flush();
 
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -2119,11 +2115,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 AssertNewRBOCboOptimizedAllTrees(type, qId, TString{*result.GetStats()->GetPlan()});
             }
 
-            stream << "Finished executing " << qId << "\n";
-            stream.Flush();
         }
-
-        stream.Finish();
 
         if (printStatus) {
             PrintStatus(queriesCurrentStatus, std::move(errors));

@@ -865,7 +865,8 @@ namespace NInterconnect::NRdma {
             }
 
             void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
-                ui32 chainIndex = GetChainIndex(mr.GetSize());
+                ui32 chainIndex = GetChainIndex(mr.OrigSize);
+                Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 if (Y_UNLIKELY(Stopped)) {
                     // current thread is stopped, return mr to global pool
                     pool.Chains[chainIndex].PutSlotUnderLock(MakeIntrusive<TMemRegion>(std::move(mr)));
@@ -875,7 +876,6 @@ namespace NInterconnect::NRdma {
                 mr.Chunk->DoRelease();
 
                 auto& chain = Chains[chainIndex];
-                Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 chain.PutSlot(MakeIntrusive<TMemRegion>(std::move(mr)));
 
                 if (chain.Slots.size() >= 2 * chain.SlotsInBatch) { // TODO: replace constant 2

@@ -2139,7 +2139,9 @@ private:
                         }
 
                         FillTablesMap(implTable->Name, tablesMap);
-                        for (const auto& columnName: {"__ydb_token", "__ydb_max_id", "__ydb_generation", "__ydb_added", "__ydb_segment"}) {
+                        for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                            NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                            NTableIndex::NFulltext::SegmentColumn}) {
                             const auto& columnMeta = implTable->Columns.at(columnName);
                             auto keyColumnProto = indexSettings->AddImplColumns();
                             fillColumnProto(columnName, &columnMeta, keyColumnProto);

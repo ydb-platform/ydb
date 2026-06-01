@@ -151,11 +151,11 @@ public:
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance)
         {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            addType(uploadTypes, "__ydb_token");
-            addType(uploadTypes, "__ydb_max_id");
-            addType(uploadTypes, "__ydb_generation");
-            addType(uploadTypes, "__ydb_added");
-            addType(uploadTypes, "__ydb_segment");
+            addType(uploadTypes, TokenColumn);
+            addType(uploadTypes, MaxIdColumn);
+            addType(uploadTypes, GenColumn);
+            addType(uploadTypes, AddedColumn);
+            addType(uploadTypes, SegmentColumn);
             PostingBuf = Uploader.AddDestination(request.GetPostingTableName(), std::move(uploadTypes));
 
             WithFreq = (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);

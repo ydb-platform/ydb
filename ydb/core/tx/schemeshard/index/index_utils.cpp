@@ -461,26 +461,25 @@ auto CalcFulltextCompactImplTableDescImpl(
 
     {
         auto col = implTableDesc.AddColumns();
-        // FIXME: Extract names to constants
-        col->SetName("__ydb_max_id");
+        col->SetName(NFulltext::MaxIdColumn);
         col->SetType("Uint64");
         col->SetTypeId(Ydb::Type::UINT64);
         col->SetNotNull(true);
-        implTableDesc.AddKeyColumnNames("__ydb_max_id");
+        implTableDesc.AddKeyColumnNames(NFulltext::MaxIdColumn);
     }
 
     {
         auto col = implTableDesc.AddColumns();
-        col->SetName("__ydb_generation");
+        col->SetName(NFulltext::GenColumn);
         col->SetType("Uint64");
         col->SetTypeId(Ydb::Type::UINT64);
         col->SetNotNull(true);
-        implTableDesc.AddKeyColumnNames("__ydb_generation");
+        implTableDesc.AddKeyColumnNames(NFulltext::GenColumn);
     }
 
     {
         auto col = implTableDesc.AddColumns();
-        col->SetName("__ydb_added");
+        col->SetName(NFulltext::AddedColumn);
         col->SetType("Bool");
         col->SetTypeId(Ydb::Type::BOOL);
         col->SetNotNull(true);
@@ -488,7 +487,7 @@ auto CalcFulltextCompactImplTableDescImpl(
 
     {
         auto col = implTableDesc.AddColumns();
-        col->SetName("__ydb_segment");
+        col->SetName(NFulltext::SegmentColumn);
         col->SetType("String");
         col->SetTypeId(NScheme::NTypeIds::String);
         col->SetNotNull(true);

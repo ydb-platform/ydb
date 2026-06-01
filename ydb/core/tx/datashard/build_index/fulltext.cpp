@@ -208,22 +208,22 @@ public:
             {
                 Ydb::Type type;
                 type.set_type_id(Ydb::Type::UINT64);
-                uploadTypes->emplace_back("__ydb_max_id", type);
+                uploadTypes->emplace_back(MaxIdColumn, type);
             }
             {
                 Ydb::Type type;
                 type.set_type_id(Ydb::Type::UINT64);
-                uploadTypes->emplace_back("__ydb_generation", type);
+                uploadTypes->emplace_back(GenColumn, type);
             }
             {
                 Ydb::Type type;
                 type.set_type_id(Ydb::Type::BOOL);
-                uploadTypes->emplace_back("__ydb_added", type);
+                uploadTypes->emplace_back(AddedColumn, type);
             }
             {
                 Ydb::Type type;
                 type.set_type_id(Ydb::Type::STRING);
-                uploadTypes->emplace_back("__ydb_segment", type);
+                uploadTypes->emplace_back(SegmentColumn, type);
             }
             break;
         case NKikimrTxDataShard::EFulltextIndexType::FulltextPlain:

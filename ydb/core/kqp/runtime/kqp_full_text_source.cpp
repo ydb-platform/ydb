@@ -676,8 +676,8 @@ public:
         if (isCompact) {
             YQL_ENSURE(keyColumns.size() == 3);
             YQL_ENSURE(keyColumns[0].GetName() == TokenColumn);
-            YQL_ENSURE(keyColumns[1].GetName() == "__ydb_max_id");
-            YQL_ENSURE(keyColumns[2].GetName() == "__ydb_generation");
+            YQL_ENSURE(keyColumns[1].GetName() == MaxIdColumn);
+            YQL_ENSURE(keyColumns[2].GetName() == GenColumn);
             auto addCol = [&](const char* str) {
                 for (auto& column: columns) {
                     if (column.GetName() == str) {

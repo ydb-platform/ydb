@@ -228,11 +228,11 @@ void CreateFulltextCompactTable(Tests::TServer::TPtr server, TActorId sender, co
     options.Shards(1);
     options.AllowSystemColumnNames(true);
     options.Columns({
-        {"__ydb_token", "String", true, true},
-        {"__ydb_max_id", "Uint64", true, true},
-        {"__ydb_generation", "Uint64", true, true},
-        {"__ydb_added", "Bool", false, true},
-        {"__ydb_segment", "String", false, true},
+        {NTableIndex::NFulltext::TokenColumn, "String", true, true},
+        {NTableIndex::NFulltext::MaxIdColumn, "Uint64", true, true},
+        {NTableIndex::NFulltext::GenColumn, "Uint64", true, true},
+        {NTableIndex::NFulltext::AddedColumn, "Bool", false, true},
+        {NTableIndex::NFulltext::SegmentColumn, "String", false, true},
     });
     CreateShardedTable(server, sender, "/Root", name, options);
 }

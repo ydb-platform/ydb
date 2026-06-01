@@ -86,7 +86,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
     flags.F.HasKinesisData = !blob.PartitionKey.empty();
-    flags.F.HasMessageMetadata = blob.MessageCount != 1 || blob.MessageFormat != EMessageFormat::STANDARD;
+    flags.F.HasBatchInfo = blob.MessageCount != 1 || blob.MessageFormat != EMessageFormat::STANDARD;
     return flags;
 }
 
@@ -104,7 +104,7 @@ ui32 BlobSize(const TClientBlob& blob) {
     if (flags.F.HasUncompressedSize) {
         size += sizeof(ui32);
     }
-    if (flags.F.HasMessageMetadata) {
+    if (flags.F.HasBatchInfo) {
         size += sizeof(ui32);
     }
     size += sizeof(ui16) + blob.SourceId.size();
@@ -142,7 +142,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     Batch.PackedData.Clear();
     bool hasUncompressed = false;
     bool hasKinesis = false;
-    bool hasMessageMetadata = false;
+    bool hasBatchInfo = false;
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
         if (Batch.Blobs[i].UncompressedSize > 0)
             hasUncompressed = true;
@@ -152,7 +152,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
         }
 
         if (Batch.Blobs[i].MessageCount != 1 || Batch.Blobs[i].MessageFormat != EMessageFormat::STANDARD) {
-            hasMessageMetadata = true;
+            hasBatchInfo = true;
         }
     }
 
@@ -311,7 +311,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     }
 
     //output Uncompressed
-    if (hasUncompressed || hasMessageMetadata) {
+    if (hasUncompressed || hasBatchInfo) {
         ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
         auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
@@ -321,7 +321,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
         WriteActualChunkSize(Batch.PackedData, sizeOffset);
     }
 
-    if (hasMessageMetadata) {
+    if (hasBatchInfo) {
         ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
         auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
@@ -674,7 +674,7 @@ void Serialize(const TClientBlob& blob, TBuffer& res) {
                        blob.ExplicitHashKey.size());
     }
 
-    if (flags.F.HasMessageMetadata) {
+    if (flags.F.HasBatchInfo) {
         ui32 messageMetadata = PackMessageMetadata(blob);
         res.Append((const char*)&messageMetadata, sizeof(ui32));
     }
@@ -736,7 +736,7 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
 
     ui32 messageCount = 1;
     EMessageFormat messageFormat = EMessageFormat::STANDARD;
-    if (flags.F.HasMessageMetadata) {
+    if (flags.F.HasBatchInfo) {
         const auto messageMetadata = UnpackMessageMetadata(ReadUnaligned<ui32>(data));
         messageCount = messageMetadata.first;
         messageFormat = messageMetadata.second;

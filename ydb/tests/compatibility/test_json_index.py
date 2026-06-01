@@ -58,11 +58,11 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(create_index_sql)
 
-    def wait_index_ready(self):
+    def wait_index_ready(self, mode):
         logger.info("Waiting for index to be ready")
         def predicate():
             try:
-                self.select_from_index_without_roll()
+                self.select_from_index_without_roll(mode=mode)
             except ydbs.issues.SchemeError as ex:
                 if "Required global index not found, index name" in str(ex):
                     logger.debug("Index not yet ready, retrying...")
@@ -73,19 +73,19 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
         assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
         logger.info("Index is ready")
 
-    def _get_queries(self):
+    def _get_queries(self, mode):
         queries = []
         for json_type in ['Json', 'JsonDocument']:
             table_name = f"table_{json_type.lower()}"
             index_name = f"idx_{json_type.lower()}"
-            queries.extend(self._get_queries_for(table_name, index_name, json_type))
+            queries.extend(self._get_queries_for(table_name, index_name, json_type, mode))
         return queries
 
-    def _get_queries_for(self, table_name, index_name, json_type):
+    def _get_queries_for(self, table_name, index_name, json_type, mode):
         queries = []
         for query_idx in range(self.query_count):
-            predicate = json.get_random_predicate()
-            logger.debug(f"Query {query_idx + 1}/{self.query_count} for {table_name}: predicate=`{predicate}`")
+            predicate = json.get_random_predicate(mode=mode)
+            logger.debug(f"Query {query_idx + 1}/{self.query_count} for {table_name} ({mode}): predicate=`{predicate}`")
 
             queries.append(f"""
                 SELECT `pk`, `json`
@@ -119,24 +119,25 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
 
     def _do_queries(self, queries):
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for idx, query in enumerate(queries, 1):
+            for query in queries:
                 session_pool.execute_with_retries(query)
 
-    def select_from_index(self):
+    def select_from_index(self, mode):
         logger.info("Starting select_from_index with rolling upgrades")
 
         for roll_idx, _ in enumerate(self.roll(), 1):
-            queries = self._get_queries()
+            queries = self._get_queries(mode=mode)
             logger.info(f"Generated {len(queries)} queries for roll step {roll_idx}")
             self._do_queries(queries)
 
         logger.info("Completed select_from_index with all rolling upgrades")
 
-    def select_from_index_without_roll(self):
-        queries = self._get_queries()
+    def select_from_index_without_roll(self, mode):
+        queries = self._get_queries(mode=mode)
         self._do_queries(queries)
 
-    def test_json_index(self):
+    @pytest.mark.parametrize("mode", ["strict", "lax"])
+    def test_json_index(self, mode):
         for json_type in ['Json', 'JsonDocument']:
             table_name = f"table_{json_type.lower()}"
             self.create_table(table_name, json_type)
@@ -148,7 +149,6 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
                 index_name=index_name,
             )
 
-        self.wait_index_ready()
-        self.select_from_index()
-
+        self.wait_index_ready(mode=mode)
+        self.select_from_index(mode=mode)
         logger.info("Completed successfully")

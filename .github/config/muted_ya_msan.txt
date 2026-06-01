@@ -27,7 +27,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnly
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOne
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
-ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactPublicApi
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql-UseQueryService
@@ -77,7 +76,6 @@ ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
 ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
 ydb/core/transfer/ut/functional Transfer.WriteToNotExists
 ydb/core/transfer/ut/functional Transfer.WriteToNotTable
-ydb/core/tx/columnshard/engines/storage/optimizer/ut TilingCoreUnits.TilingChoosesAccumulatorMiddleAndLastLevelsIndependently
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelCascadeOperationOnHalfwaySuccess
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelCascadeOperationSuccess
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelOperationFailureOnDone
@@ -124,8 +122,6 @@ ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_not_null[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-26-3_to_prestable-26-3-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_prestable-26-3_to_prestable-26-3-COLUMN]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_stable-26-2-1]

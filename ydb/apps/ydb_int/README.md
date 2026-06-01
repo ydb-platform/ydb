@@ -41,6 +41,49 @@ extra `experimental` command tree:
 ./ydb/apps/ydb_int/ydb_int experimental --help
 ```
 
+### Interactive transactions (draft)
+
+In interactive mode (run `ydb_int` with no subcommand), `ydb_int` supports
+multi-statement transactions over a Query service session.
+
+Syntax (case-insensitive, trailing semicolon allowed):
+
+```sql
+-- Begin a transaction. Default mode: serializable-rw.
+BEGIN [TRANSACTION | WORK] [<mode>]
+START TRANSACTION              [<mode>]
+
+-- Commit / rollback:
+COMMIT [TRANSACTION | WORK]
+END    [TRANSACTION]
+ROLLBACK [TRANSACTION | WORK]
+```
+
+Supported `<mode>` values are the YDB-native mode names also accepted by
+`ydb table query --tx-mode`. Only modes that the Query service can open via
+`BeginTransaction` are listed here; `online-ro` and `stale-ro` are *not*
+supported as interactive transaction modes (the server rejects open
+transactions for them — they exist only as one-shot per-query tx modes).
+
+| Mode                | YDB SDK equivalent                    | Notes                                         |
+|---------------------|---------------------------------------|-----------------------------------------------|
+| `serializable-rw`   | `TTxSettings::SerializableRW()`       | Default if no mode is specified.              |
+| `snapshot-ro`       | `TTxSettings::SnapshotRO()`           |                                               |
+| `snapshot-rw`       | `TTxSettings::SnapshotRW()`           | Requires `EnableSnapshotIsolationRW` on server. |
+| `read-committed-rw` | `TTxSettings::ReadCommittedRW()`      | Requires server support (newer versions).     |
+
+The PostgreSQL-style `ISOLATION LEVEL ...` wording is intentionally not
+supported: we keep the YDB-native names from `--tx-mode` so that the user
+always knows which YDB transaction mode is actually used.
+
+While a transaction is open, the prompt is suffixed with `*` and the YDB
+driver is kept alive between input lines. Exiting (`exit` / `quit` / Ctrl-D)
+with an open transaction prints a warning and rolls it back implicitly.
+
+This feature is **not** available in the official `ydb` client; it is
+controlled by the `EnableInteractiveTransactions` client setting that is set
+only by `ydb_int`.
+
 ## Adding a new experimental command
 
 The recipe below describes the minimum set of steps required to introduce a

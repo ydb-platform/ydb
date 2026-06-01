@@ -1,37 +1,21 @@
 from __future__ import annotations
 
 import pytest
+from test_prettytable import CITY_DATA, CITY_DATA_HEADER
 
-from prettytable import PrettyTable
 from prettytable.colortable import RESET_CODE, ColorTable, Theme, Themes
 
-
-@pytest.fixture
-def row_prettytable() -> PrettyTable:
-    # Row by row...
-    table = PrettyTable()
-    table.field_names = ["City name", "Area", "Population", "Annual Rainfall"]
-    table.add_row(["Adelaide", 1295, 1158259, 600.5])
-    table.add_row(["Brisbane", 5905, 1857594, 1146.4])
-    table.add_row(["Darwin", 112, 120900, 1714.7])
-    table.add_row(["Hobart", 1357, 205556, 619.5])
-    table.add_row(["Sydney", 2058, 4336374, 1214.8])
-    table.add_row(["Melbourne", 1566, 3806092, 646.9])
-    table.add_row(["Perth", 5386, 1554769, 869.4])
-    return table
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from prettytable import PrettyTable
 
 
 @pytest.fixture
-def row_colortable():
+def row_colortable() -> PrettyTable:
     table = ColorTable()
-    table.field_names = ["City name", "Area", "Population", "Annual Rainfall"]
-    table.add_row(["Adelaide", 1295, 1158259, 600.5])
-    table.add_row(["Brisbane", 5905, 1857594, 1146.4])
-    table.add_row(["Darwin", 112, 120900, 1714.7])
-    table.add_row(["Hobart", 1357, 205556, 619.5])
-    table.add_row(["Sydney", 2058, 4336374, 1214.8])
-    table.add_row(["Melbourne", 1566, 3806092, 646.9])
-    table.add_row(["Perth", 5386, 1554769, 869.4])
+    table.field_names = CITY_DATA_HEADER
+    for row in CITY_DATA:
+        table.add_row(row)
     return table
 
 
@@ -68,8 +52,9 @@ class TestColorTable:
         dict2 = table2.__dict__
 
         # So we don't compare functions
-        del dict1["_sort_key"]
-        del dict2["_sort_key"]
+        for func in ("_sort_key", "_row_filter"):
+            del dict1[func]
+            del dict2[func]
 
         assert dict1 == dict2
 
@@ -127,6 +112,10 @@ class TestColorTableRendering:
         minus = chars.get("-")
         pipe = chars.get("|")
         space = chars.get(" ")
+        assert isinstance(plus, str)
+        assert isinstance(minus, str)
+        assert isinstance(pipe, str)
+        assert isinstance(space, str)
 
         # +-----------------------+
         # |        Efforts        |

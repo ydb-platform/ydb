@@ -1293,6 +1293,24 @@ enum class ETableReplicaMode
     Async   /* "async" */,
 };
 
+///
+/// @brief Row lock type used by modify-rows commands.
+///
+/// Controls the lock acquired on each touched row at the dynamic table tablet level.
+/// Mirrors a subset of NYT::NTableClient::ELockType.
+///
+/// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables#conflicts
+enum class ELockType
+{
+    /// Exclusive write lock on the row (default for modify-rows commands).
+    Exclusive   /* "exclusive" */,
+
+    /// Shared-write lock. Multiple concurrent shared-write writers to the same
+    /// aggregate column coexist without conflict; their aggregate values fold
+    /// commutatively. Conflicts with Exclusive.
+    SharedWrite /* "shared_write" */,
+};
+
 /// Base class for options dealing with io to dynamic tables.
 template <typename TDerived>
 struct TTabletTransactionOptions
@@ -1353,6 +1371,13 @@ struct TInsertRowsOptions
     /// https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/replicated-dynamic-tables#write
     /// Default value is 'false'. So insertion into table without sync replicas fails.
     FLUENT_FIELD_OPTION(bool, RequireSyncReplica);
+
+    ///
+    /// @brief Row lock mode acquired on each modified row.
+    ///
+    /// Defaults to NYT::ELockType::Exclusive (server-side default). Set to
+    /// NYT::ELockType::SharedWrite for concurrent aggregate-column writers.
+    FLUENT_FIELD_OPTION(ELockType, LockType);
 };
 
 ///

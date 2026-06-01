@@ -72,6 +72,7 @@ on:
           - medium
           - large
           - small,medium
+          - small,medium,large
       additional_ya_make_args:
         description: 'additional args for ya make'
         required: false

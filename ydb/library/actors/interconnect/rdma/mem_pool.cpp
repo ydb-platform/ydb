@@ -683,8 +683,9 @@ namespace NInterconnect::NRdma {
                         // The generation check is mandatory here because the cache can contain slots with same parent chunk but with different generation
                         // we need to delete only slots with generation we check in TryAcquire
                         while ((it != Slots.end()) && ((*it)->Chunk.Get() == curChunkPtr) && ((*it)->Generation == curGeneration)) {
-                            (*it)->Chunk.Reset();
-                            Slots.erase(it++);
+                            TIntrusivePtr<TMemRegion> stale = *it;
+                            it = Slots.erase(it);
+                            stale->Chunk.Reset();
                         }
                     }
                 }

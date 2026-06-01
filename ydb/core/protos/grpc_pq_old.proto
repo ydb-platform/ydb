@@ -29,7 +29,6 @@ message TDataChunk {
     enum EChunkType {
         REGULAR = 0;
         GROW    = 1;
-        BATCH   = 2;
     }
 
     optional EChunkType ChunkType = 9 [default = REGULAR];

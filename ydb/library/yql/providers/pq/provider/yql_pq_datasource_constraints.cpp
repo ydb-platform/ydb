@@ -31,11 +31,14 @@ public:
         }, Hndl(&TPqDataSourceConstraintTransformer::HandleDefault));
     }
 
-    TStatus HandleDefault(TExprBase, TExprContext&) {
-        return TStatus::Ok;
+    TStatus HandleDefault(TExprBase node, TExprContext&) {
+        return UpdateAllChildLambdasConstraints(node.Ref());
     }
 
     TStatus HandlePqReadTopic(TExprBase node, TExprContext& ctx) {
+        if (const auto status = UpdateAllChildLambdasConstraints(node.Ref()); status != TStatus::Ok) {
+            return status;
+        }
         if (ReadInStreamingMode(node.Cast<TPqReadTopic>().Settings().Ptr(), "streaming"sv)) {
             node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
         }
@@ -43,6 +46,9 @@ public:
     }
 
     TStatus HandleDqPqTopicSource(TExprBase node, TExprContext& ctx) {
+        if (const auto status = UpdateAllChildLambdasConstraints(node.Ref()); status != TStatus::Ok) {
+            return status;
+        }
         if (ReadInStreamingMode(node.Cast<TDqPqTopicSource>().Settings().Ptr(), StreamingTopicRead)) {
             node.MutableRaw()->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
         }

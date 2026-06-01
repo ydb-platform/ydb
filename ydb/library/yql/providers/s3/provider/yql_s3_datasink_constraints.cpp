@@ -29,8 +29,8 @@ public:
         }, Hndl(&TS3DataSourceConstraintTransformer::HandleDefault));
     }
 
-    TStatus HandleDefault(TExprBase, TExprContext&) {
-        return TStatus::Ok;
+    TStatus HandleDefault(TExprBase node, TExprContext&) {
+        return UpdateAllChildLambdasConstraints(node.Ref());
     }
 
     TStatus HandleS3SinkOutput(TExprBase node, TExprContext&) {

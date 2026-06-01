@@ -1358,7 +1358,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                     if (!expectedSuccess) {
                         return;
                     }
-                    // Different scenarious:
+                    // Different scenarios:
                     // Unshuffled: second portion must come after expiring TTL (otherwise it will reuse cache)
                     // Shuffled: second portion lands in different task, so two lookups performed anyway
 
@@ -1525,7 +1525,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
 
         // write same keys to two partitions -> they lands in same task/transform actor
-        // (with ShuffeMode Map they'd land in different tasks, hence they'd take 2 lookups-per-refresh, 4 total)
+        // (with ShuffleMode Map they'd land in different tasks, hence they'd take 2 lookups-per-refresh, 4 total)
         {
             auto now = TInstant::Now();
             Sleep(TDuration::Seconds(1));
@@ -1575,7 +1575,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& result) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
             UNIT_ASSERT(ast);
-            Cerr << "AST: " << *ast << Endl;
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
         });
         ExecQuery(

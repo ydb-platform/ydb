@@ -446,7 +446,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
             ClusterInfo->AddTempLocks(action, request.GetPriority(), requestId, &ctx);
 
-            if (capEnabled && response.PermissionsSize() >= maxPermissions) {
+            if (capEnabled && static_cast<ui32>(response.PermissionsSize()) >= maxPermissions) {
                 LOG_DEBUG(ctx, NKikimrServices::CMS,
                           "MaxPermissions cap (%u) reached, deferring remaining actions",
                           maxPermissions);

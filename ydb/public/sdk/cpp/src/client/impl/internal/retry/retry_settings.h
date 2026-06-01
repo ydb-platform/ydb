@@ -62,8 +62,10 @@ auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOn
         return runOnce(remainingTimeout);
     };
 
-    return Async::TRetryWithoutSession<TClient, decltype(operation), TResult>(
-        client, std::move(operation), settings).Execute();
+    using TRetryAsync = Async::TRetryWithoutSession<TClient, decltype(operation), TResult>;
+    using TRetryContextAsync = Async::TRetryContext<TClient, TResult>;
+
+    return typename TRetryContextAsync::TPtr(new TRetryAsync(client, std::move(operation), settings))->Execute();
 }
 
 } // namespace NYdb::NRetry

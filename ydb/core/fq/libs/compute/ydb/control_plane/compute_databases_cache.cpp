@@ -66,11 +66,12 @@ class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeD
 
 public:
     using TBase =NActors::TActorBootstrapped<TComputeDatabasesCacheActor>;
-    TComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters)
+    TComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& database)
         : StartCacheReload(TInstant::Now())
         , DatabaseClientActorId(databaseClientActorId)
         , Counters(counters)
         , DatabasesCacheReloadPeriod(GetDuration(databasesCacheReloadPeriod, TDuration::Seconds(30)))
+        , Database(database)
     {}
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASES_CACHE_ACTOR";
@@ -79,7 +80,7 @@ public:
         LOG_E("Cache Bootstrap, client " << DatabaseClientActorId.ToString());
         InFlight = true;
         Counters.CacheReload.InFly->Inc();
-        Send(DatabaseClientActorId, new TEvYdbCompute::TEvListDatabasesRequest());
+        Send(DatabaseClientActorId, new TEvYdbCompute::TEvListDatabasesRequest(Database));
         Become(&TComputeDatabasesCacheActor::StateFunc, DatabasesCacheReloadPeriod, new NActors::TEvents::TEvWakeup());
     }
 
@@ -146,7 +147,7 @@ public:
             Counters.CacheReload.InFly->Inc();
             InFlight = true;
             StartCacheReload = TInstant::Now();
-            Send(DatabaseClientActorId, new TEvYdbCompute::TEvListDatabasesRequest());
+            Send(DatabaseClientActorId, new TEvYdbCompute::TEvListDatabasesRequest(Database));
         }
         Schedule(DatabasesCacheReloadPeriod, new NActors::TEvents::TEvWakeup());
     }
@@ -180,10 +181,11 @@ private:
     bool InFlight = false;
     bool Ready = false;
     const TDuration DatabasesCacheReloadPeriod = TDuration::Seconds(30);
+    const TString& Database;
 };
 
-std::unique_ptr<NActors::IActor> CreateComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return std::make_unique<TComputeDatabasesCacheActor>(databaseClientActorId, databasesCacheReloadPeriod, counters);
+std::unique_ptr<NActors::IActor> CreateComputeDatabasesCacheActor(const TActorId& databaseClientActorId, const TString& databasesCacheReloadPeriod, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& database) {
+    return std::make_unique<TComputeDatabasesCacheActor>(databaseClientActorId, databasesCacheReloadPeriod, counters, database);
 }
 
 }

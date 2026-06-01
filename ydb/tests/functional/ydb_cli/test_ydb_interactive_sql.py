@@ -1334,8 +1334,12 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
         )
         child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
 
-    def _wait_for_tx_prompt(self, child):
-        child.expect("YQL\033\\[22;39m>\\* ", timeout=self.PROMPT_TIMEOUT)
+    def _wait_for_ready_after_begin(self, child):
+        """Wait until BEGIN finished and replxx is ready for the next line."""
+        child.expect("BEGIN", timeout=15)
+        # Replxx may not echo the full colored prompt into the pty buffer; the empty-line
+        # placeholder is a reliable readiness signal (same as other completion tests).
+        child.expect("Type YQL query", timeout=self.PROMPT_TIMEOUT)
 
     def _send_line(self, child, line: str):
         child.send(line)
@@ -1348,8 +1352,7 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_prompt(child)
             self._send_line(child, "BEGIN")
-            child.expect("BEGIN", timeout=15)
-            self._wait_for_tx_prompt(child)
+            self._wait_for_ready_after_begin(child)
             child.send("S")
             child.send("\t")
             child.expect("SELECT", timeout=self.COMPLETION_TIMEOUT)

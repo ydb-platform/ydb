@@ -745,13 +745,6 @@ bool IsCurrentTraceContextRecorded()
     return context && context->IsRecorded();
 }
 
-//! Do not rename, change the signature, or drop Y_NO_INLINE.
-//! Used in devtools/gdb/yt_fibers_printer.py.
-Y_NO_INLINE TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPropagatingStorage& storage)
-{
-    auto result = storage.Find<TTraceContextPtr>();
-    return result ? result->Get() : nullptr;
-}
 
 void SetTraceContextDefaultLeakDurationThreshold(TDuration threshold)
 {

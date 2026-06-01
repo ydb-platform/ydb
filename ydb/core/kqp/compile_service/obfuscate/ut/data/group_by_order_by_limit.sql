@@ -1,0 +1,1 @@
+SELECT customer_id, COUNT(id) AS cnt, SUM(amount) AS total FROM orders GROUP BY customer_id ORDER BY total DESC LIMIT 10

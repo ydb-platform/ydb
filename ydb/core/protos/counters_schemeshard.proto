@@ -283,6 +283,9 @@ enum ESimpleCounters {
     COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
 
     COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
+
+    COUNTER_FORMAT_SHARDIDX_TABLE_COUNT = 221 [(CounterOpts) = {Name: "TablesInFormatShardidx"}];
+    COUNTER_FORMAT_POSITION_TABLE_COUNT = 222 [(CounterOpts) = {Name: "TablesInFormatPosition"}];
 }
 
 enum ECumulativeCounters {
@@ -735,4 +738,8 @@ enum ETxTypes {
     TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
 
     TXTYPE_USER_HASHES_MIGRATION = 116 [(TxTypeOpts) = {Name: "TTxUserHashesMigration"}];
+
+    TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWITCH = 117 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSwitch"}];
+    TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWEEP_STEP = 118 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSweepStep"}];
+    TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWEEP_AUTO_START = 119 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSweepAutoStart"}];
 }

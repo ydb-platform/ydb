@@ -54,6 +54,7 @@ namespace TEvPrivate {
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
+        EvProgressTablePartitionsFormatSweep,
         EvEnd
     };
 
@@ -381,6 +382,10 @@ namespace TEvPrivate {
         const bool Success = false;
         const TString Error;
     };
+
+    struct TEvProgressTablePartitionsFormatSweep
+        : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
+    {};
 
 }; // TEvPrivate
 

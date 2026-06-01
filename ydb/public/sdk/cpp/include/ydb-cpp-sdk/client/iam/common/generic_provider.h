@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 #include <grpcpp/grpcpp.h>
@@ -185,7 +186,14 @@ private:
 
             TRequest req;
 
-            RequestFiller_(req);
+            try {
+                RequestFiller_(req);
+            } catch (...) {
+                std::lock_guard guard(Lock_);
+                LastRequestError_ = TStringBuilder() << "Request failed: " << CurrentExceptionMessage();
+                ResetContextImpl();
+                return;
+            }
 
             Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
         }

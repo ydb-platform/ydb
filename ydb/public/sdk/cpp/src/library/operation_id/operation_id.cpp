@@ -16,6 +16,7 @@ namespace NOperationId {
 using namespace NUri;
 
 static const std::string QueryIdPrefix = "ydb://preparedqueryid/4?id=";
+static const std::string KindKey = "kind";
 
 std::string FormatPreparedQueryIdCompat(const std::string& in) {
     return QueryIdPrefix + in;
@@ -198,13 +199,13 @@ public:
     }
 
     std::string GetSubKind() const {
-        auto it = Index.find("kind");
+        auto it = Index.find(KindKey);
         if (it == Index.end()) {
             return std::string();
         }
 
         if (it->second.size() != 1) {
-            ythrow yexception() << "Unable to retreive sub-kind";
+            ythrow yexception() << "Unable to retrieve sub-kind";
         }
 
         return *it->second.at(0);

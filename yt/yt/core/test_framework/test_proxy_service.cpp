@@ -87,8 +87,16 @@ void TTestChannel::HandleRequestResult(
     IClientResponseHandlerPtr response,
     const TError& error)
 {
-    auto busIt = RequestToBus_.find(std::pair(address, requestId));
-    auto bus = busIt->second;
+    TTestBusPtr bus;
+    {
+        auto guard = Guard(Lock_);
+        auto busIt = RequestToBus_.find(std::pair(address, requestId));
+        if (busIt == RequestToBus_.end()) {
+            return;
+        }
+        bus = std::move(busIt->second);
+        RequestToBus_.erase(busIt);
+    }
 
     if (error.IsOK() && bus->GetMessage().Size() >= 2) {
         response->HandleResponse(bus->GetMessage(), address);
@@ -103,8 +111,6 @@ void TTestChannel::HandleRequestResult(
             << error;
         response->HandleError(std::move(wrappedError));
     }
-
-    RequestToBus_.erase(busIt);
 }
 
 IClientRequestControlPtr TTestChannel::Send(
@@ -120,7 +126,10 @@ IClientRequestControlPtr TTestChannel::Send(
         requestId);
 
     auto bus = New<TTestBus>(Address_);
-    EmplaceOrCrash(RequestToBus_, std::pair(Address_, requestId), bus);
+    {
+        auto guard = Guard(Lock_);
+        EmplaceOrCrash(RequestToBus_, std::pair(Address_, requestId), bus);
+    }
 
     try {
         // Serialization modifies the request header and should be called prior to header copying.
@@ -147,7 +156,6 @@ void TTestChannel::Terminate(const TError& error)
         return;
     }
 
-    TerminationError_.Store(error);
     Terminated_.Fire(error);
 }
 

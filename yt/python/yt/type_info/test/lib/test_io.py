@@ -7,7 +7,6 @@ from yt.type_info import is_valid_type, serialize_yson, deserialize_yson
 from yt import yson
 
 import pytest
-import six
 
 
 def to_snake_case(s):
@@ -68,11 +67,6 @@ def test_compound_types(human_readable):
 
     check(typing.EmptyTuple, {"type_name": "tuple", "elements": []})
 
-    if six.PY2:
-        russian_name = u"ой".encode("utf-8")
-    else:
-        russian_name = u"ой"
-
     check(
         typing.Struct[
             "a": typing.Uint8,
@@ -84,7 +78,7 @@ def test_compound_types(human_readable):
             "members": [
                 {"name": "a", "type": "uint8"},
                 {"name": "b", "type": "yson"},
-                {"name": russian_name, "type": "uint64"},
+                {"name": u"ой", "type": "uint64"},
             ],
         },
     )
@@ -123,13 +117,9 @@ def test_compound_types(human_readable):
         },
     })
 
-    if six.PY2:
-        russian_tag = u"мой_тэг".encode("utf-8")
-    else:
-        russian_tag = u"мой_тэг"
     check(typing.Tagged[typing.String, u"мой_тэг"], {
         "type_name": "tagged",
-        "tag": russian_tag,
+        "tag": u"мой_тэг",
         "item": "string",
     })
 

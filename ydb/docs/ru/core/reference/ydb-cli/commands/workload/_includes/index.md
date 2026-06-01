@@ -30,3 +30,4 @@
 * [Topic](../../../workload-topic.md) - Topic нагрузка.
 * [Transfer](../../../workload-transfer.md) - Transfer нагрузка.
 * [Query](../../../workload-query.md) - Пользовательская нагрузка.
+* [Fulltext](../../../workload-fulltext.md) - Fulltext нагрузка.

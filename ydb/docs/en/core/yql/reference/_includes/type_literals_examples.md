@@ -1,5 +1,4 @@
 ### Examples
-
 ```yql
 SELECT
   Bool("true"),
@@ -10,18 +9,18 @@ SELECT
   Uint64("4"),
   Float("-5"),
   Double("6"),
-  Decimal("1.23", 5, 2), -- up to 5 decimal digits, with 2 after the decimal point
+  Decimal("1.23", 5, 2), -- up to 5 decimal places, of which 2 are after the decimal point
+  DyNumber("1"),
   String("foo"),
-  Utf8("Hello"),
+  Utf8("hello"),
   Yson("<a=1>[3;%false]"),
   Json(@@{"a":1,"b":null}@@),
   Date("2017-11-27"),
   Datetime("2017-11-27T13:24:00Z"),
   Timestamp("2017-11-27T13:24:00.123456Z"),
-  Interval("P1DT2H3M4.567890S"),
+  Interval("P1W2DT2H3M4.567890S"),
   TzDate("2017-11-27,Europe/Moscow"),
   TzDatetime("2017-11-27T13:24:00,America/Los_Angeles"),
   TzTimestamp("2017-11-27T13:24:00.123456,GMT"),
   Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb");
 ```
-

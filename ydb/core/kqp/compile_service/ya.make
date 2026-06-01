@@ -28,8 +28,10 @@ END()
 
 RECURSE(
     helpers
+    obfuscate
 )
 
 RECURSE_FOR_TESTS(
+    obfuscate/ut
     ut
 )

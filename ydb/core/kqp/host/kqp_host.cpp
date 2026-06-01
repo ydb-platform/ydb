@@ -1684,6 +1684,7 @@ private:
             settingsBuilder.SetSqlAutoCommit(false)
                 .SetUsePgParser(settings.UsePgParser)
                 .SetFromConfig(SessionCtx->Config())
+                .SetValidateViewStatement(!settings.IsInternalCall.GetOrElse(false))
                 .SetYqlSelect(settings.YqlSelect);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
 

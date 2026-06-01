@@ -40,7 +40,7 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
 
 TBaseWriteRequestExecutor::~TBaseWriteRequestExecutor()
 {
-    if (!Promise.IsReady()) {
+    if (!IsAlreadyReplied()) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -51,14 +51,50 @@ TBaseWriteRequestExecutor::~TBaseWriteRequestExecutor()
     }
 }
 
-NThreading::TFuture<TBaseWriteRequestExecutor::TResponse>
-TBaseWriteRequestExecutor::GetFuture() const
+void TBaseWriteRequestExecutor::SetReplyCallback(TReplyCallback callback)
 {
-    return Promise.GetFuture();
+    ReplyCallback = std::move(callback);
+}
+
+void TBaseWriteRequestExecutor::SetNotifyBelatedCallback(
+    TNotifyBelatedCallback callback)
+{
+    NotifyBelatedCallback = std::move(callback);
+}
+
+bool TBaseWriteRequestExecutor::IsAlreadyReplied() const
+{
+    return IsReplied;
+}
+
+TString TBaseWriteRequestExecutor::ExtendedDebugState() const
+{
+    TStringBuilder result;
+    result << "RequestedWrites: " << RequestedWrites.Print() << ";";
+    result << "CompletedWrites: " << CompletedWrites.Print() << ";";
+
+    return result;
+}
+
+void TBaseWriteRequestExecutor::ReplyOrNotifyBelated(
+    NProto::TError error,
+    THostMask completedOnCurrentResponse)
+{
+    if (!IsReplied) {
+        Reply(std::move(error));
+        return;
+    }
+    NotifyBelated(completedOnCurrentResponse);
 }
 
 void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 {
+    Y_ABORT_UNLESS(
+        ReplyCallback,
+        "TBaseWriteRequestExecutor::Reply called without callback set");
+    Y_ABORT_IF(IsReplied, "TBaseWriteRequestExecutor::Reply called twice");
+    IsReplied = true;
+
     if (HasError(error)) {
         LOG_ERROR(
             *ActorSystem,
@@ -76,16 +112,35 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 
     Request->Sglist.Close();
 
-    Promise.TrySetValue(TResponse{
+    ReplyCallback(TResponse{
         .Error = std::move(error),
         .Lsn = Lsn,
         .RequestedWrites = RequestedWrites,
         .CompletedWrites = CompletedWrites});
 }
 
+void TBaseWriteRequestExecutor::NotifyBelated(
+    THostMask completedOnCurrentResponse)
+{
+    Y_ABORT_UNLESS(
+        NotifyBelatedCallback,
+        "TBaseWriteRequestExecutor::Notify called without callback set");
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TBaseWriteRequestExecutor::Notify %s, %s",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str());
+
+    if (!completedOnCurrentResponse.Empty()) {
+        NotifyBelatedCallback(completedOnCurrentResponse, Lsn);
+    }
+}
+
 void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
 {
-    if (Promise.IsReady()) {
+    if (IsAlreadyReplied()) {
         return;
     }
 
@@ -124,10 +179,6 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    if (Promise.IsReady()) {
-        return;
-    }
-
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -139,7 +190,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
         if (ShouldReplyOk()) {
-            Reply(MakeError(S_OK));
+            ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
     }
@@ -163,7 +214,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
             LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
-        Reply(response.Error);
+        ReplyOrNotifyBelated(response.Error, {});
 
         auto ender = TEndSpanWithError(std::move(span), response.Error);
     }
@@ -199,7 +250,7 @@ void TBaseWriteRequestExecutor::RequestTimeoutCallback()
         "%s Request timeout.",
         LogTitle.GetWithTime().c_str());
 
-    Reply(MakeError(E_TIMEOUT, "Write request timeout"));
+    ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
 }
 
 bool TBaseWriteRequestExecutor::ShouldReplyOk() const

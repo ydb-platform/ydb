@@ -101,6 +101,9 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         workerConfig = NYT::NodeFromYsonStream(&input);
     }
     TFmrCoordinatorSettings coordinatorSettings = GetDefaultCoordinatorSettings(coordinatorConfig, fmrOperationSpec);
+    if (fmrServices->YtServerForUpload) {
+        coordinatorSettings.RequireFmrJob = true;
+    }
 
     auto tvmSettings = fmrServices->TvmSettings;
 

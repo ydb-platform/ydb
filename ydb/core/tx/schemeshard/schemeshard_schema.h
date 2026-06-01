@@ -338,6 +338,8 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerShardId, LocalShardId, ChannelId, PoolName, Binding>;
     };
 
+    // Deprecated: superseded by TablePartitionsByShardIdx. Scheduled for removal
+    // once the migration to the ShardIdx-keyed format is complete.
     struct TablePartitions : Table<8> {
         struct TabId :          Column<1, NScheme::NTypeIds::Uint64> {};
         struct Id :             Column<2, NScheme::NTypeIds::Uint64> {};
@@ -350,6 +352,8 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TabId, Id, RangeEnd, DatashardIdx, LastCondErase, NextCondErase>;
     };
 
+    // Deprecated: superseded by TablePartitionStatsByShardIdx. Scheduled for removal
+    // once the migration to the ShardIdx-keyed format is complete.
     struct TablePartitionStats : Table<101> { // HACK: Force to use policy with multiple levels
         // key
         struct TableOwnerId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
@@ -447,6 +451,12 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    // Deprecated: cross-tablet-migrated counterpart of TablePartitions, superseded
+    // by TablePartitionsByShardIdx (whose key shape covers both local and migrated
+    // tables). Scheduled for removal once the migration is complete; see also the
+    // un-ported write site in schemeshard__init_root.cpp that still targets this
+    // table during cross-schemeshard subdomain migration and will need to be
+    // redirected to TablePartitionsByShardIdx as part of retirement.
     struct MigratedTablePartitions : Table<56> {
         struct OwnerPathId :    Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId :    Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
@@ -2392,6 +2402,126 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId, SrcTablePathId>;
     };
 
+    // Alternative to TablePartitions/MigratedTablePartitions: keyed by path+shard identity so
+    // that split/merge writes only O(k) rows (src+dst shards) instead of O(N) positional rows.
+    // Guarded by EnableTablePartitionsFormatShardIdx feature flag.
+    // Rows are not ordered by key range; schemeshard sorts them by RangeEnd on load.
+    struct TablePartitionsByShardIdx : Table<134> {
+        struct OwnerPathId :    Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId :    Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct OwnerShardIdx :  Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalShardIdx :  Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+        struct RangeEnd :       Column<5, NScheme::NTypeIds::String> { using Type = TString; };
+        struct LastCondErase :  Column<6, NScheme::NTypeIds::Uint64> {};
+        struct NextCondErase :  Column<7, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OwnerPathId,
+            LocalPathId,
+            OwnerShardIdx,
+            LocalShardIdx,
+            RangeEnd,
+            LastCondErase,
+            NextCondErase
+        >;
+    };
+
+    // Guarded by EnableTablePartitionsFormatShardIdx feature flag.
+    // ShardIdx-keyed counterpart of TablePartitionStats; eliminates O(N) position lookup.
+    struct TablePartitionStatsByShardIdx : Table<135> {
+        struct OwnerPathId :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct OwnerShardIdx : Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalShardIdx : Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+
+        struct SeqNoGeneration : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct SeqNoRound :      Column<6, NScheme::NTypeIds::Uint64> {};
+
+        struct RowCount :  Column<7,  NScheme::NTypeIds::Uint64> {};
+        struct DataSize :  Column<8,  NScheme::NTypeIds::Uint64> {};
+        struct IndexSize : Column<9,  NScheme::NTypeIds::Uint64> {};
+
+        struct LastAccessTime : Column<10, NScheme::NTypeIds::Uint64> { using Type = TInstant::TValue; };
+        struct LastUpdateTime : Column<11, NScheme::NTypeIds::Uint64> { using Type = TInstant::TValue; };
+
+        struct ImmediateTxCompleted : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct PlannedTxCompleted :   Column<13, NScheme::NTypeIds::Uint64> {};
+        struct TxRejectedByOverload : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct TxRejectedBySpace :    Column<15, NScheme::NTypeIds::Uint64> {};
+        struct TxCompleteLag :        Column<16, NScheme::NTypeIds::Uint64> { using Type = TInstant::TValue; };
+        struct InFlightTxCount :      Column<17, NScheme::NTypeIds::Uint64> {};
+
+        struct RowUpdates :    Column<18, NScheme::NTypeIds::Uint64> {};
+        struct RowDeletes :    Column<19, NScheme::NTypeIds::Uint64> {};
+        struct RowReads :      Column<20, NScheme::NTypeIds::Uint64> {};
+        struct RangeReads :    Column<21, NScheme::NTypeIds::Uint64> {};
+        struct RangeReadRows : Column<22, NScheme::NTypeIds::Uint64> {};
+
+        struct CPU :            Column<23, NScheme::NTypeIds::Uint64> {};
+        struct Memory :         Column<24, NScheme::NTypeIds::Uint64> {};
+        struct Network :        Column<25, NScheme::NTypeIds::Uint64> {};
+        struct Storage :        Column<26, NScheme::NTypeIds::Uint64> {};
+        struct ReadThroughput : Column<27, NScheme::NTypeIds::Uint64> {};
+        struct WriteThroughput : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct ReadIops :       Column<29, NScheme::NTypeIds::Uint64> {};
+        struct WriteIops :      Column<30, NScheme::NTypeIds::Uint64> {};
+
+        struct SearchHeight :   Column<31, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+        struct FullCompactionTs : Column<32, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+        struct MemDataSize :    Column<33, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+
+        struct StoragePoolsStats : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+
+        struct ByKeyFilterSize : Column<35, NScheme::NTypeIds::Uint64> {};
+
+        struct LocksAcquired :  Column<36, NScheme::NTypeIds::Uint64> {};
+        struct LocksWholeShard : Column<37, NScheme::NTypeIds::Uint64> {};
+        struct LocksBroken :    Column<38, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OwnerPathId,
+            LocalPathId,
+            OwnerShardIdx,
+            LocalShardIdx,
+            SeqNoGeneration,
+            SeqNoRound,
+            RowCount,
+            DataSize,
+            IndexSize,
+            LastAccessTime,
+            LastUpdateTime,
+            ImmediateTxCompleted,
+            PlannedTxCompleted,
+            TxRejectedByOverload,
+            TxRejectedBySpace,
+            TxCompleteLag,
+            InFlightTxCount,
+            RowUpdates,
+            RowDeletes,
+            RowReads,
+            RangeReads,
+            RangeReadRows,
+            CPU,
+            Memory,
+            Network,
+            Storage,
+            ReadThroughput,
+            WriteThroughput,
+            ReadIops,
+            WriteIops,
+            SearchHeight,
+            FullCompactionTs,
+            MemDataSize,
+            StoragePoolsStats,
+            ByKeyFilterSize,
+            LocksAcquired,
+            LocksWholeShard,
+            LocksBroken
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2523,7 +2653,9 @@ struct Schema : NIceDb::Schema {
         ForcedCompactions,
         WaitingForcedCompactionShards,
         SharedShards,
-        IncrementalRestoreItem
+        IncrementalRestoreItem,
+        TablePartitionsByShardIdx,
+        TablePartitionStatsByShardIdx
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;
@@ -2538,6 +2670,8 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_ServerlessStorageLastBillTime = 10;
     static constexpr ui64 SysParam_MaxIncompatibleChange = 11;
     static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12;
+    static constexpr ui64 SysParam_TablePartitionsFormatSweepStatus = 13;
+    static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

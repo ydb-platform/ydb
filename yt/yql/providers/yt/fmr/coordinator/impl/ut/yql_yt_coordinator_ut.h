@@ -9,6 +9,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yt/yql/providers/yt/fmr/job_preparer/impl/yql_yt_job_preparer_impl.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yt/yql/providers/yt/fmr/test_tools/table_data_service/yql_yt_table_data_service_helpers.h>
 #include <yt/yql/providers/yt/fmr/test_tools/mock_time_provider/yql_yt_mock_time_provider.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
@@ -92,7 +93,7 @@ struct TFmrTestSetup {
         TFmrJobFactorySettings settings{.NumThreads = numThreads, .Function = taskFunction};
         auto factory = MakeFmrJobFactory(settings);
         SetupTableDataServiceDiscovery(TableDataServiceDiscoveryFile, PortManager->GetPort());
-        auto jobPreparer = NFmr::MakeFmrJobPreparer(FileStorage, TableDataServiceDiscoveryFile.GetName());
+        auto jobPreparer = NFmr::MakeFmrJobPreparer(FileStorage, NFmr::MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFile.GetName()}));
         auto worker = MakeFmrWorker(coordinator, factory, jobPreparer, workerSettings);
         if (startWorker) {
             worker->Start();

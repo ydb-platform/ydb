@@ -348,9 +348,11 @@ type_name_composite:
   | type_name_dynamiclinear
   ) QUESTION*;
 
+type_name_null: NULL;
+
 type_name:
     type_name_composite
-  | (type_name_decimal | type_name_simple) QUESTION*;
+  | (type_name_decimal | type_name_simple | type_name_null) QUESTION*;
 
 type_name_or_bind: type_name | bind_parameter;
 

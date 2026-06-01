@@ -1,8 +1,48 @@
 #include "distconf.h"
 #include "distconf_quorum.h"
 #include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NStorage {
+
+    void TDistributedConfigKeeper::LogUnboundBindingWarning() {
+        auto& ctx = TActivationContext::AsActorContext();
+        const auto makeMessage = [&] {
+            const ui32 selfNodeId = SelfId().NodeId();
+
+            ui32 staticPeers = 0;
+            ui32 reachablePeers = 0;
+            for (const auto& item : AllNodeIds) {
+                const ui32 nodeId = item.first;
+                if (nodeId == selfNodeId) {
+                    continue;
+                }
+                ++staticPeers;
+                const auto it = SubscribedSessions.find(nodeId);
+                if (it != SubscribedSessions.end() && it->second.SessionId) {
+                    ++reachablePeers;
+                }
+            }
+
+            const bool hasReachablePeers = reachablePeers != 0;
+            TStringBuilder msg;
+            msg << "[YDBE-DC01] local node " << selfNodeId << " cannot join cluster";
+            if (!hasReachablePeers) {
+                msg << ": no accepted interconnect sessions to configured remote nodes";
+            } else {
+                msg << ": distconf bind failing";
+            }
+            if (staticPeers) {
+                msg << " (" << reachablePeers << "/" << staticPeers << " remote nodes connected)";
+            }
+            if (!hasReachablePeers) {
+                msg << "; check network or update config on running cluster nodes";
+            }
+            return msg;
+        };
+
+        LOG_WARN_SOURCELESS(ctx, NKikimrServices::BS_NODE, "%s", makeMessage().data());
+    }
 
     void TDistributedConfigKeeper::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC11, "TEvNodesInfo");
@@ -407,6 +447,16 @@ namespace NKikimr::NStorage {
         if (Binding) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC03, "AbortBinding", (Binding, Binding), (Reason, reason));
 
+            ++BindFailuresStreak;
+
+            constexpr ui32 kStreakThreshold = 5;
+            constexpr TDuration kWarnThrottle = TDuration::Seconds(60);
+            const TInstant now = TActivationContext::Now();
+            if (BindFailuresStreak >= kStreakThreshold && (LastUnboundWarnAt == TInstant::Zero() || now - LastUnboundWarnAt >= kWarnThrottle)) {
+                LastUnboundWarnAt = now;
+                LogUnboundBindingWarning();
+            }
+
             const TBinding binding = *std::exchange(Binding, std::nullopt);
 
             if (binding.SessionId && sendUnbindMessage) {
@@ -463,6 +513,11 @@ namespace NKikimr::NStorage {
             }
 
             Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
+
+            if (Binding) {
+                BindFailuresStreak = 0;
+                LastUnboundWarnAt = TInstant::Zero();
+            }
         }
 
         // update config if needed, or just fan-out binding changes

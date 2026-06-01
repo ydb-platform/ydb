@@ -28,8 +28,10 @@ namespace NKikimr::NDDisk {
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD11, "TDDiskActor::Handle(TEvConnect) sending OK",
+            (DDiskId, DDiskId), (Recipient, ev->Sender), (ICSession, ev->InterconnectSession));
         SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
-            DDiskInstanceGuid));
+                DDiskInstanceGuid));
 
         if (ev->InterconnectSession) {
             // subscribe to session to check for disconnections (if not yet)

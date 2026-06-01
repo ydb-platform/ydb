@@ -1,0 +1,1 @@
+SELECT o.id, c.name, i.product_name, i.qty FROM orders AS o JOIN customers AS c ON o.customer_id = c.id JOIN order_items AS i ON o.id = i.order_id WHERE o.amount > 100 AND c.age >= 18

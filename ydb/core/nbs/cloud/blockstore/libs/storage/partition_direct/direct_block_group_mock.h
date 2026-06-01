@@ -61,16 +61,16 @@ public:
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
-    using TWriteBlocksToManyPBuffersHandler = std::function<
-        NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>(
-            ui32 vChunkIndex,
-            THostIndex coordinatorHostIndex,
-            TVector<THostIndex> hostIndexes,
-            ui64 lsn,
-            TBlockRange64 range,
-            TDuration replyTimeout,
-            const TGuardedSgList& guardedSglist,
-            const NWilson::TTraceId& traceId)>;
+    using TWriteBlocksToManyPBuffersHandler = std::function<void(
+        ui32 vChunkIndex,
+        THostIndex coordinatorHostIndex,
+        TVector<THostIndex> hostIndexes,
+        ui64 lsn,
+        TBlockRange64 range,
+        TDuration replyTimeout,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback)>;
     using TSyncWithPBufferHandler =
         std::function<NThreading::TFuture<TDBGFlushResponse>(
             ui32 vChunkIndex,
@@ -155,8 +155,7 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
@@ -164,7 +163,8 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) override;
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,

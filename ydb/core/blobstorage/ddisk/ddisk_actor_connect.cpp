@@ -2,6 +2,7 @@
 
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
@@ -33,8 +34,11 @@ namespace NKikimr::NDDisk {
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD11, "TDDiskActor::Handle(TEvConnect) sending OK",
-            (DDiskId, DDiskId), (Recipient, ev->Sender), (ICSession, ev->InterconnectSession));
+        YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvConnect) sending OK",
+            {"Marker", "BSDD11"},
+            {"DDiskId", DDiskId},
+            {"Recipient", ev->Sender},
+            {"ICSession", ev->InterconnectSession});
         SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
                 DDiskInstanceGuid));
 

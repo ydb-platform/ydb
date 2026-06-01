@@ -11,6 +11,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_DEFRAG
 
@@ -114,7 +115,10 @@ namespace NKikimr {
                         {"LockedChunks", lockedChunks});
 
                     if (lockedChunks.empty()) {
-                        STLOG(PRI_NOTICE, BS_VDISK_DEFRAG, BSVDD17, DCtx->VCtx->VDiskLogPrefix << "could not lock chunks, going to run full compaction instead", (ChunksToDefrag, *ChunksToDefrag));
+                        YDB_LOG_COMP_NOTICE(BS_VDISK_DEFRAG, "could not lock chunks, going to run full compaction instead",
+                            {"Marker", "BSVDD17"},
+                            {"#_DCtx->VCtx->VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                            {"ChunksToDefrag", *ChunksToDefrag});
                     }
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();

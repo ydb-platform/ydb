@@ -6,6 +6,7 @@
 #include <ydb/library/actors/retro_tracing/span_buffer.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
@@ -561,8 +562,11 @@ namespace NKikimr::NStorage {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
-                    STLOG(PRI_NOTICE, BS_NODE, NWDC49, "ProposedStorageConfig generation is not newer than the applied one",
-                        (StorageConfig, StorageConfig.get()), (Request, task.Request), (RootNodeId, GetRootNodeId()));
+                    YDB_LOG_COMP_NOTICE(BS_NODE, "ProposedStorageConfig generation is not newer than the applied one",
+                        {"Marker", "NWDC49"},
+                        {"StorageConfig", StorageConfig.get()},
+                        {"Request", task.Request},
+                        {"RootNodeId", GetRootNodeId()});
                 } else if (proposed.HasClusterState() && (!BridgeInfo ||
                         !NBridge::PileStateTraits(proposed.GetClusterState().GetPerPileState(
                             BridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())).RequiresConfigQuorum)) {

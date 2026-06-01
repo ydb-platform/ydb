@@ -6,6 +6,7 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
@@ -207,8 +208,10 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
         const ui64 tabletId = creds.TabletId;
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD51, "TDDiskActor::Handle(TEvDeleteTabletChunks)",
-            (DDiskId, DDiskId), (TabletId, tabletId));
+        YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvDeleteTabletChunks)",
+            {"Marker", "BSDD51"},
+            {"DDiskId", DDiskId},
+            {"TabletId", tabletId});
 
         // Reject if any chunk allocation for this tablet is in flight (log record pending)
         {

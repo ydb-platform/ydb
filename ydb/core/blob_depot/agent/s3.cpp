@@ -6,6 +6,7 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
@@ -46,10 +47,16 @@ namespace NKikimr::NBlobDepot {
         const bool concurrencyThrottled = S3GetsInFlight >= CurrentMaxS3GetsInFlight;
 
         if (timeThrottled || concurrencyThrottled) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA65, "S3 read queued", (AgentId, LogId), (ReadId, read.ReadId),
-                (Key, read.Key), (TimeThrottled, timeThrottled), (ConcurrencyThrottled, concurrencyThrottled),
-                (S3GetsInFlight, S3GetsInFlight), (CurrentMaxS3GetsInFlight, CurrentMaxS3GetsInFlight),
-                (QueueSize, PendingS3Reads.size()));
+            YDB_LOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "S3 read queued",
+                {"Marker", "BDA65"},
+                {"AgentId", LogId},
+                {"ReadId", read.ReadId},
+                {"Key", read.Key},
+                {"TimeThrottled", timeThrottled},
+                {"ConcurrencyThrottled", concurrencyThrottled},
+                {"S3GetsInFlight", S3GetsInFlight},
+                {"CurrentMaxS3GetsInFlight", CurrentMaxS3GetsInFlight},
+                {"QueueSize", PendingS3Reads.size()});
             PendingS3Reads.push_back(std::move(read));
             if (timeThrottled && !S3GetWakeupScheduled) {
                 TActivationContext::Schedule(S3GetThrottleUntil, new IEventHandle(TEvPrivate::EvS3GetThrottleWakeup,
@@ -147,9 +154,16 @@ namespace NKikimr::NBlobDepot {
 
         ++S3GetsInFlight;
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA66, "starting S3 read", (AgentId, LogId), (ReadId, read.ReadId),
-            (Key, read.Key), (Offset, read.Offset), (Len, read.Len), (SlowDownRetries, read.SlowDownRetries),
-            (S3GetsInFlight, S3GetsInFlight), (CurrentMaxS3GetsInFlight, CurrentMaxS3GetsInFlight));
+        YDB_LOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "starting S3 read",
+            {"Marker", "BDA66"},
+            {"AgentId", LogId},
+            {"ReadId", read.ReadId},
+            {"Key", read.Key},
+            {"Offset", read.Offset},
+            {"Len", read.Len},
+            {"SlowDownRetries", read.SlowDownRetries},
+            {"S3GetsInFlight", S3GetsInFlight},
+            {"CurrentMaxS3GetsInFlight", CurrentMaxS3GetsInFlight});
 
         const TString key = read.Key;
         const ui32 offset = read.Offset;
@@ -172,9 +186,13 @@ namespace NKikimr::NBlobDepot {
         const TDuration delay = S3GetBackoff.Next();
         S3GetThrottleUntil = TActivationContext::Monotonic() + delay;
 
-        STLOG(PRI_WARN, BLOB_DEPOT_AGENT, BDA67, "S3 get throttled", (AgentId, LogId),
-            (Delay, delay), (CurrentMaxS3GetsInFlight, CurrentMaxS3GetsInFlight),
-            (S3GetsInFlight, S3GetsInFlight), (QueueSize, PendingS3Reads.size()));
+        YDB_LOG_COMP_WARN(BLOB_DEPOT_AGENT, "S3 get throttled",
+            {"Marker", "BDA67"},
+            {"AgentId", LogId},
+            {"Delay", delay},
+            {"CurrentMaxS3GetsInFlight", CurrentMaxS3GetsInFlight},
+            {"S3GetsInFlight", S3GetsInFlight},
+            {"QueueSize", PendingS3Reads.size()});
         BDEV(BDEV44, "S3_get_throttled", (VG, VirtualGroupId), (BDT, TabletId), (G, BlobDepotGeneration),
             (DelayMs, delay.MilliSeconds()), (QueueSize, PendingS3Reads.size()));
 

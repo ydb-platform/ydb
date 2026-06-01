@@ -5,6 +5,7 @@
 
 #include <ydb/core/util/pb.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 
 namespace NKikimr::NDDisk {
@@ -231,10 +232,10 @@ namespace NKikimr::NDDisk {
             if (SyncReadCookiesInFlight.erase(ev->Cookie)) {
                 return;
             }
-            STLOG(PRI_ERROR, BS_DDISK, BSDD24,
-                "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
-                (DDiskId, DDiskId),
-                (Cookie, ev->Cookie));
+            YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
+                {"Marker", "BSDD24"},
+                {"DDiskId", DDiskId},
+                {"Cookie", ev->Cookie});
             return;
         }
 
@@ -247,13 +248,13 @@ namespace NKikimr::NDDisk {
 
         if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
             SyncReadCookiesInFlight.erase(ev->Cookie);
-            STLOG(PRI_ERROR, BS_DDISK, BSDD25,
-                "TDDiskActor::InternalSyncReadResult request cookie out of range",
-                (DDiskId, DDiskId),
-                (Cookie, ev->Cookie),
-                (SyncId, syncId),
-                (FirstRequestId, sync.FirstRequestId),
-                (RequestsCount, sync.Requests.size()));
+            YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult request cookie out of range",
+                {"Marker", "BSDD25"},
+                {"DDiskId", DDiskId},
+                {"Cookie", ev->Cookie},
+                {"SyncId", syncId},
+                {"FirstRequestId", sync.FirstRequestId},
+                {"RequestsCount", sync.Requests.size()});
             return;
         }
         auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];

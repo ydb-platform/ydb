@@ -13,6 +13,7 @@
 
 #include <unordered_set>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_PROCESSOR
 
@@ -117,9 +118,9 @@ private:
     }
 
     void Handle(TEvPhantomFlagStorageWriteItems::TPtr ev) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP03, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagStorageWriteItems"),
-                (ItemCount, ev->Get()->Items.size()));
+        YDB_LOG_COMP_DEBUG(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagStorageWriteItems"),
+            {"Marker", "BSPFP03"},
+            {"ItemCount", ev->Get()->Items.size()});
         TWriteBatch batch{.SourceChunkIdx = std::nullopt};
         std::ranges::move(ev->Get()->Items.begin(), ev->Get()->Items.end(),
                 std::back_inserter(batch.Items));
@@ -130,10 +131,10 @@ private:
     void Handle(TEvPhantomFlagExtractedFromChunk::TPtr ev) {
         const ui32 chunkIdx = ev->Get()->ChunkIdx;
         auto& flags = ev->Get()->Flags;
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP12, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagExtractedFromChunk"),
-                (SourceChunkIdx, chunkIdx),
-                (FlagCount, flags.size()));
+        YDB_LOG_COMP_NOTICE(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagExtractedFromChunk"),
+            {"Marker", "BSPFP12"},
+            {"SourceChunkIdx", chunkIdx},
+            {"FlagCount", flags.size()});
         TWriteBatch batch{.SourceChunkIdx = chunkIdx};
         for (const TLogoBlobRec& flag : flags) {
             batch.Items.push_back(TPhantomFlagStorageItem::CreateFlag(&flag));
@@ -212,8 +213,8 @@ private:
     }
 
     void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP08, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagStorageGetSnapshot"));
+        YDB_LOG_COMP_NOTICE(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagStorageGetSnapshot"),
+            {"Marker", "BSPFP08"});
         EnqueueGetSnapshot(ev->Sender, std::move(ev->Get()->SyncLogSnapshot));
         ProcessQueues();
     }
@@ -237,9 +238,9 @@ private:
 
     void Handle(const TEvPhantomFlagStorageFinishBuilder::TPtr& ev) {
         TPhantomFlags& flags = ev->Get()->Flags;
-        STLOG(PRI_INFO, BS_PHANTOM_FLAG_PROCESSOR, BSPFP13, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagStorageFinishBuilder"),
-                (FlagCount, flags.size()));
+        YDB_LOG_COMP_INFO(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx, "Handle TEvPhantomFlagStorageFinishBuilder"),
+            {"Marker", "BSPFP13"},
+            {"FlagCount", flags.size()});
         std::move(flags.begin(), flags.end(), std::back_inserter(PendingRead.Flags));
         FinalizeRead();
     }

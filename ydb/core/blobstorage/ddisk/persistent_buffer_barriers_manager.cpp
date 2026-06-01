@@ -3,6 +3,7 @@
 
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
@@ -279,14 +280,21 @@ namespace NKikimr::NDDisk {
         auto tabletId = header->Erase.TabletId;
         auto& erase = Erases[tabletId];
         if (erase.HeaderLsn > header->RecordLsn) {
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ", (TabletId, tabletId), (erase.HeaderLsn, erase.HeaderLsn), (header->RecordLsn, header->RecordLsn));
+            YDB_LOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ",
+                {"Marker", "BSDD30"},
+                {"TabletId", tabletId},
+                {"erase.HeaderLsn", erase.HeaderLsn},
+                {"header->RecordLsn", header->RecordLsn});
             return false;
         }
         erase.ChunkIdx = chunkIdx;
         erase.SectorIdx = sectorIdx;
         erase.HeaderLsn = header->RecordLsn;
         erase.Lsns = Uncompact(header->Erase.CompactLsns);
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase", (TabletId, tabletId), (HeaderLsn, header->RecordLsn));
+        YDB_LOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferBarriersManager::AddErase",
+            {"Marker", "BSDD30"},
+            {"TabletId", tabletId},
+            {"HeaderLsn", header->RecordLsn});
         return true;
     }
 
@@ -306,7 +314,10 @@ namespace NKikimr::NDDisk {
             while (pbIt != persistentBuffers.end() && std::get<0>(pbIt->first) == tid) {
                 TPersistentBuffer& buffer = pbIt->second;
                 for (ui64 lsn : erase.Lsns) {
-                    STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found", (TabletId, tid), (Lsn, lsn));
+                    YDB_LOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found",
+                        {"Marker", "BSDD30"},
+                        {"TabletId", tid},
+                        {"Lsn", lsn});
                     buffer.Records.erase(lsn);
                 }
                 if (buffer.Records.empty()) {

@@ -4,14 +4,17 @@
 
 #include <ydb/core/blob_depot/s3_router.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NStorage {
 
     void TNodeWarden::Handle(TAutoPtr<TEventHandle<TEvNodeWardenAcquireBlobDepotS3Router>> ev) {
         auto& msg = *ev->Get();
         const ui64 tabletId = msg.TabletId;
-        STLOG(PRI_DEBUG, BS_NODE, NW70, "TEvNodeWardenAcquireBlobDepotS3Router",
-            (TabletId, tabletId), (Sender, ev->Sender));
+        YDB_LOG_COMP_DEBUG(BS_NODE, "TEvNodeWardenAcquireBlobDepotS3Router",
+            {"Marker", "NW70"},
+            {"TabletId", tabletId},
+            {"Sender", ev->Sender});
 
         TActorSystem* const as = TActivationContext::ActorSystem();
         auto& rec = BlobDepotS3Routers[tabletId];
@@ -21,11 +24,15 @@ namespace NKikimr::NStorage {
             IActor* routerActor = NBlobDepot::CreateBlobDepotS3Router(msg.Settings);
             rec.Router = Register(routerActor, TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
             as->RegisterLocalService(MakeBlobDepotS3RouterID(tabletId), rec.Router);
-            STLOG(PRI_INFO, BS_NODE, NW71, "BlobDepotS3Router created",
-                (TabletId, tabletId), (Router, rec.Router));
+            YDB_LOG_COMP_INFO(BS_NODE, "BlobDepotS3Router created",
+                {"Marker", "NW71"},
+                {"TabletId", tabletId},
+                {"Router", rec.Router});
         } else {
-            STLOG(PRI_DEBUG, BS_NODE, NW72, "BlobDepotS3Router reused",
-                (TabletId, tabletId), (Router, rec.Router));
+            YDB_LOG_COMP_DEBUG(BS_NODE, "BlobDepotS3Router reused",
+                {"Marker", "NW72"},
+                {"TabletId", tabletId},
+                {"Router", rec.Router});
         }
 
         rec.Consumers.insert(ev->Sender);
@@ -34,8 +41,10 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TAutoPtr<TEventHandle<TEvNodeWardenReleaseBlobDepotS3Router>> ev) {
         auto& msg = *ev->Get();
         const ui64 tabletId = msg.TabletId;
-        STLOG(PRI_DEBUG, BS_NODE, NW73, "TEvNodeWardenReleaseBlobDepotS3Router",
-            (TabletId, tabletId), (Sender, ev->Sender));
+        YDB_LOG_COMP_DEBUG(BS_NODE, "TEvNodeWardenReleaseBlobDepotS3Router",
+            {"Marker", "NW73"},
+            {"TabletId", tabletId},
+            {"Sender", ev->Sender});
 
         auto it = BlobDepotS3Routers.find(tabletId);
         if (it == BlobDepotS3Routers.end()) {
@@ -45,8 +54,10 @@ namespace NKikimr::NStorage {
         auto& rec = it->second;
         rec.Consumers.erase(ev->Sender);
         if (rec.Consumers.empty()) {
-            STLOG(PRI_INFO, BS_NODE, NW74, "BlobDepotS3Router terminating",
-                (TabletId, tabletId), (Router, rec.Router));
+            YDB_LOG_COMP_INFO(BS_NODE, "BlobDepotS3Router terminating",
+                {"Marker", "NW74"},
+                {"TabletId", tabletId},
+                {"Router", rec.Router});
             TActorSystem* const as = TActivationContext::ActorSystem();
             as->RegisterLocalService(MakeBlobDepotS3RouterID(tabletId), TActorId());
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, rec.Router,

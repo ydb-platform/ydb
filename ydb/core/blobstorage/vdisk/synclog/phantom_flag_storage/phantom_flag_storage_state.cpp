@@ -4,6 +4,7 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_STORAGE
 
@@ -59,12 +60,12 @@ void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* 
 
     if (blobRec->Ingress.IsDoNotKeep(GType) &&
             (Building || Thresholds.IsBehindThresholdOnUnsynced(blobRec->LogoBlobID(), SyncedMask))) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS09,
-                VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
-                (BlobId, blobRec->LogoBlobID().ToString()),
-                (Building, Building),
-                (SyncedMask, SyncedMask.to_ullong()),
-                (Thresholds, Thresholds.ToString()));
+        YDB_LOG_COMP_DEBUG(BS_PHANTOM_FLAG_STORAGE, VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
+            {"Marker", "BSPFS09"},
+            {"BlobId", blobRec->LogoBlobID().ToString()},
+            {"Building", Building},
+            {"SyncedMask", SyncedMask.to_ullong()},
+            {"Thresholds", Thresholds.ToString()});
         AddFlag(*blobRec);
     }
 }

@@ -47,7 +47,6 @@ class IDeltaReader {
 public:
     virtual ~IDeltaReader() = default;
     virtual bool Read(ui64& docId, ui32& freq) = 0;
-    virtual bool IsEnded() const = 0;
 };
 
 class TDeltaReader: public IDeltaReader {
@@ -61,7 +60,6 @@ public:
     bool Read(ui64& docId, ui32& freq) override;
     size_t GetPos() const;
     ui64 GetLastId() const;
-    bool IsEnded() const override;
 };
 
 class TMultiDeltaReader: public IDeltaReader {
@@ -90,7 +88,6 @@ public:
     void Add(bool added, ui64 firstId, TConstArrayRef<ui8> buf, ui64 maxId);
     void Start();
     bool Read(ui64& docId, ui32& freq);
-    bool IsEnded() const;
     size_t GetPos(size_t n) const;
     ui64 GetLastId(size_t n) const;
 };

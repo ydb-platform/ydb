@@ -874,10 +874,10 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
     ui64 Rows = 0;
 
     bool StartReader() {
-        if (ResultIdx >= Results.size()) {
-            return false;
-        }
         while (!Started) {
+            if (ResultIdx >= Results.size()) {
+                return false;
+            }
             if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
                 ResultIdx++;
                 RowIdx = 0;

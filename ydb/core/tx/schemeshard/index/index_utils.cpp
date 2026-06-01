@@ -426,7 +426,7 @@ auto CalcFulltextCompactImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType)
 {
     auto tableColumns = ExtractInfo(baseTable);
@@ -439,11 +439,11 @@ auto CalcFulltextCompactImplTableDescImpl(
     TString error;
     Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
     NScheme::TTypeId tokenColumnType;
-    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) {
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
         tokenColumnType = NScheme::NTypeIds::String;
     } else {
-        Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
-        auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
+        Y_ENSURE(indexDesc->GetSettings().columns().size() == 1);
+        auto textColumnInfo = baseColumnTypes.at(indexDesc->GetSettings().columns().at(0).column());
         tokenColumnType = textColumnInfo.GetTypeId();
     }
 
@@ -807,7 +807,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType)
 {
     return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
@@ -817,7 +817,7 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType)
 {
     return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);

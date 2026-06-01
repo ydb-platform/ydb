@@ -1611,8 +1611,9 @@ class TKqpWriteTask {
 public:
     enum EPathWriteType {
         SecondaryIndex = 0,
-        FulltextCompactPosting = 1,
-        FulltextCompactRelevancePosting = 2,
+        JsonCompact = 1,
+        FulltextCompact = 1,
+        FulltextCompactRelevance = 2,
         FulltextDocs = 3,
         FulltextDict = 4,
         FulltextStats = 5,
@@ -2288,11 +2289,12 @@ private:
                     if (hasAdditionalDelete) {
                         AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
                             && OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-                        bool isCompact = actorInfo.PathType == FulltextCompactPosting ||
-                            actorInfo.PathType == FulltextCompactRelevancePosting;
+                        bool isCompact = actorInfo.PathType == JsonCompact ||
+                            actorInfo.PathType == FulltextCompact ||
+                            actorInfo.PathType == FulltextCompactRelevance;
                         auto deleteProjection = isCompact
                             ? CreateFulltextTokenizeProjection(actorInfo.ColumnTypes,
-                                actorInfo.PathType == FulltextCompactRelevancePosting, false,
+                                actorInfo.PathType == FulltextCompactRelevance, false,
                                 actorInfo.FulltextSettings, actorInfo.DeleteKeysIndexes, Alloc)
                             : CreateDataBatchProjection(actorInfo.DeleteKeysIndexes, Alloc);
                         for (const auto& [key, rowAndExists] : keyToRow) {
@@ -2305,8 +2307,8 @@ private:
                         actorInfo.WriteActor->Write(
                             isCompact ? Cookie : DeleteCookie,
                             std::move(preparedKeyBatch));
-                        actorInfo.WriteActor->FlushBuffer(DeleteCookie);
-                        if (actorInfo.PathType == FulltextCompactRelevancePosting) {
+                        actorInfo.WriteActor->FlushBuffer(isCompact ? Cookie : DeleteCookie);
+                        if (actorInfo.PathType == FulltextCompactRelevance) {
                             auto ft = (IFulltextTokenizeProjection*)deleteProjection.Get();
                             PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->Write(DeleteCookie, ft->FlushDocs());
                             PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->FlushBuffer(DeleteCookie);
@@ -2318,10 +2320,10 @@ private:
                     }
 
                     AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
-                    auto projection = actorInfo.PathType == FulltextCompactPosting ||
-                        actorInfo.PathType == FulltextCompactRelevancePosting
+                    auto projection = actorInfo.PathType == FulltextCompact ||
+                        actorInfo.PathType == FulltextCompactRelevance
                         ? CreateFulltextTokenizeProjection(actorInfo.ColumnTypes,
-                            actorInfo.PathType == FulltextCompactRelevancePosting,
+                            actorInfo.PathType == FulltextCompactRelevance,
                             OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE,
                             actorInfo.FulltextSettings, actorInfo.NewColumnsIndexes, Alloc)
                         : CreateDataBatchProjection(actorInfo.NewColumnsIndexes, Alloc);
@@ -2335,7 +2337,7 @@ private:
                     auto preparedBatch = projection->Flush();
                     actorInfo.WriteActor->Write(Cookie, preparedBatch);
                     actorInfo.WriteActor->FlushBuffer(Cookie);
-                    if (actorInfo.PathType == FulltextCompactRelevancePosting) {
+                    if (actorInfo.PathType == FulltextCompactRelevance) {
                         auto ft = (IFulltextTokenizeProjection*)projection.Get();
                         PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->Write(Cookie, ft->FlushDocs());
                         PathWriteInfo.at(actorInfo.FulltextDocsTableId).WriteActor->FlushBuffer(Cookie);
@@ -2393,7 +2395,9 @@ private:
         AFL_ENSURE(!IsError());
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
-            if (!actorInfo.DeleteKeysIndexes.empty()) {
+            if (!actorInfo.DeleteKeysIndexes.empty() && (
+                actorInfo.PathType == EPathWriteType::SecondaryIndex ||
+                actorInfo.PathType == EPathWriteType::FulltextDocs)) {
                 AFL_ENSURE(pathId != PathId);
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
@@ -3517,6 +3521,8 @@ public:
                         // Fulltext index with relevance requires writing to 3 additional tables
                         auto docsActor = writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor;
                         writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                            // DeleteKeysIndexes is used to pass NeedDeleteOldRows. FIXME: Pass it explicitly.
+                            .DeleteKeysIndexes = (indexSettings.NeedDeleteOldRows ? std::vector<ui32>{1} : std::vector<ui32>()),
                             .WriteActor = docsActor,
                             .PathType = TKqpWriteTask::EPathWriteType::FulltextDocs,
                         });
@@ -3591,7 +3597,7 @@ public:
                                 ? GetIndexes(
                                     settings.Columns,
                                     settings.LookupColumns,
-                                    indexSettings.KeyColumns,
+                                    isCompact ? indexSettings.Columns : indexSettings.KeyColumns,
                                     /* preferAdditionalInputColumns */ true)
                                 : std::vector<ui32>{},
                     .NewColumnsIndexes = GetIndexes(
@@ -3615,16 +3621,18 @@ public:
                         return result;
                     }(),
                     .NeedWriteProjection = true,
-                    .PathType = isRelevance
-                        ? TKqpWriteTask::EPathWriteType::FulltextCompactRelevancePosting
-                        : (isCompact ? TKqpWriteTask::EPathWriteType::FulltextCompactPosting
-                            : TKqpWriteTask::EPathWriteType::SecondaryIndex),
+                    .PathType = TKqpWriteTask::EPathWriteType::SecondaryIndex,
                     .FulltextSettings = indexSettings.FulltextSettings,
                 });
                 if (isRelevance) {
+                    writes.back().PathType = TKqpWriteTask::EPathWriteType::FulltextCompactRelevance;
                     writes.back().FulltextDocsTableId = indexSettings.DocsTableId.PathId;
                     writes.back().FulltextDictTableId = indexSettings.DictTableId.PathId;
                     writes.back().FulltextStatsTableId = indexSettings.StatsTableId.PathId;
+                } else if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact) {
+                    writes.back().PathType = TKqpWriteTask::EPathWriteType::FulltextCompact;
+                } else if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
+                    writes.back().PathType = TKqpWriteTask::EPathWriteType::JsonCompact;
                 }
 
                 if (indexSettings.IsUniq) {

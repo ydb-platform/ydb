@@ -18,19 +18,19 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         }
         TMultiDeltaReader rdr;
         rdr.Add(true, 0, wr.GetBuf(), UINT64_MAX);
-        rdr.Add(true, 0, wr2.GetBuf(), UINT64_MAX);
+        rdr.Add(false, 0, wr2.GetBuf(), UINT64_MAX);
         rdr.Start();
+        ui64 docId;
+        ui32 freq;
         for (ui64 i = 1; i <= 100; i++) {
             if (i >= 5 && i <= 25 && !((i-5) % 2)) {
                 continue;
             }
-            ui64 docId;
-            ui32 freq;
             UNIT_ASSERT(rdr.Read(docId, freq));
             UNIT_ASSERT_VALUES_EQUAL(docId, i);
             UNIT_ASSERT_VALUES_EQUAL(freq, 1);
         }
-        UNIT_ASSERT(rdr.IsEnded());
+        UNIT_ASSERT(!rdr.Read(docId, freq));
     }
 
     Y_UNIT_TEST(MultiDeltaReader2) {
@@ -40,9 +40,9 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         rdr.Add(true, 0, TConstArrayRef<ui8>((const ui8*)"\x0A\x0A\x0A", 3), UINT64_MAX);
         rdr.Add(true, 0, TConstArrayRef<ui8>((const ui8*)"dd\x01\x02", 4), UINT64_MAX);
         rdr.Start();
+        ui64 docId;
+        ui32 freq;
         auto check = [&](ui64 expectedDoc) {
-            ui64 docId;
-            ui32 freq;
             rdr.Read(docId, freq);
             Cerr << "Read: " << docId << " == " << expectedDoc << "\n";
             UNIT_ASSERT_VALUES_EQUAL(docId, expectedDoc);
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         check(60);
         check(201);
         check(203);
-        UNIT_ASSERT(rdr.IsEnded());
+        UNIT_ASSERT(!rdr.Read(docId, freq));
     }
 
     Y_UNIT_TEST(ValidateColumnsMatches) {

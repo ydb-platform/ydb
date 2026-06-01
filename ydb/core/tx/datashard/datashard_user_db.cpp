@@ -283,11 +283,14 @@ void TDataShardUserDb::InsertFulltext(
 
     bool isPartitionBegin = false;
     ui64 beginMaxId = 0;
-    if (userTable.Range.From.GetCells().size() == 3 &&
-        key[0].AsRef() == userTable.Range.From.GetCells()[0].AsRef()) {
+    const auto& rangeFrom = userTable.Range.From.GetCells();
+    const auto& rangeTo = userTable.Range.To.GetCells();
+    if (rangeFrom.size() == 3 &&
+        rangeFrom[2].Size() > 0 &&
+        key[0].ToStringBuf() == rangeFrom[0].AsBuf()) {
         isPartitionBegin = true;
-        beginMaxId = userTable.Range.From.GetCells()[1].AsValue<ui64>();
-        ui64 beginGen = userTable.Range.From.GetCells()[2].AsValue<ui64>();
+        beginMaxId = rangeFrom[1].AsValue<ui64>();
+        ui64 beginGen = rangeFrom[2].AsValue<ui64>();
         if (!userTable.Range.FromInclusive && beginGen == UINT64_MAX && beginMaxId == UINT64_MAX) {
             isPartitionBegin = false;
         }
@@ -295,12 +298,13 @@ void TDataShardUserDb::InsertFulltext(
 
     ui64 endMaxId = UINT64_MAX;
     ui64 endGen = UINT64_MAX;
-    if (userTable.Range.To.GetCells().size() == 3 &&
-        key[0].AsRef() == userTable.Range.To.GetCells()[0].AsRef()) {
+    if (rangeTo.size() == 3 &&
+        rangeTo[2].Size() > 0 &&
+        key[0].ToStringBuf() == rangeTo[0].AsBuf()) {
         // Adding segments into the first part of token lists is allowed when split between two shards
         // But in that case, we have to limit lists by maxid/gen from the partitioning key instead of UINT64_MAX/UINT64_MAX
-        endMaxId = userTable.Range.To.GetCells()[1].AsValue<ui64>();
-        endGen = userTable.Range.To.GetCells()[2].AsValue<ui64>();
+        endMaxId = rangeTo[1].AsValue<ui64>();
+        endGen = rangeTo[2].AsValue<ui64>();
         if (!userTable.Range.ToInclusive) {
             if (!endGen) {
                 endMaxId--;
@@ -343,7 +347,7 @@ void TDataShardUserDb::InsertFulltext(
         ui64 docId = 0;
         ui32 freq = 0;
         if (!reader.Read(docId, freq)) {
-            return;
+            return false;
         }
         bool last = false;
         NFulltext::TDeltaWriter wr;
@@ -377,6 +381,7 @@ void TDataShardUserDb::InsertFulltext(
             IncreaseUpdateCounters(newKey, newOps);
             wr.Reset(withRelevance);
         }
+        return true;
     };
 
     auto findMaxId = [&](TConstArrayRef<const TRawTypeValue> minKey, ui64& maxId, ui64& gen) {
@@ -426,8 +431,10 @@ void TDataShardUserDb::InsertFulltext(
                 break;
             }
             auto existingKey = iter->GetKey().Cells();
+            if (existingKey[0].AsBuf() != key[0].ToStringBuf()) {
+                break;
+            }
             auto nextMaxId = existingKey[1].AsValue<ui64>();
-            auto nextGen = existingKey[2].AsValue<ui64>();
             IncreaseSelectCounters(existingKey);
             if (nextMaxId != maxId) {
                 break;
@@ -436,13 +443,10 @@ void TDataShardUserDb::InsertFulltext(
             auto nextAdded = rowValues[0].AsValue<bool>();
             segments.emplace_back((const ui8*)rowValues[1].Data(), (const ui8*)rowValues[1].Data() + rowValues[1].Size());
             merger.Add(nextAdded, 0, segments[segments.size()-1], UINT64_MAX);
-            // Last row will be overwritten, we don't have to erase it
-            if (nextGen != maxGen) {
-                UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, NStreamScan::MakeKey(existingKey, userTable.KeyColumnTypes), {}, userCtx);
-                ui64 keyBytes = CalculateKeyBytes(existingKey);
-                Counters.NEraseRow++;
-                Counters.EraseRowBytes += keyBytes + 8;
-            }
+            UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, NStreamScan::MakeKey(existingKey, userTable.KeyColumnTypes), {}, userCtx);
+            ui64 keyBytes = CalculateKeyBytes(existingKey);
+            Counters.NEraseRow++;
+            Counters.EraseRowBytes += keyBytes + 8;
         }
         return true;
     };
@@ -484,6 +488,7 @@ void TDataShardUserDb::InsertFulltext(
             // Read all rows for this MaxId and merge/compact them
             TVector<TVector<ui8>> segments;
             NFulltext::TMultiDeltaReader merger;
+            merger.Reset(withRelevance);
             merger.Add(rowAdded, lastId, rowSegment.Slice(lastPos), maxId);
             if (!scanMaxId(maxId, minKey, segments, merger)) {
                 return;

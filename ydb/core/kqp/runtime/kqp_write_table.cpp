@@ -1082,7 +1082,6 @@ public:
         , DocsColumns(columnTypes.size())
         , WithFreq(withFreq)
         , Added(added)
-        , Analyzers(settings.columns().at(0).analyzers())
         , Indexes(indexes)
         , Alloc(std::move(alloc))
         , RowBatcher(5, std::nullopt, Alloc)
@@ -1091,6 +1090,13 @@ public:
         , StatsBatcher(3, std::nullopt, Alloc) {
         // Always at least 2 columns: text and id + optional data columns
         AFL_ENSURE(Indexes.size() == columnTypes.size() && Indexes.size() >= 2);
+        // Settings/Analyzers are required for fulltext indexes, but not for json
+        AFL_ENSURE(settings.columns_size() == 1 ||
+            TextTypeId == NScheme::NTypeIds::Json ||
+            TextTypeId == NScheme::NTypeIds::JsonDocument);
+        if (settings.columns_size() == 1) {
+            Analyzers = settings.columns().at(0).analyzers();
+        }
     }
 
     void AddRow(TConstArrayRef<TCell> row) override {
@@ -1318,7 +1324,6 @@ IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     const Ydb::Table::FulltextIndexSettings& settings,
     TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    AFL_ENSURE(settings.columns_size() == 1);
     return MakeIntrusive<TFulltextTokenizeProjection>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
 }
 

@@ -172,7 +172,8 @@ public:
         MakeTokenTypes(table, types, addType);
 
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
-            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
+            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
+            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
             Compact = true;
         }
 

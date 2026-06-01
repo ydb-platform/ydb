@@ -16,7 +16,8 @@ namespace NKikimr::NDDisk {
         if (!inserted) {
             const bool obsoleteSession =
                 creds.Generation < connection.Generation ||
-                (creds.Generation == connection.Generation &&
+                (creds.RequiresDDiskSessionSeqNoCheck() &&
+                 creds.Generation == connection.Generation &&
                  creds.DDiskSessionSeqNo < connection.DDiskSessionSeqNo);
             if (obsoleteSession) {
                 // this is definitely obsolete tablet/session trying to reach us, reject
@@ -55,16 +56,15 @@ namespace NKikimr::NDDisk {
     bool TDDiskActor::ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const {
         const auto it = Connections.find(creds.TabletId);
         if (it == Connections.end()) {
-            return creds.IsFromPersistentBuffer;
+            return creds.IsInternal();
         }
         const TConnectionInfo& connection = it->second;
         return connection.TabletId == creds.TabletId &&
             connection.Generation == creds.Generation &&
-            connection.DDiskSessionSeqNo == creds.DDiskSessionSeqNo &&
+            (!creds.RequiresDDiskSessionSeqNoCheck() || connection.DDiskSessionSeqNo == creds.DDiskSessionSeqNo) &&
             (!creds.DDiskInstanceGuid || creds.DDiskInstanceGuid == DDiskInstanceGuid) &&
-            (creds.IsFromPersistentBuffer || (
-            connection.NodeId == ev.Sender.NodeId() &&
-            connection.InterconnectSessionId == ev.InterconnectSession));
+            (!creds.RequiresSenderCheck() || connection.NodeId == ev.Sender.NodeId()) &&
+            (!creds.RequiresInterconnectSessionCheck() || connection.InterconnectSessionId == ev.InterconnectSession);
     }
 
     void TDDiskActor::SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) const {

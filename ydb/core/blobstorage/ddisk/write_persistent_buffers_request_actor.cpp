@@ -138,10 +138,9 @@ namespace NKikimr::NDDisk {
 
         TRope payload = ev->Get()->GetPayload(payloadId);
 
-        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromPersistentBuffer(
+        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForInternal(
             inflight.TabletId,
             inflight.TabletGeneration,
-            inflight.DDiskSessionSeqNo,
             std::nullopt);
         const NDDisk::TBlockSelector selector{record.GetVChunkIndex(), record.GetOffsetInBytes(), record.GetSizeInBytes()};
 
@@ -158,10 +157,9 @@ namespace NKikimr::NDDisk {
         auto cookie = NextCookie++;
         const auto& record = ev->Get()->Record;
         auto recordCreds = record.GetCredentials();
-        TQueryCredentials creds = TQueryCredentials::FromPersistentBuffer(
+        TQueryCredentials creds = TQueryCredentials::ForInternal(
             recordCreds.GetTabletId(),
             recordCreds.GetGeneration(),
-            recordCreds.GetDDiskSessionSeqNo(),
             std::nullopt);
         auto requestGeneration = record.GetGeneration();
         auto lsn = record.GetLsn();
@@ -172,7 +170,6 @@ namespace NKikimr::NDDisk {
             .Cookie = ev->Cookie,
             .TabletId = creds.TabletId,
             .TabletGeneration = creds.Generation,
-            .DDiskSessionSeqNo = creds.DDiskSessionSeqNo,
             .RequestGeneration = requestGeneration,
             .Lsn = lsn,
             .Timeout = timeout,
@@ -206,10 +203,9 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
         auto recordCreds = record.GetCredentials();
-        TQueryCredentials creds = TQueryCredentials::FromPersistentBuffer(
+        TQueryCredentials creds = TQueryCredentials::ForInternal(
             recordCreds.GetTabletId(),
             recordCreds.GetGeneration(),
-            recordCreds.GetDDiskSessionSeqNo(),
             std::nullopt);
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();

@@ -104,11 +104,13 @@ public:
         : TBase(CreateSessionSettings(settings))
         , QueryPlanPrinter(EDataFormat::Default)
         , SqlLazyDriver(settings.SqlLazyDriver)
+        , SqlTxLazyDriver(settings.SqlTxLazyDriver)
         , EnableAiInteractive(settings.EnableAiInteractive)
         , EnableInteractiveTransactions(settings.EnableInteractiveTransactions)
         , BasePrompt(Settings.Prompt)
     {
         Y_VALIDATE(SqlLazyDriver, "TSqlSessionRunner requires a non-null SqlLazyDriver");
+        Y_VALIDATE(SqlTxLazyDriver, "TSqlSessionRunner requires a non-null SqlTxLazyDriver");
         Y_VALIDATE(settings.CompleterLazyDriver, "TSqlSessionRunner requires a non-null CompleterLazyDriver");
     }
 
@@ -122,12 +124,13 @@ public:
 
     void HandleLine(const TString& line) final {
         Y_DEFER { ResetInterrupted(); };
-        // Stop the driver at the end of the line iff no transaction is active.
+        // Stop the drivers at the end of the line if no transaction is active.
         // The flag is re-evaluated at scope exit (after BEGIN/COMMIT/ROLLBACK
-        // mutate the state) so the driver lives across queries inside a tx.
+        // mutate the state) so the tx driver lives across queries inside a tx.
         Y_DEFER {
             if (!IsInteractiveTransactionActive()) {
                 SqlLazyDriver->Stop(true);
+                SqlTxLazyDriver->Stop(true);
             }
         };
 
@@ -341,7 +344,7 @@ public:
         }
 
         try {
-            TExecuteGenericQuery executeRunner(SqlLazyDriver->Get());
+            TExecuteGenericQuery executeRunner(SqlTxLazyDriver->Get());
             executeRunner.Execute(line, {
                 .Settings = settings,
                 .AddIndent = true,
@@ -527,7 +530,7 @@ private:
         if (Session) {
             return;
         }
-        QueryClient = NQuery::TQueryClient(SqlLazyDriver->Get());
+        QueryClient = NQuery::TQueryClient(SqlTxLazyDriver->Get());
         auto sessionResult = QueryClient->GetSession().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
         Session = sessionResult.GetSession();
@@ -615,6 +618,7 @@ private:
 private:
     TQueryPlanPrinter QueryPlanPrinter;
     TLazyDriver::TPtr SqlLazyDriver;
+    TLazyDriver::TPtr SqlTxLazyDriver;
     NQuery::EStatsMode CollectStatsMode = NQuery::EStatsMode::None;
     std::string ResourcePool;
     bool EnableAiInteractive;

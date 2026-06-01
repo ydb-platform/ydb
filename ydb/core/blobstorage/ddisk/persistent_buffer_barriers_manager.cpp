@@ -176,15 +176,15 @@ namespace NKikimr::NDDisk {
         if (cnt * sizeof(ui64) <= TPersistentBufferHeader::ErasesBufferSize) {
             ui32 pos = 0;
             for (auto& lsn : oldLsns) {
-                memcpy(&header.Erase.CompactLsns[pos], &lsn, 8);
-                pos += 8;
+                memcpy(&header.Erase.CompactLsns[pos], &lsn, sizeof(ui64));
+                pos += sizeof(ui64);
             }
             for (auto& lsn : newLsns) {
-                if (oldLsns.count(lsn)) {
+                if (oldLsns.contains(lsn)) {
                     continue;
                 }
-                memcpy(&header.Erase.CompactLsns[pos], &lsn, 8);
-                pos += 8;
+                memcpy(&header.Erase.CompactLsns[pos], &lsn, sizeof(ui64));
+                pos += sizeof(ui64);
             }
             Y_ABORT_UNLESS(pos <= TPersistentBufferHeader::ErasesBufferSize);
             return true;
@@ -199,8 +199,8 @@ namespace NKikimr::NDDisk {
         ui64 first = *it;
 
         // Write first LSN as 8 raw bytes (little-endian)
-        memcpy(header.Erase.CompactLsns, &first, 8);
-        resPos += 8;
+        memcpy(header.Erase.CompactLsns, &first, sizeof(ui64));
+        resPos += sizeof(ui64);
         ui64 prev = first;
         ++it;
         for (; it != lsns.end(); ++it) {

@@ -9,6 +9,11 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 HeaderChecksumSize = 8;
         static constexpr ui32 MaxBarriersPerHeader = 240;
         static constexpr ui32 ErasesBufferSize = 3832;
+
+        // Heuristic based on ErasesBufferSize, means that it's better to fallback on zeroing erases
+        // If lsns count exeed this number - barrier was not moved for a long time and fast erases is not efficient in this case.
+        // It is better to fall back to zeroing erases a little bit earlier,
+        // than continue every erase call Compact method to check erase sector overfill.
         static constexpr ui32 ErasesBufferLsnCount = 3800;
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 

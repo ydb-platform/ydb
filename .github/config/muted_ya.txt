@@ -4,9 +4,6 @@ ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Always
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspecified
-ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage1
-ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage2
-ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewRanges
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
@@ -16,7 +13,6 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockThenUncommittedReadUpgradeRetryAndRestart
-ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockUncommittedConflictFailure
 ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
 ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest

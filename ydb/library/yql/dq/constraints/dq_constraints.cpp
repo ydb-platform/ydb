@@ -196,6 +196,7 @@ TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (const auto* constraints = multi->GetItem(FromString<ui32>(output.Index().Value()))) {
             input->SetConstraints(*constraints);
         }
+        TCopyConstraint<TStreamingConstraintNode>::Do(output.Stage().Ref(), input);
     } else {
         input->CopyConstraints(programBody);
     }

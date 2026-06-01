@@ -9,6 +9,7 @@ from textual.css.query import NoMatches
 from textual.widgets import Button, Checkbox, Input, ListView, TabbedContent
 
 from ydb.tools.mnc.lib import agent_client, deploy_ctx, progress
+from ydb.tools.mnc.viewer import main as viewer_main
 from ydb.tools.mnc.viewer.main import Viewer
 from ydb.tools.mnc.viewer.widgets import (
     AgentHostStatus,
@@ -48,6 +49,51 @@ class ClusterConfigValidationTest(unittest.TestCase):
 
         self.assertFalse(validation.ok)
         self.assertTrue(any("erasure" in error for error in validation.errors))
+
+
+class ViewerStartupStateTest(unittest.IsolatedAsyncioTestCase):
+    def test_load_mnc_config_uses_defaults_when_yaml_is_malformed(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "mnc.yaml")
+            with open(path, "w") as file:
+                file.write("git_ydb_root: [")
+
+            with mock.patch.object(viewer_main, "MNC_CONFIG_PATH", path):
+                app = Viewer()
+
+        self.assertEqual(app._mnc_config["git_ydb_root"], viewer_main.DEFAULT_GIT_YDB_ROOT)
+        self.assertEqual(app._mnc_config["deploy_flags"], [])
+
+    def test_load_mnc_config_uses_defaults_when_yaml_is_not_mapping(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "mnc.yaml")
+            with open(path, "w") as file:
+                file.write("- not\n- mapping\n")
+
+            with mock.patch.object(viewer_main, "MNC_CONFIG_PATH", path):
+                app = Viewer()
+
+        self.assertEqual(app._mnc_config["git_ydb_root"], viewer_main.DEFAULT_GIT_YDB_ROOT)
+        self.assertEqual(app._mnc_config["deploy_flags"], [])
+
+    def test_load_mnc_config_uses_defaults_when_file_is_unreadable(self):
+        with mock.patch("builtins.open", side_effect=OSError("denied")):
+            app = Viewer()
+
+        self.assertEqual(app._mnc_config["git_ydb_root"], viewer_main.DEFAULT_GIT_YDB_ROOT)
+        self.assertEqual(app._mnc_config["deploy_flags"], [])
+
+    async def test_check_agents_empty_hosts_is_ok(self):
+        app = Viewer()
+        refreshed = []
+        app._refresh_overview = lambda: refreshed.append(True)
+
+        await app._check_agents([], app._agent_check_generation)
+
+        self.assertEqual(app._state.agents.status, "OK")
+        self.assertEqual(app._state.agents.hosts, [])
+        self.assertEqual(app._state.agents_details(), "No hosts in selected cluster config")
+        self.assertEqual(refreshed, [True])
 
 
 class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):

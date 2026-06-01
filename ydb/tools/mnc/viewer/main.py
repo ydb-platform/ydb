@@ -233,7 +233,9 @@ class Viewer(App):
         try:
             with open(MNC_CONFIG_PATH) as file:
                 config = yaml.safe_load(file) or {}
-        except FileNotFoundError:
+        except (OSError, yaml.YAMLError):
+            config = {}
+        if not isinstance(config, dict):
             config = {}
 
         deploy_flags = config.get("deploy_flags") or []
@@ -315,11 +317,18 @@ class Viewer(App):
         )
 
     async def _check_agents(self, hosts: list[str], generation: int) -> None:
+        if not hosts:
+            if generation != self._agent_check_generation:
+                return
+            self._state.agents = AgentsState(status="OK", hosts=[])
+            self._refresh_overview()
+            return
+
         host_statuses = await asyncio.gather(*(self._check_agent_host(host) for host in hosts))
         if generation != self._agent_check_generation:
             return
 
-        status = "OK" if host_statuses and all(host.agent_is_running() for host in host_statuses) else "FAIL"
+        status = "OK" if all(host.agent_is_running() for host in host_statuses) else "FAIL"
         self._state.agents = AgentsState(status=status, hosts=host_statuses)
         self._refresh_overview()
 

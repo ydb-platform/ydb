@@ -1873,12 +1873,8 @@ void TPersQueue::FillBatchInfo(
     if (cmd.HasMaxSeqNo()) {
         msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
     }
-    if (cmd.HasMessageCount()) {
-        msg.MessageCount = static_cast<ui32>(cmd.GetMessageCount());
-    }
-    if (cmd.HasMessageFormat()) {
-        msg.MessageFormat = FromProtoMessageFormat(cmd.GetMessageFormat());
-    }
+    msg.MessageCount = static_cast<ui32>(cmd.GetMessageCount());
+    msg.MessageFormat = FromProtoMessageFormat(cmd.GetMessageFormat());
     if (cmd.GetPartNo() > 0) {
         return;
     }

@@ -1006,14 +1006,14 @@ public:
 
     void RequestDone(const char* name) {
         --Requests;
-        YDB_LOG_TRACE("RequestDone with remaining requests",
+        YDB_LOG_TRACE("RequestDone",
             {"name", name},
             {"Requests", Requests});
         if (Requests == 0) {
             ReplyAndPassAway();
         }
         if (Requests < 0) {
-            YDB_LOG_CRIT("Requests < 0 in RequestDone(",
+            YDB_LOG_CRIT("Requests < 0 in RequestDone",
                 {"name", name});
         }
     }
@@ -2975,9 +2975,9 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
         checker.ReportStatus(context);
 
-        YDB_LOG_DEBUG("Group has status",
+        YDB_LOG_DEBUG("Group status",
             {"groupId", groupId},
-            {"GetOverallStatus", context.GetOverallStatus()});
+            {"status", context.GetOverallStatus()});
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 

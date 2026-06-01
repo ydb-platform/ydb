@@ -185,9 +185,7 @@ message TPermissionRequest {
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
-  // Maximum number of permissions that may be issued by a single check of
-  // this request. Excess actions that would have been allowed are instead
-  // pushed back into the scheduled request and reported as DISALLOW_TEMP.
+  // Maximum number of permissions that may be issued by a single check of this request.
   optional uint32 MaxPermissions = 13 [default = 0];
 }
 

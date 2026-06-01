@@ -1554,7 +1554,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             CurrentTimestamp,
             p.Msg.ProducerEpoch);
 
-        curOffset += p.Msg.BatchMessageCount >= 1 ? p.Msg.BatchMessageCount : 1;
+        curOffset += p.Msg.GetOffsetsCount();
         BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;

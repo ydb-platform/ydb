@@ -304,6 +304,13 @@ struct TEvPQ {
             // 0 means the message is not a batch.
             ui32 BatchMessageCount = 0;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
+
+            // Number of logical offsets occupied by this message on the partition.
+            // A batch (BatchMessageCount >= 1) advances the offset by BatchMessageCount;
+            // a regular message (BatchMessageCount == 0) advances it by 1.
+            ui32 GetOffsetsCount() const {
+                return BatchMessageCount >= 1 ? BatchMessageCount : 1;
+            }
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)

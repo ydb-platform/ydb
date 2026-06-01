@@ -137,7 +137,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                 << " NewHead: " << CompactionBlobEncoder.NewHead
         );
 
-        curOffset += p.Msg.BatchMessageCount >= 1 ? p.Msg.BatchMessageCount : 1;
+        curOffset += p.Msg.GetOffsetsCount();
         CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
 

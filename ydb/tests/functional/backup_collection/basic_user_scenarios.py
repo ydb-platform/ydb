@@ -2474,11 +2474,11 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
     """End-to-end lifecycle that drives every backup-collection operation
     through the operation_id RETURNED by the KQP statement, and polls each
     one to a terminal state via `ydb operation get`, using the proper
-    `ydb://<kind>?id=` wrapping per kind:
+    `ydb://<kind>/<num>?id=` wrapping per kind:
 
-        full BACKUP        -> ydb://fullbackup?id=N
-        incremental BACKUP -> ydb://incbackup?id=N
-        RESTORE            -> ydb://restore?id=N
+        full BACKUP        -> ydb://fullbackup/14?id=N
+        incremental BACKUP -> ydb://incbackup/11?id=N
+        RESTORE            -> ydb://restore/12?id=N
 
     Also exercises `operation list <kind>` and `operation forget` for each.
     This is the "control-plane via long ops" happy path: start -> get id ->
@@ -2530,12 +2530,15 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
 
     @staticmethod
     def _wrap_op_id(kind, raw_id):
-        """Wrap a bare numeric operation id into a kind-tagged ydb:// id.
-        If the statement already returned a wrapped id, keep it as-is."""
+        """Wrap a bare numeric operation id into a canonical ydb:// id. The CLI
+        parser reads the numeric EKind from the URI path, so the form must be
+        ydb://<kind>/<num>?id=<n> (see operation_id.cpp). If the statement
+        already returned a wrapped id, keep it as-is."""
         rid = str(raw_id)
         if rid.startswith("ydb://"):
             return rid
-        return f"ydb://{kind}?id={rid}"
+        kind_num = {"fullbackup": 14, "incbackup": 11, "restore": 12}[kind]
+        return f"ydb://{kind}/{kind_num}?id={rid}"
 
     def _run_statement_capture_op_id(self, sql, kind, max_retries=10):
         """Run a backup/restore statement that returns an operation_id result
@@ -2634,7 +2637,7 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
         # ---- 1) FULL backup: capture id -> ydb://fullbackup -> poll ------
         time.sleep(1.1)
         full_id = self._run_statement_capture_op_id(f"BACKUP `{collection}`;", "fullbackup")
-        assert full_id.startswith("ydb://fullbackup?id="), full_id
+        assert full_id.startswith("ydb://fullbackup/14?id="), full_id
         self.poll_operation(full_id)
         assert full_id in self.operation_list_ids("fullbackup"), \
             f"{full_id} not found in `operation list fullbackup`"
@@ -2648,7 +2651,7 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
 
         time.sleep(1.1)
         incr_id = self._run_statement_capture_op_id(f"BACKUP `{collection}` INCREMENTAL;", "incbackup")
-        assert incr_id.startswith("ydb://incbackup?id="), incr_id
+        assert incr_id.startswith("ydb://incbackup/11?id="), incr_id
         self.poll_operation(incr_id)
         assert incr_id in self.operation_list_ids("incbackup"), \
             f"{incr_id} not found in `operation list incbackup`"
@@ -2657,7 +2660,7 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
         self._try_remove_tables(tables)
 
         restore_id = self._run_statement_capture_op_id(f"RESTORE `{collection}`;", "restore")
-        assert restore_id.startswith("ydb://restore?id="), restore_id
+        assert restore_id.startswith("ydb://restore/12?id="), restore_id
         self.poll_operation(restore_id)
         assert restore_id in self.operation_list_ids("restore"), \
             f"{restore_id} not found in `operation list restore`"

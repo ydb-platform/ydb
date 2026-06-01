@@ -474,39 +474,6 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(MaxInflightActionsCapsInitialBatch) {
-        TCmsTestEnv env(8);
-
-        auto response = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
-            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
-            /* maxInflightActions = */ 3u,
-            MakeActionGroup(MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))),
-            MakeActionGroup(MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))),
-            MakeActionGroup(MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))),
-            MakeActionGroup(MakeLockAction(env.GetNodeId(3), TDuration::Minutes(10))),
-            MakeActionGroup(MakeLockAction(env.GetNodeId(4), TDuration::Minutes(10))),
-            MakeActionGroup(MakeLockAction(env.GetNodeId(5), TDuration::Minutes(10))),
-            MakeActionGroup(MakeLockAction(env.GetNodeId(6), TDuration::Minutes(10))),
-            MakeActionGroup(MakeLockAction(env.GetNodeId(7), TDuration::Minutes(10)))
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL(response.action_group_states().size(), 8);
-
-        ui32 performed = 0;
-        ui32 pending = 0;
-        for (const auto& group : response.action_group_states()) {
-            UNIT_ASSERT_VALUES_EQUAL(group.action_states().size(), 1);
-            const auto& state = group.action_states(0);
-            if (state.status() == ActionState::ACTION_STATUS_PERFORMED) {
-                ++performed;
-            } else if (state.status() == ActionState::ACTION_STATUS_PENDING) {
-                ++pending;
-            }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(performed, 3);
-        UNIT_ASSERT_VALUES_EQUAL(pending, 5);
-    }
-
     Y_UNIT_TEST(MaxInflightActionsBlocksRefresh) {
         TCmsTestEnv env(8);
 

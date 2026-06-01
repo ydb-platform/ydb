@@ -924,7 +924,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
             msg->PBufferId.NodeId,
             msg->PBufferId.PDiskId,
             msg->PBufferId.DDiskSlotId),
-        msg->PBufferCredentials.DDiskInstanceGuid);
+        msg->PBufferCredentials.DDiskInstanceGuid.value_or(0));
 
     Y_ABORT_UNLESS(msg->Selectors.size() == msg->Lsns.size());
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {

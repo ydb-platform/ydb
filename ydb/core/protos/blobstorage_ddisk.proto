@@ -246,16 +246,23 @@ message TSegmentResult {
 }
 
 message TEvSyncWithPersistentBuffer {
+    message TSource {
+        TDDiskId DDiskId = 1;
+        fixed64 DDiskInstanceGuid = 2;
+    }
+
     message TSegment {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
         uint32 Generation = 3;
+        // Optional source override for this segment; if absent, request-level Source is used.
+        TSource Source = 4;
     }
 
     TQueryCredentials Credentials = 1;
     repeated TSegment Segments = 2;
-    TDDiskId DDiskId = 3;
-    fixed64 DDiskInstanceGuid = 4;
+    TSource Source = 3;
+    reserved 4;
 }
 
 message TEvSyncWithPersistentBufferResult {
@@ -266,14 +273,21 @@ message TEvSyncWithPersistentBufferResult {
 }
 
 message TEvSyncWithDDisk {
+    message TSource {
+        TDDiskId DDiskId = 1;
+        fixed64 DDiskInstanceGuid = 2;
+    }
+
     message TSegment {
         TBlockSelector Selector = 1;
+        // Optional source override for this segment; if absent, request-level Source is used.
+        TSource Source = 2;
     }
 
     TQueryCredentials Credentials = 1;
     repeated TSegment Segments = 2;
-    TDDiskId DDiskId = 3;
-    fixed64 DDiskInstanceGuid = 4;
+    TSource Source = 3;
+    reserved 4;
 }
 
 message TEvSyncWithDDiskResult {

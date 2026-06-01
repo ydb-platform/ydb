@@ -656,19 +656,20 @@ struct TPersistentBufferFormat {
 
         TEvSyncWithPersistentBuffer() = default;
 
-        TEvSyncWithPersistentBuffer(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
-                std::optional<ui64> ddiskInstanceGuid) {
+        TEvSyncWithPersistentBuffer(const TQueryCredentials& creds, const std::tuple<ui32, ui32, ui32>& ddiskId,
+                ui64 ddiskInstanceGuid) {
             creds.Serialize(Record.MutableCredentials());
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
+            SetSource(Record.MutableSource(), ddiskId, ddiskInstanceGuid);
+        }
+
+        static void SetSource(NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBuffer::TSource *source,
+                const std::tuple<ui32, ui32, ui32>& ddiskId, ui64 ddiskInstanceGuid) {
+            const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
+            auto *m = source->MutableDDiskId();
+            m->SetNodeId(nodeId);
+            m->SetPDiskId(pdiskId);
+            m->SetDDiskSlotId(ddiskSlotId);
+            source->SetDDiskInstanceGuid(ddiskInstanceGuid);
         }
 
         void AddSegment(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
@@ -676,6 +677,12 @@ struct TPersistentBufferFormat {
             selector.Serialize(segment->MutableSelector());
             segment->SetLsn(lsn);
             segment->SetGeneration(generation);
+        }
+
+        void AddSegmentWithSource(const TBlockSelector& selector, ui64 lsn, ui32 generation,
+                const std::tuple<ui32, ui32, ui32>& ddiskId, ui64 ddiskInstanceGuid) {
+            AddSegment(selector, lsn, generation);
+            SetSource(Record.MutableSegments(Record.SegmentsSize() - 1)->MutableSource(), ddiskId, ddiskInstanceGuid);
         }
     };
 
@@ -704,24 +711,31 @@ struct TPersistentBufferFormat {
 
         TEvSyncWithDDisk() = default;
 
-        TEvSyncWithDDisk(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
-                std::optional<ui64> ddiskInstanceGuid) {
+        TEvSyncWithDDisk(const TQueryCredentials& creds, const std::tuple<ui32, ui32, ui32>& ddiskId,
+                ui64 ddiskInstanceGuid) {
             creds.Serialize(Record.MutableCredentials());
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
+            SetSource(Record.MutableSource(), ddiskId, ddiskInstanceGuid);
+        }
+
+        static void SetSource(NKikimrBlobStorage::NDDisk::TEvSyncWithDDisk::TSource *source,
+                const std::tuple<ui32, ui32, ui32>& ddiskId, ui64 ddiskInstanceGuid) {
+            const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
+            auto *m = source->MutableDDiskId();
+            m->SetNodeId(nodeId);
+            m->SetPDiskId(pdiskId);
+            m->SetDDiskSlotId(ddiskSlotId);
+            source->SetDDiskInstanceGuid(ddiskInstanceGuid);
         }
 
         void AddSegment(const TBlockSelector& selector) {
             auto *segment = Record.AddSegments();
             selector.Serialize(segment->MutableSelector());
+        }
+
+        void AddSegmentWithSource(const TBlockSelector& selector, const std::tuple<ui32, ui32, ui32>& ddiskId,
+                ui64 ddiskInstanceGuid) {
+            AddSegment(selector);
+            SetSource(Record.MutableSegments(Record.SegmentsSize() - 1)->MutableSource(), ddiskId, ddiskInstanceGuid);
         }
     };
 

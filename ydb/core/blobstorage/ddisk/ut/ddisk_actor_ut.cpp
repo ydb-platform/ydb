@@ -1122,7 +1122,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, BlockSize));
 
         SendToDDisk(ctx, disk.ServiceId, syncEv.release());
@@ -1157,7 +1157,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
                 creds,
                 std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-                std::optional<ui64>(42));
+                42);
             syncEv->AddSegment(NDDisk::TBlockSelector(7, 0, BlockSize));
             SendToDDisk(ctx, disk.ServiceId, syncEv.release());
         };
@@ -1239,7 +1239,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(7, 0, BlockSize));
 
         SendToDDisk(ctx, disk.ServiceId, syncEv.release());
@@ -1288,6 +1288,100 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             static_cast<int>(TReplyStatus::OK));
     }
 
+    Y_UNIT_TEST(SyncWithDDiskUsesSegmentSourceOverride) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(13, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 50, 1);
+
+        const ui32 srcPDiskId1 = 97;
+        const ui32 srcSlotId1 = 1;
+        TActorId fakeSourceEdge1 = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        TActorId fakeSourceServiceId1 = MakeBlobStorageDDiskId(NodeId, srcPDiskId1, srcSlotId1);
+        ctx.Runtime.RegisterService(fakeSourceServiceId1, fakeSourceEdge1);
+
+        const ui32 srcPDiskId2 = 96;
+        const ui32 srcSlotId2 = 1;
+        TActorId fakeSourceEdge2 = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        TActorId fakeSourceServiceId2 = MakeBlobStorageDDiskId(NodeId, srcPDiskId2, srcSlotId2);
+        ctx.Runtime.RegisterService(fakeSourceServiceId2, fakeSourceEdge2);
+
+        const TString payload1 = MakeData('A', BlockSize);
+        const TString payload2 = MakeData('B', BlockSize);
+
+        auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
+            creds,
+            std::make_tuple(NodeId, srcPDiskId1, srcSlotId1),
+            42);
+        syncEv->AddSegment(NDDisk::TBlockSelector(7, 0, BlockSize));
+        syncEv->AddSegmentWithSource(
+            NDDisk::TBlockSelector(7, BlockSize, BlockSize),
+            std::make_tuple(NodeId, srcPDiskId2, srcSlotId2),
+            43);
+
+        SendToDDisk(ctx, disk.ServiceId, syncEv.release());
+
+        auto readReq1 = ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge1});
+        UNIT_ASSERT_VALUES_EQUAL(readReq1->GetTypeRewrite(), static_cast<ui32>(NDDisk::TEv::EvRead));
+        {
+            auto* readEv = reinterpret_cast<TEventHandle<NDDisk::TEvRead>*>(readReq1.get());
+            const auto& readRecord = readEv->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetVChunkIndex(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetOffsetInBytes(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetSize(), BlockSize);
+        }
+        ctx.Runtime.Send(new IEventHandle(readReq1->Sender, fakeSourceEdge1,
+            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload1)),
+            0, readReq1->Cookie), NodeId);
+
+        auto readReq2 = ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge2});
+        UNIT_ASSERT_VALUES_EQUAL(readReq2->GetTypeRewrite(), static_cast<ui32>(NDDisk::TEv::EvRead));
+        {
+            auto* readEv = reinterpret_cast<TEventHandle<NDDisk::TEvRead>*>(readReq2.get());
+            const auto& readRecord = readEv->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetVChunkIndex(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetOffsetInBytes(), BlockSize);
+            UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetSize(), BlockSize);
+        }
+        ctx.Runtime.Send(new IEventHandle(readReq2->Sender, fakeSourceEdge2,
+            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload2)),
+            0, readReq2->Cookie), NodeId);
+
+        auto logIncrement = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        auto logIncrementReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+        logIncrementReply->Results.emplace_back(logIncrement->Get()->Lsn, logIncrement->Get()->Cookie);
+        ctx.SendPDiskResponse(disk, *logIncrement, logIncrementReply.release());
+
+        auto logSnapshot = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        auto logSnapshotReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+        logSnapshotReply->Results.emplace_back(logSnapshot->Get()->Lsn, logSnapshot->Get()->Cookie);
+        ctx.SendPDiskResponse(disk, *logSnapshot, logSnapshotReply.release());
+
+        auto refill = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
+        auto refillReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
+        refillReply->ChunkIds.push_back(4001);
+        ctx.SendPDiskResponse(disk, *refill, refillReply.release());
+
+        auto writeRaw1 = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(writeRaw1->Get()->Offset, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(writeRaw1->Get()->Data.ConvertToString(), payload1);
+        ctx.SendPDiskResponse(disk, *writeRaw1, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto writeRaw2 = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(writeRaw2->Get()->Offset, BlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(writeRaw2->Get()->Data.ConvertToString(), payload2);
+        ctx.SendPDiskResponse(disk, *writeRaw2, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto syncResult = WaitFromDDisk<NDDisk::TEvSyncWithDDiskResult>(ctx);
+        AssertStatus(syncResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(syncResult->Get()->Record.SegmentResultsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(syncResult->Get()->Record.GetSegmentResults(0).GetStatus()),
+            static_cast<int>(TReplyStatus::OK));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(syncResult->Get()->Record.GetSegmentResults(1).GetStatus()),
+            static_cast<int>(TReplyStatus::OK));
+    }
+
     Y_UNIT_TEST(SyncWithPBViaFakeSource) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(12, 1);
@@ -1303,7 +1397,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
             creds,
             std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(5, 0, BlockSize), 10, 1);
 
         SendToDDisk(ctx, disk.ServiceId, syncEv.release());

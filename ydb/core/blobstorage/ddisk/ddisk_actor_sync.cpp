@@ -107,8 +107,26 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        if (!record.HasDDiskId()) {
-            reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "source ddisk id must be set");
+        auto getSource = [&](const auto& source, TActorId *actorId, ui64 *ddiskInstanceGuid) {
+            if (!source.HasDDiskId()) {
+                reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                    "source ddisk id must be set");
+                return false;
+            }
+            const auto& ddiskId = source.GetDDiskId();
+            *actorId = TPolicy::MakeSourceActorId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
+            *ddiskInstanceGuid = source.GetDDiskInstanceGuid();
+            return true;
+        };
+
+        TActorId defaultSourceActorId;
+        ui64 defaultSourceInstanceGuid = 0;
+        if (!record.HasSource()) {
+            reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                "source must be set");
+            return;
+        }
+        if (!getSource(record.GetSource(), &defaultSourceActorId, &defaultSourceInstanceGuid)) {
             return;
         }
 
@@ -133,18 +151,38 @@ namespace NKikimr::NDDisk {
         auto& sync = syncIt->second;
         sync.Span = std::move(span);
 
-        const auto& ddiskId = record.GetDDiskId();
-        const TQueryCredentials sourceCreds = TQueryCredentials::ForInternal(
-            creds.TabletId,
-            creds.Generation,
-            std::make_optional(record.GetDDiskInstanceGuid()));
-        const TActorId sourceDDiskId = TPolicy::MakeSourceActorId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
         std::optional<ui64> vChunkIndex;
 
         sync.Requests.reserve(record.SegmentsSize());
 
+        auto validateSelector = [&](const TBlockSelector& selector, TStringBuf selectorName) {
+            if (selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
+                reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                    TStringBuilder() << selectorName
+                        << " offset and size must be multiple of block size and size must be nonzero");
+                return false;
+            }
+
+            if (selector.OffsetInBytes > DiskFormat->ChunkSize ||
+                    selector.Size > DiskFormat->ChunkSize - selector.OffsetInBytes) {
+                reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                    TStringBuilder() << selectorName << " exceeds chunk bounds");
+                return false;
+            }
+
+            return true;
+        };
+
         for (const auto& segment : record.GetSegments()) {
             const TBlockSelector selector(segment.GetSelector());
+
+            TActorId sourceActorId = defaultSourceActorId;
+            ui64 sourceInstanceGuid = defaultSourceInstanceGuid;
+            if (segment.HasSource()) {
+                if (!getSource(segment.GetSource(), &sourceActorId, &sourceInstanceGuid)) {
+                    return;
+                }
+            }
 
             if (!vChunkIndex) {
                 vChunkIndex = selector.VChunkIndex;
@@ -154,16 +192,7 @@ namespace NKikimr::NDDisk {
                 return;
             }
 
-            if (selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
-                reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                    "offset and size must be multiple of block size and size must be nonzero");
-                return;
-            }
-
-            if (selector.OffsetInBytes > DiskFormat->ChunkSize ||
-                    selector.Size > DiskFormat->ChunkSize - selector.OffsetInBytes) {
-                reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                    "segment exceeds chunk bounds");
+            if (!validateSelector(selector, "segment")) {
                 return;
             }
 
@@ -200,7 +229,11 @@ namespace NKikimr::NDDisk {
             }
 
             Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
-            Send(sourceDDiskId,
+            const TQueryCredentials sourceCreds = TQueryCredentials::ForInternal(
+                creds.TabletId,
+                creds.Generation,
+                std::make_optional(sourceInstanceGuid));
+            Send(sourceActorId,
                 TPolicy::MakeReadQuery(sourceCreds, selector, segment),
                 IEventHandle::FlagTrackDelivery,
                 requestId,

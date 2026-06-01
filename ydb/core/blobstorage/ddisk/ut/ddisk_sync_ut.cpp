@@ -10,25 +10,52 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithPersistentBuffer) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithPersistentBufferResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncWithPersistentBufferResult>(result, TReplyStatus::INCORRECT_REQUEST);
     }
 
-    Y_UNIT_TEST(MissingDDiskId) {
+    Y_UNIT_TEST(MissingSource) {
         TTestContext ctx;
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
-        auto syncEv = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
-            creds,
-            std::nullopt,
-            std::optional<ui64>(42));
+        auto syncEv = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>();
+        creds.Serialize(syncEv->Record.MutableCredentials());
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize), 1, 1);
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithPersistentBufferResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncWithPersistentBufferResult>(result, TReplyStatus::INCORRECT_REQUEST);
     }
+
+    Y_UNIT_TEST(SourceWithoutDDiskId) {
+        TTestContext ctx;
+        NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
+
+        auto syncEv = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>();
+        creds.Serialize(syncEv->Record.MutableCredentials());
+        syncEv->Record.MutableSource();
+        syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize), 1, 1);
+
+        auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithPersistentBufferResult>(syncEv.release());
+        AssertStatus<NDDisk::TEvSyncWithPersistentBufferResult>(result, TReplyStatus::INCORRECT_REQUEST);
+    }
+
+    Y_UNIT_TEST(SegmentSourceWithoutDDiskId) {
+        TTestContext ctx;
+        NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
+
+        auto syncEv = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
+            creds,
+            std::make_tuple(ui32(1), ui32(999), ui32(1)),
+            42);
+        syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize), 1, 1);
+        syncEv->Record.MutableSegments(0)->MutableSource();
+
+        auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithPersistentBufferResult>(syncEv.release());
+        AssertStatus<NDDisk::TEvSyncWithPersistentBufferResult>(result, TReplyStatus::INCORRECT_REQUEST);
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
@@ -39,21 +66,47 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncWithDDiskResult>(result, TReplyStatus::INCORRECT_REQUEST);
     }
 
-    Y_UNIT_TEST(MissingDDiskId) {
+    Y_UNIT_TEST(MissingSource) {
+        TTestContext ctx;
+        NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
+
+        auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>();
+        creds.Serialize(syncEv->Record.MutableCredentials());
+        syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize));
+
+        auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
+        AssertStatus<NDDisk::TEvSyncWithDDiskResult>(result, TReplyStatus::INCORRECT_REQUEST);
+    }
+
+    Y_UNIT_TEST(SourceWithoutDDiskId) {
+        TTestContext ctx;
+        NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
+
+        auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>();
+        creds.Serialize(syncEv->Record.MutableCredentials());
+        syncEv->Record.MutableSource();
+        syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize));
+
+        auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
+        AssertStatus<NDDisk::TEvSyncWithDDiskResult>(result, TReplyStatus::INCORRECT_REQUEST);
+    }
+
+    Y_UNIT_TEST(SegmentSourceWithoutDDiskId) {
         TTestContext ctx;
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
-            std::nullopt,
-            std::optional<ui64>(42));
+            std::make_tuple(ui32(1), ui32(999), ui32(1)),
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        syncEv->Record.MutableSegments(0)->MutableSource();
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncWithDDiskResult>(result, TReplyStatus::INCORRECT_REQUEST);
@@ -66,7 +119,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize));
         syncEv->AddSegment(NDDisk::TBlockSelector(1, 0, MinBlockSize));
 
@@ -81,7 +134,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 1, MinBlockSize));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
@@ -95,7 +148,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize + 1));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
@@ -109,7 +162,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, 0));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
@@ -126,7 +179,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
@@ -140,7 +193,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, ChunkSize, ChunkSize / 2));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
@@ -154,7 +207,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,
             std::make_tuple(ui32(1), ui32(999), ui32(1)),
-            std::optional<ui64>(42));
+            42);
         syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());

@@ -2127,6 +2127,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE, avgQuotaBytes);
         bytesThrottledMicroseconds = avgQuotaBytes * 1000000 / TotalPartitionWriteSpeed / 60;
         hasWriteQuotaUsage = true;
+<<<<<<< HEAD
     }
 
     if (TotalPartitionWriteSpeedInMessages) {
@@ -2139,11 +2140,20 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     if (hasWriteQuotaUsage) {
         SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE,
             Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
+=======
+>>>>>>> f8d4b145d2a (LOGBROKER-10375 Better metrics (#41838))
     }
 
     if (TotalPartitionWriteSpeedInMessages) {
-        ui64 quotaUsage = ui64(AvgQuotaMessages.GetValue()) * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, quotaUsage);
+        const ui64 avgQuotaMessages = AvgQuotaMessages.GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, avgQuotaMessages);
+        messagesThrottledMicroseconds = avgQuotaMessages * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
+        hasWriteQuotaUsage = true;
+    }
+
+    if (hasWriteQuotaUsage) {
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE,
+            Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
     }
 
     ui64 storageSize = StorageSize(ctx);

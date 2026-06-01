@@ -1735,7 +1735,7 @@ public:
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
-            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, !forLLVM, testParams
+            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, true, testParams
         )
         , OutputRowCounter(outputRowCounter)
         , InputTypes(inputTypes)
@@ -2452,9 +2452,12 @@ public:
         fillState->addIncoming(fillStateFinish, blockInputFinish);
 
         auto processInputResult = CallInst::Create(statusToStatusMethodType, processInputMethodPtr, {boxedStatePtr, fillState}, "dq_hash_call_process_input", block);
-        const auto handleProcessResult = SwitchInst::Create(processInputResult, tryDrain, 2U, block);
+        const auto handleProcessResult = SwitchInst::Create(processInputResult, tryDrain, 3U, block);
         handleProcessResult->addCase(ConstantInt::get(statusType, static_cast<i32>(EFillState::Yield)), returnYield);
         handleProcessResult->addCase(ConstantInt::get(statusType, static_cast<i32>(EFillState::ContinueFilling)), inputLoop);
+        // ImmediateOutput: ProcessInputDirect has already written a row/block into the buffer
+        // returned by GetDenseOutputBufferDirect, so just return EFetchResult::One
+        handleProcessResult->addCase(ConstantInt::get(statusType, static_cast<i32>(EFillState::ImmediateOutput)), returnOne);
 
         block = tryDrain;
 

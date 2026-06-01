@@ -359,9 +359,8 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
             cc->SetTotalSize(blob.PartData->TotalSize);
     }
 
-    if (blob.BatchMessageCount >= 1) {
-        cc->SetBatchMessageCount(blob.BatchMessageCount);
-    }
+    cc->SetMessageCount(blob.MessageCount);
+    cc->SetMessageFormat(static_cast<NKikimrClient::EMessageFormat>(blob.MessageFormat));
 }
 
 template <typename T>

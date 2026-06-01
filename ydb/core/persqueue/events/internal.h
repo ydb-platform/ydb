@@ -301,15 +301,13 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
-            // 0 means the message is not a batch.
-            ui32 BatchMessageCount = 0;
+            ui32 MessageCount = 1;
+            NPQ::EMessageFormat MessageFormat = NPQ::EMessageFormat::STANDARD;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
 
             // Number of logical offsets occupied by this message on the partition.
-            // A batch (BatchMessageCount >= 1) advances the offset by BatchMessageCount;
-            // a regular message (BatchMessageCount == 0) advances it by 1.
             ui32 GetOffsetsCount() const {
-                return BatchMessageCount >= 1 ? BatchMessageCount : 1;
+                return MessageCount;
             }
         };
 

@@ -1188,7 +1188,7 @@ void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
 }
 
 bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& p) {
-    if (p.Msg.BatchMessageCount < 1) {
+    if (p.Msg.MessageCount <= 1) {
         return true;
     }
 
@@ -1208,12 +1208,12 @@ bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg&
         return false;
     }
 
-    if (*p.Msg.MaxSeqNo != p.Msg.SeqNo + p.Msg.BatchMessageCount - 1) {
+    if (*p.Msg.MaxSeqNo != p.Msg.SeqNo + p.Msg.MessageCount - 1) {
         CancelOneWriteOnWrite(ctx,
-                              TStringBuilder() << "MaxSeqNo is inconsistent with BatchMessageCount, partitionId: " << Partition
+                              TStringBuilder() << "MaxSeqNo is inconsistent with MessageCount, partitionId: " << Partition
                                                << ", seqNo: " << p.Msg.SeqNo
                                                << ", maxSeqNo: " << *p.Msg.MaxSeqNo
-                                               << ", batchMessageCount: " << p.Msg.BatchMessageCount,
+                                               << ", messageCount: " << p.Msg.MessageCount,
                               p,
                               NPersQueue::NErrorCode::BAD_REQUEST);
         return false;
@@ -1475,7 +1475,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(TString{p.Msg.SourceId}, p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey), p.Msg.BatchMessageCount); //remove curOffset when LB will report CTime
+                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
+                     p.Msg.MessageCount, p.Msg.MessageFormat); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();

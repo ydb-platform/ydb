@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].BatchMessageCount, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].MessageCount, 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
     }
@@ -106,7 +106,24 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].UncompressedSize, 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].BatchMessageCount, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].MessageCount, 5u);
+    }
+
+
+    Y_UNIT_TEST(MessageMetadataPackUnpack) {
+        TBatch batch(100, 0);
+        auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("data"), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", 5, EMessageFormat::KAFKA_BATCH
+        ));
+
+        batch.Pack();
+        batch.Unpack();
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].MessageCount, 5u);
+        UNIT_ASSERT(batch.Blobs[0].MessageFormat == EMessageFormat::KAFKA_BATCH);
     }
 
     Y_UNIT_TEST(BatchHeaderOffsetDeltaRoundtrip) {
@@ -139,10 +156,10 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         TBatch batch(0, 0);
         const auto ts = TInstant::Seconds(100);
 
-        auto makeBlob = [&](ui64 seqNo, ui32 batchMessageCount = 0) {
+        auto makeBlob = [&](ui64 seqNo, ui32 messageCount = 1) {
             return TClientBlob(
                 TString("src"), seqNo, TString("data"), TMaybe<TPartData>(),
-                ts, ts, 0, "", "", batchMessageCount);
+                ts, ts, 0, "", "", messageCount);
         };
 
         batch.AddBlob(makeBlob(1, 5));
@@ -215,7 +232,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         batch.Pack();
         batch.Unpack();
 
-        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].BatchMessageCount, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].MessageCount, 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, 0u);
     }
@@ -235,7 +252,8 @@ bool operator ==(const TClientBlob &lhs, const TClientBlob &rhs) {
         lhs.UncompressedSize == rhs.UncompressedSize &&
         lhs.PartitionKey == rhs.PartitionKey &&
         lhs.ExplicitHashKey == rhs.ExplicitHashKey &&
-        lhs.BatchMessageCount == rhs.BatchMessageCount;
+        lhs.MessageCount == rhs.MessageCount &&
+        lhs.MessageFormat == rhs.MessageFormat;
 }
 
 Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
@@ -278,6 +296,24 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
 
         TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
         UNIT_ASSERT(blob == deserialized);
+    }
+
+
+    Y_UNIT_TEST(SerializeAndDeserializeMessageMetadata) {
+        TBuffer buffer;
+        buffer.Reserve(8_MB);
+
+        auto ts = TInstant::Seconds(100);
+        TClientBlob blob(
+            TString("src"), 42, TString("payload"), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", 7, EMessageFormat::KAFKA_BATCH);
+
+        Serialize(blob, buffer);
+        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
+
+        UNIT_ASSERT(blob == deserialized);
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.MessageCount, 7u);
+        UNIT_ASSERT(deserialized.MessageFormat == EMessageFormat::KAFKA_BATCH);
     }
 
     Y_UNIT_TEST(SerializeAndDeserializeAllScenarios) {

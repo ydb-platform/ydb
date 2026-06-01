@@ -32,11 +32,6 @@ message TDataChunk {
         BATCH   = 2;
     }
 
-    enum EFormatBatch {
-        UNSPECIFIED = 0;
-        KAFKA       = 1;
-    }
-
     optional EChunkType ChunkType = 9 [default = REGULAR];
 
     optional int64 Codec = 10;
@@ -46,6 +41,4 @@ message TDataChunk {
     optional bytes Data           = 127; // ~ 64K
 
     repeated Ydb.Topic.MetadataItem MessageMeta = 128;
-
-    optional EFormatBatch FormatBatch = 129;
 }

@@ -179,13 +179,13 @@ Y_UNIT_TEST(BatchedMessagesWriteRead) {
     constexpr size_t dataSize = 16;
 
     const TVector<TBatchedMessageSpec> writes = {
-        {.SeqNo = 1, .BatchMessageCount = 5, .Offset = 0, .Fill = 'a'},
-        {.SeqNo = 6, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
-        {.SeqNo = 9, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
+        {.SeqNo = 1, .MessageCount = 5, .Offset = 0, .Fill = 'a'},
+        {.SeqNo = 6, .MessageCount = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 9, .MessageCount = 0, .Offset = 8, .Fill = 'c'},
     };
 
     for (const auto& w : writes) {
-        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.BatchMessageCount, tc);
+        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.MessageCount, tc);
     }
 
     PQGetPartInfo(0, 9, tc);
@@ -239,7 +239,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
     const auto readResult = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult,
-        {{.SeqNo = 1, .BatchMessageCount = batchCount, .Offset = 0, .Fill = 'a'}},
+        {{.SeqNo = 1, .MessageCount = batchCount, .Offset = 0, .Fill = 'a'}},
         dataSize);
 
     readSettings.Offset = batchCount + 1;
@@ -247,7 +247,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
     const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult2,
-        {{.SeqNo = batchCount + 1, .BatchMessageCount = secondBatchCount, .Offset = batchCount, .Fill = 'b'}},
+        {{.SeqNo = batchCount + 1, .MessageCount = secondBatchCount, .Offset = batchCount, .Fill = 'b'}},
         dataSize);
 }
 
@@ -293,7 +293,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     const auto readResult = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult,
-        {{.SeqNo = 1, .BatchMessageCount = batchCount, .Offset = 0, .Fill = 'a'}},
+        {{.SeqNo = 1, .MessageCount = batchCount, .Offset = 0, .Fill = 'a'}},
         dataSize);
 
     readSettings.Offset = batchCount;
@@ -301,7 +301,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult2,
-        {{.SeqNo = batchCount + 1, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
+        {{.SeqNo = batchCount + 1, .MessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
         dataSize);
 
     readSettings.Offset = batchCount + 3;
@@ -309,7 +309,7 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     const auto readResult3 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult3,
-        {{.SeqNo = batchCount + 4, .BatchMessageCount = 0, .Offset = batchCount + 3, .Fill = 'c'}},
+        {{.SeqNo = batchCount + 4, .MessageCount = 0, .Offset = batchCount + 3, .Fill = 'c'}},
         dataSize);
 }
 
@@ -348,13 +348,13 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
     constexpr size_t dataSize = 7000_KB;
 
     const TVector<TBatchedMessageSpec> writes = {
-        {.SeqNo = 1, .BatchMessageCount = 5, .Offset = 0, .Fill = 'a'},
-        {.SeqNo = 6, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
-        {.SeqNo = 9, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
+        {.SeqNo = 1, .MessageCount = 5, .Offset = 0, .Fill = 'a'},
+        {.SeqNo = 6, .MessageCount = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 9, .MessageCount = 0, .Offset = 8, .Fill = 'c'},
     };
 
     for (const auto& w : writes) {
-        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.BatchMessageCount, tc, static_cast<i64>(w.Offset));
+        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.MessageCount, tc, static_cast<i64>(w.Offset));
     }
 
     PQGetPartInfo(0, 9, tc);

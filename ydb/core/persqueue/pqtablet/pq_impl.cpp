@@ -1873,8 +1873,11 @@ void TPersQueue::FillBatchInfo(
     if (cmd.HasMaxSeqNo()) {
         msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
     }
-    if (cmd.HasBatchMessageCount()) {
-        msg.BatchMessageCount = static_cast<ui32>(cmd.GetBatchMessageCount());
+    if (cmd.HasMessageCount()) {
+        msg.MessageCount = static_cast<ui32>(cmd.GetMessageCount());
+    }
+    if (cmd.HasMessageFormat()) {
+        msg.MessageFormat = static_cast<EMessageFormat>(cmd.GetMessageFormat());
     }
     if (cmd.GetPartNo() > 0) {
         return;
@@ -1970,8 +1973,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
             errorStr = "MaxSeqNo must be >= 0";
-        } else if (cmd.HasBatchMessageCount() && (cmd.GetBatchMessageCount() < 0 || cmd.GetBatchMessageCount() > Max<ui32>())) {
-            errorStr = "BatchMessageCount must be >= 0 and <= Max<ui32>";
+        } else if (cmd.HasMessageCount() && (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT)) {
+            errorStr = "MessageCount must be >= 1 and <= MAX_MESSAGE_COUNT";
+        } else if (cmd.HasMessageFormat() && (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS))) {
+            errorStr = "MessageFormat must be >= 0 and < 8";
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {

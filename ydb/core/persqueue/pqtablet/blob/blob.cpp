@@ -44,7 +44,7 @@ TClientBlob::TClientBlob()
 
 TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
-        TString&& partitionKey, TString&& explicitHashKey, ui32 batchMessageCount)
+        TString&& partitionKey, TString&& explicitHashKey, ui32 messageCount, EMessageFormat messageFormat)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -54,12 +54,15 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , UncompressedSize(uncompressedSize)
         , PartitionKey(std::move(partitionKey))
         , ExplicitHashKey(std::move(explicitHashKey))
-        , BatchMessageCount(batchMessageCount) {
+        , MessageCount(messageCount)
+        , MessageFormat(messageFormat) {
     Y_ENSURE(PartitionKey.size() <= 256);
+    Y_ENSURE(MessageCount >= 1 && MessageCount <= MAX_MESSAGE_COUNT);
+    Y_ENSURE(static_cast<ui32>(MessageFormat) < (1u << MESSAGE_FORMAT_BITS));
 }
 
 ui32 TClientBlob::GetLogicalOffsetSpan() const {
-    return BatchMessageCount >= 1 ? BatchMessageCount : 1;
+    return MessageCount;
 }
 
 
@@ -92,7 +95,9 @@ TString TClientBlob::DebugString() const {
         << ", CreateTimestamp=" << CreateTimestamp
         << ", UncompressedSize=" << UncompressedSize
         << ", PartitionKey='" << PartitionKey << "'"
-        << ", ExplicitHashKey='" << ExplicitHashKey << "'";
+        << ", ExplicitHashKey='" << ExplicitHashKey << "'"
+        << ", MessageCount=" << MessageCount
+        << ", MessageFormat=" << static_cast<ui32>(MessageFormat);
 
     if (PartData) {
         sb << ", PartNo=" << PartData->PartNo
@@ -167,7 +172,7 @@ void TBatch::AddBlob(const TClientBlob &b) {
         InternalPartsPos.push_back(i);
     }
 
-    if (Header.HasOffsetDelta() || b.BatchMessageCount >= 1) {
+    if (Header.HasOffsetDelta() || b.MessageCount > 1) {
         Header.SetOffsetDelta(offsetDelta);
     } else {
         Header.ClearOffsetDelta();

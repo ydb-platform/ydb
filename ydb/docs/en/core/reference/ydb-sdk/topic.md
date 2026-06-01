@@ -2478,7 +2478,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   {% endlist %}
 
-- Java (sync)
+- Java
 
   {% list tabs %}
 

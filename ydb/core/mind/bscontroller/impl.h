@@ -534,8 +534,9 @@ public:
             return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
         }
 
-        bool AcceptsNewSlots() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
+        bool AcceptsNewSlots(bool allowInactive) const {
+            return (Status == NKikimrBlobStorage::EDriveStatus::ACTIVE || 
+                    (allowInactive && Status == NKikimrBlobStorage::EDriveStatus::INACTIVE))
                 && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED
                 && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS;
         }
@@ -1540,6 +1541,7 @@ private:
 
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
     TMonotonic LoadedAt;
+    bool AllowSlotAllocationOnInactive = false;
 
     struct TLifetimeToken {};
     std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();

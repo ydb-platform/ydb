@@ -84,6 +84,14 @@ namespace NKikimr {
             // applies commit result and returns first lsn to keep
             ui64 ApplyCommitResult(TEvSyncLogCommitDone *msg);
 
+            // Dispose the whole on-disk sync log after a chunk write returned
+            // OUT_OF_SPACE. Drops all disk chunks (scheduling them for deletion) and
+            // suppresses swapping memory to disk for the next (disposal) commit.
+            // allocatedChunks are the chunks the committer managed to write during the
+            // aborted commit; the ones not already owned by the disk log are orphans
+            // that have to be deleted and forgotten as well.
+            void DisposeDiskSyncLog(TVector<ui32> allocatedChunks);
+
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
             void UpdateNeighbourSyncedLsn(ui32 orderNumber, ui64 syncedLsn);
@@ -131,6 +139,9 @@ namespace NKikimr {
             const ui64 SyncLogMaxEntryPointSize;
             // does it need initial commit?
             bool NeedsInitialCommit;
+            // one-shot flag: when set, the next commit must not swap memory to disk
+            // (used by the disposal commit triggered on OUT_OF_SPACE)
+            bool SuppressSwapToDisk = false;
             // Id of Keeper actor which possesses the state
             TActorId SelfId;
 

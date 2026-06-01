@@ -369,6 +369,51 @@ namespace NKikimr {
             return firstLsnToKeep;
         }
 
+        void TSyncLogKeeperState::DisposeDiskSyncLog(TVector<ui32> allocatedChunks) {
+            // Drop every chunk currently in the disk sync log. These chunks may still
+            // be referenced by outstanding snapshots, so TrimLogByRemovingChunks attaches
+            // a notifier to each of them; the chunk is actually forgotten (TEvChunkForget)
+            // only once the last snapshot referencing it is released (see FreeChunkEvent).
+            THashSet<ui32> existing;
+            const ui32 numChunks = SyncLogPtr->GetSizeInChunks();
+            if (numChunks > 0) {
+                for (const TDeletedChunk& chunk : SyncLogPtr->TrimLogByRemovingChunks(numChunks, Notifier)) {
+                    existing.insert(chunk.ChunkIdx);
+                }
+            }
+
+            LOG_NOTICE(*LoggerCtx, BS_SYNCLOG,
+                    VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                        "KEEPER: DisposeDiskSyncLog: droppedChunks# %s allocatedChunks# %s",
+                        FormatList(existing).data(), FormatList(allocatedChunks).data()));
+
+            // Existing chunks: schedule them for deletion through the regular machinery.
+            ChunksToDelete.insert(ChunksToDelete.end(), existing.begin(), existing.end());
+            DeletedChunksPending.insert(existing.begin(), existing.end());
+
+            // Orphan chunks: written by the aborted commit but never part of the disk log
+            // (and not referenced by any snapshot). Pre-seed them into ChunksToForgetPending
+            // so that ApplyCommitResult routes them straight to ChunksToForget once the
+            // disposal commit confirms their deletion. No TEvSyncLogFreeChunk will arrive
+            // for these chunks since the keeper holds no TOneChunk object for them.
+            for (ui32 chunkIdx : allocatedChunks) {
+                if (!existing.contains(chunkIdx)) {
+                    ChunksToDelete.push_back(chunkIdx);
+                    const auto [it, inserted] = ChunksToForgetPending.insert(chunkIdx);
+                    Y_ABORT_UNLESS(inserted, "%s chunkIdx# %" PRIu32,
+                            SlCtx->VCtx->VDiskLogPrefix.data(), chunkIdx);
+                }
+            }
+
+            if (!ChunksToDelete.empty()) {
+                DelayedActions.DeleteChunk = true;
+            }
+
+            // Do not try to swap memory to disk in the disposal commit, otherwise it
+            // would just hit OUT_OF_SPACE again.
+            SuppressSwapToDisk = true;
+        }
+
         // Fix Disk overflow, i.e. remove some chunks from SyncLog
         TVector<TDeletedChunk> TSyncLogKeeperState::FixDiskOverflow(ui32 numChunksToAdd) {
             // prepare disk write
@@ -386,6 +431,16 @@ namespace NKikimr {
         }
 
         TMemRecLogSnapshotPtr TSyncLogKeeperState::BuildSwapSnap() {
+            // One-shot suppression: the disposal commit (triggered on OUT_OF_SPACE) must
+            // not swap memory to disk, otherwise it would hit OUT_OF_SPACE again.
+            if (SuppressSwapToDisk) {
+                SuppressSwapToDisk = false;
+                LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
+                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                            "KEEPER: BuildSwapSnap: swap suppressed for disposal commit"));
+                return {};
+            }
+
             // find mem pages to write to disk
             const bool stillMemOverflow = SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages;
             const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();

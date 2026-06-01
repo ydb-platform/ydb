@@ -7,8 +7,9 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/formats/arrow
-    yql/essentials/public/udf/service/stub
+    ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

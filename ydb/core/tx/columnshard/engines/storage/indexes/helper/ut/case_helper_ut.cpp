@@ -1,43 +1,15 @@
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/kqp/ut/common/arrow_builders.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
 namespace {
 
-std::shared_ptr<arrow::Array> MakeStringArray(const std::vector<std::optional<std::string>>& values) {
-    arrow::StringBuilder builder;
-    for (auto&& value : values) {
-        if (value) {
-            Y_UNUSED(builder.Append(*value));
-        } else {
-            Y_UNUSED(builder.AppendNull());
-        }
-    }
-
-    std::shared_ptr<arrow::Array> array;
-    Y_UNUSED(builder.Finish(&array));
-    return array;
-}
-
-std::shared_ptr<arrow::Array> MakeInt32Array(const std::vector<std::optional<i32>>& values) {
-    arrow::Int32Builder builder;
-    for (auto&& value : values) {
-        if (value) {
-            Y_UNUSED(builder.Append(*value));
-        } else {
-            Y_UNUSED(builder.AppendNull());
-        }
-    }
-
-    std::shared_ptr<arrow::Array> array;
-    Y_UNUSED(builder.Finish(&array));
-    return array;
-}
+using NKikimr::NKqp::NTestArrow::MakeArrayNullable;
+using NKikimr::NKqp::NTestArrow::MakeInt32ArrayNullable;
 
 std::vector<ui64> CollectHashes(const std::shared_ptr<arrow::Array>& array, const ui64 seed, const bool caseSensitive) {
     TCaseAwareHashCalcer calcer(caseSensitive);
@@ -118,7 +90,7 @@ Y_UNIT_TEST_SUITE(TCaseHelperTests) {
 
     Y_UNIT_TEST(CalcForAllStringArrayCaseInsensitive) {
         constexpr ui64 seed = 13;
-        const auto array = MakeStringArray({ "AbC", "abc", "XYZ", std::nullopt });
+        const auto array = MakeArrayNullable<arrow::StringType, std::string>({ "AbC", "abc", "XYZ", std::nullopt });
         const auto hashes = CollectHashes(array, seed, false);
         UNIT_ASSERT_VALUES_EQUAL(hashes[0], hashes[1]);
         UNIT_ASSERT_VALUES_UNEQUAL(hashes[0], hashes[2]);
@@ -127,7 +99,7 @@ Y_UNIT_TEST_SUITE(TCaseHelperTests) {
 
     Y_UNIT_TEST(CalcForAllIntArray) {
         constexpr ui64 seed = 17;
-        const auto array = MakeInt32Array({ 10, 20, std::nullopt });
+        const auto array = MakeInt32ArrayNullable({ 10, 20, std::nullopt });
         const auto caseSensitiveHashes = CollectHashes(array, seed, true);
         const auto caseInsensitiveHashes = CollectHashes(array, seed, false);
         UNIT_ASSERT_VALUES_EQUAL(caseSensitiveHashes, caseInsensitiveHashes);
@@ -141,7 +113,7 @@ Y_UNIT_TEST_SUITE(TCaseHelperTests) {
 
     Y_UNIT_TEST(CalcForAllMatchesReferenceForStrings) {
         constexpr ui64 seed = 19;
-        const auto array = MakeStringArray({ "Hello", "WORLD", std::nullopt });
+        const auto array = MakeArrayNullable<arrow::StringType, std::string>({ "Hello", "WORLD", std::nullopt });
         const auto hashes = CollectHashes(array, seed, false);
         TCaseAwareHashCalcer calcer(false);
         for (ui32 idx = 0; idx < array->length(); ++idx) {

@@ -1529,13 +1529,13 @@ public:
     }
 
     void StartWorkers(const TActorContext& ctx) {
+        TestStartTime = TActivationContext::Monotonic();
         if (TestDuration) {
             ctx.Schedule(*TestDuration, new TEvents::TEvPoisonPill());
         }
         for (auto& writer : TabletWriters) {
             writer->StartWorking(ctx);
         }
-        TestStartTime = TActivationContext::Monotonic();
         UpdateWakeupQueue(ctx);
     }
 

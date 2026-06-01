@@ -3809,7 +3809,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     void TestFollowerPromotion(bool killDuringPromotion) {
         constexpr int NODES = 3;
         TTestBasicRuntime runtime(NODES, false);
-        Setup(runtime, true);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetTabletRestartsMaxCount(4);
+        });
 
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID();

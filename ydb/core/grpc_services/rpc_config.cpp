@@ -13,6 +13,127 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/library/services/services.pb.h>
+
+namespace {
+
+TString DescribeConfigIdentity(const Ydb::DynamicConfig::ConfigIdentity& id)
+{
+    TStringBuilder descr;
+
+    switch (id.type_case()) {
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kCluster:
+            descr << "cluster=" << id.cluster();
+            break;
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase:
+            descr << "database=" << id.database();
+            break;
+        case Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET:
+            descr << "<TYPE_NOT_SET>";
+            break;
+        default:
+            descr << "<unknown-type:" << static_cast<int>(id.type_case()) << ">";
+            break;
+    }
+
+    descr << ";version=" << id.version();
+
+    return descr;
+}
+
+bool ConvertGetConfigToFetchConfigResult(
+    const Ydb::DynamicConfig::GetConfigResult &from,
+    Ydb::Config::FetchConfigResult &to,
+    TString& error)
+{
+    const auto identityCount = from.identity_size();
+    const auto configCount = from.config_size();
+
+    error.clear();
+
+    // Reject Ydb::DynamicConfig::GetConfigResult invariant violation
+    if (identityCount < configCount) {
+        TStringBuilder descr;
+        descr << (configCount - identityCount)
+              << " extra 'config' field with no corresponding 'identity' field";
+        error = descr;
+        return false;
+    }
+    if (identityCount > configCount) {
+        TStringBuilder descr;
+        descr << "no 'config' fields for 'identity' fields [";
+        for (int i = configCount; i < identityCount; i++) {
+            if (i > configCount) {
+                descr << ", ";
+            }
+            descr << "'" << DescribeConfigIdentity(from.identity(i)) << "'";
+        }
+        descr << "]";
+        error = descr;
+        return false;
+    }
+
+    // Reject TYPE_NOT_SET upfront so the error path leaves 'to' untouched
+    {
+        TStringBuilder descr;
+        int unsetCount = 0;
+
+        descr << "'identity' fields with no type set at indices [";
+        for (int i = 0; i < identityCount; i++) {
+            if (from.identity(i).type_case()
+                == Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET)
+            {
+                if (unsetCount > 0) {
+                    descr << ", ";
+                }
+                descr << "#" << i << " - " << "'" << DescribeConfigIdentity(from.identity(i)) << "'";
+                ++unsetCount;
+            }
+        }
+        descr << "]";
+
+        if (unsetCount > 0) {
+            error = descr;
+            return false;
+        }
+    }
+
+    for (int i = 0; i < identityCount; i++) {
+        const auto& srcIdentity = from.identity(i);
+        switch (srcIdentity.type_case()) {
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kCluster: {
+                auto dstEntry = to.add_config();
+                auto dstIdentity = dstEntry->mutable_identity();
+                dstIdentity->set_version(srcIdentity.version());
+                dstIdentity->set_cluster(srcIdentity.cluster());
+                dstIdentity->mutable_main();
+                dstEntry->set_config(from.config(i));
+                break;
+            }
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase: {
+                auto dstEntry = to.add_config();
+                auto dstIdentity = dstEntry->mutable_identity();
+                dstIdentity->set_version(srcIdentity.version());
+                dstIdentity->mutable_database()->set_database(srcIdentity.database());
+                dstEntry->set_config(from.config(i));
+                break;
+            }
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET:
+                // TYPE_NOT_SET is rejected with error by pre-validation above
+                break;
+            default:
+                // Any other value comes from a newer Console is skipped with a warning
+                // so we don't fail on forward-compatible additions
+                ALOG_NOTICE(NKikimrServices::GRPC_SERVER,
+                    "Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: "
+                    << "skipped unknown config identity '" << DescribeConfigIdentity(srcIdentity) << "'" );
+                break;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 namespace NKikimr::NGRpcService {
 
@@ -412,6 +533,8 @@ public:
         self->OnBootstrap();
 
         if (self->Request_->GetDatabaseName()) {
+            // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)
+            // is requested directly from Console (like legacy API)
             SendRequestToConsole();
             return;
         }
@@ -544,7 +667,19 @@ private:
     }
 
     void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), ActorContext());
+        Ydb::Config::FetchConfigResult result;
+        TString error;
+
+        bool succeed = ConvertGetConfigToFetchConfigResult(ev->Get()->Record.GetResponse(), result, error);
+        if (succeed) {
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+        }
+        else {
+            // The malformed payload comes from the Console tablet (server-side),
+            // not from the gRPC client — so this is an internal-error condition.
+            Reply(Ydb::StatusIds::INTERNAL_ERROR, error,
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+        }
     }
 };
 

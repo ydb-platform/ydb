@@ -863,7 +863,8 @@ namespace NInterconnect::NRdma {
                 return localChain.TryGetSlot();
             }
 
-            void Free(TMemRegion&& mr, TSlotMemPool& pool, ui32 chainIndex) noexcept {
+            void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
+                ui32 chainIndex = GetChainIndex(mr.OrigSize);
                 Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 if (Y_UNLIKELY(Stopped)) {
                     // current thread is stopped, return mr to global pool
@@ -946,9 +947,8 @@ namespace NInterconnect::NRdma {
             return nullptr;
         }
         void Free(TMemRegion&& mr, TChunk&) noexcept override {
-            const ui32 chainIndex = GetChainIndex(mr.OrigSize);
             AllocatedCounter->Sub(mr.GetSize());
-            LocalCache.Free(std::move(mr), *this, chainIndex);
+            LocalCache.Free(std::move(mr), *this);
         }
 
     private:

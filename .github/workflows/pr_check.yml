@@ -231,7 +231,9 @@ jobs:
             // "Safe" means infra/docs-only changes where full test run is not required.
             const isSafeFile = (file) => {
               return (
-                file.startsWith('docs/') ||
+                file.startsWith('ydb/docs/') ||
+                file.startsWith('yql/essentials/docs/') ||
+                file.startsWith('plans/') ||
                 file.endsWith('.md') ||
                 file.startsWith('.github/config/') ||
                 file.startsWith('.github/scripts/') ||

@@ -204,8 +204,6 @@ It's important for the client application to monitor the session state, as it ca
 
   In the Python SDK, the session automatically restores the connection to the {{ ydb-short-name }} cluster after failures. Use a context manager (`with` or `async with`) to ensure the session is closed when leaving the block. When working with semaphores through a context manager (`with session.semaphore(name)` or `async with session.semaphore(name)`), the semaphore is released automatically when leaving the block, and the session is closed when the context exits.
 
-<<<<<<< HEAD
-=======
 - Java
 
   Call `close()` when your scenario is finished; this explicitly releases the connection to the node. Until the session is closed, the SDK retries the connection on network failures according to `CoordinationSessionSettings`. Hold a semaphore only while solving your business task and release it with `SemaphoreLease.release()` when the resource is no longer needed.
@@ -216,7 +214,6 @@ It's important for the client application to monitor the session state, as it ca
 
   For long-running applications, the JavaScript SDK provides a recommended pattern to automatically obtain a new session when the previous one is lost: `for await (session of client.openSession()) { session.signal }`
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ## Working with semaphores {#semaphore}
@@ -291,8 +288,6 @@ When creating a semaphore, you can specify its limit. The limit determines the m
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -313,7 +308,6 @@ When creating a semaphore, you can specify its limit. The limit determines the m
       .expectSuccess("create semaphore failed");
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ### Acquiring a semaphore {#acquire-semaphore}
@@ -407,8 +401,6 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -440,7 +432,6 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
   The API documentation states that a session can hold **only one** semaphore at a time; repeated calls for the same name **replace** the previous operation (for example, to reduce `count` or change the timeout).
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 The taken value of an acquired semaphore can be decreased (but not increased) by calling the `AcquireSemaphore` method again with a smaller value.
@@ -500,8 +491,6 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   ```java
@@ -520,7 +509,6 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
   });
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 This call doesn't require acquiring the semaphore and doesn't lead to it. If you need only one specific client to update the data, this must be explicitly ensured, for example, by acquiring the semaphore, updating the data, and releasing the semaphore back.
@@ -606,8 +594,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   The `describeSemaphore` method takes a semaphore name and a [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): data only, with owners list, with waiters list, or both.
@@ -636,7 +622,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
   });
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ### Releasing a semaphore {#release-semaphore}
@@ -696,8 +681,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   Release via [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (asynchronous, `CompletableFuture<Status>`).
@@ -714,7 +697,6 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
   await lease.release();
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ## Important implementation details

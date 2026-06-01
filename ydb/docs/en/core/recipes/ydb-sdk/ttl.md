@@ -40,8 +40,6 @@ In the example below, the items of the `mytable` table will be deleted an hour a
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -55,7 +53,6 @@ In the example below, the items of the `mytable` table will be deleted an hour a
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 The example below shows how to use the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
@@ -94,8 +91,6 @@ The example below shows how to use the `modified_at` column with a numeric type 
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -113,7 +108,6 @@ The example below shows how to use the `modified_at` column with a numeric type 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ## Enabling data eviction to S3-compatible external storage {#enable-tiering-on-existing-tables}
@@ -145,8 +139,6 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
 {% endif %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   This functionality is not currently supported.
@@ -163,7 +155,6 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ## Enabling TTL for a newly created table {#enable-for-new-table}
@@ -215,8 +206,6 @@ For a newly created table, you can pass TTL settings along with the table descri
   )
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -234,7 +223,6 @@ For a newly created table, you can pass TTL settings along with the table descri
   session.createTable("mytable", description).join().expectSuccess();
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ## Disabling TTL {#disable}
@@ -271,8 +259,6 @@ For a newly created table, you can pass TTL settings along with the table descri
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -286,7 +272,6 @@ For a newly created table, you can pass TTL settings along with the table descri
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 
 ## Getting TTL settings {#describe}
@@ -323,8 +308,6 @@ The current TTL settings can be obtained from the table description:
   ttl = desc.ttl_settings
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -335,6 +318,5 @@ The current TTL settings can be obtained from the table description:
   TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
   ```
 
->>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 {% endlist %}
 

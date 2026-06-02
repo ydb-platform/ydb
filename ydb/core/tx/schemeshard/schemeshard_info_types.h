@@ -848,6 +848,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
     bool IsExternalBlobsEnabled = false;
 
+    mutable ui64 LastVerifyConsistencyTime = 0;
+
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 

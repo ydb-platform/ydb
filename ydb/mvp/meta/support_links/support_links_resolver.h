@@ -16,6 +16,7 @@ public:
     enum class EEntityType {
         Cluster,
         Database,
+        StorageNode,
     };
 
     struct TParams {

@@ -13,6 +13,9 @@ void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const T
     for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
         ValidateLinkSourceConfig(supportLinks.GetDatabase(i), metaSettings);
     }
+    for (int i = 0; i < supportLinks.GetStorageNode().size(); ++i) {
+        ValidateLinkSourceConfig(supportLinks.GetStorageNode(i), metaSettings);
+    }
 }
 
 void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings) {

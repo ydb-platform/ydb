@@ -25,6 +25,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <memory>
+#include <optional>
 
 namespace NMVP {
 
@@ -37,6 +38,12 @@ public:
     using EEntityType = TSupportLinksResolver::EEntityType;
 
 protected:
+    struct TEntityIdentity {
+        std::optional<TString> Cluster;
+        std::optional<TString> Database;
+        std::optional<TString> StorageNode;
+    };
+
     NActors::TActorId HttpProxyId;
     const TYdbLocation& Location;
     const TMetaSettings Settings;
@@ -73,16 +80,72 @@ public:
         RequestClusterInfo();
     }
 
-    bool ValidateAndInitEntityType() {
-        const TString cluster = Request.Parameters["cluster"];
-        const TString database = Request.Parameters["database"];
-
-        if (cluster.empty()) {
-            AddCommonError("Invalid identity parameters. Supported entities: cluster requires 'cluster'; database requires 'cluster' and 'database'.");
-            return false;
+    std::optional<TString> ReadOptionalParameter(TStringBuf name) const {
+        if (!Request.Parameters.UrlParameters.Has(name)) {
+            return std::nullopt;
         }
-        EntityType = database.empty() ? EEntityType::Cluster : EEntityType::Database;
-        return true;
+        return Request.Parameters.UrlParameters[name];
+    }
+
+    TEntityIdentity ReadEntityIdentity() const {
+        return TEntityIdentity{
+            .Cluster = ReadOptionalParameter("cluster"),
+            .Database = ReadOptionalParameter("database"),
+            .StorageNode = ReadOptionalParameter("node"),
+        };
+    }
+
+    void InitEntityType(const TEntityIdentity& identity) {
+        if (identity.StorageNode) {
+            EntityType = EEntityType::StorageNode;
+            return;
+        }
+
+        if (identity.Database) {
+            EntityType = EEntityType::Database;
+            return;
+        }
+
+        EntityType = EEntityType::Cluster;
+    }
+
+    bool ValidateEntityParameters(const TEntityIdentity& identity) {
+        switch (EntityType) {
+            case EEntityType::Cluster:
+                if (!identity.Cluster || identity.Cluster->empty()) {
+                    AddCommonError("Invalid identity parameters. Parameter 'cluster' must not be empty.");
+                    return false;
+                }
+                return true;
+            case EEntityType::Database:
+                if (!identity.Cluster || identity.Cluster->empty()) {
+                    AddCommonError("Invalid identity parameters. Parameter 'cluster' must not be empty.");
+                    return false;
+                }
+                if (!identity.Database || identity.Database->empty()) {
+                    AddCommonError("Invalid identity parameters. Parameter 'database' must not be empty.");
+                    return false;
+                }
+                return true;
+            case EEntityType::StorageNode:
+                if (!identity.Cluster || identity.Cluster->empty()) {
+                    AddCommonError("Invalid identity parameters. Parameter 'cluster' must not be empty.");
+                    return false;
+                }
+                if (!identity.StorageNode || identity.StorageNode->empty()) {
+                    AddCommonError("Invalid identity parameters. Parameter 'node' must not be empty.");
+                    return false;
+                }
+                return true;
+        }
+        AddCommonError("Invalid identity parameters. Supported entities: cluster requires 'cluster'; database requires 'cluster' and 'database'; storage node requires 'cluster' and 'node'.");
+        return false;
+    }
+
+    bool ValidateAndInitEntityType() {
+        const TEntityIdentity identity = ReadEntityIdentity();
+        InitEntityType(identity);
+        return ValidateEntityParameters(identity);
     }
 
     virtual void RequestClusterInfo() {

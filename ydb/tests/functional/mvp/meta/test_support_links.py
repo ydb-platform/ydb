@@ -12,6 +12,7 @@ from support_links_env import (
     MISSING_CLUSTER_ERROR,
     MISSING_CLUSTER_NAME,
     MISSING_CLUSTER_PARAMETER_ERROR,
+    STORAGE_NODE_NAME,
     WORKSPACE_NAME,
     start_cluster_with_meta_table,
     start_meta_support_links_service,
@@ -89,6 +90,13 @@ def grafana_url_with_cluster(cluster_name=CLUSTER_NAME, extra_query=""):
     return url
 
 
+def grafana_url_with_storage_node(storage_node=STORAGE_NODE_NAME, extra_query=""):
+    query = f"var-node={storage_node}"
+    if extra_query:
+        query += f"&{extra_query}"
+    return grafana_url_with_cluster(extra_query=query)
+
+
 def external_grafana_url(extra_query=""):
     url = (
         "https://external.example.test/d/ydb/overview"
@@ -128,6 +136,16 @@ def test_meta_support_links_returns_grafana_link(meta_support_links_env, case):
     assert_support_links_response(
         meta_support_links_env.get_ok_support_links_payload(CLUSTER_NAME, database=case.database),
         case.expected_url,
+    )
+
+
+def test_meta_support_links_returns_grafana_link_for_storage_node(meta_support_links_env):
+    assert_support_links_response(
+        meta_support_links_env.get_ok_support_links_payload(
+            CLUSTER_NAME,
+            storage_node=STORAGE_NODE_NAME,
+        ),
+        grafana_url_with_storage_node(),
     )
 
 
@@ -190,4 +208,15 @@ def test_meta_support_links_requires_cluster_parameter(meta_support_links_env):
     assert_bad_request_response(
         meta_support_links_env.get_bad_request_support_links_payload(database=DATABASE_NAME),
         MISSING_CLUSTER_PARAMETER_ERROR,
+    )
+
+
+def test_meta_support_links_allows_extra_database_parameter_for_storage_node(meta_support_links_env):
+    assert_support_links_response(
+        meta_support_links_env.get_ok_support_links_payload(
+            cluster_name=CLUSTER_NAME,
+            database=DATABASE_NAME,
+            storage_node=STORAGE_NODE_NAME,
+        ),
+        grafana_url_with_storage_node(extra_query=f"var-database={DATABASE_NAME}"),
     )

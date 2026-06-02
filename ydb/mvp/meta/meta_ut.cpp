@@ -174,4 +174,26 @@ meta:
         );
     }
 
+    Y_UNIT_TEST(UnsupportedSourceInStorageNodeConfigThrows) {
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    storage_node:
+      - source: "unknown/source"
+        title: "Unknown"
+        url: "https://example.test"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        auto mvp = MakeTestMvp();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "unsupported support_links source: unknown/source"
+        );
+    }
+
 }

@@ -68,6 +68,10 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             for (int i = 0; i < config.GetDatabase().size(); ++i) {
                 Settings.SupportLinks.DatabaseLinks.push_back(config.GetDatabase(i));
             }
+            Settings.SupportLinks.StorageNodeLinks.reserve(config.GetStorageNode().size());
+            for (int i = 0; i < config.GetStorageNode().size(); ++i) {
+                Settings.SupportLinks.StorageNodeLinks.push_back(config.GetStorageNode(i));
+            }
         }
 
         NActors::TActorId RegisterGet(
@@ -157,6 +161,15 @@ columns {
         return {};
     }
 
+    static NMVP::TSupportLinksConfig MakeStorageNodeConfig(TStringBuf source) {
+        NMVP::TSupportLinksConfig cfg;
+        auto* storageNode = cfg.AddStorageNode();
+        storageNode->SetSource(TString(source));
+        storageNode->SetTitle("mock");
+        storageNode->SetUrl("mock://source");
+        return cfg;
+    }
+
     Y_UNIT_TEST(SupportLinksReturnsBadRequestWhenClusterMissing) {
         TTestActorRuntime runtime;
         TAutoPtr<NActors::IEventHandle> handle;
@@ -177,7 +190,7 @@ columns {
         UNIT_ASSERT(json.Has("errors"));
         UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "meta");
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("Invalid identity parameters"));
+        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("Parameter 'cluster' must not be empty"));
     }
 
     Y_UNIT_TEST(SupportLinksReturnsMethodNotAllowedForNonGet) {
@@ -240,6 +253,22 @@ columns {
         TSupportLinksTestContext context(MakeConfig("mock/async"));
 
         auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
+        auto result = MakeClusterInfoResult();
+        context.RegisterGet(runtime, sender, request, std::move(result));
+
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
+        AssertMockResponse(response->Response->Body);
+    }
+
+    Y_UNIT_TEST(UsesStorageNodeLinksForStorageNodeEntity) {
+        TTestActorRuntime runtime;
+        TAutoPtr<NActors::IEventHandle> handle;
+
+        auto sender = runtime.AllocateEdgeActor();
+        TSupportLinksTestContext context(MakeStorageNodeConfig("mock/sync"));
+
+        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&node=static-1");
         auto result = MakeClusterInfoResult();
         context.RegisterGet(runtime, sender, request, std::move(result));
 

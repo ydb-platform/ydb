@@ -14,12 +14,24 @@ TVector<std::shared_ptr<ILinkSource>> BuildSources(const TSupportLinksResolver::
     if (!params.Settings) {
         ythrow yexception() << "support links settings are required";
     }
-    const auto& linkConfigs = params.EntityType == TSupportLinksResolver::EEntityType::Database
-        ? params.Settings->SupportLinks.DatabaseLinks
-        : params.Settings->SupportLinks.ClusterLinks;
+    const TVector<TSupportLinkEntryConfig>* linkConfigs = nullptr;
+    switch (params.EntityType) {
+        case TSupportLinksResolver::EEntityType::Cluster:
+            linkConfigs = &params.Settings->SupportLinks.ClusterLinks;
+            break;
+        case TSupportLinksResolver::EEntityType::Database:
+            linkConfigs = &params.Settings->SupportLinks.DatabaseLinks;
+            break;
+        case TSupportLinksResolver::EEntityType::StorageNode:
+            linkConfigs = &params.Settings->SupportLinks.StorageNodeLinks;
+            break;
+    }
+    if (!linkConfigs) {
+        ythrow yexception() << "unsupported support links entity type";
+    }
     TVector<std::shared_ptr<ILinkSource>> linkSources;
-    linkSources.reserve(linkConfigs.size());
-    for (const auto& linkConfig : linkConfigs) {
+    linkSources.reserve(linkConfigs->size());
+    for (const auto& linkConfig : *linkConfigs) {
         linkSources.push_back(params.LinkSourceFactory(linkConfig, *params.Settings));
     }
     return linkSources;

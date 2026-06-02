@@ -35,6 +35,10 @@ TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EA
         for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
             settings.SupportLinks.DatabaseLinks.push_back(supportLinks.GetDatabase(i));
         }
+        settings.SupportLinks.StorageNodeLinks.reserve(supportLinks.GetStorageNode().size());
+        for (int i = 0; i < supportLinks.GetStorageNode().size(); ++i) {
+            settings.SupportLinks.StorageNodeLinks.push_back(supportLinks.GetStorageNode(i));
+        }
     }
 
     return settings;

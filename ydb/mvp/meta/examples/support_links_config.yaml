@@ -42,3 +42,7 @@ meta:
           - ui-database
         folder:
           - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1
+    storage_node:
+      - source: grafana/dashboard
+        title: Storage Node Overview
+        url: /d/ydb_storage/overview

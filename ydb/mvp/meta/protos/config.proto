@@ -27,6 +27,8 @@ message TMetaConfig {
         repeated TSupportLinkEntry Cluster = 1;
         // Support links resolved for database entity.
         repeated TSupportLinkEntry Database = 2;
+        // Support links resolved for storage node entity.
+        repeated TSupportLinkEntry StorageNode = 3;
     }
 
     optional string MetaApiEndpoint = 1;
@@ -36,7 +38,7 @@ message TMetaConfig {
     optional bool DbUserTokenAccess = 5 [default = false];
     // Grafana integration settings used by Grafana-based support link sources.
     optional TGrafanaConfig Grafana = 6;
-    // Shared support links config reused across all clusters/databases.
+    // Shared support links config reused across all supported entities.
     optional TSupportLinksConfig SupportLinks = 7;
 }
 

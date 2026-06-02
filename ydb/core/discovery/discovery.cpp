@@ -15,7 +15,6 @@
 
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 

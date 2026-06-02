@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 import re
 import typing as t
+import warnings
 from datetime import datetime
 
-from .._internal import _cookie_parse_impl
 from .._internal import _dt_as_utc
-from .._internal import _to_str
 from ..http import generate_etag
 from ..http import parse_date
 from ..http import parse_etags
@@ -15,14 +16,14 @@ _etag_re = re.compile(r'([Ww]/)?(?:"(.*?)"|(.*?))(?:\s*,\s*|$)')
 
 
 def is_resource_modified(
-    http_range: t.Optional[str] = None,
-    http_if_range: t.Optional[str] = None,
-    http_if_modified_since: t.Optional[str] = None,
-    http_if_none_match: t.Optional[str] = None,
-    http_if_match: t.Optional[str] = None,
-    etag: t.Optional[str] = None,
-    data: t.Optional[bytes] = None,
-    last_modified: t.Optional[t.Union[datetime, str]] = None,
+    http_range: str | None = None,
+    http_if_range: str | None = None,
+    http_if_modified_since: str | None = None,
+    http_if_none_match: str | None = None,
+    http_if_match: str | None = None,
+    etag: str | None = None,
+    data: bytes | None = None,
+    last_modified: datetime | str | None = None,
     ignore_if_range: bool = True,
 ) -> bool:
     """Convenience method for conditional requests.
@@ -63,7 +64,7 @@ def is_resource_modified(
         if_range = parse_if_range_header(http_if_range)
 
     if if_range is not None and if_range.date is not None:
-        modified_since: t.Optional[datetime] = if_range.date
+        modified_since: datetime | None = if_range.date
     else:
         modified_since = parse_date(http_if_modified_since)
 
@@ -94,12 +95,38 @@ def is_resource_modified(
     return not unmodified
 
 
+_cookie_re = re.compile(
+    r"""
+    ([^=;]*)
+    (?:\s*=\s*
+      (
+        "(?:[^\\"]|\\.)*"
+      |
+        .*?
+      )
+    )?
+    \s*;\s*
+    """,
+    flags=re.ASCII | re.VERBOSE,
+)
+_cookie_unslash_re = re.compile(rb"\\([0-3][0-7]{2}|.)")
+
+
+def _cookie_unslash_replace(m: t.Match[bytes]) -> bytes:
+    v = m.group(1)
+
+    if len(v) == 1:
+        return v
+
+    return int(v, 8).to_bytes(1, "big")
+
+
 def parse_cookie(
-    cookie: t.Union[bytes, str, None] = "",
-    charset: str = "utf-8",
-    errors: str = "replace",
-    cls: t.Optional[t.Type["ds.MultiDict"]] = None,
-) -> "ds.MultiDict[str, str]":
+    cookie: str | None = None,
+    charset: str | None = None,
+    errors: str | None = None,
+    cls: type[ds.MultiDict] | None = None,
+) -> ds.MultiDict[str, str]:
     """Parse a cookie from a string.
 
     The same key can be provided multiple times, the values are stored
@@ -108,28 +135,67 @@ def parse_cookie(
     :meth:`MultiDict.getlist`.
 
     :param cookie: The cookie header as a string.
-    :param charset: The charset for the cookie values.
-    :param errors: The error behavior for the charset decoding.
     :param cls: A dict-like class to store the parsed cookies in.
         Defaults to :class:`MultiDict`.
 
+    .. versionchanged:: 2.3
+        Passing bytes, and the ``charset`` and ``errors`` parameters, are deprecated and
+        will be removed in Werkzeug 3.0.
+
     .. versionadded:: 2.2
     """
-    # PEP 3333 sends headers through the environ as latin1 decoded
-    # strings. Encode strings back to bytes for parsing.
-    if isinstance(cookie, str):
-        cookie = cookie.encode("latin1", "replace")
-
     if cls is None:
         cls = ds.MultiDict
 
-    def _parse_pairs() -> t.Iterator[t.Tuple[str, str]]:
-        for key, val in _cookie_parse_impl(cookie):  # type: ignore
-            key_str = _to_str(key, charset, errors, allow_none_charset=True)
-            val_str = _to_str(val, charset, errors, allow_none_charset=True)
-            yield key_str, val_str
+    if isinstance(cookie, bytes):
+        warnings.warn(
+            "The 'cookie' parameter must be a string. Passing bytes is deprecated and"
+            " will not be supported in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        cookie = cookie.decode()
 
-    return cls(_parse_pairs())
+    if charset is not None:
+        warnings.warn(
+            "The 'charset' parameter is deprecated and will be removed in Werkzeug 3.0",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    else:
+        charset = "utf-8"
+
+    if errors is not None:
+        warnings.warn(
+            "The 'errors' parameter is deprecated and will be removed in Werkzeug 3.0",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    else:
+        errors = "replace"
+
+    if not cookie:
+        return cls()
+
+    cookie = f"{cookie};"
+    out = []
+
+    for ck, cv in _cookie_re.findall(cookie):
+        ck = ck.strip()
+        cv = cv.strip()
+
+        if not ck:
+            continue
+
+        if len(cv) >= 2 and cv[0] == cv[-1] == '"':
+            # Work with bytes here, since a UTF-8 character could be multiple bytes.
+            cv = _cookie_unslash_re.sub(
+                _cookie_unslash_replace, cv[1:-1].encode()
+            ).decode(charset, errors)
+
+        out.append((ck, cv))
+
+    return cls(out)
 
 
 # circular dependencies

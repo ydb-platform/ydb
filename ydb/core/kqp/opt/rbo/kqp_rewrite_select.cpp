@@ -1194,14 +1194,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     TVector<TExprNode::TPtr> joinFilterPredicates;
                     TVector<TExprNode::TPtr> joinFilters;
 
-                    if (joinKeys.empty() && joinPredicates.empty()) {
-                        // Ansi cross join.
-                        ++ansiCrossJoinCount;
-                        continue;
-                    }
-
-                    Y_ENSURE((joinKeys.size() || joinPredicates.size()) && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
-
                     if (tableInputsCount == 2) {
                         leftInput = aliasToInputMap[leftSideAliases[0]];
                         rightInput = aliasToInputMap[rightSideAlias];

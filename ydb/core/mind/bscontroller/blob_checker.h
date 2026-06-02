@@ -33,9 +33,9 @@ public:
     TString ToString() const;
 
 public:
-    ui64 ShortStatus;
-    TMonotonic LastScanFinishedTimestamp;
-    TLogoBlobID MaxCheckedBlob;
+    ui64 ShortStatus = 0;
+    TMonotonic LastScanFinishedTimestamp = TMonotonic::Zero();
+    TLogoBlobID MaxCheckedBlob = TLogoBlobID(0, 0, 0);
 };
 
 } // namespace NBsController

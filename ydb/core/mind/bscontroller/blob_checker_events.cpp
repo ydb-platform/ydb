@@ -33,7 +33,7 @@ TString TEvBlobCheckerFinishQuantum::ToString() const {
 TEvBlobCheckerUpdateGroupStatus::TEvBlobCheckerUpdateGroupStatus(
         TGroupId groupId, TString serializedState, bool finishScan)
     : GroupId(groupId)
-    , SerializedState(serializedState)
+    , SerializedState(std::move(serializedState))
     , FinishScan(finishScan)
 {}
 

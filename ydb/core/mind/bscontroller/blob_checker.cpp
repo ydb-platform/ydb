@@ -65,6 +65,8 @@ TString BlobCheckerWorkerQuantumStatusToString(EBlobCheckerWorkerQuantumStatus v
         return "Error";
     case EBlobCheckerWorkerQuantumStatus::FinishOk:
         return "FinishOk";
+    default:
+        return "Unknown";
     }
 }
 

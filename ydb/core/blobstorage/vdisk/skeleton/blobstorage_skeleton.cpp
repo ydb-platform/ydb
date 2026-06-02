@@ -767,6 +767,7 @@ namespace NKikimr {
         }
 
         void PrivateHandle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
+            Cerr << "DEBUG PrivateHandle# " << ev->TraceId.GetHexTraceId() << Endl;
             IFaceMonGroup->PutMsgs()++;
             IFaceMonGroup->PutTotalBytes() += ev->GetSize();
             TInstant now = TAppData::TimeProvider->Now();

@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
 
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
+
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
@@ -493,6 +495,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             PassAway();
             Done = true;
             return true;
+        }
+        if (RandomNumber<ui32>(1000) == 1) {
+            NRetroTracing::DemandTrace(Span.GetTraceId());
         }
         return false;
     }

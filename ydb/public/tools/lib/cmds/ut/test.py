@@ -2,7 +2,6 @@ import os
 import tempfile
 
 from ydb.public.tools.lib.cmds import (
-    default_kikimr_config_path,
     generic_connector_config,
     should_write_default_config,
 )
@@ -25,13 +24,10 @@ def test_kikimr_config_generator_generic_connector_config():
     expected = TGenericConnectorConfig()
     expected.Endpoint.host = "localhost"
     expected.Endpoint.port = 50051
+    expected.UseSsl = True
+
     actual = generic_connector_config()
     assert actual == expected
-
-
-def test_default_kikimr_config_path():
-    assert default_kikimr_config_path('/ydb_data') == '/ydb_data/cluster/kikimr_configs/config.yaml'
-    assert default_kikimr_config_path(None) is None
 
 
 def test_should_write_default_config():

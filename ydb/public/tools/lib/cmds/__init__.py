@@ -319,12 +319,6 @@ def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
-def default_kikimr_config_path(working_dir):
-    if not working_dir:
-        return None
-    return os.path.join(working_dir, 'cluster', 'kikimr_configs', 'config.yaml')
-
-
 def should_write_default_config(config_path, target_config):
     if config_path:
         return os.path.abspath(config_path) != os.path.abspath(target_config)
@@ -424,6 +418,8 @@ def deploy(arguments):
             os.makedirs(configs_path, exist_ok=True)
             if os.path.abspath(config_path) != os.path.abspath(target_config):
                 shutil.copyfile(config_path, target_config)
+            elif should_write_default_config(None, target_config):
+                original_write_proto_configs(configs_path)
             return
 
         if not should_write_default_config(None, target_config):

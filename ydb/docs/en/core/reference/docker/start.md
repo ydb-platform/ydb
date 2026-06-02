@@ -56,7 +56,7 @@ By default, when starting a Docker container for {{ ydb-short-name }}, a built-i
 If both are set, `--config-path` takes precedence.
 
 ```bash
-docker_args+=( -e YDB_CONFIG=/path/to/your/config/file ); docker run "${docker_args[@]}"
+docker run -e YDB_CONFIG=/path/to/your/config/file "${docker_args[@]}"
 ```
 
 ```bash

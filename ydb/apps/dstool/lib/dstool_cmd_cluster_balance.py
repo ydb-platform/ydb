@@ -9,6 +9,7 @@ It can operate in several modes:
 
 1. Overpopulated PDisk mode (--only-from-overpopulated-pdisks):
    Moves VDisks from PDisks that exceed their expected slot count to less populated PDisks.
+   VDisks whose GroupSizeInUnits does not match the PDisk SlotSizeInUnits are relocated first.
 
 2. Slot-based balancing (--sort-by=slots, default):
    Redistributes VDisks to equalize slot usage across PDisks.
@@ -283,7 +284,7 @@ class BalancingStrategy(IBalancingStrategy):
 
         weight_from = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, pdisk_id)
 
-        common.print_if_verbose(self.args, 'Checking to relocate vdisk from vslot %s on pdisk %s with slot usage %d' % (vslot_id, pdisk_id, pdisk_usage[pdisk_id]), file=sys.stdout)
+        common.print_if_verbose(self.args, 'Checking to relocate vdisk from vslot %s on pdisk %s with slot usage %d, try_blocking=%s' % (vslot_id, pdisk_id, pdisk_usage[pdisk_id], try_blocking), file=sys.stdout)
 
         current_usage = pdisk_usage[pdisk_id]
         if not self.args.only_from_overpopulated_pdisks:
@@ -566,6 +567,18 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
         return True
 
 
+def is_vslot_size_mismatch(vslot, cluster_info):
+    pdisk_id = common.get_pdisk_id(vslot.VSlotId)
+    slot_size_in_units = cluster_info.pdisk_slot_size_in_units_map.get(pdisk_id, 0)
+    
+    group = cluster_info.group_map.get(vslot.GroupId)
+    group_size_in_units = group.GroupSizeInUnits if group is not None else 0
+
+    pu = slot_size_in_units if slot_size_in_units else 1
+    vu = group_size_in_units if group_size_in_units else 1
+    return pu != vu
+
+
 def balance_iteration(args, strategy, iteration_number):
     if strategy.calculate_extra_info():
         common.print_status(args, success=False, error_reason='Failed to calculate extra info')
@@ -591,7 +604,15 @@ def balance_iteration(args, strategy, iteration_number):
         time.sleep(Constants.WAITING_TIME)
         return None
 
-    vslots_ordered_groups_to_reassign = strategy.order_candidate_vslots(candidate_vslots)
+    mismatch_vslots = [v for v in candidate_vslots if is_vslot_size_mismatch(v, strategy.cluster_info)]
+    regular_vslots = [v for v in candidate_vslots if not is_vslot_size_mismatch(v, strategy.cluster_info)]
+    if mismatch_vslots:
+        vslots_ordered_groups_to_reassign = (
+            strategy.order_candidate_vslots(mismatch_vslots) +
+            strategy.order_candidate_vslots(regular_vslots)
+        )
+    else:
+        vslots_ordered_groups_to_reassign = strategy.order_candidate_vslots(candidate_vslots)
     common.print_if_verbose(args, f"Found {len(candidate_vslots)} candidate vslots, {len(vslots_ordered_groups_to_reassign)} groups to reassign", file=sys.stdout)
     was_sent = False
     for vslots in vslots_ordered_groups_to_reassign:

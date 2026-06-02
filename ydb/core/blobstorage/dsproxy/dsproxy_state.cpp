@@ -128,13 +128,15 @@ namespace NKikimr {
                 }
             };
 
+            const bool wasInitial = LifeCyclePhase == TBlobStorageGroupInfo::ELCP_INITIAL;
+
             Y_VERIFY_S(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode(),
                     "EncryptionMode# " << printOptional(EncryptionMode) << " Info# " << Info->ToString());
-            Y_VERIFY_S(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase(),
+            Y_VERIFY_S(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase() || wasInitial,
                     "LifeCyclePhase# " << printOptional(LifeCyclePhase) << " Info# " << Info->ToString());
-            Y_VERIFY_S(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce(),
+            Y_VERIFY_S(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce() || wasInitial,
                     "GroupKeyNonce# " << printOptional(GroupKeyNonce) << " Info# " << Info->ToString());
-            Y_VERIFY_S(!CypherKey || *CypherKey == *Info->GetCypherKey(),
+            Y_VERIFY_S(!CypherKey || *CypherKey == *Info->GetCypherKey() || wasInitial,
                     "CypherKey# " << printOptional(CypherKey) << " Info# " << Info->ToString());
             EncryptionMode = Info->GetEncryptionMode();
             LifeCyclePhase = Info->GetLifeCyclePhase();

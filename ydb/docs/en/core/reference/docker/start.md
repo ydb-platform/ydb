@@ -48,19 +48,14 @@ For more information about stopping and deleting a Docker container with {{ ydb-
 
 ### Overriding the configuration file
 
-By default, when starting a Docker container for {{ ydb-short-name }}, a built-in [configuration file](../configuration/index.md) is used, which provides standard operating parameters. To override the configuration file, you can:
-
-- mount your file at `/ydb_data/cluster/kikimr_configs/config.yaml` — no extra startup parameters are required;
-- pass the `--config-path` argument with the path to a configuration file that has been pre-mounted in the container (for example, in a different directory).
+By default, when starting a Docker container for {{ ydb-short-name }}, a built-in [configuration file](../configuration/index.md) is used, which provides standard operating parameters. To use your own config, mount it at `/ydb_data/cluster/kikimr_configs/config.yaml`:
 
 ```bash
 docker run "${docker_args[@]}" \
   -v $(pwd)/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
 ```
 
-```bash
-docker run "${docker_args[@]}" --config-path /path/to/your/config/file
-```
+The mounted file is not overwritten on the container's first start.
 
 For users who are not experienced with Docker, it's important to understand how to properly mount a configuration file into the container. Below is a step-by-step example:
 

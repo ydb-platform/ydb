@@ -583,4 +583,20 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
 
 }
 
+Y_UNIT_TEST_SUITE(TAlgToKtyTest) {
+
+    Y_UNIT_TEST(GetKtyFromAlg) {
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::RS256), EJWKKeyType::RSA);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::RS384), EJWKKeyType::RSA);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::RS512), EJWKKeyType::RSA);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::PS256), EJWKKeyType::RSA);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::PS384), EJWKKeyType::RSA);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::PS512), EJWKKeyType::RSA);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::ES256), EJWKKeyType::EC);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::ES384), EJWKKeyType::EC);
+        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::ES512), EJWKKeyType::EC);
+    }
+
+}
+
 } // namespace NKikimr::NSecurity

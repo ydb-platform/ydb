@@ -1,5 +1,7 @@
 #include "ic_storage_transport_actor.h"
 
+#include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
+
 #include <ydb/library/actors/util/rope.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -106,7 +108,7 @@ void TICStorageTransportActor::HandleConnect(
     const TEvTransportPrivate::TEvConnect::TPtr& ev,
     const TActorContext& ctx)
 {
-    auto* msg = ev->Get();
+    const auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
@@ -119,14 +121,40 @@ void TICStorageTransportActor::HandleConnect(
         "Sent TEvConnect with requestId# %lu",
         requestId);
 
-    auto request = std::make_unique<NDDisk::TEvConnect>(msg->Credentials);
-
-    ctx.Send(
+    SendWithUndeliveryTracking(
+        ctx,
         msg->ServiceId,
-        request.release(),
-        0,          // flags
-        requestId   // cookie
-    );
+        std::make_unique<NDDisk::TEvConnect>(msg->Credentials),
+        requestId);
+}
+
+void TICStorageTransportActor::HandleConnectUndelivery(
+    const NKikimr::NDDisk::TEvConnect::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received NDDisk::TEvConnect undelivery with requestId# %lu",
+        requestId);
+
+    if (auto* r = ConnectRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        auto result = NKikimrBlobStorage::NDDisk::TEvConnectResult();
+        // How to set undelivery error?
+        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        request.Promise.SetValue(std::move(result));
+        ConnectRequests.erase(requestId);
+    } else {
+        // That means that request is already completed
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "ConnectEvent with requestId# %lu not found",
+            requestId);
+    }
 }
 
 void TICStorageTransportActor::HandleConnectResult(
@@ -786,6 +814,7 @@ STFUNC(TICStorageTransportActor::StateWork)
         cFunc(TEvents::TEvPoison::EventType, PassAway);
 
         HFunc(TEvTransportPrivate::TEvConnect, HandleConnect);
+        HFunc(NDDisk::TEvConnect, HandleConnectUndelivery);
         HFunc(NDDisk::TEvConnectResult, HandleConnectResult);
 
         HFunc(
@@ -837,7 +866,7 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleListPersistentBufferResult);
 
         default:
-            LOG_DEBUG_S(
+            LOG_ERROR_S(
                 TActivationContext::AsActorContext(),
                 NKikimrServices::NBS_PARTITION,
                 "Unhandled event type: " << ev->GetTypeRewrite()

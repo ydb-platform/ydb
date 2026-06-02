@@ -54,6 +54,7 @@ public:
     bool AddTransparentPrefixToTransparentSystemColumns = true;
     bool EnableUserAttributesInTopicQuery = false;
     bool StreamingTopicsReadByDefault = true;
+    bool EnableTopicsPredicatePushdown = false;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

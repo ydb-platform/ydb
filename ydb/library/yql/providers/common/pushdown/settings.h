@@ -47,6 +47,7 @@ struct TSettings {
         NonDeterministic = 1 << 28,
         DecimalCtor = 1 << 29, 
         DateCtor = 1 << 30,
+        AnyExpressionExceptMember = ui64{1} << 32,
     };
 
     explicit TSettings(NLog::EComponent logComponent)
@@ -60,9 +61,13 @@ struct TSettings {
 
     void EnableFunction(const TString& functionName);
 
+    void EnableMember(const TString& memberName);
+
     bool IsEnabled(EFeatureFlag flagMask) const;
 
     bool IsEnabledFunction(const TString& functionName) const;
+
+    bool IsMemberEnabled(const TString& memberName) const;
 
     NLog::EComponent GetLogComponent() const {
         return LogComponent;
@@ -72,6 +77,7 @@ private:
     const NLog::EComponent LogComponent;
     ui64 FeatureFlags = 0;
     std::unordered_set<TString> EnabledFunctions;
+    std::unordered_set<TString> EnabledMembers;
 };
 
 } // namespace NYql::NPushdown

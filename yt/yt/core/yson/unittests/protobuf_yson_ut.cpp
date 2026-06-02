@@ -3202,5 +3202,13 @@ TEST(TCustomEnumFieldConverterTest, OtherEnumsWorkingDefault)
 
 //////////////////////////////////////////////////////////////////////////////
 
+TEST(TProtobufFormatterTest, Format)
+{
+    EXPECT_EQ("blue", Format("%v", NProto::EColor::Color_Blue));
+    EXPECT_EQ("42", Format("%v", static_cast<NProto::EColor>(42)));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NYson

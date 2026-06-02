@@ -4305,6 +4305,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
         ui32 cnt = 0;
         ui32 size = 0;
         ui32 lastBlobSize = 0;
+        bool hasBatches = false;
 
         TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                           0,
@@ -4321,7 +4322,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
                                                           cnt,
                                                           size,
                                                           lastBlobSize,
-                                                          ctx);
+                                                          ctx,
+                                                          info.CanReadBatches,
+                                                          hasBatches);
 
         UNIT_ASSERT(!early.Defined());
         UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 8u);
@@ -4376,6 +4379,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyStopsOnEmptyBlob, TPartitionFixture) {
         ui32 cnt = 0;
         ui32 size = 0;
         ui32 lastBlobSize = 0;
+        bool hasBatches = false;
 
         TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                           0,
@@ -4392,7 +4396,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodyStopsOnEmptyBlob, TPartitionFixture) {
                                                           cnt,
                                                           size,
                                                           lastBlobSize,
-                                                          ctx);
+                                                          ctx,
+                                                          info.CanReadBatches,
+                                                          hasBatches);
 
         UNIT_ASSERT(early.Defined());
         UNIT_ASSERT(early->Event.Get() != nullptr);
@@ -4447,6 +4453,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyGotGap, TPartitionFixture) {
             ui32 cnt = 0;
             ui32 size = 0;
             ui32 lastBlobSize = 0;
+            bool hasBatches = false;
 
             TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                               0,
@@ -4463,7 +4470,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodyGotGap, TPartitionFixture) {
                                                               cnt,
                                                               size,
                                                               lastBlobSize,
-                                                              ctx);
+                                                              ctx,
+                                                              info.CanReadBatches,
+                                                              hasBatches);
 
             UNIT_ASSERT(!early.Defined());
             UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
@@ -4496,6 +4505,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyGotGap, TPartitionFixture) {
             ui32 cnt = 0;
             ui32 size = 0;
             ui32 lastBlobSize = 0;
+            bool hasBatches = false;
 
             TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                               0,
@@ -4512,7 +4522,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodyGotGap, TPartitionFixture) {
                                                               cnt,
                                                               size,
                                                               lastBlobSize,
-                                                              ctx);
+                                                              ctx,
+                                                              info.CanReadBatches,
+                                                              hasBatches);
 
             UNIT_ASSERT(!early.Defined());
             UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
@@ -4562,6 +4574,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodySkipsBatchWhenReaderAhead, TPartitionFixture) {
         ui32 cnt = 0;
         ui32 size = 0;
         ui32 lastBlobSize = 0;
+        bool hasBatches = false;
 
         TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                           0,
@@ -4578,7 +4591,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodySkipsBatchWhenReaderAhead, TPartitionFixture) {
                                                           cnt,
                                                           size,
                                                           lastBlobSize,
-                                                          ctx);
+                                                          ctx,
+                                                          info.CanReadBatches,
+                                                          hasBatches);
 
         UNIT_ASSERT(!early.Defined());
         UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 0u);
@@ -4628,6 +4643,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
             ui32 cnt = 0;
             ui32 size = 0;
             ui32 lastBlobSize = 0;
+            bool hasBatches = false;
 
             TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                               0,
@@ -4644,7 +4660,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
                                                               cnt,
                                                               size,
                                                               lastBlobSize,
-                                                              ctx);
+                                                              ctx,
+                                                              info.CanReadBatches,
+                                                              hasBatches);
 
             UNIT_ASSERT(!early.Defined());
             UNIT_ASSERT(needStop);
@@ -4675,6 +4693,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
             ui32 cnt = 0;
             ui32 size = 0;
             ui32 lastBlobSize = 0;
+            bool hasBatches = false;
 
             TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                               0,
@@ -4691,7 +4710,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
                                                               cnt,
                                                               size,
                                                               lastBlobSize,
-                                                              ctx);
+                                                              ctx,
+                                                              info.CanReadBatches,
+                                                              hasBatches);
 
             UNIT_ASSERT(!early.Defined());
             UNIT_ASSERT(!needStop);
@@ -4715,6 +4736,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
             ui32 cnt = 0;
             ui32 size = 0;
             ui32 lastBlobSize = 0;
+            bool hasBatches = false;
 
             TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
                                                               0,
@@ -4731,7 +4753,9 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
                                                               cnt,
                                                               size,
                                                               lastBlobSize,
-                                                              ctx);
+                                                              ctx,
+                                                              info.CanReadBatches,
+                                                              hasBatches);
 
             UNIT_ASSERT(!early.Defined());
             UNIT_ASSERT(needStop);

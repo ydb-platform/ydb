@@ -33,7 +33,6 @@ DEFAULT_OUTPUT = SCRIPT_DIR / 'mon_endpoints_auth.md'
 
 VIEWER_DIR = REPO_ROOT / 'ydb/core/viewer'
 VIEWER_CPP = VIEWER_DIR / 'viewer.cpp'
-AUDIT_DENYLIST_CPP = REPO_ROOT / 'ydb/core/mon/audit/audit_denylist.cpp'
 
 CHECK_ACCESS_PATTERN = re.compile(
     r'CheckAccess(Monitoring|Viewer|Administration)\s*\(',
@@ -50,7 +49,8 @@ POLICY_CHECK_LABEL = {
 }
 
 TOKEN_ORDER = [
-    ('__none__', 'public'),
+    ('__none__', 'anonymus'),
+    ('user@builtin', 'public'),
     ('database@builtin', 'database'),
     ('viewer@builtin', 'viewer'),
     ('monitoring@builtin', 'monitoring'),
@@ -58,24 +58,28 @@ TOKEN_ORDER = [
 ]
 
 GROUPS = [
-    ('public', 'Группа 1 — public (no token)'),
-    ('database', 'Группа 2 — database'),
-    ('viewer', 'Группа 3 — viewer'),
-    ('monitoring', 'Группа 4 — monitoring'),
-    ('unavailable', 'Группа 5 — unavailable'),
+    ('anonymus', 'Группа 1 — anonymus (no token)'),
+    ('public', 'Группа 2 — public'),
+    ('database', 'Группа 3 — database'),
+    ('viewer', 'Группа 4 — viewer'),
+    ('monitoring', 'Группа 5 — monitoring'),
+    ('admin', 'Группа 6 — admin'),
+    ('unavailable', 'Группа 7 — unavailable'),
 ]
 
 ACCESS_LEVEL_RANK = {
-    'public': 0,
-    'database': 1,
-    'viewer': 2,
-    'monitoring': 3,
-    'admin': 4,
-    'unavailable': 5,
+    'anonymus': 0,
+    'public': 1,
+    'database': 2,
+    'viewer': 3,
+    'monitoring': 4,
+    'admin': 5,
+    'unavailable': 6,
 }
 
 LEVEL_LABELS = {
-    'public': 'без токена',
+    'anonymus': 'без токена',
+    'public': 'user@builtin',
     'database': 'database@builtin',
     'viewer': 'viewer@builtin',
     'monitoring': 'monitoring@builtin',
@@ -131,8 +135,6 @@ class Row:
 
     @property
     def group(self) -> str:
-        if self.current_level == 'admin':
-            return 'monitoring'
         return self.current_level
 
 
@@ -227,15 +229,15 @@ def resolve_access_level(
 ) -> tuple[str, str]:
     """Return (access_level, comment).
 
-    For public/database endpoints, 400 still means the request passed the access
-    check and reached handler validation. For viewer+ endpoints, 400 can be a
-    bad method/body/params before the protected action, so use handler policy
-    when there is no successful response.
+    For anonymus/public/database endpoints, 400 still means the request passed
+    the access check and reached handler validation. For viewer+ endpoints, 400
+    can be a bad method/body/params before the protected action, so use handler
+    policy when there is no successful response.
     """
     if _uniform_statuses(status_by_token):
         code = next(iter(status_by_token.values()))
         if code in (404, 405):
-            return 'public', f'одинаковый {code} для всех токенов'
+            return 'anonymus', f'одинаковый {code} для всех токенов'
 
     policy = viewer_access.get(path) or policy_levels.get(path)
     reach = _canon_handler_reach_level(status_by_token)
@@ -315,29 +317,6 @@ def _parse_viewer_endpoint_access(viewer_cpp: Path) -> dict[str, str]:
     return result
 
 
-def _parse_audit_denylist(cpp_path: Path) -> list[tuple[str, bool]]:
-    if not cpp_path.is_file():
-        return []
-    text = cpp_path.read_text(encoding='utf-8')
-    pattern = re.compile(
-        r'\{\s*\.Path\s*=\s*"([^"]+)"(?:,\s*\.Recursive\s*=\s*(true|false))?\s*\}',
-    )
-    entries: list[tuple[str, bool]] = []
-    for path, recursive in pattern.findall(text):
-        entries.append((path, recursive == 'true'))
-    return entries
-
-
-def _path_in_denylist(path: str, denylist: list[tuple[str, bool]]) -> str | None:
-    for pattern, recursive in denylist:
-        if recursive:
-            if path == pattern or path.startswith(pattern + '/'):
-                return pattern
-        elif path == pattern:
-            return pattern
-    return None
-
-
 def _is_static(path: str) -> bool:
     if path in STATIC_EXACT:
         return True
@@ -378,7 +357,7 @@ def _target_access_level(path: str, viewer_access: dict[str, str]) -> str:
     return 'monitoring'
 
 
-def _target_audited(method: str, path: str, target_level: str, denylist: list[tuple[str, bool]]) -> bool:
+def _target_audited(method: str, path: str, target_level: str) -> bool:
     path_only = path.split('?')[0]
 
     if method == 'OPTIONS':
@@ -390,20 +369,16 @@ def _target_audited(method: str, path: str, target_level: str, denylist: list[tu
     if path_only in AUDIT_FORCE_LOG_PATHS:
         return True
 
-    if path_only in AUDIT_EXCEPTION_NO_LOG:
+    if path_only in AUDIT_EXCEPTION_NO_LOG or path_only.startswith('/internal/'):
         return False
 
     if _is_static(path_only):
         return False
 
-    deny_pattern = _path_in_denylist(path_only, denylist)
-    if deny_pattern is not None:
-        return False
-
     if target_level in ('monitoring', 'admin'):
         return True
 
-    return True
+    return False
 
 
 def _format_endpoint(path: str, query: str) -> str:
@@ -430,7 +405,6 @@ def _iter_rows(
     all_queries: bool,
     viewer_access: dict[str, str],
     policy_levels: dict[str, str],
-    denylist: list[tuple[str, bool]],
 ) -> list[Row]:
     rows: list[Row] = []
 
@@ -464,7 +438,7 @@ def _iter_rows(
                     viewer_access=viewer_access,
                 )
                 target = _target_access_level(path, viewer_access)
-                audited = _target_audited(method, path, target, denylist)
+                audited = _target_audited(method, path, target)
                 rows.append(
                     Row(
                         endpoint=_format_endpoint(path, query),
@@ -505,8 +479,8 @@ def _render_markdown(rows: list[Row], canon_path: Path) -> str:
         '',
         '## Как определяется «текущий уровень»',
         '',
-        '- Для public/database уровней **400** считается признаком, что запрос прошёл access check '
-        'и дошёл до валидации handler.',
+        '- Для anonymus/public/database уровней **400** считается признаком, что запрос прошёл '
+        'access check и дошёл до валидации handler.',
         '- Для viewer+ уровней **2xx** из canon считается успешным доступом.',
         '- Если **2xx** нет, для ручек viewer+ уровень берётся из политики handler '
         '(`CheckAccessViewer` / `CheckAccessMonitoring` / `CheckAccessAdministration` в C++), '
@@ -574,13 +548,11 @@ def main() -> None:
     canon = _load_canon(args.canon)
     viewer_access = _parse_viewer_endpoint_access(VIEWER_CPP)
     policy_levels = _parse_handler_policy_levels(VIEWER_DIR)
-    denylist = _parse_audit_denylist(AUDIT_DENYLIST_CPP)
     rows = _iter_rows(
         canon,
         all_queries=args.all_queries,
         viewer_access=viewer_access,
         policy_levels=policy_levels,
-        denylist=denylist,
     )
     markdown = _render_markdown(rows, args.canon)
     args.output.write_text(markdown, encoding='utf-8')

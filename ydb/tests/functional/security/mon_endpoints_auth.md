@@ -14,41 +14,45 @@
 
 ## Как определяется «текущий уровень»
 
-- Для public/database уровней **400** считается признаком, что запрос прошёл access check и дошёл до валидации handler.
+- Для anonymus/public/database уровней **400** считается признаком, что запрос прошёл access check и дошёл до валидации handler.
 - Для viewer+ уровней **2xx** из canon считается успешным доступом.
 - Если **2xx** нет, для ручек viewer+ уровень берётся из политики handler (`CheckAccessViewer` / `CheckAccessMonitoring` / `CheckAccessAdministration` в C++), а не из первого **400** в canon.
 - **400** в комментарии для viewer+ — диагностика (невалидный метод/body/параметры), а не доказательство, что этого токена достаточно для действия.
 
-## Группа 1 — public (no token)
+## Группа 1 — anonymus (no token)
 
 | Endpoint | Метод | Текущий уровень | Аудит лог | Комментарий |
 | --- | --- | --- | --- | --- |
-| `/actors/tablet_counters_aggregator` | GET | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/actors/tablet_counters_aggregator` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/counters` | GET | public | не логируется | без токена: 200 — запрос дошёл до handler |
-| `/counters` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/counters/hosts` | GET | public | не логируется | без токена: 200 — запрос дошёл до handler |
-| `/counters/hosts` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/followercounters` | GET | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/followercounters` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/healthcheck?database=/Root` | GET | public | не логируется | без токена: 200 — запрос дошёл до handler |
-| `/healthcheck?database=/Root` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/labeledcounters` | GET | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/labeledcounters` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/login` | GET | public | логируется | без токена: 400 — запрос дошёл до handler |
-| `/login` | POST | public | логируется | без токена: 400 — запрос дошёл до handler |
-| `/monitoring/` | GET | public | не логируется | без токена: 200 — запрос дошёл до handler |
-| `/monitoring/` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/node/1/monitoring` | GET | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/node/1/monitoring` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/ping` | GET | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/ping` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/status` | GET | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/status` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
-| `/viewer/capabilities` | GET | public | не логируется | без токена: 200 — запрос дошёл до handler |
-| `/viewer/capabilities` | POST | public | логируется | без токена: 200 — запрос дошёл до handler |
+| `/actors/tablet_counters_aggregator` | GET | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/actors/tablet_counters_aggregator` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/counters` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/counters` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/counters/hosts` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/counters/hosts` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/followercounters` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/followercounters` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/healthcheck?database=/Root` | GET | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/healthcheck?database=/Root` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/labeledcounters` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/labeledcounters` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/login` | GET | anonymus | не логируется | без токена: 400 — запрос дошёл до handler |
+| `/login` | POST | anonymus | логируется | без токена: 400 — запрос дошёл до handler |
+| `/monitoring/` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/monitoring/` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/node/1/monitoring` | GET | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/node/1/monitoring` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/ping` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/ping` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/status` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/status` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
+| `/viewer/capabilities` | GET | anonymus | не логируется | без токена: 200 — запрос дошёл до handler |
+| `/viewer/capabilities` | POST | anonymus | логируется | без токена: 200 — запрос дошёл до handler |
 
-## Группа 2 — database
+## Группа 2 — public
+
+_Нет эндпойнтов._
+
+## Группа 3 — database
 
 | Endpoint | Метод | Текущий уровень | Аудит лог | Комментарий |
 | --- | --- | --- | --- | --- |
@@ -67,34 +71,22 @@
 | `/scheme/directory` | DELETE | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/scheme/directory` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/scheme/directory` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/storage/groups?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
-| `/storage/groups?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/storage/groups` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/storage/groups` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
 | `/viewer` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/acl?database=/Root` | GET | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/acl?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/autocomplete?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
-| `/viewer/autocomplete?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/viewer/autocomplete` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/viewer/autocomplete` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
 | `/viewer/browse` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/browse` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/bscontrollerinfo` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/bscontrollerinfo` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/bsgroupinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/bsgroupinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/check_access?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/check_access?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/cluster` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/cluster` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/commit_offset` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/commit_offset` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/compute` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/compute` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/config` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/config` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/content` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/content` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/counters` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/counters` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/database_stats?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/database_stats?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/describe?database=/Root` | GET | database | логируется | database@builtin: 400 — запрос дошёл до handler |
@@ -107,99 +99,107 @@
 | `/viewer/describe_topic` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/describe_transfer` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/describe_transfer` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/feature_flags?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/feature_flags?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/graph` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/graph` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/groups?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/groups?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/hiveinfo` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/hiveinfo` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/hivestats` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/hivestats` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/hotkeys?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/hotkeys?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/labeledcounters` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/labeledcounters` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/metainfo` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/metainfo` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/multipart_counter?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/multipart_counter?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/netinfo` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/netinfo` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/nodeinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/nodeinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/nodelist?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
-| `/viewer/nodelist?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
-| `/viewer/nodes?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
-| `/viewer/nodes?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
-| `/viewer/pdiskinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/pdiskinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/peers?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/peers?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
+| `/viewer/nodelist` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/viewer/nodelist` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/viewer/nodes` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/viewer/nodes` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
 | `/viewer/plan2svg` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/plan2svg` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/pqconsumerinfo` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/pqconsumerinfo` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/put_record` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/put_record` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/query?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/query?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/render?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/render?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/simple_counter?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/simple_counter?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/sse_counter?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/sse_counter?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/storage` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/storage` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
 | `/viewer/storage_stats?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/storage_stats?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/storage_usage` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/storage_usage` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/sysinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/sysinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/tabletcounters` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/tabletcounters` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/tabletinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
-| `/viewer/tabletinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/viewer/tabletinfo` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
+| `/viewer/tabletinfo` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler; политика: database |
 | `/viewer/tenantinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/tenantinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/tenants` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/tenants` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/topic_data` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/topic_data` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/topicinfo` | GET | database | не логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/topicinfo` | POST | database | логируется | database@builtin: 200 — запрос дошёл до handler |
-| `/viewer/v2/json/nodeinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/nodeinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/pdiskinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/pdiskinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/sysinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/sysinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/tabletinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/tabletinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/vdiskinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/v2/json/vdiskinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/vdiskinfo?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
-| `/viewer/vdiskinfo?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
+| `/viewer/v2/json/tabletinfo` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
+| `/viewer/v2/json/tabletinfo` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/whoami?database=/Root` | GET | database | не логируется | database@builtin: 400 — запрос дошёл до handler |
 | `/viewer/whoami?database=/Root` | POST | database | логируется | database@builtin: 400 — запрос дошёл до handler |
 
-## Группа 3 — viewer
+## Группа 4 — viewer
 
 | Endpoint | Метод | Текущий уровень | Аудит лог | Комментарий |
 | --- | --- | --- | --- | --- |
-| `/pdisk/info` | GET | viewer | не логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
+| `/pdisk/info` | GET | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
 | `/pdisk/info` | POST | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
-| `/vdisk/blobindexstat` | GET | viewer | не логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
+| `/vdisk/blobindexstat` | GET | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
 | `/vdisk/blobindexstat` | POST | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
-| `/vdisk/getblob` | GET | viewer | не логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
+| `/vdisk/getblob` | GET | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
 | `/vdisk/getblob` | POST | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
-| `/vdisk/vdiskstat` | GET | viewer | не логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
+| `/vdisk/vdiskstat` | GET | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
 | `/vdisk/vdiskstat` | POST | viewer | логируется | viewer@builtin: 400 — запрос дошёл до handler, но ответ bad request |
+| `/viewer/bsgroupinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/bsgroupinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/cluster` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/cluster` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/compute` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/compute` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/config` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/config` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/counters` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/counters` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/feature_flags` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/feature_flags` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/graph` | GET | viewer | не логируется | политика: CheckAccessViewer; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400 |
+| `/viewer/graph` | POST | viewer | логируется | политика: CheckAccessViewer; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400 |
+| `/viewer/groups` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/groups` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/hiveinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/hiveinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/hivestats` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/hivestats` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/multipart_counter` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/multipart_counter` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/netinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/netinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/nodeinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/nodeinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/pdiskinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/pdiskinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/peers` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/peers` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/pqconsumerinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/pqconsumerinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/render` | GET | viewer | не логируется | политика: CheckAccessViewer; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400 |
+| `/viewer/render` | POST | viewer | логируется | политика: CheckAccessViewer; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400 |
+| `/viewer/simple_counter` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/simple_counter` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/sse_counter` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/sse_counter` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/storage` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/storage` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/storage_usage` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/storage_usage` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/sysinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/sysinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/tenants` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/tenants` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/topicinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/topicinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/nodeinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/nodeinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/pdiskinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/pdiskinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/sysinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/sysinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/vdiskinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/v2/json/vdiskinfo` | POST | viewer | логируется | viewer@builtin: 200 |
+| `/viewer/vdiskinfo` | GET | viewer | не логируется | viewer@builtin: 200 |
+| `/viewer/vdiskinfo` | POST | viewer | логируется | viewer@builtin: 200 |
 
-## Группа 4 — monitoring
+## Группа 5 — monitoring
 
 | Endpoint | Метод | Текущий уровень | Аудит лог | Комментарий |
 | --- | --- | --- | --- | --- |
@@ -271,9 +271,9 @@
 | `/memory/statistics` | POST | monitoring | логируется | monitoring@builtin: 200 |
 | `/nodetabmon` | GET | monitoring | логируется | monitoring@builtin: 200 |
 | `/nodetabmon` | POST | monitoring | логируется | monitoring@builtin: 200 |
-| `/pdisk/restart` | GET | monitoring | не логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
+| `/pdisk/restart` | GET | monitoring | логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
 | `/pdisk/restart` | POST | monitoring | логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
-| `/pdisk/status` | GET | monitoring | не логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
+| `/pdisk/status` | GET | monitoring | логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
 | `/pdisk/status` | POST | monitoring | логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
 | `/static/css/bootstrap.min.css` | GET | monitoring | не логируется | monitoring@builtin: 200 |
 | `/static/css/bootstrap.min.css` | POST | monitoring | логируется | monitoring@builtin: 200 |
@@ -295,7 +295,7 @@
 | `/tablets` | POST | monitoring | логируется | monitoring@builtin: 200 |
 | `/trace` | GET | monitoring | логируется | monitoring@builtin: 200 |
 | `/trace` | POST | monitoring | логируется | monitoring@builtin: 200 |
-| `/vdisk/evict` | GET | monitoring | не логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
+| `/vdisk/evict` | GET | monitoring | логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
 | `/vdisk/evict` | POST | monitoring | логируется | политика: CheckAccessMonitoring; canon: viewer@builtin: 400, monitoring@builtin: 400, root@builtin: 400; canon доходит до handler с viewer@builtin (400 ≠ уровень доступа) |
 | `/ver` | GET | monitoring | не логируется | monitoring@builtin: 200 |
 | `/ver` | POST | monitoring | логируется | monitoring@builtin: 200 |
@@ -310,7 +310,16 @@
 | `/viewer/v2/json/storage` | GET | monitoring | не логируется | monitoring@builtin: 200 |
 | `/viewer/v2/json/storage` | POST | monitoring | логируется | monitoring@builtin: 200 |
 
-## Группа 5 — unavailable
+## Группа 6 — admin
+
+| Endpoint | Метод | Текущий уровень | Аудит лог | Комментарий |
+| --- | --- | --- | --- | --- |
+| `/viewer/bscontrollerinfo` | GET | admin | логируется | root@builtin: 200 |
+| `/viewer/bscontrollerinfo` | POST | admin | логируется | root@builtin: 200 |
+| `/viewer/topic_data` | GET | admin | логируется | политика: CheckAccessAdministration; canon: viewer@builtin: 403, monitoring@builtin: 403, root@builtin: 400 |
+| `/viewer/topic_data` | POST | admin | логируется | политика: CheckAccessAdministration; canon: viewer@builtin: 403, monitoring@builtin: 403, root@builtin: 400 |
+
+## Группа 7 — unavailable
 
 | Endpoint | Метод | Текущий уровень | Аудит лог | Комментарий |
 | --- | --- | --- | --- | --- |
@@ -334,7 +343,7 @@
 | `/fq_diag/quotas` | POST | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/operation` | GET | unavailable | не логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/operation` | POST | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
-| `/pdisk` | GET | unavailable | не логируется | нет успешного доступа (2xx) и нет политики handler |
+| `/pdisk` | GET | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/pdisk` | POST | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/query` | GET | unavailable | не логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/query` | POST | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
@@ -342,5 +351,5 @@
 | `/scheme` | POST | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/storage` | GET | unavailable | не логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/storage` | POST | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
-| `/vdisk` | GET | unavailable | не логируется | нет успешного доступа (2xx) и нет политики handler |
+| `/vdisk` | GET | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |
 | `/vdisk` | POST | unavailable | логируется | нет успешного доступа (2xx) и нет политики handler |

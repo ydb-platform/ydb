@@ -41,7 +41,7 @@ aws --endpoint "$ENDPOINT" \
   --attributes FifoQueue=true
 ```
 
-После выполнения это команды будет создан [топик](../../concepts/datamodel/topic.md) с именем my_topic.fifo и читателем [shared-читателем](../../concepts/datamodel/topic.md#shared-consumer) с именем `sqs_consumer`, у которого будет включено сохранение порядка сообщений.
+После выполнения этой команды будет создан [топик](../../concepts/datamodel/topic.md) с именем my_topic.fifo и читателем [shared-читателем](../../concepts/datamodel/topic.md#shared-consumer) с именем `sqs_consumer`, у которого будет включено сохранение порядка сообщений.
 
 ## Запись в топик и чтение из топика через AWS CLI
 

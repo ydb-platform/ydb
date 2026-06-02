@@ -16,7 +16,18 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
     auto headerConclusion = TSubColumnsHeader::ReadHeader(originalData, externalInfo);
     if (headerConclusion.IsFail()) {
-        return headerConclusion;
+        if (externalInfo.GetDefaultSerializer()) {
+            NPlain::TConstructor plainConstructor;
+            auto plainData = plainConstructor.DeserializeFromString(originalData, externalInfo);
+            if (plainData.IsSuccess()) {
+                auto made = TSubColumnsArray::Make(plainData.GetResult(), Settings, externalInfo.GetColumnType());
+                if (made.IsFail()) {
+                    return made.GetError();
+                }
+                return made.DetachResult();
+            }
+        }
+        return TConclusionStatus::Fail(headerConclusion.GetErrorMessage());
     }
     ui32 currentIndex = headerConclusion->GetHeaderSize();
     const auto& proto = headerConclusion->GetAddressesProto();

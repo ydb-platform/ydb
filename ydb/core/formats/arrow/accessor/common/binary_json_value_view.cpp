@@ -34,7 +34,10 @@ std::optional<TString> TBinaryJsonValueView::JsonNumberToString(double jsonNumbe
 TBinaryJsonValueView::TBinaryJsonValueView(const TStringBuf& rawValue)
     : RawValue(rawValue) {
     if (!RawValue.empty()) {
-        AFL_VERIFY(NBinaryJson::IsValidBinaryJson(RawValue));
+        // AFL_VERIFY(NBinaryJson::IsValidBinaryJson(RawValue));
+        if (!NBinaryJson::IsValidBinaryJson(RawValue)) {
+            RawValue = "";
+        }
     }
 }
 

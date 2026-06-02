@@ -2385,12 +2385,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         StopGRpcServers(GRpcServersWrapper, true);
     }
 
-    if (ActorSystem) {
-        ActorSystem->Stop();
-    }
-
     if (YqSharedResources) {
         YqSharedResources->Stop();
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Stop();
     }
 
     if (ModuleFactories) {

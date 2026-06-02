@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -10,6 +10,7 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -43,7 +44,11 @@ inline constexpr const char* ImplTable = "indexImplTable";
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index, TString& explain);
 TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const TTableColumns& table, const TIndexColumns& index);
 
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
+
 std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
+
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 

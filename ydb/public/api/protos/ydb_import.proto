@@ -61,6 +61,17 @@ message ImportFromS3Settings {
         string destination_path = 2;
     }
 
+    enum IndexPopulationMode {
+        // If unspecified, use default - Build
+        INDEX_POPULATION_MODE_UNSPECIFIED = 0;
+        // Build index
+        INDEX_POPULATION_MODE_BUILD = 1;
+        // Import materialized index
+        INDEX_POPULATION_MODE_IMPORT = 2;
+        // Try to import materialized index, build otherwise
+        INDEX_POPULATION_MODE_AUTO = 3;
+    }
+
     string endpoint = 1 [(required) = true];
     Scheme scheme = 2; // HTTPS if not specified
     string bucket = 3 [(required) = true];
@@ -99,6 +110,10 @@ message ImportFromS3Settings {
     // If encryption_settings field is not specified,
     // the resulting data is considered not encrypted.
     Ydb.Export.EncryptionSettings encryption_settings = 15;
+
+    // Index population mode.
+    // If not specified, indexes will be built.
+    IndexPopulationMode index_population_mode = 16;
 }
 
 message ImportFromS3Result {

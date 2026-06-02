@@ -1037,8 +1037,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     // Parquet Export Tests
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleShardTableWithParquet, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
+        RunParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1048,8 +1048,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/Table", ""}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnMultiShardTableWithParquet, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnMultiShardTableWithParquet, 2, 1, false) {
+        RunParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
@@ -1060,8 +1060,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/Table", ""}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnManyTablesWithParquet, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnManyTablesWithParquet, 2, 1, false) {
+        RunParquetExport<false>(t, {
             R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1077,8 +1077,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/Table1", "table1"}, {"/MyRoot/Table2", "table2"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnViewsAndTablesWithParquet, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTablesWithParquet, 2, 1, false) {
+        RunParquetExport<false>(t, {
             {
                 EPathTypeView,
                 R"(
@@ -1097,8 +1097,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/View", "view"}, {"/MyRoot/Table", "table"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnParquetWithSmallRowGroup, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithSmallRowGroup, 2, 1, false) {
+        RunParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1110,8 +1110,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         MakeParquetSettingsWithRowGroupSize(100));
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnParquetWithLargeRowGroup, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithLargeRowGroup, 2, 1, false) {
+        RunParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1123,8 +1123,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         MakeParquetSettingsWithRowGroupSize(10000));
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnParquetWithZstdCompression, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithZstdCompression, 2, 1, false) {
+        RunParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1136,43 +1136,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         MakeParquetSettingsWithCompression("zstd"));
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldFailWhenParquetDisabled, 2, 1, false, IsFs) {
-        TExportEnv<IsFs> env({{"/MyRoot/Table", ""}});
-
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            env.SetupRuntime(runtime);
-            // Disable Parquet feature flag
-            runtime.GetAppData().FeatureFlags.SetEnableParquetForS3Export(false);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-            {
-                TInactiveZone inactive(activeZone);
-                CreateSchemeObjects(t, runtime, {
-                    R"(
-                        Name: "Table"
-                        Columns { Name: "key" Type: "Utf8" }
-                        Columns { Name: "value" Type: "Utf8" }
-                        KeyColumnNames: ["key"]
-                    )",
-                });
-
-                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request, "", "", Ydb::StatusIds::BAD_REQUEST);
-            }
-        });
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedWhenParquetEnabled, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
-            R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-        }, {{"/MyRoot/Table", ""}});
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldCreateParquetFiles, 2, 1, false, IsFs) {
-        TExportEnv<IsFs> env({{"/MyRoot/Table", ""}}, MakeParquetSettings());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldCreateParquetFiles, 2, 1, false) {
+        TExportEnv<false> env({{"/MyRoot/Table", ""}}, MakeParquetSettings());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             env.SetupRuntime(runtime);
@@ -1197,7 +1162,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 // Verify that Parquet files were created
-                UNIT_ASSERT(env.HasParquetFile("/data_0"));
+                UNIT_ASSERT(env.HasParquetFile("/data_00"));
 
                 TestGetExport(runtime, exportId, "/MyRoot");
                 TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
@@ -1207,8 +1172,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnParquetWithComplexTypes, 2, 1, false, IsFs) {
-        RunParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithComplexTypes, 2, 1, false) {
+        RunParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1222,52 +1187,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/Table", ""}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldFailOnInvalidRowGroupSize, 2, 1, false, IsFs) {
-        TExportEnv<IsFs> env({{"/MyRoot/Table", ""}}, MakeParquetSettingsWithRowGroupSize(0));
-
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-            {
-                TInactiveZone inactive(activeZone);
-                CreateSchemeObjects(t, runtime, {
-                    R"(
-                        Name: "Table"
-                        Columns { Name: "key" Type: "Utf8" }
-                        Columns { Name: "value" Type: "Utf8" }
-                        KeyColumnNames: ["key"]
-                    )",
-                });
-
-                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request, "", "", Ydb::StatusIds::BAD_REQUEST);
-            }
-        });
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldFailOnUnsupportedCompression, 2, 1, false, IsFs) {
-        TExportEnv<IsFs> env({{"/MyRoot/Table", ""}}, MakeParquetSettingsWithCompression("invalid"));
-
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            env.SetupRuntime(runtime);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-            {
-                TInactiveZone inactive(activeZone);
-                CreateSchemeObjects(t, runtime, {
-                    R"(
-                        Name: "Table"
-                        Columns { Name: "key" Type: "Utf8" }
-                        Columns { Name: "value" Type: "Utf8" }
-                        KeyColumnNames: ["key"]
-                    )",
-                });
-
-                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request, "", "", Ydb::StatusIds::BAD_REQUEST);
-            }
-        });
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleShardTableWithParquet, 2, 1, false, IsFs) {
-        CancelParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
+        CancelParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1277,8 +1198,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/Table", ""}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSingleShardTableWithParquet, 2, 1, false, IsFs) {
-        ForgetParquetExport<IsFs>(t, {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
+        ForgetParquetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }

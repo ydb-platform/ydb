@@ -50,8 +50,8 @@ std::optional<NQuery::TTxSettings> ParseBeginTransactionIsolation(TStringBuf lin
 
 // Extracts the user-facing mode token from a BEGIN line, if any.
 //
-// Returns the lowercased mode token (e.g. "online-ro") for inputs like
-// "BEGIN online-ro" or "BEGIN TRANSACTION snapshot-ro".
+// Returns the lowercased mode token (e.g. "snapshot-ro") for inputs like
+// "BEGIN snapshot-ro" or "BEGIN TRANSACTION read-committed-rw".
 // Returns std::nullopt if the line is not a BEGIN command or has no mode
 // token after the prefix. Used to produce targeted diagnostics for known but
 // unsupported modes.
@@ -61,6 +61,11 @@ std::optional<TString> ExtractBeginModeToken(TStringBuf line);
 // tx_control (--tx-mode), not as an open interactive transaction. Today:
 // online-ro and stale-ro.
 bool IsOneShotOnlyTxMode(TStringBuf mode);
+
+// True if a BEGIN line has tokens after the mode (e.g. "BEGIN serializable-rw
+// extra"). Such lines are rejected as malformed rather than with the
+// one-shot-mode hint.
+bool HasTrailingBeginTokens(TStringBuf line);
 
 // Human-readable list of supported mode names for help / error messages.
 TString GetTxModeNamesForHelp();

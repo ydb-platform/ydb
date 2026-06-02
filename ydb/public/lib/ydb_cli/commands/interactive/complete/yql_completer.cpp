@@ -233,10 +233,10 @@ namespace {
     //
     // Given the user's input split into completed tokens and a partial last
     // token, the completer scans a precomputed list of "full TCL commands"
-    // (e.g. "BEGIN TRANSACTION online-ro INCONSISTENT READS") and for every
-    // match returns only the *next word* — never the whole tail. This produces
-    // the same UX as the YQL completer (e.g. typing `BEGIN T<TAB>` proposes
-    // `TRANSACTION`, not `TRANSACTION online-ro INCONSISTENT READS`).
+    // (e.g. "BEGIN TRANSACTION serializable-rw") and for every match returns
+    // only the *next word* — never the whole tail. This produces the same UX
+    // as the YQL completer (e.g. typing `BEGIN T<TAB>` proposes `TRANSACTION`,
+    // not `TRANSACTION serializable-rw`).
     class TTclCompleter {
     public:
         explicit TTclCompleter(const std::vector<TString>& commands) {

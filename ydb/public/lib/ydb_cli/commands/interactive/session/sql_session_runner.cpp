@@ -240,7 +240,7 @@ public:
         auto txSettings = ParseBeginTransactionIsolation(line);
         if (!txSettings) {
             const auto modeToken = ExtractBeginModeToken(line);
-            if (modeToken && IsOneShotOnlyTxMode(*modeToken)) {
+            if (modeToken && IsOneShotOnlyTxMode(*modeToken) && !HasTrailingBeginTokens(line)) {
                 Cerr << Colors.Red()
                      << "\nMode \"" << *modeToken
                      << "\" cannot be used with BEGIN — the Query service does"

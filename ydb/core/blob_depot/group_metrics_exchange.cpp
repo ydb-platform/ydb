@@ -1,7 +1,6 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 #include "space_monitor.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 

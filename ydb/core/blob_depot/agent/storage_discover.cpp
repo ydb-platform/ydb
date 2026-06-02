@@ -1,6 +1,5 @@
 #include "agent_impl.h"
 #include "blob_mapping_cache.h"
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 

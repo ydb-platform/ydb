@@ -4,10 +4,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
-
 
 namespace NKikimr::NBlobDepot {
 

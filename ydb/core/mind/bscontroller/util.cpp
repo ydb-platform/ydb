@@ -44,6 +44,9 @@ namespace NKikimr::NBsController {
         if (config.HasTryToRelocateBrokenDisksLocallyFirst()) {
             result.AddTryToRelocateBrokenDisksLocallyFirst(config.GetTryToRelocateBrokenDisksLocallyFirst());
         }
+        if (config.HasBlobCheckerPeriodicitySeconds()) {
+            result.AddBlobCheckerPeriodicitySeconds(config.GetBlobCheckerPeriodicitySeconds());
+        }
 
         return result;
     }

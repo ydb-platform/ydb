@@ -1,6 +1,11 @@
 LIBRARY()
 
 SRCS(
+    blob_checker.cpp
+    blob_checker_actors.cpp
+    blob_checker_bsc.cpp
+    blob_checker_events.cpp
+    blob_checker_planner.cpp
     bsc.cpp
     bsc.h
     bsc_audit.h

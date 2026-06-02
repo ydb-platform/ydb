@@ -1276,6 +1276,13 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 return (typeof v === "number" && isFinite(v)) ? v.toFixed(2) : "-";
             }
 
+            function nbsTabletFmtUs(v) {
+                if (typeof v !== "number" || !isFinite(v)) {
+                    return "-";
+                }
+                return String(Math.round(v));
+            }
+
             function nbsTabletRenderTableSkeleton(sweepValues) {
                 const tbl = document.getElementById("nbs-run-result-table");
                 if (!tbl) return;
@@ -1284,7 +1291,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 html += "<thead><tr>";
                 html += "<th rowspan='2' style='vertical-align:middle'>MaxInFlight</th>";
                 html += "<th rowspan='2' style='vertical-align:middle'>Direction</th>";
-                html += "<th>IOPS</th><th>p50 ms</th><th>p95 ms</th><th>p99 ms</th>";
+                html += "<th>IOPS</th><th>p50 us</th><th>p95 us</th><th>p99 us</th>";
                 html += "</tr></thead>";
                 html += "<tbody>";
                 for (let i = 0; i < sweepValues.length; i++) {
@@ -1317,13 +1324,13 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 const wIops = jr.write_rps !== undefined ? Math.round(jr.write_rps) : "-";
                 const rIops = jr.read_rps  !== undefined ? Math.round(jr.read_rps)  : "-";
                 set("nbs-sw-wiops-" + idx, wIops);
-                set("nbs-sw-wp50-"  + idx, nbsTabletFmt2(jr.write_p50));
-                set("nbs-sw-wp95-"  + idx, nbsTabletFmt2(jr.write_p95));
-                set("nbs-sw-wp99-"  + idx, nbsTabletFmt2(jr.write_p99));
+                set("nbs-sw-wp50-"  + idx, nbsTabletFmtUs(jr.write_p50));
+                set("nbs-sw-wp95-"  + idx, nbsTabletFmtUs(jr.write_p95));
+                set("nbs-sw-wp99-"  + idx, nbsTabletFmtUs(jr.write_p99));
                 set("nbs-sw-riops-" + idx, rIops);
-                set("nbs-sw-rp50-"  + idx, nbsTabletFmt2(jr.read_p50));
-                set("nbs-sw-rp95-"  + idx, nbsTabletFmt2(jr.read_p95));
-                set("nbs-sw-rp99-"  + idx, nbsTabletFmt2(jr.read_p99));
+                set("nbs-sw-rp50-"  + idx, nbsTabletFmtUs(jr.read_p50));
+                set("nbs-sw-rp95-"  + idx, nbsTabletFmtUs(jr.read_p95));
+                set("nbs-sw-rp99-"  + idx, nbsTabletFmtUs(jr.read_p99));
             }
 
             function nbsTabletSetColumnError(idx, msg) {
@@ -1514,7 +1521,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                         <div class='form-group'>
                                             <label for='nbs-run-inflight-to'>InFlightTo (sweep end):</label>
                                             <input id='nbs-run-inflight-to' class='form-control' type='number' min='1' step='1' placeholder='e.g. 128' />
-                                            <p class='help-block'>If both From/To set, sweeps MaxInFlight ×2 per step (From should be a power of 2; otherwise the last value may be below To).</p>
+                                            <p class='help-block'>If both From/To set, sweeps MaxInFlight x2 per step (From should be a power of 2; otherwise the last value may be below To).</p>
                                         </div>
                                     </div>
                                 </div>

@@ -32,8 +32,6 @@ using NUdf::TUnboxedValuePod;
 
 namespace {
 
-TMutex DumpMutex;
-
 bool HasMemoryForProcessing() {
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
 }
@@ -563,6 +561,7 @@ EFillState FetchFromStream(TUnboxedValue& inputStream, TUnboxedValueVector& inpu
 constexpr const size_t DefaultMemoryLimit = 128ull << 20; // if the runtime limit is zero
 constexpr const float ExtraMapCapacity = 2.0; // hashmap size is target row count increased by this factor then adjusted up to a power of 2
 constexpr const float MaxCompressionRatio = 32.0;
+constexpr const float IncompressibleThresholdRatio = 0.9;
 constexpr const size_t CombineMemorySampleRowCount = 16384ULL; // sample size for row weight estimation in Combine mode, in rows
 constexpr const size_t SpillingMemorySampleRowCount = 1000ULL; // sample size for row weight estimation in Aggregate mode when trying to spill, in rows
 constexpr const size_t LowerFixedRowCount = CombineMemorySampleRowCount; // minimum viable hash table size, rows
@@ -1265,12 +1264,6 @@ public:
     }
 
     virtual ~TBaseAggregationState() {
-        {
-            TGuard<TMutex> dumpGuard(DumpMutex);
-            Cerr << "IsAggregation: " << IsAggregation << "; Bypassed: " << BypassActivated << "; MaxRowCount: " << MaxRowCount;
-            Cerr << "; Capacity: " << (Map ? Map->GetCapacity() : 0) << "; InputRows: " << InputRows << "; OutputRows: " << OutputRows << Endl;
-        }
-
         if (ForLLVM) {
             // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
             for (TUnboxedValue& val : InputBuffer) {
@@ -1340,7 +1333,8 @@ protected:
 
     void UpdateRowLimitFromSample()
     {
-        if (Map->GetSize() && (InputRows * 0.90 <= Map->GetSize())) {
+        // Signal that the input isn't compressing well at all; no need to increase hashmap size
+        if (Map->GetSize() && (InputRows * IncompressibleThresholdRatio <= Map->GetSize())) {
             Incompressible = true;
             return;
         }
@@ -2043,7 +2037,6 @@ public:
             }
 
             ++currentBlockSize;
-            ++OutputRows;
         }
 
         if (currentBlockSize) {
@@ -2667,66 +2660,8 @@ private:
     TDqHashCombineTestParams TestParams;
 };
 
-void DumpNode(TRuntimeNode node, int offset = 0) {
-    auto tabs = [offset]() -> IOutputStream& {
-        for (int i = 0; i < offset; ++i) {
-            Cerr << "\t";
-        }
-        return Cerr;
-    };
-
-    tabs() << (size_t)node.GetNode() << ": ";
-    if (node.IsImmediate()) {
-        Cerr << "Immediate of type: " << *node.GetRuntimeType() << Endl;
-    } else if (node.GetNode()->GetType()->IsCallable()) {
-        auto subCallable = static_cast<TCallable*>(node.GetNode());
-        auto name = subCallable->GetType()->GetName();
-        if (name == "Arg") {
-            Cerr << "Arg of type: ";
-        } else {
-            Cerr << "callable [" << name << "] returns ";
-        }
-        Cerr << *((TType*)(subCallable->GetType()->GetReturnType())) << Endl;
-        /*for (ui32 i = 0; i < subCallable->GetType()->GetArgumentsCount(); ++i) {
-            tabs() << "argument " << i << ": type " << *(subCallable->GetType()->GetArgumentType(i)) << Endl;
-        }*/
-        for (ui32 i = 0; i < subCallable->GetInputsCount(); ++i) {
-            tabs() << "input " << i << ":" << Endl;
-            DumpNode(subCallable->GetInput(i), offset + 1);
-        }
-    } else {
-        Cerr << "Unsupported node of type: " << *node.GetStaticType() << Endl;
-    }
-}
-
 IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNodeFactoryContext& ctx, const EOperatorKind kind) {
-    TGuard<TMutex> dumpGuard(DumpMutex);
     TDqHashOperatorParams params = ParseCommonDqHashOperatorParams(callable, ctx);
-
-    /*
-    auto printNodesFromTuple = [&](size_t inputIndex) {
-        int nodeIndex = 0;
-        NDqHashOperatorCommon::IterateInputNodes(callable, inputIndex, [&](TRuntimeNode node) {
-            Cerr << "Argument " << (++nodeIndex) << Endl;
-            DumpNode(node, 1);
-        });
-        Cerr << Endl << Endl;
-    };
-
-    Cerr << "----------- Argument dump begins --------------" << Endl;
-    Cerr << "isAggregator: " << (kind == EOperatorKind::Aggregator) << Endl;
-    Cerr << "GetKey nodes: " << Endl;
-    printNodesFromTuple(NDqHashOperatorParams::GetKey);
-
-    Cerr << "Item argument nodes: " << Endl;
-    printNodesFromTuple(NDqHashOperatorParams::ItemArgs);
-
-    Cerr << "Init nodes: " << Endl;
-    printNodesFromTuple(NDqHashOperatorParams::InitState);
-
-    Cerr << "Key argument nodes: " << Endl;
-    printNodesFromTuple(NDqHashOperatorParams::KeyArgs);
-    */
 
     auto inputComponents = GetWideComponents(callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
     std::vector<TType*> inputTypes;

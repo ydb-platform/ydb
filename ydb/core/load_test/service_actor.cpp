@@ -764,13 +764,13 @@ public:
                 const double sec = s->MeasuredMs > 0 ? s->MeasuredMs / 1000.0 : 1.0;
                 auto& jr = msg->JsonResult;
                 jr["write_rps"]     = s->WritesOk / sec;
-                jr["write_p50"]     = s->WriteE2eUs.GetValueAtPercentile(50.0) / 1000.0;
-                jr["write_p95"]     = s->WriteE2eUs.GetValueAtPercentile(95.0) / 1000.0;
-                jr["write_p99"]     = s->WriteE2eUs.GetValueAtPercentile(99.0) / 1000.0;
+                jr["write_p50"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(50.0));
+                jr["write_p95"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(95.0));
+                jr["write_p99"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(99.0));
                 jr["read_rps"]      = (s->ReadsPbOk + s->ReadsDDiskOk) / sec;
-                jr["read_p50"]      = s->ReadPbUs.GetValueAtPercentile(50.0) / 1000.0;
-                jr["read_p95"]      = s->ReadPbUs.GetValueAtPercentile(95.0) / 1000.0;
-                jr["read_p99"]      = s->ReadPbUs.GetValueAtPercentile(99.0) / 1000.0;
+                jr["read_p50"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(50.0));
+                jr["read_p95"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(95.0));
+                jr["read_p99"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(99.0));
                 jr["max_in_flight"] = static_cast<ui64>(s->MaxInFlight);
             }
 

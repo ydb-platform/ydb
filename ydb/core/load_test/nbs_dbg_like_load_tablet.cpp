@@ -283,7 +283,7 @@ struct TPerDbgState {
     std::bitset<kHostsPerDbgMax> PBConnected;
 
     // TDDiskId -> k in [0..kHostsPerDbgMax).
-    THashMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui32, TDDiskIdHash, TDDiskIdEqual> PbIndexById;
+    absl::flat_hash_map<NKikimrBlobStorage::NDDisk::TDDiskId, ui32, TDDiskIdHash, TDDiskIdEqual> PbIndexById;
 
     absl::flat_hash_map<ui64, TWriteInfo> Lsns;
     absl::flat_hash_set<ui64> ReadyToErase;
@@ -294,7 +294,7 @@ struct TPerDbgState {
     std::deque<ui64> PendingErase;
 
     // Per-vChunk slot tracking; slot = offsetInVChunk / IoSizeBytes.
-    std::vector<THashMap<ui32, ui64>> InflightLsnAtSlot;
+    std::vector<absl::flat_hash_map<ui32, ui64>> InflightLsnAtSlot;
     std::vector<TDynBitMap> FlushedSlots;
 
     std::array<ui32, kPrimaryHostsPerDbg> InFlightTo = {};

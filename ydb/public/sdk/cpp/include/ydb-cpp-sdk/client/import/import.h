@@ -2,7 +2,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
 namespace Ydb::Import {
@@ -25,6 +24,14 @@ enum class EImportProgress {
     Cancellation = 5,
     Cancelled = 6,
     CreateChangefeeds = 7,
+
+    Unknown = std::numeric_limits<int>::max(),
+};
+
+enum class EIndexFillingMode {
+    Build = 0,
+    Import = 1,
+    Auto = 2,
 
     Unknown = std::numeric_limits<int>::max(),
 };
@@ -64,6 +71,7 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_OPTIONAL(std::string, SourcePrefix);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
+    FLUENT_SETTING_DEFAULT(EIndexFillingMode, IndexFillingMode, EIndexFillingMode::Build);
 };
 
 class TImportFromS3Response : public TOperation {

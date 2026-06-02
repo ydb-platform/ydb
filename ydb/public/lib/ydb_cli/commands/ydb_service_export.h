@@ -74,6 +74,7 @@ private:
     ui32 NumberOfRetries = 10;
     TString Compression;
     bool UseVirtualAddressing = true;
+    bool MaterializeIndexes = false;
     TString CommonSourcePath;
     TString CommonDestinationPrefix;
 

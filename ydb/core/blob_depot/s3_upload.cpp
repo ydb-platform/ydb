@@ -1,6 +1,9 @@
 #include "s3.h"
 
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -32,7 +35,10 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void Bootstrap() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS00, "TUploaderActor::Bootstrap", (Key, Key), (ValueChain, ValueChain));
+            YDB_LOG_DEBUG("TUploaderActor::Bootstrap",
+                {"Marker", "BDTS00"},
+                {"Key", Key},
+                {"ValueChain", ValueChain});
             size_t targetOffset = 0;
             EnumerateBlobsForValueChain(ValueChain, Info->TabletID, TOverloaded{
                 [&](TLogoBlobID id, ui32 shift, ui32 size) {
@@ -55,7 +61,9 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             auto *msg = ev->Get();
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS01, "TUploaderActor::Handle(TEvGetResult)", (Msg, *msg));
+            YDB_LOG_DEBUG("TUploaderActor::Handle(TEvGetResult)",
+                {"Marker", "BDTS01"},
+                {"Msg", *msg});
             if (msg->Status == NKikimrProto::OK && msg->ResponseSz == 1 && msg->Responses->Status == NKikimrProto::OK) {
                 TRope& rope = msg->Responses->Buffer;
                 char *ptr = Buffer.Detach() + ev->Cookie;
@@ -74,7 +82,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS02, "TUploaderActor::Handle(TEvPutObjectResponse)", (Result, ev->Get()->Result));
+            YDB_LOG_DEBUG("TUploaderActor::Handle(TEvPutObjectResponse)",
+                {"Marker", "BDTS02"},
+                {"Result", ev->Get()->Result});
             if (auto& result = ev->Get()->Result; result.IsSuccess()) {
             } else {
             }

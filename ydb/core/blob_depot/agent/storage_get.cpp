@@ -1,5 +1,8 @@
 #include "agent_impl.h"
 #include "blob_mapping_cache.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -45,8 +48,17 @@ namespace NKikimr::NBlobDepot {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Request.QuerySize; ++i) {
                         const auto& q = Request.Queries[i];
-                        BDEV_QUERY(BDEV19, "TEvGet_new", (U.BlobId, q.Id), (U.Shift, q.Shift), (U.Size, q.Size),
-                            (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IsIndexOnly, Request.IsIndexOnly));
+                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGet_new",
+                            {"Marker", "BDEV19"},
+                            {"VG", Agent.VirtualGroupId},
+                            {"BDT", Agent.TabletId},
+                            {"G", Agent.BlobDepotGeneration},
+                            {"Q", QueryId},
+                            {"U.BlobId", q.Id},
+                            {"U.Shift", q.Shift},
+                            {"U.Size", q.Size},
+                            {"U.MustRestoreFirst", Request.MustRestoreFirst},
+                            {"U.IsIndexOnly", Request.IsIndexOnly});
                     }
                 }
 
@@ -69,8 +81,12 @@ namespace NKikimr::NBlobDepot {
                             return; // error occured
                         }
                     } else {
-                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA29, "resolve pending", (AgentId, Agent.LogId),
-                            (QueryId, GetQueryId()), (QueryIdx, i), (BlobId, query.Id));
+                        YDB_LOG_DEBUG("resolve pending",
+                            {"Marker", "BDA29"},
+                            {"AgentId", Agent.LogId},
+                            {"QueryId", GetQueryId()},
+                            {"QueryIdx", i},
+                            {"BlobId", query.Id});
                     }
                 }
 
@@ -82,8 +98,12 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool ProcessSingleResult(ui32 queryIdx, const TKeyResolved& result) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA27, "ProcessSingleResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Result, result));
+                YDB_LOG_DEBUG("ProcessSingleResult",
+                    {"Marker", "BDA27"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"QueryIdx", queryIdx},
+                    {"Result", result});
 
                 auto& r = Response->Responses[queryIdx];
                 Y_ABORT_UNLESS(r.Status == NKikimrProto::UNKNOWN);
@@ -119,8 +139,12 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 tag, TReadOutcome&& outcome) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA35, "OnRead", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                    (Tag, tag), (Outcome, outcome));
+                YDB_LOG_DEBUG("OnRead",
+                    {"Marker", "BDA35"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Tag", tag},
+                    {"Outcome", outcome});
 
                 auto& resp = Response->Responses[tag];
                 Y_ABORT_UNLESS(resp.Status == NKikimrProto::UNKNOWN);
@@ -175,9 +199,17 @@ namespace NKikimr::NBlobDepot {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Response->ResponseSz; ++i) {
                         const auto& r = Response->Responses[i];
-                        BDEV_QUERY(BDEV20, "TEvGet_end", (BlobId, r.Id), (Shift, r.Shift),
-                            (RequestedSize, r.RequestedSize), (Status, status.value_or(r.Status)),
-                            (Buffer.size, r.Buffer.size()));
+                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGet_end",
+                            {"Marker", "BDEV20"},
+                            {"VG", Agent.VirtualGroupId},
+                            {"BDT", Agent.TabletId},
+                            {"G", Agent.BlobDepotGeneration},
+                            {"Q", QueryId},
+                            {"BlobId", r.Id},
+                            {"Shift", r.Shift},
+                            {"RequestedSize", r.RequestedSize},
+                            {"Status", status.value_or(r.Status)},
+                            {"Buffer.size", r.Buffer.size()});
                     }
                 }
             }
@@ -192,8 +224,11 @@ namespace NKikimr::NBlobDepot {
                     TQuery::HandleResolveResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
-                        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA26, "TTabletDisconnected", (AgentId, Agent.LogId),
-                            (QueryId, GetQueryId()), (QueryIdx, resolveContext->QueryIdx));
+                        YDB_LOG_DEBUG("TTabletDisconnected",
+                            {"Marker", "BDA26"},
+                            {"AgentId", Agent.LogId},
+                            {"QueryId", GetQueryId()},
+                            {"QueryIdx", resolveContext->QueryIdx});
                         Response->Responses[resolveContext->QueryIdx].Status = NKikimrProto::ERROR;
                         --AnswersRemain;
                         CheckAndFinish();

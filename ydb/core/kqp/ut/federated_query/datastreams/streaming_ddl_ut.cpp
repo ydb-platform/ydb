@@ -1811,6 +1811,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1848,6 +1849,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1888,6 +1890,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
@@ -1927,6 +1930,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1966,6 +1970,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -2936,6 +2941,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "key1value1");
         ReadTopicMessage(outputTopicName, "key1value1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         // Finish query like shutdown
         {

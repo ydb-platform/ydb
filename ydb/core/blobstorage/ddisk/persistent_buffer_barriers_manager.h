@@ -49,8 +49,6 @@ namespace NKikimr::NDDisk {
         void RestoreBarriers(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
         bool AddBarrier(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);
 
-        bool Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header);
-        std::vector<ui64> Uncompact(const ui8* data, bool isCompact);
         ui32 GetErasesCount(ui64 tabletId);
         std::optional<TFastErase> Erase(ui64 tabletId, std::vector<ui64>& lsns, TPersistentBufferSpaceAllocator& allocator);
         bool AddErase(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);

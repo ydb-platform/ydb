@@ -6,7 +6,7 @@
 namespace NKikimr::NDDisk {
 
     // Returns a new sorted vector containing all unique elements from sorted a and sorted b.
-    static std::vector<ui64> merge_unique(const std::vector<ui64>& a, const std::vector<ui64>& b) {
+    static std::vector<ui64> MergeUnique(const std::vector<ui64>& a, const std::vector<ui64>& b) {
         std::vector<ui64> result;
         result.reserve(a.size() + b.size());
         auto ai = a.begin(), ae = a.end();
@@ -200,7 +200,7 @@ namespace NKikimr::NDDisk {
         return true;
     }
 
-    bool TPersistentBufferBarriersManager::Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header) {
+    bool Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header) {
         ui32 resPos = 0;
         ui32 cnt = oldLsns.size() + newLsns.size();
         if (cnt == 0 || cnt > TPersistentBufferFastErases::ErasesBufferLsnCount) {
@@ -209,12 +209,12 @@ namespace NKikimr::NDDisk {
         std::sort(newLsns.begin(), newLsns.end());
 
         if (cnt * sizeof(oldLsns[0]) <= TPersistentBufferFastErases::ErasesBufferSize) {
-            oldLsns = merge_unique(oldLsns, newLsns);
+            oldLsns = MergeUnique(oldLsns, newLsns);
             memcpy(header.CompactLsns, oldLsns.data(), oldLsns.size() * sizeof(oldLsns[0]));
             return true;
         }
 
-        std::vector<ui64> lsns = merge_unique(oldLsns, newLsns);
+        std::vector<ui64> lsns = MergeUnique(oldLsns, newLsns);
 
         auto it = lsns.begin();
         ui64 first = *it;
@@ -247,7 +247,7 @@ namespace NKikimr::NDDisk {
         return true;
     }
 
-    std::vector<ui64> TPersistentBufferBarriersManager::Uncompact(const ui8* data, bool isCompact) {
+    std::vector<ui64> Uncompact(const ui8* data, bool isCompact) {
         std::vector<ui64> res;
         ui64 first = 0;
         memcpy(&first, data, sizeof(res[0]));

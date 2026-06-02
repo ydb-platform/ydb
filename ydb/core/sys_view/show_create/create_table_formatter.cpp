@@ -554,20 +554,6 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             Stream << " GLOBAL USING json ON ";
             break;
         }
-        case Ydb::Table::TableIndex::kGlobalFulltextCompactIndex: {
-            Stream << " GLOBAL USING fulltext_compact ON ";
-            fulltextIndexSettings = index.global_fulltext_compact_index().fulltext_settings();
-            break;
-        }
-        case Ydb::Table::TableIndex::kGlobalFulltextCompactRelevanceIndex: {
-            Stream << " GLOBAL USING fulltext_compact_relevance ON ";
-            fulltextIndexSettings = index.global_fulltext_compact_relevance_index().fulltext_settings();
-            break;
-        }
-        case Ydb::Table::TableIndex::kGlobalJsonCompactIndex: {
-            Stream << " GLOBAL USING json_compact ON ";
-            break;
-        }
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
             Stream << " LOCAL USING bloom_filter ON ";
             isLocalBloomFilter = true;

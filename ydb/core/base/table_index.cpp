@@ -171,12 +171,6 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
         case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalJson;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactRelevanceIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalJsonCompactIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalJson;
         default:
             return std::nullopt;
     }
@@ -197,9 +191,6 @@ bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
         case Ydb::Table::TableIndex::kGlobalJsonIndex:
-        case Ydb::Table::TableIndex::kGlobalFulltextCompactIndex:
-        case Ydb::Table::TableIndex::kGlobalFulltextCompactRelevanceIndex:
-        case Ydb::Table::TableIndex::kGlobalJsonCompactIndex:
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             return false;
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:

@@ -1128,7 +1128,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 }
 
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchAndSnowball, Compact) {
-    auto kikimr = Kikimr();
+    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchAndSnowball, Compact) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexSnowball(db, "english", Compact ? "fulltext_compact" : "fulltext_plain");
+    AddIndexSnowball(db, "english", "fulltext_plain");
 
     {
         TString query = R"sql(
@@ -1218,7 +1218,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchAndSnowball, Compact) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexSnowball(db, "russian", Compact ? "fulltext_compact" : "fulltext_plain");
+    AddIndexSnowball(db, "russian", "fulltext_plain");
 
     {
         TString query = R"sql(

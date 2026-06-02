@@ -3164,8 +3164,7 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
-    case EIndexType::GlobalFulltextPlain:
-    case EIndexType::GlobalFulltextCompact: {
+    case EIndexType::GlobalFulltextPlain: {
         auto* global_fulltext_index = proto.mutable_global_fulltext_plain_index();
         auto& settings = *global_fulltext_index->mutable_settings();
         auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
@@ -3177,8 +3176,7 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
-    case EIndexType::GlobalFulltextRelevance:
-    case EIndexType::GlobalFulltextCompactRelevance: {
+    case EIndexType::GlobalFulltextRelevance: {
         auto* global_fulltext_index = proto.mutable_global_fulltext_relevance_index();
         auto& dict_settings = *global_fulltext_index->mutable_dict_table_settings();
         auto& docs_settings = *global_fulltext_index->mutable_docs_table_settings();
@@ -3196,8 +3194,7 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
-    case EIndexType::GlobalJson:
-    case EIndexType::GlobalJsonCompact: {
+    case EIndexType::GlobalJson: {
         auto& settings = *proto.mutable_global_json_index()->mutable_settings();
         if (GlobalIndexSettings_.size() == 1) {
             GlobalIndexSettings_.at(0).SerializeTo(settings);
@@ -3248,7 +3245,6 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::GlobalAsync:
     case EIndexType::GlobalUnique:
     case EIndexType::GlobalJson:
-    case EIndexType::GlobalJsonCompact:
     case EIndexType::LocalBloomFilter:
     case EIndexType::LocalBloomNgramFilter:
     case EIndexType::LocalMinMax:
@@ -3261,8 +3257,6 @@ void TIndexDescription::Out(IOutputStream& o) const {
         break;
     case EIndexType::GlobalFulltextPlain:
     case EIndexType::GlobalFulltextRelevance:
-    case EIndexType::GlobalFulltextCompact:
-    case EIndexType::GlobalFulltextCompactRelevance:
         if (auto settings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
             o << ", fulltext_settings: " << *settings;
         }

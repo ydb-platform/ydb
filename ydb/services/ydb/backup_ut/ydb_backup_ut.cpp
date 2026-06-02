@@ -348,7 +348,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalAsync:
                 case EIndexType::GlobalUnique:
                 case EIndexType::GlobalJson:
-                case EIndexType::GlobalJsonCompact:
                 case EIndexType::LocalMinMax:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
                     break;
@@ -374,7 +373,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     }
                     break;
                 }
-                case EIndexType::GlobalFulltextCompact:
                 case EIndexType::GlobalFulltextPlain: {
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
@@ -390,7 +388,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     }
                     break;
                 }
-                case EIndexType::GlobalFulltextCompactRelevance:
                 case EIndexType::GlobalFulltextRelevance: {
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
@@ -793,17 +790,14 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             return NYdb::NTable::EIndexType::GlobalFulltextPlain;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
-            return NYdb::NTable::EIndexType::GlobalJson;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-            return NYdb::NTable::EIndexType::GlobalFulltextCompact;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
-            return NYdb::NTable::EIndexType::GlobalFulltextCompactRelevance;
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
-            return NYdb::NTable::EIndexType::GlobalJsonCompact;
+            return NYdb::NTable::EIndexType::GlobalJson;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -855,13 +849,11 @@ void TestRestoreTableWithIndex(
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             type = type.empty() ? "fulltext_plain" : type;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-            type = type.empty() ? "fulltext_relevance" : type;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-            type = type.empty() ? "fulltext_compact" : type;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
-            type = type.empty() ? "fulltext_compact_relevance" : type;
+            type = type.empty() ? "fulltext_relevance" : type;
             query = fmt::format(R"(CREATE TABLE `{table}` (
                 Key Uint64,
                 Group Uint32,
@@ -872,9 +864,8 @@ void TestRestoreTableWithIndex(
                     WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
                 ))", "table"_a = table, "index"_a = index, "type"_a = type);
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
-            type = type.empty() ? "json_compact" : type;
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             type = type.empty() ? "json" : type;
             query = fmt::format(R"(CREATE TABLE `{table}` (
                 Key Uint64,
@@ -2892,6 +2883,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+            appConfig.MutableFeatureFlags()->SetEnableCompactFulltextIndex(true);
+        }
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
@@ -4415,6 +4411,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+            testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
+        }
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
 

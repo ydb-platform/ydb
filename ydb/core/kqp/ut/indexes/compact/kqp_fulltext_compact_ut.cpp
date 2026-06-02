@@ -17,16 +17,6 @@ using namespace NYdb::NTable;
 
 namespace {
 
-TKikimrRunner KikimrWithJson() {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableJsonIndex(true);
-    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
-    return TKikimrRunner(settings);
-}
-
 void ExecuteQuery(NQuery::TQueryClient& db, const TString& query) {
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -58,14 +48,14 @@ TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTab
 }
 
 Y_UNIT_TEST(AddIndexCompact) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
     UpsertTexts(db);
-    AddIndex(db, "fulltext_compact");
+    AddIndex(db, "fulltext_plain");
 
     auto index = ReadIndex(db);
     CompareYson(R"([
@@ -80,7 +70,7 @@ Y_UNIT_TEST(AddIndexCompact) {
 }
 
 Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     auto db = kikimr.GetQueryClient();
@@ -88,9 +78,9 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
     CreateTexts(db);
     UpsertTexts(db);
     if (Covered)
-        AddIndexCovered(db, "fulltext_compact_relevance");
+        AddIndexCovered(db, "fulltext_relevance");
     else
-        AddIndex(db, "fulltext_compact_relevance");
+        AddIndex(db, "fulltext_relevance");
 
     auto index = ReadIndex(db);
     CompareYson(R"([
@@ -139,12 +129,12 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
 
 Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
     UpsertSomeTexts(db);
-    AddIndex(db, WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact");
+    AddIndex(db, WithRelevance ? "fulltext_relevance" : "fulltext_plain");
     auto index = NYdb::FormatResultSetYson(ReadIndex(db));
     Cerr << "indexImplTable: " << index << Endl;
     if (WithRelevance) {
@@ -253,9 +243,9 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(InsertMultipleTimes, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -301,12 +291,12 @@ Y_UNIT_TEST_TWIN(InsertMultipleTimes, WithRelevance) {
 }
 
 Y_UNIT_TEST(UpsertNewRow) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
     UpsertSomeTexts(db);
-    AddIndex(db, "fulltext_compact");
+    AddIndex(db, "fulltext_plain");
 
     // Upsert a new row (no existing key conflict - same as INSERT path)
     ExecuteQuery(db, R"sql(
@@ -327,12 +317,12 @@ Y_UNIT_TEST(UpsertNewRow) {
 }
 
 Y_UNIT_TEST(UpsertNewRowRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
     UpsertSomeTexts(db);
-    AddIndex(db, "fulltext_compact_relevance");
+    AddIndex(db, "fulltext_relevance");
 
     // Upsert a new row (no existing key conflict)
     ExecuteQuery(db, R"sql(
@@ -358,9 +348,9 @@ Y_UNIT_TEST(UpsertNewRowRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -388,9 +378,9 @@ Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -419,9 +409,9 @@ Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertTexts(db);
@@ -454,9 +444,9 @@ Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertTexts(db);
@@ -489,9 +479,9 @@ Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -517,9 +507,9 @@ Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(ReplaceRow, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -558,12 +548,12 @@ Y_UNIT_TEST_TWIN(ReplaceRow, WithRelevance) {
 }
 
 Y_UNIT_TEST(AddIndexCoveredCompact) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
     UpsertTexts(db);
-    AddIndexCovered(db, "fulltext_compact");
+    AddIndexCovered(db, "fulltext_plain");
 
     auto index = ReadIndex(db);
     Cerr << "covered compact index: " << NYdb::FormatResultSetYson(index) << Endl;
@@ -576,9 +566,9 @@ Y_UNIT_TEST(AddIndexCoveredCompact) {
 }
 
 Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -633,9 +623,9 @@ Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
-    auto kikimr = Kikimr();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_compact_relevance" : "fulltext_compact";
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -693,7 +683,7 @@ TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTab
 }
 
 Y_UNIT_TEST(AddJsonCompactIndex) {
-    auto kikimr = KikimrWithJson();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -715,19 +705,19 @@ Y_UNIT_TEST(AddJsonCompactIndex) {
 
     ExecuteQuery(db, R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX json_idx
-            GLOBAL USING json_compact ON (Text)
+            GLOBAL USING json ON (Text)
     )sql");
 
     auto index = ReadIndex(db);
     auto indexStr = NYdb::FormatResultSetYson(index);
-    Cerr << "json_compact index: " << indexStr << Endl;
+    Cerr << "json index: " << indexStr << Endl;
 
     NYdb::TResultSetParser parser(index);
     UNIT_ASSERT(parser.RowsCount() > 0);
 }
 
 Y_UNIT_TEST(JsonCompactInsertRow) {
-    auto kikimr = KikimrWithJson();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -747,7 +737,7 @@ Y_UNIT_TEST(JsonCompactInsertRow) {
 
     ExecuteQuery(db, R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX json_idx
-            GLOBAL USING json_compact ON (Text)
+            GLOBAL USING json ON (Text)
     )sql");
 
     auto indexBefore = NYdb::FormatResultSetYson(ReadIndex(db));
@@ -767,7 +757,7 @@ Y_UNIT_TEST(JsonCompactInsertRow) {
 }
 
 Y_UNIT_TEST(JsonCompactUpsertModify) {
-    auto kikimr = KikimrWithJson();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -787,7 +777,7 @@ Y_UNIT_TEST(JsonCompactUpsertModify) {
 
     ExecuteQuery(db, R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX json_idx
-            GLOBAL USING json_compact ON (Text)
+            GLOBAL USING json ON (Text)
     )sql");
 
     // Upsert: modify existing
@@ -804,7 +794,7 @@ Y_UNIT_TEST(JsonCompactUpsertModify) {
 }
 
 Y_UNIT_TEST(JsonCompactDeleteRow) {
-    auto kikimr = KikimrWithJson();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -825,7 +815,7 @@ Y_UNIT_TEST(JsonCompactDeleteRow) {
 
     ExecuteQuery(db, R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX json_idx
-            GLOBAL USING json_compact ON (Text)
+            GLOBAL USING json ON (Text)
     )sql");
 
     auto indexBefore = NYdb::FormatResultSetYson(ReadIndex(db));
@@ -841,7 +831,7 @@ Y_UNIT_TEST(JsonCompactDeleteRow) {
 }
 
 Y_UNIT_TEST(JsonCompactCompaction) {
-    auto kikimr = KikimrWithJson();
+    auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -861,7 +851,7 @@ Y_UNIT_TEST(JsonCompactCompaction) {
 
     ExecuteQuery(db, R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX json_idx
-            GLOBAL USING json_compact ON (Text)
+            GLOBAL USING json ON (Text)
     )sql");
 
     NDataShard::gFulltextMaxDelta = 2;

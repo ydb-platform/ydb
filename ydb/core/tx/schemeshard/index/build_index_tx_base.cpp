@@ -326,22 +326,16 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:
             *index.mutable_global_fulltext_plain_index() = Ydb::Table::GlobalFulltextPlainIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance:
             *index.mutable_global_fulltext_relevance_index() = Ydb::Table::GlobalFulltextRelevanceIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
-            *index.mutable_global_json_index() = Ydb::Table::GlobalJsonIndex();
-            break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:
-            *index.mutable_global_fulltext_compact_index() = Ydb::Table::GlobalFulltextCompactIndex();
-            break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance:
-            *index.mutable_global_fulltext_compact_relevance_index() = Ydb::Table::GlobalFulltextCompactRelevanceIndex();
-            break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
-            *index.mutable_global_json_compact_index() = Ydb::Table::GlobalJsonCompactIndex();
+            *index.mutable_global_json_index() = Ydb::Table::GlobalJsonIndex();
             break;
         default:
             Y_ENSURE(false, InvalidIndexType(info.IndexType));

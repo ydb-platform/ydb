@@ -331,42 +331,33 @@ private:
             }
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
-            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextPlain, index.global_fulltext_plain_index().fulltext_settings(), explain)) {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex: {
+            auto type = Self->EnableCompactFulltextIndex
+                ? EIndexType::EIndexTypeGlobalFulltextCompact
+                : EIndexType::EIndexTypeGlobalFulltextPlain;
+            if (!PrepareFulltext(buildInfo, type, index.global_fulltext_plain_index().fulltext_settings(), explain)) {
                 return false;
             }
             break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex:
-            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextRelevance, index.global_fulltext_relevance_index().fulltext_settings(), explain)) {
+        }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex: {
+            auto type = Self->EnableCompactFulltextIndex
+                ? EIndexType::EIndexTypeGlobalFulltextCompactRelevance
+                : EIndexType::EIndexTypeGlobalFulltextRelevance;
+            if (!PrepareFulltext(buildInfo, type, index.global_fulltext_relevance_index().fulltext_settings(), explain)) {
                 return false;
             }
             break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactIndex:
-            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextCompact, index.global_fulltext_compact_index().fulltext_settings(), explain)) {
-                return false;
-            }
-            break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactRelevanceIndex:
-            if (!PrepareFulltext(buildInfo, EIndexType::EIndexTypeGlobalFulltextCompactRelevance, index.global_fulltext_compact_relevance_index().fulltext_settings(), explain)) {
-                return false;
-            }
-            break;
+        }
         case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex: {
             if (!Self->EnableJsonIndex) {
                 explain = "JSON index support is disabled";
                 return false;
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
-            break;
-        }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalJsonCompactIndex: {
-            if (!Self->EnableJsonIndex) {
-                explain = "JSON index support is disabled";
-                return false;
-            }
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact;
+            buildInfo.IndexType = Self->EnableCompactFulltextIndex
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kLocalBloomFilterIndex:

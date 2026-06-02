@@ -153,17 +153,14 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
         case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             return "global sync vector_kmeans_tree";
         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
+        case NYql::TIndexDescription::EType::GlobalFulltextCompact:
             return "global sync fulltext_plain";
         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+        case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
             return "global sync fulltext_relevance";
         case NYql::TIndexDescription::EType::GlobalJson:
-            return "global sync json";
-        case NYql::TIndexDescription::EType::GlobalFulltextCompact:
-            return "global sync fulltext_compact";
-        case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
-            return "global sync fulltext_compact_relevance";
         case NYql::TIndexDescription::EType::GlobalJsonCompact:
-            return "global sync json_compact";
+            return "global sync json";
         case NYql::TIndexDescription::EType::LocalBloomFilter:
             return "local bloom_filter";
         case NYql::TIndexDescription::EType::LocalBloomNgramFilter:

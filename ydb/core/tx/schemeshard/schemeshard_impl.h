@@ -417,6 +417,7 @@ public:
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
     bool EnableFulltextIndex = false;
+    bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;

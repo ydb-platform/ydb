@@ -532,17 +532,9 @@ bool FillIndexTablePartitioning(
         }
         break;
     }
-
     case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         indexImplTableDescriptions.resize(1);
         if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions[0])) {
-            return false;
-        }
-        break;
-
-    case Ydb::Table::TableIndex::kGlobalFulltextCompactIndex:
-        indexImplTableDescriptions.resize(1);
-        if (!fillIndexPartitioning(index.global_fulltext_compact_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
@@ -563,32 +555,9 @@ bool FillIndexTablePartitioning(
         }
         break;
 
-    case Ydb::Table::TableIndex::kGlobalFulltextCompactRelevanceIndex:
-        indexImplTableDescriptions.resize(4);
-        if (!fillIndexPartitioning(index.global_fulltext_compact_relevance_index().dict_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DictTablePosition])) {
-            return false;
-        }
-        if (!fillIndexPartitioning(index.global_fulltext_compact_relevance_index().docs_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DocsTablePosition])) {
-            return false;
-        }
-        if (!fillIndexPartitioning(index.global_fulltext_compact_relevance_index().stats_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::StatsTablePosition])) {
-            return false;
-        }
-        if (!fillIndexPartitioning(index.global_fulltext_compact_relevance_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::PostingTablePosition])) {
-            return false;
-        }
-        break;
-
     case Ydb::Table::TableIndex::kGlobalJsonIndex:
         indexImplTableDescriptions.resize(1);
         if (!fillIndexPartitioning(index.global_json_index().settings(), indexImplTableDescriptions[0])) {
-            return false;
-        }
-        break;
-
-    case Ydb::Table::TableIndex::kGlobalJsonCompactIndex:
-        indexImplTableDescriptions.resize(1);
-        if (!fillIndexPartitioning(index.global_json_compact_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;

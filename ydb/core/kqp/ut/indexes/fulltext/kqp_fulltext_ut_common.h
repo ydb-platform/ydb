@@ -9,6 +9,7 @@ using namespace NYdb;
 TKikimrRunner Kikimr(NKikimrConfig::TFeatureFlags&& featureFlags);
 TKikimrRunner Kikimr();
 TKikimrRunner Kikimr(bool enableIndexStreamWrite);
+TKikimrRunner KikimrWithCompact();
 void CreateTexts(NQuery::TQueryClient& db, const bool utf8 = false);
 void UpsertSomeTexts(NQuery::TQueryClient& db);
 void UpsertTexts(NQuery::TQueryClient& db);

@@ -41,9 +41,6 @@ enum class EIndexType {
     LocalBloomFilter,
     LocalBloomNgramFilter,
     LocalMinMax,
-    GlobalFulltextCompact,
-    GlobalFulltextCompactRelevance,
-    GlobalJsonCompact,
 
     Unknown = std::numeric_limits<int>::max()
 };

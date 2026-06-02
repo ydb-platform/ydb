@@ -29,6 +29,17 @@ TKikimrRunner Kikimr() {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner KikimrWithCompact() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableJsonIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    return TKikimrRunner(settings);
+}
+
 void CreateTexts(NQuery::TQueryClient& db, const bool utf8) {
     TString query = std::format(R"sql(
         CREATE TABLE `/Root/Texts` (

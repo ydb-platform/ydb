@@ -240,6 +240,7 @@ message FulltextIndexSettings {
     repeated ColumnAnalyzers columns = 2;
 }
 
+// Without EnableCompactFulltextIndex feature flag (old version):
 // Simplest possible layout without support for relevance.
 // Uses a single flat inverted index table (indexImplTable).
 // Supports a single column only.
@@ -263,6 +264,23 @@ message FulltextIndexSettings {
 //     │ "quick"      │ 1  │
 //     │ "quick"      │ 2  │
 //     └──────────────┴────┘
+//
+// With EnableCompactFulltextIndex feature flag (new version):
+// Compact fulltext index format with segmented storage.
+// Index table stores varint+delta-compressed binary segments (document ID lists)
+// instead of individual document IDs.
+// Example inverted index table (indexImplTable):
+//     ┌──────────────┬──────────────┬──────────────────┬─────────────┬───────────────┐
+//     │ __ydb_token  │ __ydb_max_id │ __ydb_generation | __ydb_added | __ydb_segment │
+//     ├──────────────┼──────────────┼──────────────────┼─────────────┼───────────────┤
+//     │ "The"        │ 2^64-1       │ 2^64-1           │ true        │ 1 2           │
+//     │ "blue"       │ 2^64-1       │ 2^64-1           │ true        │ 2             │
+//     │ "brown"      │ 2^64-1       │ 2^64-1           │ true        │ 1             │
+//     │ "fox"        │ 2^64-1       │ 2^64-1           │ true        │ 1             │
+//     │ "hare"       │ 2^64-1       │ 2^64-1           │ true        │ 2             │
+//     │ "quick"      │ 2^64-1       │ 2^64-1           │ true        │ 1 2           │
+//     └──────────────┴──────────────┴──────────────────┴─────────────┴───────────────┘
+
 message GlobalFulltextPlainIndex {
     GlobalIndexSettings settings = 1;
     FulltextIndexSettings fulltext_settings = 2;
@@ -277,6 +295,7 @@ message GlobalFulltextPlainIndex {
 //     │ 1  │ "A quick fox catches quick hare"      │
 //     │ 2  │ "The quick blue hare"                 │
 //     └────┴───────────────────────────────────────┘
+// Without EnableCompactFulltextIndex feature flag (old version):
 // Example inverted index table with term frequencies (indexImplTable):
 //     ┌──────────────┬────┬────────────┐
 //     │ __ydb_token  │ id │ __ydb_freq │
@@ -291,6 +310,20 @@ message GlobalFulltextPlainIndex {
 //     │ "quick"      │ 1  │ 2          │
 //     │ "quick"      │ 2  │ 1          │
 //     └──────────────┴────┴────────────┘
+// With EnableCompactFulltextIndex feature flag (new version):
+//     ┌──────────────┬──────────────┬──────────────────┬─────────────┬───────────────┐
+//     │ __ydb_token  │ __ydb_max_id │ __ydb_generation | __ydb_added | __ydb_segment │
+//     ├──────────────┼──────────────┼──────────────────┼─────────────┼───────────────┤
+//     │ "A"          │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "The"        │ 2^64-1       │ 2^64-1           │ true        │ 2:1           │
+//     │ "blue"       │ 2^64-1       │ 2^64-1           │ true        │ 2:1           │
+//     │ "catches"    │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "fox"        │ 2^64-1       │ 2^64-1           │ true        │ 1:1           │
+//     │ "hare"       │ 2^64-1       │ 2^64-1           │ true        │ 1:1 2:1       │
+//     │ "quick"      │ 2^64-1       │ 2^64-1           │ true        │ 1:2 2:1       │
+//     └──────────────┴──────────────┴──────────────────┴─────────────┴───────────────┘
+//
+// Other tables are the same for both compressed and uncompressed formats:
 // Term dictionary table (indexImplDictTable):
 //     ┌──────────────┬────────────┐
 //     │ __ydb_token  │ __ydb_freq │
@@ -324,41 +357,6 @@ message GlobalFulltextRelevanceIndex {
     GlobalIndexSettings stats_table_settings = 5;
 }
 
-// Compact fulltext index format with segmented storage.
-// Two compact formats are available: with and without relevance (term frequency) support.
-// Both are similar to regular FulltextPlain and FulltextRelevance, but indexImplTable
-// is different: it contains compressed binary segments instead of individual document IDs.
-// Example source table:
-//     ┌────┬────────────────────────────┐
-//     │ id │ text                       │
-//     ├────┼────────────────────────────┤
-//     │ 1  │ "The quick brown fox"      │
-//     │ 2  │ "The quick blue hare"      │
-//     └────┴────────────────────────────┘
-// Example inverted index table (indexImplTable):
-//     ┌──────────────┬──────────────┬──────────────────┬─────────────┬───────────────┐
-//     │ __ydb_token  │ __ydb_max_id │ __ydb_generation | __ydb_added | __ydb_segment │
-//     ├──────────────┼──────────────┼──────────────────┼─────────────┼───────────────┤
-//     │ "The"        │ 2            │ 0                │ true        │ 1 2           │
-//     │ "blue"       │ 2            │ 0                │ true        │ 2             │
-//     │ "brown"      │ 1            │ 0                │ true        │ 1             │
-//     │ "fox"        │ 1            │ 0                │ true        │ 1             │
-//     │ "hare"       │ 2            │ 0                │ true        │ 2             │
-//     │ "quick"      │ 2            │ 0                │ true        │ 1 2           │
-//     └──────────────┴──────────────┴──────────────────┴─────────────┴───────────────┘
-message GlobalFulltextCompactIndex {
-    GlobalIndexSettings settings = 1;
-    FulltextIndexSettings fulltext_settings = 2;
-}
-
-message GlobalFulltextCompactRelevanceIndex {
-    GlobalIndexSettings posting_table_settings = 1;
-    FulltextIndexSettings fulltext_settings = 2;
-    GlobalIndexSettings dict_table_settings = 3;
-    GlobalIndexSettings docs_table_settings = 4;
-    GlobalIndexSettings stats_table_settings = 5;
-}
-
 message LocalBloomFilterIndex {
     optional double false_positive_probability = 1;
 }
@@ -375,10 +373,6 @@ message LocalBloomNgramFilterIndex {
 message LocalMinMaxIndex {}
 
 message GlobalJsonIndex {
-    GlobalIndexSettings settings = 1;
-}
-
-message GlobalJsonCompactIndex {
     GlobalIndexSettings settings = 1;
 }
 
@@ -400,9 +394,6 @@ message TableIndex {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
        GlobalJsonIndex global_json_index = 12;
        LocalMinMaxIndex local_min_max_index = 14;
-       GlobalFulltextCompactIndex global_fulltext_compact_index = 15;
-       GlobalFulltextCompactRelevanceIndex global_fulltext_compact_relevance_index = 16;
-       GlobalJsonCompactIndex global_json_compact_index = 17;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -435,9 +426,6 @@ message TableIndexDescription {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
        GlobalJsonIndex global_json_index = 14;
        LocalMinMaxIndex local_min_max_index = 15;
-       GlobalFulltextCompactIndex global_fulltext_compact_index = 16;
-       GlobalFulltextCompactRelevanceIndex global_fulltext_compact_relevance_index = 17;
-       GlobalJsonCompactIndex global_json_compact_index = 18;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

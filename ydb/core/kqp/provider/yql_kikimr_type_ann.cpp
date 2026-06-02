@@ -1234,13 +1234,21 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltextPlain;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalFulltextCompact;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalFulltextPlain;
+                }
             } else if (type == "globalFulltextRelevance") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalFulltextCompactRelevance;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+                }
             } else if (type == "globalJson") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
@@ -1250,25 +1258,11 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index is not supported on column tables"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalJson;
-            } else if (type == "globalFulltextCompact") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
-                    return TStatus::Error;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalJsonCompact;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalJson;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltextCompact;
-            } else if (type == "globalFulltextCompactRelevance") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
-                    return TStatus::Error;
-                }
-                indexType = TIndexDescription::EType::GlobalFulltextCompactRelevance;
-            } else if (type == "globalJsonCompact") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
-                    return TStatus::Error;
-                }
-                indexType = TIndexDescription::EType::GlobalJsonCompact;
             } else if (type == "localBloomFilter") {
                 if (meta->StoreType == EStoreType::Column &&
                     !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {

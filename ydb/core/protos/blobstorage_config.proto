@@ -680,6 +680,10 @@ message TInferPDiskSlotCountSettings {
     optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 2;
 }
 
+message TDeleteSpecificGroups {
+    repeated uint32 GroupIds = 1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -737,6 +741,7 @@ message TConfigRequest {
             TDeleteDDiskPool DeleteDDiskPool = 59;
             TMoveDDisk MoveDDisk = 60;
             TPopulatePDisk PopulatePDisk = 61;
+            TDeleteSpecificGroups DeleteSpecificGroups = 62;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

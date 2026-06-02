@@ -2287,10 +2287,6 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         } else {
             request.Request.ClearMaxPermissions();
         }
-    } else if (rec.HasMaxPermissions()) {
-        request.Request.SetMaxPermissions(rec.GetMaxPermissions());
-    } else {
-        request.Request.ClearMaxPermissions();
     }
 
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, rec.GetRequestId(), ctx);

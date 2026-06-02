@@ -531,17 +531,19 @@ class TCreateMaintenanceTask
         }
 
         for (const auto& group : request.action_groups()) {
-            if (group.actions().size() < 1) {
+            const ui32 actionsCount = group.actions().size();
+            if (actionsCount < 1) {
                 Reply(Ydb::StatusIds::BAD_REQUEST, "Empty actions");
                 return false;
             }
 
-            if (!GetCmsState()->EnableSingleCompositeActionGroup && group.actions().size() > 1) {
+            if (!GetCmsState()->EnableSingleCompositeActionGroup && actionsCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableSingleCompositeActionGroup is off");
                 return false;
             }
 
-            if (request.action_groups().size() > 1 && group.actions().size() > 1) {
+            const ui32 actionGroupsCount = request.action_groups().size();
+            if (actionGroupsCount > 1 && actionsCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
                     << "A task can have either a single composite action group or many action groups"
                     << " with only one action");
@@ -555,16 +557,16 @@ class TCreateMaintenanceTask
             }
         }
 
-        if (request.task_options().max_inflight_actions() > 0) {
-            const bool hasSingleCompositeActionGroup = request.action_groups().size() == 1
+        const ui32 maxInflightActions = request.task_options().max_inflight_actions();
+        if (maxInflightActions > 0) {
+            const bool hasSingleCompositeActionGroup = actionGroupsCount == 1
                 && request.action_groups(0).actions().size() > 1;
             if (hasSingleCompositeActionGroup) {
                 LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS,
                     "max_inflight_actions is not applicable to a single composite action group:"
                     << " actions within one group are granted atomically");
             }
-            if (static_cast<ui32>(request.action_groups().size())
-                    < request.task_options().max_inflight_actions()) {
+            if (actionGroupsCount < maxInflightActions) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS,
                     "max_inflight_actions is greater than the number of action groups");
             }

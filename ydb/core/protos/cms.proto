@@ -248,8 +248,6 @@ message TCheckRequest {
   optional string   RequestId = 2;
   optional bool     DryRun = 3;
   optional EAvailabilityMode AvailabilityMode = 4 [default = MODE_MAX_AVAILABILITY];
-  // Per-call override of TPermissionRequest.MaxPermissions for the underlying scheduled request.
-  optional uint32 MaxPermissions = 5 [default = 0];
 }
 
 message TManagePermissionRequest {

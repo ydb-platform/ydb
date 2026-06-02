@@ -1189,7 +1189,6 @@ public:
         , TestParams(testParams)
     {
         TempKeyBuffer.resize(KeyTypes.size(), {});
-        TempStateBuffer.resize(stateItemTypes.size(), {});
 
         if (!IsAggregation) {
             IsEstimating = !(MemoryHelper.KeySizeBound && MemoryHelper.StateSizeBound);
@@ -1511,7 +1510,6 @@ protected:
     TSegmentedArena::TIterator DrainArenaIterator;
     THolder<TMap> Map;
     std::vector<TUnboxedValuePod> TempKeyBuffer;
-    std::vector<TUnboxedValue> TempStateBuffer; // for passthrough mode in early combiner
     TUnboxedValueVector InputBuffer;
     size_t StatesOffset;
     bool Draining;

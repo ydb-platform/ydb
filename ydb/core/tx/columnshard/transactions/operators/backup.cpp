@@ -22,7 +22,12 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     }
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(
         NKikimr::NOlap::TSnapshot{ txBody.GetBackupTask().GetSnapshotStep(), txBody.GetBackupTask().GetSnapshotTxId() });
-    auto columns = schema->GetIndexInfo().GetColumns();
+    const auto& columnsMap = schema->GetIndexInfo().GetColumns();
+    std::vector<NOlap::TNameTypeInfo> columns;
+    columns.reserve(columnsMap.size());
+    for (const auto& [_, nameType] : columnsMap) {
+        columns.emplace_back(nameType);
+    }
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), columns, txBody.GetBackupTask(), GetTxId());
     NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()),
         std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);

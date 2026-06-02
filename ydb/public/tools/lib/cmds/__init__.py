@@ -319,12 +319,27 @@ def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
-def should_write_default_config(config_path, target_config):
-    if config_path:
-        return os.path.abspath(config_path) != os.path.abspath(target_config)
-    if os.path.exists(target_config) and os.path.getsize(target_config) > 0:
-        return False
-    return True
+def same_config_path(left, right):
+    return os.path.realpath(left) == os.path.realpath(right)
+
+
+def should_preserve_existing_config(target_config):
+    """Return True when an existing non-empty config.yaml should be kept.
+
+    On the first deploy (before the recipe metafile exists), a non-empty
+    target config is preserved to support bind-mounted configs in Docker.
+    If the metafile is removed while the data directory is kept, the existing
+    config is also preserved instead of being regenerated.
+    """
+    return os.path.exists(target_config) and os.path.getsize(target_config) > 0
+
+
+def resolve_deploy_config_action(config_path, target_config):
+    if config_path and not same_config_path(config_path, target_config):
+        return 'copy'
+    if should_preserve_existing_config(target_config):
+        return 'preserve'
+    return 'generate'
 
 
 def deploy(arguments):
@@ -413,16 +428,13 @@ def deploy(arguments):
         # This override only triggers on the very first deploy before the recipe metafile exists.
         # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
         target_config = os.path.join(configs_path, "config.yaml")
-        if config_path:
+        os.makedirs(configs_path, exist_ok=True)
+        action = resolve_deploy_config_action(config_path, target_config)
+        if action == 'copy':
             self.write_tls_data()
-            os.makedirs(configs_path, exist_ok=True)
-            if os.path.abspath(config_path) != os.path.abspath(target_config):
-                shutil.copyfile(config_path, target_config)
-            elif should_write_default_config(None, target_config):
-                original_write_proto_configs(configs_path)
+            shutil.copyfile(config_path, target_config)
             return
-
-        if not should_write_default_config(None, target_config):
+        if action == 'preserve':
             self.write_tls_data()
             return
 

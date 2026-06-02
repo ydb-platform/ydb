@@ -161,9 +161,9 @@ To update cluster (stop + start):
 
     arguments = parser.parse_args()
     if arguments.config_path is None:
-        ydb_config = os.environ.get('YDB_CONFIG')
-        if ydb_config:
-            arguments.config_path = ydb_config
+        ydb_config_path = os.environ.get('YDB_CONFIG_PATH')
+        if ydb_config_path:
+            arguments.config_path = ydb_config_path
     arguments.ydb_working_dir = cmds.wrap_path(arguments.ydb_working_dir)
     arguments.ydb_binary_path = cmds.wrap_path(arguments.ydb_binary_path)
     arguments.ydb_udfs_dir = cmds.wrap_path(arguments.ydb_udfs_dir)

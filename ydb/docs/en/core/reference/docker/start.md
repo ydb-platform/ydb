@@ -50,13 +50,13 @@ For more information about stopping and deleting a Docker container with {{ ydb-
 
 By default, when starting a Docker container for {{ ydb-short-name }}, a built-in [configuration file](../configuration/index.md) is used, which provides standard operating parameters. To override the configuration file when starting the container, specify the path to your pre-mounted configuration file using either:
 
-- the `YDB_CONFIG` environment variable (via `-e`);
+- the `YDB_CONFIG_PATH` environment variable (via `-e`);
 - the `--config-path` argument in the `docker run` command.
 
 If both are set, `--config-path` takes precedence.
 
 ```bash
-docker run -e YDB_CONFIG=/path/to/your/config/file "${docker_args[@]}"
+docker run -e YDB_CONFIG_PATH=/path/to/your/config/file "${docker_args[@]}"
 ```
 
 ```bash
@@ -114,7 +114,7 @@ For users who are not experienced with Docker, it's important to understand how 
        -e GRPC_TLS_PORT=2135
        -e GRPC_PORT=2136
        -e MON_PORT=8765
-       -e YDB_CONFIG=/ydb_config/my-ydb-config.yaml
+       -e YDB_CONFIG_PATH=/ydb_config/my-ydb-config.yaml
        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
    )
    

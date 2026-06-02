@@ -66,8 +66,9 @@ using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf
 using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
 
 static ui64 GetInstanceSeed(void* self) {
-    // Used to return CityHash64(self) but looks like that's unnecessary: we put the seed through regular and then Fibonacci hashing anyway
-    return reinterpret_cast<ui64>(self);
+    char buf[sizeof(void*)];
+    WriteUnaligned<void*>(buf, self);
+    return CityHash64(buf, sizeof(buf));
 }
 
 struct TSegmentedArena
@@ -993,9 +994,13 @@ protected:
         ui64 bucketId = 0;
         ui64 hash = Hasher(tempKey);
         if (EnableSpilling) {
-            // Lower 16 bits are used by the hash shuffle connection to distribute keys among tasks, so we can't use these (even with the hash seed)
-            // Another solution would be to rehash using a different function but shifted bits are uniform enough
-            bucketId = ((hash * 11400714819323198485llu) >> 16) & ((1ull << BucketBits) - 1ull);
+            // Lower 32 bits are used by the hash shuffle task selection fn (with no seed) and by the hash map slot selection fn (with the same seed)
+            // which use the same Fibonacci hashing trick with the same constant.
+            // Seeding ensures there's no significant correlation between the hash shuffle destination and the hash map slot,
+            // although it still could be improved... we'll deal with it later.
+            // The bucketId must not be correlated with either, so we'll just use the upper 32 bits.
+            // Another solution would be to rehash using a different function but shifted bits are uniform enough.
+            bucketId = ((hash * 11400714819323198485llu) >> 32) & ((1ull << BucketBits) - 1ull);
         }
 
         if (!SpillingStack.empty()) {

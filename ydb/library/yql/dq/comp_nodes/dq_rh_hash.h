@@ -7,6 +7,7 @@
 #include <util/generic/yexception.h>
 #include <span>
 
+#include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_rh_hash_utils.h>
 #include <yql/essentials/utils/is_pod.h>
 #include <yql/essentials/utils/prefetch.h>
@@ -271,7 +272,7 @@ private:
 
     Y_NO_INLINE void Grow() {
         auto newCapacity = Capacity_ * CalculateRHHashTableGrowFactor(Capacity_);
-        ui32 newCapacityShift = 32 - MostSignificantBit(newCapacity);
+        ui32 newCapacityShift = 32 - std::min<ui32>(MostSignificantBit(newCapacity), 32);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {

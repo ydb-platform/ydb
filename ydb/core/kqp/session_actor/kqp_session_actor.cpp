@@ -1928,7 +1928,7 @@ public:
         if (Settings.Database) {
             GUCSettings->Set("ydb_database", Settings.Database.substr(1, Settings.Database.size() - 1));
         }
-        if (Settings.UserName) {
+        if (Settings.UserName && !Settings.UserName->empty()) {
             GUCSettings->Set("ydb_user", *Settings.UserName);
         }
     }

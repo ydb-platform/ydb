@@ -449,6 +449,68 @@ namespace {
         }
     }
 
+
+    NYdb::NQuery::TExecuteQueryResult ExecuteQueryQueryApi(
+        TKikimrRunner& kikimr, const TString& userSid,
+        const TString& query, bool isThreadLocked)
+    {
+        auto impl = [&] {
+            TDriverConfig driverConfig;
+            driverConfig
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken(userSid + "@builtin");
+
+            auto driver = NYdb::TDriver(driverConfig);
+            auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .StatsMode(NYdb::NQuery::EStatsMode::Basic);
+            return queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                settings).ExtractValueSync();
+        };
+        return isThreadLocked ? kikimr.RunCall(impl) : impl();
+    }
+
+    void FillCacheQueryApi(TKikimrRunner& kikimr, const TVector<TString>& userSids, bool isThreadLocked) {
+        ui32 key = 0;
+        for (const auto& userSid : userSids) {
+            TString query = TStringBuilder()
+                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = "
+                << key++ << " /* qapi */;";
+
+            auto result = ExecuteQueryQueryApi(kikimr, userSid, query, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Query API populate failed for user " << userSid << ": "
+                << result.GetIssues().ToString());
+        }
+    }
+
+    void VerifyQueriesServedFromCacheQueryApi(TKikimrRunner& kikimr,
+        const TVector<TString>& userSids, bool isThreadLocked)
+    {
+        ui32 key = 0;
+        for (const auto& userSid : userSids) {
+            TString query = TStringBuilder()
+                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = "
+                << key++ << " /* qapi */;";
+
+            auto result = ExecuteQueryQueryApi(kikimr, userSid, query, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Query API verify failed for user " << userSid << ": "
+                << result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(result.GetStats().has_value(),
+                "Query API verify must have stats, user " << userSid);
+            const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(stats.compilation().from_cache(),
+                "Query API verify: query for user " << userSid
+                << " should be served from cache, but was recompiled");
+        }
+    }
+
     } // namespace
 
     Y_UNIT_TEST_SUITE(KqpWarmup) {
@@ -1450,6 +1512,61 @@ namespace {
             const i64 hitsAfterSecondClientRound = counters.WarmupHitsInWindow->Val();
             UNIT_ASSERT_VALUES_EQUAL_C(hitsAfterSecondClientRound, hitsAfterFirstClientRound,
                 "Repeated client hits on the same warmup uid must not be counted again");
+        }
+
+        // Query API mirror of ObservationWindowHitsAreAttributedToWarmup.
+        // Regression guard: warmup-compiled GENERIC_QUERY entries must match
+        // the user's TKqpQueryId so cache hits are attributed to warmup.
+        Y_UNIT_TEST(ObservationWindowHitsAreAttributedToWarmupQueryApi) {
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+            params.NodeCount = 1;
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            const bool isThreadLocked = !params.UseRealThreads;
+            GrantPermissions(kikimr, "/Root/KeyValue", params.UserSids, isThreadLocked);
+            FillCacheQueryApi(kikimr, params.UserSids, isThreadLocked);
+
+            // Skip PrepareWarmupTest's expectedUniqueCount accounting; warmup
+            // actor doesn't depend on it and we deliberately use Query API only.
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            TWarmupTestEnv env{kikimr, runtime, isThreadLocked, 0,
+                params.NodeCount, params.UserSids, 0};
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+            const i64 hitsBeforeWarmup = counters.WarmupHitsInWindow->Val();
+            const i64 savedMsBeforeWarmup = counters.WarmupSavedCompileMs->Val();
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup must succeed: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Warmup must populate at least one Query API entry");
+
+            VerifyQueriesServedFromCacheQueryApi(kikimr, env.UserSids, env.IsThreadLocked);
+
+            const i64 hitsAfterFirstClientRound = counters.WarmupHitsInWindow->Val();
+            const i64 savedMsAfterFirstClientRound = counters.WarmupSavedCompileMs->Val();
+
+            UNIT_ASSERT_C(hitsAfterFirstClientRound > hitsBeforeWarmup,
+                "[QueryAPI] First client request hitting a warmup entry must increment "
+                "WarmupHitsInWindow (was " << hitsBeforeWarmup
+                << ", now " << hitsAfterFirstClientRound << ")");
+            UNIT_ASSERT_C(savedMsAfterFirstClientRound >= savedMsBeforeWarmup,
+                "[QueryAPI] WarmupSavedCompileMs must be non-decreasing (was "
+                << savedMsBeforeWarmup << ", now " << savedMsAfterFirstClientRound << ")");
+
+            VerifyQueriesServedFromCacheQueryApi(kikimr, env.UserSids, env.IsThreadLocked);
+
+            const i64 hitsAfterSecondClientRound = counters.WarmupHitsInWindow->Val();
+            UNIT_ASSERT_VALUES_EQUAL_C(hitsAfterSecondClientRound, hitsAfterFirstClientRound,
+                "[QueryAPI] Repeated client hits on the same warmup uid must not be counted again");
         }
 
         Y_UNIT_TEST(ObservationWindowCountsMissesOnly) {

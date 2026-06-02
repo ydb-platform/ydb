@@ -1253,7 +1253,7 @@ void TKqpQueryCache::AccountWarmupHitImpl(
                 AtomicSet(WarmupHasPendingAtomic, 1);
             }
             return;
-        case EWarmupAttributionMode::Client:
+        case EWarmupAttributionMode::Client: {
             if (WarmupAccountingIsNoopFast()) {
                 return;
             }
@@ -1263,6 +1263,7 @@ void TKqpQueryCache::AccountWarmupHitImpl(
                 counters->WarmupSavedCompileMs->Add(compileResult->CompilationDuration.MilliSeconds());
             }
             return;
+        }
     }
 }
 

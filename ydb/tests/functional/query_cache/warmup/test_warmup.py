@@ -1,5 +1,4 @@
 import logging
-import re
 import socket
 import time
 from contextlib import contextmanager
@@ -29,49 +28,42 @@ WARMUP_QUERY_PARAM = "DECLARE $val AS Int64; SELECT $val + 1 AS result"
 WARMUP_PARAM_VALUES = {"$val": 42}
 
 
-def _node_id_from_session_id(session_id):
-    m = re.search(r'node_id=(\d+)', session_id)
-    return int(m.group(1)) if m else None
-
-
-# Public SDK has no API to create a session on a specific node — the pool
-# load-balances. We retry create-and-discard until we land on target_node_id.
-# Yields None on failure; callers must check.
+# Pins every RPC to `node`. ydb.Driver(**kwargs) doesn't forward
+# disable_discovery in this SDK build, so set it on DriverConfig explicitly.
 @contextmanager
-def _pinned_table_session(driver, target_node_id, max_attempts=30):
-    pinned = None
-    for _ in range(max_attempts):
-        candidate = driver.table_client.session().create()
-        if _node_id_from_session_id(candidate.session_id) == target_node_id:
-            pinned = candidate
-            break
-        candidate.delete()
-    if pinned is None:
-        yield None
-        return
+def _node_pinned_driver(node, database="/Root", timeout=10):
+    config = ydb.DriverConfig(
+        endpoint=f"grpc://{node.host}:{node.port}",
+        database=database,
+    )
+    config.disable_discovery = True
+    driver = ydb.Driver(driver_config=config)
+    driver.wait(timeout=timeout)
     try:
-        yield pinned
+        yield driver
     finally:
-        pinned.delete()
+        driver.stop()
 
 
 @contextmanager
-def _pinned_query_session(driver, target_node_id, max_attempts=30):
-    pinned = None
-    for _ in range(max_attempts):
-        candidate = ydb.QuerySession(driver)
-        candidate.create()
-        if candidate.node_id == target_node_id:
-            pinned = candidate
-            break
-        candidate.delete()
-    if pinned is None:
-        yield None
-        return
-    try:
-        yield pinned
-    finally:
-        pinned.delete()
+def _pinned_table_session(node, database="/Root", driver_timeout=10):
+    with _node_pinned_driver(node, database=database, timeout=driver_timeout) as driver:
+        session = driver.table_client.session().create()
+        try:
+            yield session
+        finally:
+            session.delete()
+
+
+@contextmanager
+def _pinned_query_session(node, database="/Root", driver_timeout=10):
+    with _node_pinned_driver(node, database=database, timeout=driver_timeout) as driver:
+        session = ydb.QuerySession(driver)
+        session.create()
+        try:
+            yield session
+        finally:
+            session.delete()
 
 
 class CompileCacheView:
@@ -82,7 +74,7 @@ class CompileCacheView:
     def get_cached_queries(self, node_id):
         node = self.cluster.nodes[node_id]
         driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{node.port}",
+            endpoint=f"grpc://{node.host}:{node.port}",
             database=self.database,
         )
         driver.wait(timeout=10)
@@ -129,42 +121,28 @@ class CompileCacheView:
                 from_cache += 1
         return from_cache, len(queries)
 
-    def verify_queries_from_cache_query_api(self, queries, node, nodes_count=None):
-        max_attempts = (nodes_count or 3) * 4
-        driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{node.port}",
-            database=self.database,
-        )
-        driver.wait(timeout=10)
-        try:
-            with _pinned_query_session(driver, node.node_id, max_attempts=max_attempts) as session:
-                if session is None:
-                    raise AssertionError(
-                        f"Failed to get session on node {node.node_id} after {max_attempts} attempts "
-                        "(queries are distributed across nodes)"
-                    )
-                from_cache_count = 0
-                for item in queries:
-                    if isinstance(item, tuple):
-                        query, params = item
-                    else:
-                        query, params = item, None
-                    result = session.execute(
-                        query,
-                        params or {},
-                        stats_mode=ydb.QueryStatsMode.BASIC,
-                    )
-                    for _ in result:
-                        pass
-                    if session.last_query_stats and session.last_query_stats.compilation.from_cache:
-                        from_cache_count += 1
-                return from_cache_count, len(queries)
-        finally:
-            driver.stop()
+    def verify_queries_from_cache_query_api(self, queries, node):
+        with _pinned_query_session(node, database=self.database) as session:
+            from_cache_count = 0
+            for item in queries:
+                if isinstance(item, tuple):
+                    query, params = item
+                else:
+                    query, params = item, None
+                result = session.execute(
+                    query,
+                    params or {},
+                    stats_mode=ydb.QueryStatsMode.BASIC,
+                )
+                for _ in result:
+                    pass
+                if session.last_query_stats and session.last_query_stats.compilation.from_cache:
+                    from_cache_count += 1
+            return from_cache_count, len(queries)
 
-    def verify_queries_served_from_cache(self, queries, node, use_query_api=True, nodes_count=None):
+    def verify_queries_served_from_cache(self, queries, node, use_query_api=True):
         if use_query_api:
-            return self.verify_queries_from_cache_query_api(queries, node, nodes_count=nodes_count)
+            return self.verify_queries_from_cache_query_api(queries, node)
         return self.verify_queries_in_cache(queries, node.node_id)
 
     @staticmethod
@@ -201,8 +179,7 @@ class CompileCacheView:
             "saved_ms": counters.get("Warmup/SavedCompileMs", 0),
         }
 
-    # Polls Warmup/QueriesCompiled until it stays the same for 2 reads in a row,
-    # then returns. Avoids racing the test against an in-progress warmup actor.
+    # Returns when Warmup/QueriesCompiled stops growing (2 stable reads).
     @classmethod
     def wait_for_warmup_finished(cls, node, timeout=60):
         start_time = time.time()
@@ -230,29 +207,17 @@ class CompileCacheView:
 
         for node_id in node_ids:
             node = self.cluster.nodes[node_id]
-            driver = ydb.Driver(endpoint=f"grpc://localhost:{node.port}", database=self.database)
-            driver.wait(timeout=10)
-            try:
-                if use_query_api:
-                    ok = self._populate_node_query_api(driver, node_id, queries)
-                else:
-                    ok = self._populate_node_table_api(driver, node_id, queries)
-                if not ok:
-                    logger.warning(
-                        "Could not pin session to node %d after 30 attempts, "
-                        "cache may be on a different node", node_id,
-                    )
-            finally:
-                driver.stop()
+            if use_query_api:
+                self._populate_node_query_api(node, queries)
+            else:
+                self._populate_node_table_api(node, queries)
 
         queries.append((WARMUP_QUERY_PARAM, WARMUP_PARAM_VALUES))
         return queries
 
-    def _populate_node_table_api(self, driver, target_node_id, queries, repeat_count=3):
+    def _populate_node_table_api(self, node, queries, repeat_count=3):
         settings = ydb.BaseRequestSettings().with_timeout(10)
-        with _pinned_table_session(driver, target_node_id) as session:
-            if session is None:
-                return False
+        with _pinned_table_session(node, database=self.database) as session:
             for query in queries:
                 prepared = session.prepare(query)
                 for _ in range(repeat_count):
@@ -262,13 +227,9 @@ class CompileCacheView:
                 session.transaction().execute(
                     prepared_param, WARMUP_PARAM_VALUES, commit_tx=True, settings=settings,
                 )
-            return True
 
-    @staticmethod
-    def _populate_node_query_api(driver, target_node_id, queries, repeat_count=3):
-        with _pinned_query_session(driver, target_node_id) as session:
-            if session is None:
-                return False
+    def _populate_node_query_api(self, node, queries, repeat_count=3):
+        with _pinned_query_session(node, database=self.database) as session:
             for query in queries:
                 for _ in range(repeat_count):
                     for _ in session.execute(query):
@@ -276,7 +237,6 @@ class CompileCacheView:
             for _ in range(repeat_count):
                 for _ in session.execute(WARMUP_QUERY_PARAM, WARMUP_PARAM_VALUES):
                     pass
-            return True
 
 
 def _make_warmup_config(nodes=3, max_nodes_to_request=None,
@@ -349,20 +309,19 @@ class TestWarmupBasic:
 
     def _assert_cache_hit(self, queries, node, label, use_query_api=False):
         from_cache, total = self.cache.verify_queries_served_from_cache(
-            queries, node, use_query_api=use_query_api, nodes_count=len(self.cluster.nodes),
+            queries, node, use_query_api=use_query_api,
         )
         logger.info("[%s] Node %d: cache hit %d/%d", label, node.node_id, from_cache, total)
         assert from_cache == total, f"[{label}] Expected all {total} from cache, got {from_cache}/{total}"
 
+    # Table-API _assert_cache_hit only reads sysview; we need an actual
+    # client RPC against `node` to bump Warmup/HitsInWindow.
     def _trigger_client_hits(self, node, use_query_api):
-        # _assert_cache_hit in the Table API path only reads sysview; we need
-        # actual client execution against `node` for hit counters to move.
         self.cache.populate_cache_on_nodes(
             [node.node_id], use_query_api=use_query_api,
         )
 
     def _assert_warmup_attribution_hits(self, node, label):
-        # SavedCompileMs is a soft check: trivial SELECTs may round to 0ms.
         ctrs = CompileCacheView.get_warmup_window_counters(node)
         logger.info("[%s] Node %d warmup window counters: %s", label, node.node_id, ctrs)
         assert ctrs["hits"] > 0, (
@@ -372,13 +331,10 @@ class TestWarmupBasic:
             f"[{label}] Warmup/SavedCompileMs must be present (>= 0), got {ctrs}"
         )
 
-    # _run_pinned_queries_*: returns (pinned, ok_count, errors).
     @staticmethod
-    def _run_pinned_queries_table_api(driver, target_node_id, queries, query_timeout=15):
+    def _run_pinned_queries_table_api(node, queries, query_timeout=15):
         settings = ydb.BaseRequestSettings().with_timeout(query_timeout)
-        with _pinned_table_session(driver, target_node_id) as session:
-            if session is None:
-                return False, 0, []
+        with _pinned_table_session(node) as session:
             ok = 0
             errors = []
             for query in queries:
@@ -387,13 +343,11 @@ class TestWarmupBasic:
                     ok += 1
                 except Exception as e:
                     errors.append(e)
-            return True, ok, errors
+            return ok, errors
 
     @staticmethod
-    def _run_pinned_queries_query_api(driver, target_node_id, queries):
-        with _pinned_query_session(driver, target_node_id) as session:
-            if session is None:
-                return False, 0, []
+    def _run_pinned_queries_query_api(node, queries):
+        with _pinned_query_session(node) as session:
             ok = 0
             errors = []
             for query in queries:
@@ -403,7 +357,7 @@ class TestWarmupBasic:
                     ok += 1
                 except Exception as e:
                     errors.append(e)
-            return True, ok, errors
+            return ok, errors
 
     def test_warmup_basic(self):
         all_node_ids = sorted(self.cluster.nodes.keys())
@@ -428,17 +382,16 @@ class TestWarmupBasic:
         logger.info("SCENARIO 2/4: Query API warmup (restart node 3)")
         self._restart_node(node3)
         self._assert_warmup(node3, "QueryAPI")
-        # Query API path of _assert_cache_hit already executes the queries
-        # against node3 — no separate _trigger_client_hits call needed.
+        # Query API _assert_cache_hit already runs the queries against node3.
         self._assert_cache_hit(query_queries, node3, "QueryAPI", use_query_api=True)
         self._assert_warmup_attribution_hits(node3, "QueryAPI")
 
-        # KqpProxy's TryStartWarmup gates on PeerProxyNodeResources.size() > 1,
-        # which is satisfied by {self, the other freshly-restarted peer} alone.
-        # The federated .sys/compile_cache_queries scan then filters by
-        # NodeId IN (self, peer) and misses node 1 (the only cache holder),
-        # so warmup may complete with fetched=0. Strict assertions live in
-        # S1/S2/S4; this scenario only smoke-tests "nothing crashes".
+        # TryStartWarmup is single-shot on the first PeerProxyNodeResources
+        # snapshot with size > 1. With simultaneous restart, that snapshot
+        # may briefly miss node 1 (its old board entry expires before the
+        # new one is published), so the federated scan filters out the only
+        # cache holder and fetched=0. Production warm-restart is staggered
+        # in time and doesn't hit this; here we only smoke-test no crash.
         logger.info("SCENARIO 3/4: Simultaneous restart (nodes 2, 3)")
         node2 = self.cluster.nodes[2]
         logger.info("Stopping nodes 2 and 3 ...")
@@ -462,13 +415,12 @@ class TestWarmupBasic:
             )
             if fetched == 0:
                 logger.warning(
-                    "[Simultaneous/node%d] TryStartWarmup race -> fetched=0 (see comment above)",
+                    "[Simultaneous/node%d] TryStartWarmup race -> fetched=0",
                     node.node_id,
                 )
 
-        # TKqpQueryId.Settings.QueryType is part of the compile cache key, so
-        # Table API and Query API entries live in different buckets — populate
-        # both before scenario 4 to give 4a/4b independent warmed texts.
+        # QueryType is part of TKqpQueryId, so Table API and Query API entries
+        # live in different cache buckets — populate both before S4.
         logger.info("Re-populating cache on all nodes for scenario 4 (both APIs)")
         self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
         self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=True)
@@ -478,11 +430,6 @@ class TestWarmupBasic:
         self._restart_node(node3, sleep_after=3)
         self._assert_warmup(node3, "Concurrent")
 
-        # Hits attribution is best-effort: warmup actor restores QueryType
-        # from .sys but cannot reconstruct every TKqpQueryId field (Settings
-        # subset, GUCSettings) — the warmup-compiled key may differ from the
-        # user-execute key and suppress HitsInWindow for warmed texts. Logged
-        # rather than asserted; misses below are the load-bearing check.
         warmed_queries = list(WARMUP_QUERIES)
 
         # 4a: Table API
@@ -493,24 +440,13 @@ class TestWarmupBasic:
         ctrs_before_4a = CompileCacheView.get_warmup_window_counters(node3)
         logger.info("[Concurrent/4a Table] window before: %s", ctrs_before_4a)
 
-        table_driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{node3.port}", database="/Root",
+        ok_t, errors_t = self._run_pinned_queries_table_api(
+            node3, warmed_queries + fresh_table,
         )
-        table_driver.wait(timeout=20)
-        try:
-            pinned_t, ok_t, errors_t = self._run_pinned_queries_table_api(
-                table_driver, node3.node_id, warmed_queries + fresh_table,
-            )
-        finally:
-            table_driver.stop()
-
         for e in errors_t:
             logger.warning("[Concurrent/4a Table] pinned query failed: %r", e)
         logger.info(
             "[Concurrent/4a Table] OK: %d/%d", ok_t, len(warmed_queries) + len(fresh_table),
-        )
-        assert pinned_t, (
-            f"[Concurrent/4a Table] Could not pin a Table session to node {node3.node_id}"
         )
         assert ok_t == len(warmed_queries) + len(fresh_table), (
             f"[Concurrent/4a Table] Expected all queries OK, got {ok_t}"
@@ -520,11 +456,10 @@ class TestWarmupBasic:
         logger.info("[Concurrent/4a Table] window after: %s", ctrs_after_4a)
         d_hits_4a = ctrs_after_4a["hits"] - ctrs_before_4a["hits"]
         d_misses_4a = ctrs_after_4a["misses"] - ctrs_before_4a["misses"]
-        if d_hits_4a < len(warmed_queries):
-            logger.warning(
-                "[Concurrent/4a Table] HitsInWindow delta=%d, expected >= %d (cache-key mismatch, see above)",
-                d_hits_4a, len(warmed_queries),
-            )
+        assert d_hits_4a >= len(warmed_queries), (
+            f"[Concurrent/4a Table] Warmed queries pinned to node3 must bump "
+            f"Warmup/HitsInWindow >= {len(warmed_queries)}, got delta={d_hits_4a}, ctrs={ctrs_after_4a}"
+        )
         assert d_misses_4a >= len(fresh_table), (
             f"[Concurrent/4a Table] Fresh probes pinned to node3 must bump "
             f"Warmup/MissesInWindow >= {len(fresh_table)}, got delta={d_misses_4a}, ctrs={ctrs_after_4a}"
@@ -535,24 +470,13 @@ class TestWarmupBasic:
             f"SELECT 7919 + {i} AS unique_warmup_miss_probe_q_{i}"
             for i in range(6)
         ]
-        query_driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{node3.port}", database="/Root",
+        ok_q, errors_q = self._run_pinned_queries_query_api(
+            node3, warmed_queries + fresh_query,
         )
-        query_driver.wait(timeout=20)
-        try:
-            pinned_q, ok_q, errors_q = self._run_pinned_queries_query_api(
-                query_driver, node3.node_id, warmed_queries + fresh_query,
-            )
-        finally:
-            query_driver.stop()
-
         for e in errors_q:
             logger.warning("[Concurrent/4b Query] pinned query failed: %r", e)
         logger.info(
             "[Concurrent/4b Query] OK: %d/%d", ok_q, len(warmed_queries) + len(fresh_query),
-        )
-        assert pinned_q, (
-            f"[Concurrent/4b Query] Could not pin a Query session to node {node3.node_id}"
         )
         assert ok_q == len(warmed_queries) + len(fresh_query), (
             f"[Concurrent/4b Query] Expected all queries OK, got {ok_q}"
@@ -562,11 +486,10 @@ class TestWarmupBasic:
         logger.info("[Concurrent/4b Query] window after: %s", ctrs_after_4b)
         d_hits_4b = ctrs_after_4b["hits"] - ctrs_after_4a["hits"]
         d_misses_4b = ctrs_after_4b["misses"] - ctrs_after_4a["misses"]
-        if d_hits_4b < len(warmed_queries):
-            logger.warning(
-                "[Concurrent/4b Query] HitsInWindow delta=%d, expected >= %d (cache-key mismatch, see above)",
-                d_hits_4b, len(warmed_queries),
-            )
+        assert d_hits_4b >= len(warmed_queries), (
+            f"[Concurrent/4b Query] Warmed queries pinned to node3 must bump "
+            f"Warmup/HitsInWindow >= {len(warmed_queries)}, got delta={d_hits_4b}, ctrs={ctrs_after_4b}"
+        )
         assert d_misses_4b >= len(fresh_query), (
             f"[Concurrent/4b Query] Fresh probes pinned to node3 must bump "
             f"Warmup/MissesInWindow >= {len(fresh_query)}, got delta={d_misses_4b}, ctrs={ctrs_after_4b}"
@@ -597,7 +520,6 @@ class TestWarmupStress:
 
     def test_warmup_stress(self):
         all_node_ids = sorted(self.cluster.nodes.keys())
-        nodes_count = len(self.cluster.nodes)
         node3 = self.cluster.nodes[3]
 
         logger.info("SETUP: Populating cache on all nodes (Query API)")
@@ -605,8 +527,7 @@ class TestWarmupStress:
         logger.info("%d queries on nodes %s", len(queries), all_node_ids)
         time.sleep(2)
 
-        # Counters reset on node stop, so every round must fetch+compile the
-        # full WARMUP_QUERIES + 1 parametrised query fresh.
+        # Counters reset on node stop, so every round refills from scratch.
         expected_min_compiled = len(queries)
 
         logger.info("SCENARIO 1/3: Multiple restarts of node 3 (3 rounds)")
@@ -634,7 +555,7 @@ class TestWarmupStress:
             )
 
             from_cache, total = self.cache.verify_queries_served_from_cache(
-                queries, node3, use_query_api=True, nodes_count=nodes_count,
+                queries, node3, use_query_api=True,
             )
             logger.info("Round %d: cache hit %d/%d", i + 1, from_cache, total)
             assert from_cache == total, (
@@ -667,7 +588,7 @@ class TestWarmupStress:
             assert compiled > 0, f"[Rolling] node {nid}: WarmupQueriesCompiled should be > 0, got {compiled}"
 
             from_cache, total = self.cache.verify_queries_served_from_cache(
-                queries, node, use_query_api=True, nodes_count=nodes_count,
+                queries, node, use_query_api=True,
             )
             logger.info("[Rolling] node %d: cache hit %d/%d", nid, from_cache, total)
             assert from_cache == total, (
@@ -691,11 +612,10 @@ class TestWarmupStress:
             node.start()
         time.sleep(8)
 
-        # Same TryStartWarmup race as TestWarmupBasic Scenario 3: with both
-        # nodes coming up at once their board view can converge on each other
-        # without node 1. We require at least one node to warm up; for nodes
-        # that raced, queries must still be served from cache via interconnect
-        # — that's the user-facing invariant.
+        # Same TryStartWarmup race as TestWarmupBasic S3 (see comment there).
+        # We require at least one node to warm up; for raced nodes, the
+        # user-facing invariant (queries served from cache via interconnect)
+        # is checked only on those that did fetch.
         any_fetched = False
         for node in nodes_to_restart:
             counters = CompileCacheView.wait_for_warmup_finished(
@@ -711,7 +631,7 @@ class TestWarmupStress:
             if fetched > 0:
                 any_fetched = True
                 from_cache, total = self.cache.verify_queries_served_from_cache(
-                    queries, node, use_query_api=True, nodes_count=nodes_count,
+                    queries, node, use_query_api=True,
                 )
                 logger.info("[FullRestart] node %d: cache hit %d/%d", node.node_id, from_cache, total)
                 assert from_cache == total, (
@@ -719,7 +639,7 @@ class TestWarmupStress:
                 )
             else:
                 logger.warning(
-                    "[FullRestart] node %d: TryStartWarmup race -> fetched=0 (see comment above)",
+                    "[FullRestart] node %d: TryStartWarmup race -> fetched=0",
                     node.node_id,
                 )
 
@@ -728,8 +648,6 @@ class TestWarmupStress:
         logger.info("ALL 3 STRESS SCENARIOS PASSED")
 
 
-# Single-node cluster: no peers ever discovered, warmup must skip; counters
-# stay at 0 past the hard deadline and the cluster keeps serving queries.
 class TestWarmupSingleNode:
     SOFT_DEADLINE_SECONDS = 10
     HARD_DEADLINE_SECONDS = 12
@@ -760,7 +678,7 @@ class TestWarmupSingleNode:
     def test_warmup_skips_on_single_node(self):
         node = self.cluster.nodes[1]
 
-        wait_seconds = self.HARD_DEADLINE_SECONDS + 2
+        wait_seconds = 3
         logger.info("Waiting %ds past warmup hard deadline before reading counters", wait_seconds)
         time.sleep(wait_seconds)
 
@@ -785,9 +703,8 @@ class TestWarmupSingleNode:
         finally:
             pool.stop()
 
-        # No warmup inserts -> observation window must stay closed even after
-        # the client query above (HitsInWindow/MissesInWindow only attribute
-        # to in-window inserts).
+        # HitsInWindow/MissesInWindow only attribute to in-window inserts;
+        # without warmup inserts the window stays closed.
         window = CompileCacheView.get_warmup_window_counters(node)
         logger.info("[SingleNode] window counters after client query: %s", window)
         assert window["hits"] == 0 and window["misses"] == 0, (
@@ -797,9 +714,6 @@ class TestWarmupSingleNode:
         logger.info("SingleNode skip scenario PASSED")
 
 
-# Multi-node cold start (no entries in any compile cache): proxies discover
-# peers (>1) and warmup actor scans .sys/compile_cache_queries, finds it
-# empty, completes with no work. Fetched/Compiled stay at 0 on every node.
 class TestWarmupMultiNodeColdStart:
     SOFT_DEADLINE_SECONDS = 10
     HARD_DEADLINE_SECONDS = 12
@@ -828,7 +742,7 @@ class TestWarmupMultiNodeColdStart:
             cls.cluster.stop()
 
     def test_warmup_cold_start_no_queries(self):
-        wait_seconds = self.HARD_DEADLINE_SECONDS + 3
+        wait_seconds = 4
         logger.info("Waiting %ds past warmup hard deadline before reading counters", wait_seconds)
         time.sleep(wait_seconds)
 
@@ -854,7 +768,6 @@ class TestWarmupMultiNodeColdStart:
         finally:
             pool.stop()
 
-        # No warmup inserts anywhere -> window must stay closed on every node.
         for nid in sorted(self.cluster.nodes.keys()):
             node = self.cluster.nodes[nid]
             window = CompileCacheView.get_warmup_window_counters(node)
@@ -875,12 +788,6 @@ def _is_tcp_port_open(host, port, timeout=0.4):
         return False
 
 
-# gRPC isolation during warmup: until the warmup actor sends
-# TEvKqpWarmupComplete, GRpcServersManager (run.cpp:288-300) does not call
-# Start() on the gRPC servers, so the port stays closed to external clients.
-# Port-closed window is short on small caches; on very fast hosts we may miss
-# it and `grpc_closed_observed` stays False — we log instead of failing,
-# because the load-bearing invariant is "port is open after warmup".
 class TestWarmupGrpcIsolation:
     @classmethod
     def setup_class(cls):
@@ -938,7 +845,6 @@ class TestWarmupGrpcIsolation:
                 warmup_made_progress = True
 
             if warmup_made_progress and port_open:
-                # Re-check after a short delay to dodge a flaky one-shot success.
                 time.sleep(0.3)
                 if _is_tcp_port_open("localhost", grpc_port):
                     port_open_after_warmup = True
@@ -957,11 +863,12 @@ class TestWarmupGrpcIsolation:
             "TEvKqpWarmupComplete -> GRpcServersManager::Start path may be broken"
         )
 
+        # Port-closed window can be missed on fast hosts (warmup finishes
+        # before first sample); log instead of failing — the load-bearing
+        # invariant is "port is open after warmup".
         if not grpc_closed_observed:
             logger.warning(
-                "[GrpcIsolation] gRPC port was never observed closed during warmup — "
-                "warmup likely completed before first sample. Consider extending the cache "
-                "or adding artificial compilation delay to make the window observable."
+                "[GrpcIsolation] gRPC port was never observed closed during warmup"
             )
 
         ready_driver = ydb.Driver(

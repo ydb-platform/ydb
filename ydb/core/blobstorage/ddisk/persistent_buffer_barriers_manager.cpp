@@ -200,7 +200,7 @@ namespace NKikimr::NDDisk {
         return true;
     }
 
-    bool Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header) {
+    bool TPersistentBufferBarriersManager::Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header) {
         ui32 resPos = 0;
         ui32 cnt = oldLsns.size() + newLsns.size();
         if (cnt == 0 || cnt > TPersistentBufferFastErases::ErasesBufferLsnCount) {
@@ -247,7 +247,7 @@ namespace NKikimr::NDDisk {
         return true;
     }
 
-    std::vector<ui64> Uncompact(const ui8* data, bool isCompact) {
+    std::vector<ui64> TPersistentBufferBarriersManager::Uncompact(const ui8* data, bool isCompact) {
         std::vector<ui64> res;
         ui64 first = 0;
         memcpy(&first, data, sizeof(res[0]));

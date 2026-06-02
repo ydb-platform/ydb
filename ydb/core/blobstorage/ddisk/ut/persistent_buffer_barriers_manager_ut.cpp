@@ -196,6 +196,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT(added);
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(2000), MaxRawLsns + 1);
     }
+    
     Y_UNIT_TEST(AddEraseNonCompact) {
         auto mgr = MakeManager();
 

@@ -36,7 +36,6 @@ namespace NKikimr::NDDisk {
 
     static_assert(sizeof(TPersistentBufferHeader) == 128);
 
-
     struct TPersistentBufferBarriers {
 
         struct TBarrierRecord {

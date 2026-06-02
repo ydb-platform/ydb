@@ -159,7 +159,7 @@ namespace NKikimr::NDDisk {
         auto headerData = TRcBuf::UninitializedPageAligned(SectorSize);
         TPersistentBufferLsnRecordHeader *header = (TPersistentBufferLsnRecordHeader*)headerData.GetDataMut();
         memset(header, 0, SectorSize);
-        memcpy(header->Header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+        memcpy(header->Header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, sizeof(TPersistentBufferHeader::PersistentBufferHeaderSignature));
         header->Header.Version = 0;
         header->Header.PersistentBufferUniqueId = PersistentBufferUniqueId;
         header->Header.NodeId = BaseInfo.PDiskActorID.NodeId();

@@ -6,7 +6,6 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_PGWIRE
 

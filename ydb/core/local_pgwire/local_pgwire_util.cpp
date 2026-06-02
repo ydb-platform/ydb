@@ -1,7 +1,6 @@
 #include "local_pgwire_util.h"
 #include "log_impl.h"
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_PGWIRE
 

@@ -12,10 +12,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_PGWIRE
-
 
 namespace NLocalPgWire {
 

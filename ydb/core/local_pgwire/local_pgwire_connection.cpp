@@ -16,7 +16,6 @@
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_PGWIRE
 

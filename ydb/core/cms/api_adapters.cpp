@@ -530,6 +530,7 @@ class TCreateMaintenanceTask
             return false;
         }
 
+        const ui32 actionGroupsCount = request.action_groups().size();
         for (const auto& group : request.action_groups()) {
             const ui32 actionsCount = group.actions().size();
             if (actionsCount < 1) {
@@ -542,7 +543,6 @@ class TCreateMaintenanceTask
                 return false;
             }
 
-            const ui32 actionGroupsCount = request.action_groups().size();
             if (actionGroupsCount > 1 && actionsCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
                     << "A task can have either a single composite action group or many action groups"

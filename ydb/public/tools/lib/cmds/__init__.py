@@ -14,8 +14,6 @@ from six.moves.urllib.parse import urlparse
 
 import yatest
 
-logger = logging.getLogger(__name__)
-
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -24,6 +22,8 @@ from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator
 from library.python.testing.recipe import set_env
+
+logger = logging.getLogger(__name__)
 
 
 class EmptyArguments(object):

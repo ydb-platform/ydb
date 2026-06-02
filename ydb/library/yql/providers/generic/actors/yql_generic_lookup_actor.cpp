@@ -227,13 +227,8 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvListSplitsPart::TPtr ev) {
-<<<<<<< HEAD
-            auto response = ev->Get()->Response;
-            Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
-=======
             auto response = std::move(ev->Get()->Response);
-            Y_ABORT_UNLESS(response.splits_size() == 1);
->>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
+            Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
 

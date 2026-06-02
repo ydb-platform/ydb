@@ -96,8 +96,6 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalUnique;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalFulltext;
         default:
             return std::nullopt;
     }

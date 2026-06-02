@@ -2924,18 +2924,19 @@ void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
         return;
     }
 
-    TMaybe<ui64> txId = tx.GetTxId();
+    const TMaybe<ui64> txId = tx.GetTxId();
+    const TMaybe<ui64> step = tx.GetStep();
     PQ_ENSURE(txId.Defined());
-    PQ_ENSURE(tx.Tx);
+    PQ_ENSURE(step.Defined());
 
     TStaleTxMetaEntry entry;
-    entry.Step = tx.Tx->Step;
+    entry.Step = *step;
     entry.TxId = *txId;
     entry.SerializedTx = tx.SerializedTx;
     entry.TabletConfig = tx.TabletConfig;
     entry.BootstrapConfig = tx.BootstrapConfig;
     entry.PartitionsData = tx.PartitionsData;
-    
+
     AddCmdWritePersistStaleTxMeta(entry);
 }
 

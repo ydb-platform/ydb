@@ -60,19 +60,32 @@ Y_UNIT_TEST_SUITE(DataShardFulltext) {
 
         const auto tableId = ResolveTableId(server, sender, "/Root/table/ft_idx/indexImplTable");
         const auto shards = GetTableShards(server, sender, "/Root/table/ft_idx/indexImplTable");
+        ui64 txId = 100;
 
         Cout << "========= Initial writes =========\n";
         {
             // 1, 2, 3
             // 100, 200, 201, 203
             // 10, 20, 30
-            ExecSQL(server, sender, Q_(R"(
-                INSERT INTO `/Root/table/ft_idx/indexImplTable`
-                (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
-                ("red", 0, 0, true, "\x01\x01\x01"),
-                ("red", 0, 0, true, "dd\x01\x02"),
-                ("red", 0, 0, true, "\x0A\x0A\x0A");
-            )"));
+            TVector<TCell> cells(15);
+            cells[0] = TCell("red", 3);
+            cells[1] = TCell::Make((ui64)0);
+            cells[2] = TCell::Make((ui64)0);
+            cells[3] = TCell::Make(true);
+            cells[4] = TCell("\x01\x01\x01", 3);
+            cells[5] = TCell("red", 3);
+            cells[6] = TCell::Make((ui64)0);
+            cells[7] = TCell::Make((ui64)0);
+            cells[8] = TCell::Make(true);
+            cells[9] = TCell("dd\x01\x02", 4);
+            cells[10] = TCell("red", 3);
+            cells[11] = TCell::Make((ui64)0);
+            cells[12] = TCell::Make((ui64)0);
+            cells[13] = TCell::Make(true);
+            cells[14] = TCell("\x0A\x0A\x0A", 3);
+            Write(runtime, sender, shards[0], MakeWriteRequest(txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                tableId, {1, 2, 3, 4, 5}, cells, 0), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
 
         Cout << "========= Read table =========\n";
@@ -96,12 +109,21 @@ Y_UNIT_TEST_SUITE(DataShardFulltext) {
             // add 50, 60
             // added as a new segment
             // -> 1 2 3 [max=9] + 10 20 30 [max=200] + 50 60 [max=200] + 201 203 [max=UINT64_MAX]
-            ExecSQL(server, sender, Q_(R"(
-                INSERT INTO `/Root/table/ft_idx/indexImplTable`
-                (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
-                ("red", 0, 0, false, "dd"),
-                ("red", 0, 0, true, "2\x0A");
-            )"));
+            TVector<TCell> cells(10);
+            cells[0] = TCell("red", 3);
+            cells[1] = TCell::Make((ui64)0);
+            cells[2] = TCell::Make((ui64)0);
+            cells[3] = TCell::Make(false);
+            cells[4] = TCell("dd", 2);
+            cells[5] = TCell("red", 3);
+            cells[6] = TCell::Make((ui64)0);
+            cells[7] = TCell::Make((ui64)0);
+            cells[8] = TCell::Make(true);
+            cells[9] = TCell("2\x0A", 2);
+            txId++;
+            Write(runtime, sender, shards[0], MakeWriteRequest(txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                tableId, {1, 2, 3, 4, 5}, cells, 0), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
             gFulltextMaxDelta = 10000;
             gFulltextMaxSegment = 10000;

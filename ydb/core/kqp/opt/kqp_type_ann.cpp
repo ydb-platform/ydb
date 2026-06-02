@@ -1191,16 +1191,6 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         }
     }
 
-    bool allowNonKey = false;
-    if (TKqlDeleteRowsIndex::Match(node.Get())) {
-        auto settings = TKqpDeleteRowsIndexSettings::Parse(TExprBase(node).Cast<TKqlDeleteRowsIndex>());
-        allowNonKey = settings.SkipLookup;
-    }
-    if (!allowNonKey && rowType->GetItems().size() != table.second->Metadata->KeyColumnNames.size()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Input type contains non-key columns"));
-        return TStatus::Error;
-    }
-
     auto effectType = MakeKqpEffectType(ctx);
     if (isStream) {
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(effectType));

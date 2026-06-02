@@ -846,6 +846,26 @@ THashSet<TStringBuf> GetUpdateLookupColumns(const TKikimrTableDescription& table
         }
     }
 
+    const bool needOldData = !lookupColumns.empty()
+        || std::any_of(tableData.Metadata->Indexes.begin(), tableData.Metadata->Indexes.end(),
+            [&](const auto& indexDesc) {
+                if (!indexDesc.ItUsedForWrite()) {
+                    return false;
+                }
+
+                if (indexDesc.Type != TIndexDescription::EType::GlobalSync) {
+                    AFL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalAsync);
+                    return false;
+                }
+
+                return std::any_of(
+                    indexDesc.KeyColumns.begin(),
+                    indexDesc.KeyColumns.end(),
+                    [&](const auto& column) {
+                        return updateColumns.contains(column) && !tableData.GetKeyColumnIndex(column);
+                    });
+            });
+
     for (const auto& indexDesc : tableData.Metadata->Indexes) {
         if (!indexDesc.ItUsedForWrite()) {
             continue;
@@ -874,7 +894,7 @@ THashSet<TStringBuf> GetUpdateLookupColumns(const TKikimrTableDescription& table
             continue;
         }
 
-        if (secondaryIndexKeyUpdated) {
+        if (needOldData) {
             // Need to read old secondary key value in order to delete old row from index table.
             for (const auto& column : indexDesc.KeyColumns) {
                 // Primary key columns can't be changed.
@@ -891,7 +911,8 @@ THashSet<TStringBuf> GetUpdateLookupColumns(const TKikimrTableDescription& table
                 }
             }
         } else {
-            // Update index inplace, don't need lookup old values.
+            // Update all indexes inplace, don't need lookup old values.
+            AFL_ENSURE(!secondaryIndexKeyUpdated);
         }
     }
 

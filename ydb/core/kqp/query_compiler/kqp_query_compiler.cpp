@@ -1744,7 +1744,7 @@ private:
         const auto* structType = GetSeqItemType(stage.Program().Ref().GetTypeAnn())->Cast<TStructExprType>();
         YQL_ENSURE(structType);
 
-        const bool isStructOfRows = (structType->GetSize() == 2) && [&]() {
+        const bool isStructOfNewAndOldValues = (structType->GetSize() == 2) && [&]() {
             THashSet<TStringBuf> names;
             for (const auto& item : structType->GetItems()) {
                 names.insert(item->GetName());
@@ -1761,7 +1761,7 @@ private:
         const TStructExprType* newStructType = nullptr;
         const TStructExprType* oldStructType = nullptr;
 
-        if (isStructOfRows) {
+        if (isStructOfNewAndOldValues) {
             AFL_ENSURE(Config->GetEnableIndexStreamWrite());
             AFL_ENSURE(settings.Mode().StringValue() == "update_conditional"); // TODO: delete
 
@@ -1894,6 +1894,8 @@ private:
                                     // In case of INSERT we assume that row doesn't exist (otherwise, query will fail),
                                     // so we don't need to lookup existing rows.
                                     AFL_ENSURE(columnsSet.contains(columnName));
+                                } else if (settings.Mode().StringValue() == "delete" && columnsSet.contains(columnName)) {
+                                    // In case of DELETE we assume that forwarded rows are from WHERE
                                 } else if (!mainKeyColumnsSet.contains(columnName)) {
                                     // Need to lookup index key for update.
                                     // Secondary key is not a subset of primary key here.
@@ -1908,7 +1910,7 @@ private:
                         }) || (!settings.ReturningColumns().Empty() // Need to check if row exists for RETURNING
                             && (settings.Mode().StringValue() == "update" || settings.Mode().StringValue() == "delete"));
 
-                    const bool needLookup = needOldValues && !isStructOfRows;
+                    const bool needLookup = needOldValues && !isStructOfNewAndOldValues;
                     settingsProto.SetNeedLookup(needLookup);
                     if (needOldValues) {
                         AFL_ENSURE(settings.Mode().StringValue() != "insert");
@@ -1931,7 +1933,7 @@ private:
                             lookupColumnsSet.insert(columnName);
                         }
 
-                        if (isStructOfRows) {
+                        if (isStructOfNewAndOldValues) {
                             for (const auto& item : oldStructType->GetItems()) {
                                 const auto& columnName = item->GetName();
                                 AFL_ENSURE(!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName));
@@ -2018,7 +2020,7 @@ private:
 
                     if (settings.Mode().StringValue() == "delete") {
                         indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
-                    } else if (settings.Mode().StringValue() == "update" && !settingsProto.GetNeedLookup() && !isStructOfRows) { // TODO: update index inplace if not all rows are looked up!
+                    } else if (settings.Mode().StringValue() == "update" && !settingsProto.GetNeedLookup() && !isStructOfNewAndOldValues) {
                         // Special case for UPDATE table where secondary key is a subset of primary key.
                         // Query will be executed without lookups.
                         indexSettings->SetOperationType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
@@ -2042,8 +2044,8 @@ private:
                     // Rows are filtered using where, so all rows exist.
                     settings.Mode().StringValue() == "update_conditional"
                     // In this case KqpBufferWriteActor does lookup, so it will skip missing rows.
-                    || (settings.Mode().StringValue() == "update" && (settingsProto.GetNeedLookup() || isStructOfRows))
-                    || (settings.Mode().StringValue() == "delete" && (settingsProto.GetNeedLookup() || isStructOfRows)));
+                    || (settings.Mode().StringValue() == "update" && (settingsProto.GetNeedLookup() || isStructOfNewAndOldValues))
+                    || (settings.Mode().StringValue() == "delete" && (settingsProto.GetNeedLookup() || isStructOfNewAndOldValues)));
 
                 for (const auto& columnName : settings.ReturningColumns()) {
                     const auto columnMeta = tableMeta->Columns.FindPtr(columnName);

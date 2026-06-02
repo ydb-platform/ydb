@@ -7,9 +7,9 @@ REQUIREMENTS(cpu:2)
 SIZE(MEDIUM)
 
 SRCS(
-    #kqp_indexes_multishard_ut.cpp
-    #kqp_indexes_ut.cpp
-    kqp_stream_indexes_ut.cpp
+    kqp_indexes_multishard_ut.cpp
+    kqp_indexes_ut.cpp
+    #kqp_stream_indexes_ut.cpp
 )
 
 PEERDIR(

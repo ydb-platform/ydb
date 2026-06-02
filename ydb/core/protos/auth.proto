@@ -201,32 +201,28 @@ message TExternalIdpConfig {
        optional string Timeout = 1 [default = "2h"];
     }
 
-    // OpenID Connect Discovery URL (e.g. https://idp.example.com/.well-known/openid-configuration)
-    // `jwks_uri` is fetched from the discovery document
-    // `issuer` must be configured and must match discovery `issuer`.
-    optional string DiscoveryUrl = 1;
-
     // Expected issuer (iss) claim value in the JWT token
-    optional string Issuer = 2;
+    // OIDC discovery URL will be built via concatenating Issuer and "/.well-known/openid-configuration"
+    optional string Issuer = 1;
 
     // Expected audience (aud) claim value in the JWT token
-    optional string Audience = 3;
+    optional string Audience = 2;
 
     // Allowed clock skew for JWT validation (exp, nbf, iat claims)
-    optional string AllowedClockSkew = 4 [default = "30s"];
+    optional string AllowedClockSkew = 3 [default = "30s"];
 
     // JWT claim name to use as the user subject identifier
-    optional string SubjectClaimName = 5 [default = "sub"];
+    optional string SubjectClaimName = 4 [default = "sub"];
 
     // JWT claim name to use as the list of groups
-    optional string GroupsClaimName = 6 [default = "groups"];
+    optional string GroupsClaimName = 5 [default = "groups"];
 
     // How often to refresh discovery info from the IdP
-    optional TPeriodicSettings DiscoveryPeriodicSettings = 7;
+    optional TPeriodicSettings DiscoveryPeriodicSettings = 6;
 
     // How often to refresh the JWKS keys from the IdP
-    optional TPeriodicSettings JwksPeriodicSettings = 8;
+    optional TPeriodicSettings JwksPeriodicSettings = 7;
 
     // Cache settings for JWKS keys
-    optional TJWKsCacheSettings JwksCacheSettings = 9;
+    optional TJWKsCacheSettings JwksCacheSettings = 8;
 }

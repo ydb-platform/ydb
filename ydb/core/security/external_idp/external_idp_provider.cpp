@@ -24,6 +24,7 @@
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
@@ -49,35 +50,37 @@ static constexpr TStringBuf ISSUER = "issuer";
 // not a public key. Including them would enable the "algorithm confusion" attack
 // where an attacker signs a token with HS256 using the (public) RSA key.
 template <typename TVerifier>
-static const std::unordered_map<TString, std::function<void(TVerifier&, const TString&)>> SUPPORTED_ALGORITHMS = {
-    {"ES256", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es256(pubkey.c_str())); }},
-    {"ES384", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es384(pubkey.c_str())); }},
-    {"ES512", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es512(pubkey.c_str())); }},
-    {"PS256", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps256(pubkey.c_str())); }},
-    {"PS384", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps384(pubkey.c_str())); }},
-    {"PS512", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps512(pubkey.c_str())); }},
-    {"RS256", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs256(pubkey.c_str())); }},
-    {"RS384", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs384(pubkey.c_str())); }},
-    {"RS512", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs512(pubkey.c_str())); }},
-};
-
-static const std::unordered_map<TString, TString> SUPPORTED_KTYS = {
-    {"ES256", "EC"},
-    {"ES384", "EC"},
-    {"ES512", "EC"},
-    {"PS256", "RSA"},
-    {"PS384", "RSA"},
-    {"PS512", "RSA"},
-    {"RS256", "RSA"},
-    {"RS384", "RSA"},
-    {"RS512", "RSA"},
+static const std::unordered_map<NSecurity::EJWKAlg, std::function<void(TVerifier&, const TString&)>> SUPPORTED_ALGORITHMS = {
+    {NSecurity::EJWKAlg::ES256,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es256(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::ES384,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es384(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::ES512,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es512(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::PS256,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps256(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::PS384,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps384(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::PS512,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps512(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::RS256,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs256(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::RS384,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs384(pubkey.c_str())); }},
+    {NSecurity::EJWKAlg::RS512,
+        [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs512(pubkey.c_str())); }},
 };
 
 TString BuildKey(const TString& kty, const TString& kid) {
     return kty + "-" + kid;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+TString BuildDiscoveryUrl(TString issuer) {
+    while (issuer.EndsWith('/')) {
+        issuer.pop_back();
+    }
+    return TStringBuilder() << issuer << "/.well-known/openid-configuration";
+}
 
 TDuration RandomizeJitter(const TDuration& jitter) {
     const ui64 half = jitter.MilliSeconds() / 2;
@@ -101,8 +104,6 @@ NMonitoring::TBucketBounds AuthProcessingTimeBuckets() {
     static NMonitoring::TBucketBounds buckets = {0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000};
     return buckets;
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 class TExternalIdpProvider : public NActors::TActorBootstrapped<TExternalIdpProvider> {
     class TRecurringPeriod {
@@ -227,8 +228,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CounterAuthFailed;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 TExternalIdpProvider::TRecurringPeriod::TRecurringPeriod(
     const NKikimrProto::TExternalIdpConfig::TPeriodicSettings& settings,
     TInstant scheduled,
@@ -286,29 +285,20 @@ TString TExternalIdpProvider::TRecurringPeriod::GetHtml() const {
     html << "<table class='table table-hover simple-table1'>";
     html << "<caption>Refresh info</caption>";
 
-    html << "<tr><td scope=\"row\">Success refresh period</td><td>"
-        << SuccessRefreshPeriod.ToString() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Min error refresh period</td><td>"
-        << MinErrorRefreshPeriod.ToString() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Max error refresh period</td><td>"
-        << MaxErrorRefreshPeriod.ToString() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Request timeout</td><td>"
-        << RequestTimeout.ToString() << "</td></tr>";
+    html << "<tr><td scope=\"row\">Success refresh period</td><td>" << SuccessRefreshPeriod << "</td></tr>";
+    html << "<tr><td scope=\"row\">Min error refresh period</td><td>" << MinErrorRefreshPeriod << "</td></tr>";
+    html << "<tr><td scope=\"row\">Max error refresh period</td><td>" << MaxErrorRefreshPeriod << "</td></tr>";
+    html << "<tr><td scope=\"row\">Request timeout</td><td>" << RequestTimeout << "</td></tr>";
 
     if (InFlight == nullptr) {
         html << "<tr><td scope=\"row\">Request in progress</td><td>FALSE</td></tr>";
-        html << "<tr><td scope=\"row\">Previous request sent</td><td>"
-            << Started.ToStringLocalUpToSeconds() << "</td></tr>";
-        html << "<tr><td scope=\"row\">Previous request received</td><td>"
-            << Ended.ToStringLocalUpToSeconds() << "</td></tr>";
-        html << "<tr><td scope=\"row\">Next request scheduled</td><td>"
-            << Scheduled.ToStringLocalUpToSeconds() << "</td></tr>";
+        html << "<tr><td scope=\"row\">Previous request sent</td><td>" << Started << "</td></tr>";
+        html << "<tr><td scope=\"row\">Previous request received</td><td>" << Ended << "</td></tr>";
+        html << "<tr><td scope=\"row\">Next request scheduled</td><td>" << Scheduled << "</td></tr>";
     } else {
         html << "<tr><td scope=\"row\">Request in progress</td><td>TRUE</td></tr>";
-        html << "<tr><td scope=\"row\">Current request sent</td><td>"
-            << Started.ToStringLocalUpToSeconds() << "</td></tr>";
-        html << "<tr><td scope=\"row\">Current request scheduled</td><td>"
-            << Scheduled.ToStringLocalUpToSeconds() << "</td></tr>";
+        html << "<tr><td scope=\"row\">Current request sent</td><td>" << Started << "</td></tr>";
+        html << "<tr><td scope=\"row\">Current request scheduled</td><td>" << Scheduled << "</td></tr>";
     }
     html << "<tr><td scope=\"row\">Retry count</td><td>" << RetryCount << "</td></tr>";
 
@@ -324,8 +314,6 @@ void TExternalIdpProvider::TRecurringPeriod::OnReceived(TInstant now) {
 
     ResponseTime->Collect((Ended - Started).MilliSeconds());
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 TExternalIdpProvider::TJWKsCache::TJWKsCache(
     const NKikimrProto::TExternalIdpConfig::TJWKsCacheSettings& settings,
@@ -365,11 +353,9 @@ TString TExternalIdpProvider::TJWKsCache::GetHtml(const TInstant& now) const {
     html << "<table class='table table-hover simple-table1'>";
     html << "<caption>Refresh info</caption>";
 
-    html << "<tr><td scope=\"row\">Timeout</td><td>" << Timeout.ToString() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Last update</td><td>"
-        << LastUpdate.ToStringLocalUpToSeconds() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Freshness deadline</td><td>"
-        << (LastUpdate + Timeout).ToStringLocalUpToSeconds() << "</td></tr>";
+    html << "<tr><td scope=\"row\">Timeout</td><td>" << Timeout << "</td></tr>";
+    html << "<tr><td scope=\"row\">Last update</td><td>" << LastUpdate << "</td></tr>";
+    html << "<tr><td scope=\"row\">Freshness deadline</td><td>" << (LastUpdate + Timeout) << "</td></tr>";
     html << "<tr><td scope=\"row\">Key count</td><td>" << Count() << "</td></tr>";
     html << "<tr><td scope=\"row\">Is stale</td><td>" << (IsStale(now) ? "TRUE" : "FALSE") << "</td></tr>";
 
@@ -393,8 +379,6 @@ TString TExternalIdpProvider::TJWKsCache::GetHtml(const TInstant& now) const {
     html << "</div>";
     return html;
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 constexpr NKikimrServices::TActivity::EType TExternalIdpProvider::ActorActivityType() {
     return NKikimrServices::TActivity::EXTERNAL_IDP_PROVIDER_ACTOR;
@@ -512,12 +496,9 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid);
     }
-    const TString algorithm = TString{decoded->get_algorithm()};
 
-    TString kty;
-    if (const auto it = SUPPORTED_KTYS.find(algorithm); it != SUPPORTED_KTYS.end()) {
-        kty = it->second;
-    } else {
+    NSecurity::EJWKAlg alg;
+    if (!TryFromString(decoded->get_algorithm(), alg)) {
         return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::BAD_REQUEST,
@@ -525,10 +506,10 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
-                << " algorithm=" << algorithm);
+                << " algorithm=" << decoded->get_algorithm());
     }
 
-    const auto pem = JwksCache.Get(BuildKey(kty, kid));
+    const auto pem = JwksCache.Get(BuildKey(ToString(GetKeyType(alg)), kid));
     if (!pem.Defined()) {
         return ReplyError(
             ev->Sender, msg->Key,
@@ -537,7 +518,8 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
-                << " algorithm=" << algorithm,
+                << " kty=" << GetKeyType(alg)
+                << " algorithm=" << alg,
             true);
     }
 
@@ -547,7 +529,7 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         verifier.leeway(TDuration::Parse(skewStr).Seconds());
     }
 
-    if (const auto it = SUPPORTED_ALGORITHMS<decltype(verifier)>.find(algorithm);
+    if (const auto it = SUPPORTED_ALGORITHMS<decltype(verifier)>.find(alg);
         it != SUPPORTED_ALGORITHMS<decltype(verifier)>.end()) {
         it->second(verifier, *pem);
     } else {
@@ -558,7 +540,7 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
-                << " algorithm=" << algorithm);
+                << " algorithm=" << alg);
     }
     verifier.with_issuer(Config.GetIssuer());
 
@@ -642,13 +624,14 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
 }
 
 void TExternalIdpProvider::StartDiscoveryFetch(const TInstant& now) {
-    if (!Config.HasDiscoveryUrl() || Config.GetDiscoveryUrl().empty() || !DiscoveryRefresh.CanSendRequest(now)) {
+    if (!Config.HasIssuer() || Config.GetIssuer().empty() || !DiscoveryRefresh.CanSendRequest(now)) {
         return;
     }
+    const auto discoveryUrl = BuildDiscoveryUrl(Config.GetIssuer());
 
-    BLOG_D("Discovery fetch IdP issuer=" << Config.GetIssuer() << " url=" << Config.GetDiscoveryUrl());
+    BLOG_D("Discovery fetch IdP issuer=" << Config.GetIssuer() << " url=" << discoveryUrl);
 
-    const auto request = NHttp::THttpOutgoingRequest::CreateRequestGet(Config.GetDiscoveryUrl());
+    const auto request = NHttp::THttpOutgoingRequest::CreateRequestGet(discoveryUrl);
     const auto timeout = DiscoveryRefresh.OnRequestSending(now, request);
     Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request, timeout));
 }
@@ -772,20 +755,7 @@ void TExternalIdpProvider::HandleJwksResponse(
             BLOG_W("Skipping JWKS key with kid='" << jwk.KeyId << "': unsupported key format (no x5c)");
             continue;
         }
-        switch (jwk.Type) {
-            case NSecurity::EJWKKeyType::RSA: {
-                newKeys[BuildKey("RSA", TString(jwk.KeyId))] = std::move(pubkey.value());
-                break;
-            }
-            case NSecurity::EJWKKeyType::EC: {
-                newKeys[BuildKey("EC", TString(jwk.KeyId))] = std::move(pubkey.value());
-                break;
-            }
-            default: {
-                BLOG_W("Skipping JWKS key with kid='" << jwk.KeyId << "': unsupported key type");
-                continue;
-            }
-        }
+        newKeys[BuildKey(ToString(jwk.Type), TString{jwk.KeyId})] = std::move(pubkey.value());
     }
     if (newKeys.empty()) {
         BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=No supported keys in JWKS response");
@@ -817,7 +787,7 @@ void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorConte
     html << "<h3>Config</h3>";
     html << "<div>";
     html << "<table class='table table-hover simple-table1'>";
-    html << "<tr><td scope=\"row\">Now</td><td>" << now.ToStringLocalUpToSeconds() << "</td></tr>";
+    html << "<tr><td scope=\"row\">Now</td><td>" << now << "</td></tr>";
     html << "<tr><td scope=\"row\">Issuer</td><td>" << Config.GetIssuer() << "</td></tr>";
     html << "<tr><td scope=\"row\">Audience</td><td>" << Config.GetAudience() << "</td></tr>";
     html << "<tr><td scope=\"row\">Subject claim name</td><td>" << Config.GetSubjectClaimName() << "</td></tr>";
@@ -829,7 +799,7 @@ void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorConte
     html << "<div>";
     html << "<table class='table table-hover simple-table1'>";
     html << "<caption>Common info</caption>";
-    html << "<tr><td scope=\"row\">Discovery URL</td><td>" << Config.GetDiscoveryUrl() << "</td></tr>";
+    html << "<tr><td scope=\"row\">Discovery URL</td><td>" << BuildDiscoveryUrl(Config.GetIssuer()) << "</td></tr>";
     html << "</table>";
     html << DiscoveryRefresh.GetHtml();
     html << "</div>";
@@ -883,8 +853,6 @@ void TExternalIdpProvider::ReplyError(
 }
 
 } // namespace
-
-////////////////////////////////////////////////////////////////////////////////
 
 NActors::IActor* CreateExternalIdpProvider(
     const NKikimrProto::TExternalIdpConfig& config,

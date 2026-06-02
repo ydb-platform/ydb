@@ -3380,7 +3380,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetExternalIdpAuthenticationDomain(DOM);
         auto* idpSettings = authConfig.MutableExternalIdp();
         idpSettings->SetIssuer(ISS);
-        idpSettings->SetDiscoveryUrl(DISC);
         idpSettings->SetSubjectClaimName("sub");
         idpSettings->SetGroupsClaimName("groups");
         idpSettings->SetAllowedClockSkew("30s");
@@ -3470,7 +3469,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetExternalIdpAuthenticationDomain(DOM);
         auto* idpSettings = authConfig.MutableExternalIdp();
         idpSettings->SetIssuer(ISS);
-        idpSettings->SetDiscoveryUrl(DISC);
         idpSettings->SetSubjectClaimName("sub");
         idpSettings->SetGroupsClaimName("groups");
         idpSettings->SetAllowedClockSkew("30s");
@@ -3572,7 +3570,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetExternalIdpAuthenticationDomain(DOM);
         auto* idpSettings = authConfig.MutableExternalIdp();
         idpSettings->SetIssuer(ISS);
-        idpSettings->SetDiscoveryUrl(DISC);
         idpSettings->SetSubjectClaimName("sub");
         idpSettings->SetGroupsClaimName("groups");
         idpSettings->SetAllowedClockSkew("5s"); // small skew so expired token is rejected

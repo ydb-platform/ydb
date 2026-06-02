@@ -16,19 +16,19 @@ enum class EJWKKeyType : ui8 {
 };
 
 enum class EJWKUsage : ui8 {
-    SIG,
-    ENC,
+    SIG /* "sig" */,
+    ENC /* "enc" */,
 };
 
 enum class EJWKKeyOps : ui8 {
-    SIGN,
-    VERIFY,
-    ENCRYPT,
-    DECRYPT,
-    WRAP_KEY,
-    UNWRAP_KEY,
-    DERIVE_KEY,
-    DERIVE_BITS,
+    SIGN /* "sign" */,
+    VERIFY /* "verify" */,
+    ENCRYPT /* "encrypt" */,
+    DECRYPT /* "decrypt" */,
+    WRAP_KEY /* "wrapKey" */,
+    UNWRAP_KEY /* "unwrapKey" */,
+    DERIVE_KEY /* "deriveKey" */,
+    DERIVE_BITS /* "deriveBits" */,
 };
 
 // Use for asymmetric JWS: https://datatracker.ietf.org/doc/html/rfc7518#section-3
@@ -70,6 +70,7 @@ struct TJWKSet {
     std::vector<TJWK> Keys; // `keys`
 };
 
+EJWKKeyType GetKeyType(EJWKAlg alg);
 std::optional<TJWK> ParseJWK(const NJson::TJsonValue& jwk);
 std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet);
 

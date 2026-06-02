@@ -4,6 +4,8 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <util/string/cast.h>
+
 #include <openssl/sha.h>
 
 #include <string>
@@ -24,39 +26,6 @@ inline constexpr std::string_view X5T = "x5t";
 inline constexpr std::string_view X5T_S256 = "x5t#S256";
 inline constexpr std::string_view KEYS = "keys";
 
-const std::unordered_map<std::string_view, EJWKKeyType> KTY_TO_KEY_TYPE = {
-    {"RSA", EJWKKeyType::RSA},
-    {"EC", EJWKKeyType::EC},
-};
-
-const std::unordered_map<std::string_view, EJWKUsage> USE_TO_USAGE = {
-    {"sig", EJWKUsage::SIG},
-    {"enc", EJWKUsage::ENC},
-};
-
-const std::unordered_map<std::string_view, EJWKKeyOps> KEY_OPS_TO_KEY_OPS = {
-    {"sign", EJWKKeyOps::SIGN},
-    {"verify", EJWKKeyOps::VERIFY},
-    {"encrypt", EJWKKeyOps::ENCRYPT},
-    {"decrypt", EJWKKeyOps::DECRYPT},
-    {"wrapKey", EJWKKeyOps::WRAP_KEY},
-    {"unwrapKey", EJWKKeyOps::UNWRAP_KEY},
-    {"deriveKey", EJWKKeyOps::DERIVE_KEY},
-    {"deriveBits", EJWKKeyOps::DERIVE_BITS},
-};
-
-const std::unordered_map<std::string_view, EJWKAlg> ALG_TO_ALG = {
-    {"RS256", EJWKAlg::RS256},
-    {"RS384", EJWKAlg::RS384},
-    {"RS512", EJWKAlg::RS512},
-    {"ES256", EJWKAlg::ES256},
-    {"ES384", EJWKAlg::ES384},
-    {"ES512", EJWKAlg::ES512},
-    {"PS256", EJWKAlg::PS256},
-    {"PS384", EJWKAlg::PS384},
-    {"PS512", EJWKAlg::PS512},
-};
-
 std::optional<std::string> ParseStr(const NJson::TJsonValue& jwk, const std::string_view name) {
     if (!jwk.Has(name) || !jwk[name].IsString()) {
         return std::nullopt;
@@ -71,8 +40,8 @@ std::optional<TJWK> ParseKeyType(const NJson::TJsonValue& jwk) {
         return std::nullopt;
     }
 
-    const auto it = KTY_TO_KEY_TYPE.find(kty.value());
-    return (it != KTY_TO_KEY_TYPE.end()) ? std::make_optional(TJWK{it->second}) : std::nullopt;
+    EJWKKeyType res = EJWKKeyType::RSA;
+    return TryFromString(kty.value(), res) ? std::make_optional(TJWK{res}) : std::nullopt;
 }
 
 std::optional<EJWKUsage> ParseUsage(const NJson::TJsonValue& jwk) {
@@ -81,8 +50,8 @@ std::optional<EJWKUsage> ParseUsage(const NJson::TJsonValue& jwk) {
         return std::nullopt;
     }
 
-    const auto it = USE_TO_USAGE.find(usage.value());
-    return (it != USE_TO_USAGE.end()) ? std::make_optional(it->second) : std::nullopt;
+    EJWKUsage res = EJWKUsage::SIG;
+    return TryFromString(usage.value(), res) ? std::make_optional(res) : std::nullopt;
 }
 
 std::vector<EJWKKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
@@ -97,12 +66,12 @@ std::vector<EJWKKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
             continue;
         }
 
-        const auto it = KEY_OPS_TO_KEY_OPS.find(op.GetString());
-        if (it == KEY_OPS_TO_KEY_OPS.end()) {
+        EJWKKeyOps res = EJWKKeyOps::SIGN;
+        if (!TryFromString(op.GetString(), res)) {
             continue;
         }
 
-        keyOps.push_back(it->second);
+        keyOps.push_back(res);
     }
 
     return keyOps;
@@ -114,8 +83,8 @@ std::optional<EJWKAlg> ParseAlg(const NJson::TJsonValue& jwk) {
         return std::nullopt;
     }
 
-    const auto it = ALG_TO_ALG.find(alg.value());
-    return (it != ALG_TO_ALG.end()) ? std::make_optional(it->second) : std::nullopt;
+    EJWKAlg res = EJWKAlg::RS256;
+    return TryFromString(alg.value(), res) ? std::make_optional(res) : std::nullopt;
 }
 
 bool IsCompatibleAlgorithm(EJWKKeyType keyType, EJWKAlg algorithm) {
@@ -305,6 +274,22 @@ std::optional<std::string> GetPublicKeyFromX5C(const TJWK& jwk) {
 TJWK::TJWK(EJWKKeyType type)
     : Type(type)
 {}
+
+EJWKKeyType GetKeyType(EJWKAlg alg) {
+    switch (alg) {
+        case EJWKAlg::RS256:
+        case EJWKAlg::RS384:
+        case EJWKAlg::RS512:
+        case EJWKAlg::PS256:
+        case EJWKAlg::PS384:
+        case EJWKAlg::PS512:
+            return EJWKKeyType::RSA;
+        case EJWKAlg::ES256:
+        case EJWKAlg::ES384:
+        case EJWKAlg::ES512:
+            return EJWKKeyType::EC;
+    }
+}
 
 // Currently this implementation is x5c-only: a public key can be derived
 // only from the first certificate in the X.509 chain. RFC 7518 RSA/EC

@@ -120,8 +120,6 @@ TRsaKeyPair GenerateRsaKeyPair() {
     return {privPem, pubPem, x5c};
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 TString BuildDiscoveryJson(const TString& issuer, const TString& jwksUri) {
     NJson::TJsonValue json;
     json["issuer"] = issuer;
@@ -174,8 +172,6 @@ TString BuildUnsupportedJwksJsonWithoutX5c(const TString& kid) {
     json["keys"] = keys;
     return NJson::WriteJson(json, false);
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 enum class EJwtSigningAlgorithm {
     RS256,
@@ -347,16 +343,13 @@ TString CreateJwtWithMixedGroups(
         });
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 NKikimrProto::TExternalIdpConfig MakeConfig(
-    const TString& issuer, const TString& discoveryUrl,
+    const TString& issuer,
     const TString& audience = "",
     const TString& subClaim = "sub", const TString& grpClaim = "groups")
 {
     NKikimrProto::TExternalIdpConfig c;
     c.SetIssuer(issuer);
-    c.SetDiscoveryUrl(discoveryUrl);
     if (!audience.empty()) {
         c.SetAudience(audience);
     }
@@ -367,8 +360,6 @@ NKikimrProto::TExternalIdpConfig MakeConfig(
     c.SetAllowedClockSkew("30s");
     return c;
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 struct TSetup : public NUnitTest::TBaseFixture {
     std::unique_ptr<TTestActorSystem> Rt;
@@ -421,8 +412,7 @@ struct TSetup : public NUnitTest::TBaseFixture {
 };
 
 const TString ISS = "https://idp.example.com";
-const TString DISC = "https://idp.example.com/.well-known/openid-configuration";
-const TString JWKS = "https://idp.example.com/.well-known/jwks.json";
+const TString JWKS = "https://idp.example.com/jwks.json";
 const TString KID = "test-key-1";
 
 } // namespace
@@ -430,7 +420,7 @@ const TString KID = "test-key-1";
 Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(DiscoveryFetchOnBootstrap, TSetup) {
-        std::ignore = RegProvider(MakeConfig(ISS, DISC));
+        std::ignore = RegProvider(MakeConfig(ISS));
         const auto req = WaitHttp();
         UNIT_ASSERT(req);
         UNIT_ASSERT_STRING_CONTAINS(TString{req->Get()->Request->URL}, ".well-known/openid-configuration");
@@ -438,7 +428,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(DiscoveryInvalidResponse, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         auto d = WaitHttp();
         ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", "not-json{{{");
 
@@ -460,7 +450,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(DiscoveryRepeatsIfNoJwksUri, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         auto d = WaitHttp();
         NJson::TJsonValue noJwks;
         noJwks["issuer"] = ISS;
@@ -483,7 +473,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
     }
 
     Y_UNIT_TEST_F(JwksFetchAfterDiscovery, TSetup) {
-        std::ignore = RegProvider(MakeConfig(ISS, DISC));
+        std::ignore = RegProvider(MakeConfig(ISS));
         auto d = WaitHttp();
         ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
         const auto j = WaitHttp();
@@ -493,7 +483,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(JwksKeysPopulated, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
         const auto token = CreateJwt(keys, KID, ISS, "user1", {});
         SendAuth(id, "k1", token);
@@ -504,7 +494,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(JwksInvalidResponse, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         auto d = WaitHttp();
         ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
         auto j = WaitHttp();
@@ -526,7 +516,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(ValidTokenOk, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "", "sub", "groups"));
+        const auto id = RegProvider(MakeConfig(ISS, "", "sub", "groups"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
         const auto token = CreateJwt(keys, KID, ISS, "testuser", {},
             {"g1", "g2"}, "", "groups");
@@ -542,7 +532,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(NoMatchingJwk, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, "other-key", keys.X5cBase64);
         const auto token = CreateJwt(keys, KID, ISS, "u1", {});
         SendAuth(id, "k1", token);
@@ -553,7 +543,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(InvalidTokenErrors, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto expired = CreateExpiredJwt(keys, KID, ISS, "u1", {});
@@ -570,7 +560,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(PreferredSubjectClaim, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "", "preferred_username", "groups"));
+        const auto id = RegProvider(MakeConfig(ISS, "", "preferred_username", "groups"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
         const auto token = CreateJwt(keys, KID, ISS, "custom-user", {},
                                      {}, "preferred_username", "");
@@ -582,7 +572,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(PreferredGroupsClaim, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "", "sub", "custom_groups"));
+        const auto id = RegProvider(MakeConfig(ISS, "", "sub", "custom_groups"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
         const auto token = CreateJwt(keys, KID, ISS, "u1", {},
                                      {"admins", "devs"}, "", "custom_groups");
@@ -596,7 +586,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(InvalidSubjectClaimFallsBackToSub, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "", "nonexistent_claim", "groups"));
+        const auto id = RegProvider(MakeConfig(ISS, "", "nonexistent_claim", "groups"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
         const auto token = CreateJwt(keys, KID, ISS, "real-user", {});
         SendAuth(id, "k1", token);
@@ -607,7 +597,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(InvalidGroupsClaimResultsInEmptyGroups, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "", "sub", "nonexistent_groups"));
+        const auto id = RegProvider(MakeConfig(ISS, "", "sub", "nonexistent_groups"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
         const auto token = CreateJwt(keys, KID, ISS, "u1", {},
                                      {"g1"}, "", "actual_groups");
@@ -619,7 +609,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(AuthBeforeJwksReturnsError, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
 
         auto d = WaitHttp();
 
@@ -642,7 +632,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(AuthBeforeDiscoveryReturnsError, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
 
         auto d = WaitHttp();
 
@@ -658,7 +648,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(WrongIssuerRejected, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwt(keys, KID, "https://wrong-issuer.com", "u1", {});
@@ -671,7 +661,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(ConfiguredAudienceAccepted, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "my-client-id"));
+        const auto id = RegProvider(MakeConfig(ISS, "my-client-id"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwt(keys, KID, ISS, "u1", {"my-client-id"});
@@ -684,7 +674,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(AudienceMismatchRejected, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "my-client-id"));
+        const auto id = RegProvider(MakeConfig(ISS, "my-client-id"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwt(keys, KID, ISS, "u1", {"wrong-audience"});
@@ -696,7 +686,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(NoConfiguredAudienceDoesNotVerifyTokenAudience, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwt(keys, KID, ISS, "u1", {"some-random-audience"});
@@ -709,7 +699,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(NoKidInTokenRejected, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwtWithoutKid(keys, ISS, "u1", {});
@@ -722,7 +712,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(JwksFetchNetworkError, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
 
         auto d = WaitHttp();
         ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
@@ -740,7 +730,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(DiscoveryIssuerMismatch, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
 
         auto d = WaitHttp();
         NJson::TJsonValue discoveryJson;
@@ -758,7 +748,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(DiscoveryHttp500Error, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
 
         auto d = WaitHttp();
         ReplyHttpError(Rt.get(), Node, Proxy, d, "HTTP 500 Internal Server Error");
@@ -775,7 +765,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         const auto keys1 = GenerateRsaKeyPair();
         const auto keys2 = GenerateRsaKeyPair();
 
-        auto config = MakeConfig(ISS, DISC);
+        auto config = MakeConfig(ISS);
         config.MutableJwksPeriodicSettings()->SetSuccessRefreshPeriod("1s");
         config.MutableDiscoveryPeriodicSettings()->SetSuccessRefreshPeriod("2h");
         const auto id = RegProvider(config);
@@ -802,7 +792,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         const auto initialKeys = GenerateRsaKeyPair();
         const auto fallbackKeys = GenerateRsaKeyPair();
 
-        auto config = MakeConfig(ISS, DISC);
+        auto config = MakeConfig(ISS);
         config.MutableDiscoveryPeriodicSettings()->SetSuccessRefreshPeriod("1s");
         config.MutableJwksPeriodicSettings()->SetSuccessRefreshPeriod("2h");
         std::ignore = RegProvider(config);
@@ -825,7 +815,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(MalformedTokenReturnsBadRequest, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         SendAuth(id, "k1", "this-is-not-a-jwt-token");
@@ -836,7 +826,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(UnsupportedAlgorithmReturnsBadRequest, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateSignedJwt(
@@ -852,7 +842,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(Ps256TokenAuthenticates, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreatePs256Jwt(keys, KID, ISS, "u1", {});
@@ -864,7 +854,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(UnsupportedJwksWithoutX5cLeavesEmptyCache, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
 
         auto d = WaitHttp();
         ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
@@ -882,7 +872,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(AllowedClockSkewAcceptsRecentlyExpired, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        auto config = MakeConfig(ISS, DISC);
+        auto config = MakeConfig(ISS);
         config.SetAllowedClockSkew("60s");
         const auto id = RegProvider(config);
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
@@ -902,7 +892,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
     Y_UNIT_TEST_F(MultipleJwksKeysBothUsable, TSetup) {
         const auto keys1 = GenerateRsaKeyPair();
         const auto keys2 = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
 
         auto d = WaitHttp();
         ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
@@ -930,7 +920,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(EmptySubjectReturnsUnauthorized, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC));
+        const auto id = RegProvider(MakeConfig(ISS));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwtWithEmptySubject(keys, KID, ISS, {});
@@ -941,7 +931,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(NonStringSubjectClaimFallsBackToSub, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "", "int_claim", "groups"));
+        const auto id = RegProvider(MakeConfig(ISS, "", "int_claim", "groups"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwtWithIntSubjectClaim(keys, KID, ISS, "fallback-sub",
@@ -954,7 +944,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(GroupsClaimMixedTypesExtractsStringsOnly, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        const auto id = RegProvider(MakeConfig(ISS, DISC, "", "sub", "mixed_groups"));
+        const auto id = RegProvider(MakeConfig(ISS, "", "sub", "mixed_groups"));
         DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
 
         const auto token = CreateJwtWithMixedGroups(keys, KID, ISS, "u1",
@@ -970,7 +960,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
     Y_UNIT_TEST_F(JwksCacheStalenessClears, TSetup) {
         const auto keys = GenerateRsaKeyPair();
-        auto config = MakeConfig(ISS, DISC);
+        auto config = MakeConfig(ISS);
         config.MutableJwksCacheSettings()->SetTimeout("2s");
         config.MutableJwksPeriodicSettings()->SetSuccessRefreshPeriod("1s");
         config.MutableDiscoveryPeriodicSettings()->SetSuccessRefreshPeriod("2h");

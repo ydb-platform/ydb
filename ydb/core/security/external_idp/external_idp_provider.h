@@ -10,21 +10,6 @@
 
 namespace NKikimr {
 
-// TEvExternalIdpProvider is the public events interface for the ExternalIdpProvider actor.
-//
-// The actor is the analogue of AccessServiceValidator/LdapAuthProvider, but for external
-// OIDC/OAuth2 IdPs. It owns the cache of OIDC discovery metadata and JSON Web Key Sets
-// (JWKs) for the configured IdP and performs JWT signature & claim validation entirely
-// in-process (without contacting the IdP for every request).
-//
-// Typical flow inside TicketParser:
-//   1. Bearer JWT arrives -> TicketParser sends TEvAuthenticateRequest
-//   2. ExternalIdpProvider decodes token, verifies signature against cached JWKs (fetching them
-//      if missing/stale) and validates standard claims (exp, aud, iss).
-//   3. Provider replies with TEvAuthenticateResponse containing the user subject
-//      and group claims.
-//   4. On periodic refresh TicketParser issues another TEvAuthenticateRequest
-//      with the same Ticket; the same validation runs (cache hot-path).
 struct TEvExternalIdpProvider {
     enum EEv {
         EvAuthenticateRequest = EventSpaceBegin(TKikimrEvents::ES_EXTERNAL_IDP_PROVIDER),

@@ -20,7 +20,7 @@ ydb/core/client/ut unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
-ydb/core/kqp/ut/olap/storage KqpOlapDictionary.DictCompactionAndActualization
+ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.CreateExternalDataSourceAuthMethodIam
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma

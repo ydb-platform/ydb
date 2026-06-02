@@ -1283,9 +1283,39 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 return String(Math.round(v));
             }
 
+            function nbsTabletParseTrials() {
+                const raw = nbsTabletTrim($("#nbs-run-trials").val());
+                if (raw === "") {
+                    return { ok: true, trials: 1 };
+                }
+                if (!/^[0-9]+$/.test(raw)) {
+                    return { ok: false, error: "Trials per InFlight must be a non-negative integer" };
+                }
+                const trials = parseInt(raw, 10);
+                if (trials < 1) {
+                    return { ok: false, error: "Trials per InFlight must be >= 1" };
+                }
+                if (trials > 1 && (trials % 2) === 0) {
+                    return { ok: false, error: "Trials per InFlight must be odd when > 1" };
+                }
+                return { ok: true, trials: trials };
+            }
+
+            function nbsTabletMedianByWriteIops(runs) {
+                if (!runs || runs.length === 0) {
+                    return null;
+                }
+                const sorted = runs.slice().sort(function(a, b) {
+                    return (a.write_rps || 0) - (b.write_rps || 0);
+                });
+                return sorted[Math.floor(sorted.length / 2)];
+            }
+
             function nbsTabletRenderTableSkeleton(sweepValues) {
                 const tbl = document.getElementById("nbs-run-result-table");
-                if (!tbl) return;
+                if (!tbl) {
+                    return;
+                }
 
                 let html = "<table class='table table-condensed table-bordered' style='margin-top:12px'>";
                 html += "<thead><tr>";
@@ -1316,36 +1346,151 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 tbl.innerHTML = html;
             }
 
-            function nbsTabletFillTableColumn(idx, jr) {
+            function nbsTabletRenderMultiTrialSkeleton(sweepValues, trials) {
+                const tbl = document.getElementById("nbs-run-result-table");
+                if (!tbl) {
+                    return;
+                }
+
+                let html = "<table class='table table-condensed table-bordered' style='margin-top:12px'>";
+                html += "<thead><tr>";
+                html += "<th style='vertical-align:middle'>MaxInFlight</th>";
+                html += "<th style='vertical-align:middle'>Trial</th>";
+                html += "<th style='vertical-align:middle'>Direction</th>";
+                html += "<th>IOPS</th><th>p50 us</th><th>p95 us</th><th>p99 us</th>";
+                html += "</tr></thead><tbody>";
+                for (let i = 0; i < sweepValues.length; i++) {
+                    const v = sweepValues[i];
+                    const rowSpan = 2 * trials;
+                    for (let t = 0; t < trials; t++) {
+                        html += "<tr id='nbs-sweep-w-" + i + "-" + t + "'>";
+                        if (t === 0) {
+                            html += "<td rowspan='" + rowSpan +
+                                "' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
+                        }
+                        html += "<td rowspan='2' style='vertical-align:middle'>" + (t + 1) + "</td>";
+                        html += "<td>Writes</td>";
+                        html += "<td id='nbs-sw-wiops-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-wp50-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-wp95-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-wp99-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "</tr>";
+                        html += "<tr id='nbs-sweep-r-" + i + "-" + t + "'>";
+                        html += "<td>Reads</td>";
+                        html += "<td id='nbs-sw-riops-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-rp50-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-rp95-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-rp99-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "</tr>";
+                    }
+                }
+                html += "</tbody></table>";
+                tbl.innerHTML = html;
+            }
+
+            function nbsTabletRenderMedianSkeleton(sweepValues) {
+                const tbl = document.getElementById("nbs-run-median-table");
+                if (!tbl) {
+                    return;
+                }
+
+                let html = "<h4 style='margin-top:0'>Median trial (by write IOPS)</h4>";
+                html += "<table class='table table-condensed table-bordered'>";
+                html += "<thead><tr>";
+                html += "<th rowspan='2' style='vertical-align:middle'>MaxInFlight</th>";
+                html += "<th rowspan='2' style='vertical-align:middle'>Direction</th>";
+                html += "<th>IOPS</th><th>p50 us</th><th>p95 us</th><th>p99 us</th>";
+                html += "</tr></thead><tbody>";
+                for (let i = 0; i < sweepValues.length; i++) {
+                    const v = sweepValues[i];
+                    html += "<tr id='nbs-median-w-" + i + "'>";
+                    html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
+                    html += "<td>Writes</td>";
+                    html += "<td id='nbs-sm-wiops-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sm-wp50-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sm-wp95-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sm-wp99-" + i + "'>&#9711;</td>";
+                    html += "</tr>";
+                    html += "<tr id='nbs-median-r-" + i + "'>";
+                    html += "<td>Reads</td>";
+                    html += "<td id='nbs-sm-riops-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sm-rp50-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sm-rp95-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sm-rp99-" + i + "'>&#9711;</td>";
+                    html += "</tr>";
+                }
+                html += "</tbody></table>";
+                tbl.innerHTML = html;
+            }
+
+            function nbsTabletRenderDetailSkeleton(sweepValues, trials) {
+                if (trials > 1) {
+                    nbsTabletRenderMultiTrialSkeleton(sweepValues, trials);
+                } else {
+                    nbsTabletRenderTableSkeleton(sweepValues);
+                }
+            }
+
+            function nbsTabletFillMetricsCells(prefix, idx, suffix, jr) {
                 function set(id, val) {
                     const el = document.getElementById(id);
-                    if (el) el.textContent = val;
+                    if (el) {
+                        el.textContent = val;
+                    }
                 }
+                const sfx = suffix !== undefined ? ("-" + suffix) : "";
                 const wIops = jr.write_rps !== undefined ? Math.round(jr.write_rps) : "-";
-                const rIops = jr.read_rps  !== undefined ? Math.round(jr.read_rps)  : "-";
-                set("nbs-sw-wiops-" + idx, wIops);
-                set("nbs-sw-wp50-"  + idx, nbsTabletFmtUs(jr.write_p50));
-                set("nbs-sw-wp95-"  + idx, nbsTabletFmtUs(jr.write_p95));
-                set("nbs-sw-wp99-"  + idx, nbsTabletFmtUs(jr.write_p99));
-                set("nbs-sw-riops-" + idx, rIops);
-                set("nbs-sw-rp50-"  + idx, nbsTabletFmtUs(jr.read_p50));
-                set("nbs-sw-rp95-"  + idx, nbsTabletFmtUs(jr.read_p95));
-                set("nbs-sw-rp99-"  + idx, nbsTabletFmtUs(jr.read_p99));
+                const rIops = jr.read_rps !== undefined ? Math.round(jr.read_rps) : "-";
+                set(prefix + "wiops-" + idx + sfx, wIops);
+                set(prefix + "wp50-" + idx + sfx, nbsTabletFmtUs(jr.write_p50));
+                set(prefix + "wp95-" + idx + sfx, nbsTabletFmtUs(jr.write_p95));
+                set(prefix + "wp99-" + idx + sfx, nbsTabletFmtUs(jr.write_p99));
+                set(prefix + "riops-" + idx + sfx, rIops);
+                set(prefix + "rp50-" + idx + sfx, nbsTabletFmtUs(jr.read_p50));
+                set(prefix + "rp95-" + idx + sfx, nbsTabletFmtUs(jr.read_p95));
+                set(prefix + "rp99-" + idx + sfx, nbsTabletFmtUs(jr.read_p99));
+            }
+
+            function nbsTabletSetMetricsError(prefix, idx, suffix, msg) {
+                function set(id, val) {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.textContent = val;
+                    }
+                }
+                const sfx = suffix !== undefined ? ("-" + suffix) : "";
+                set(prefix + "wiops-" + idx + sfx, "ERR");
+                set(prefix + "wp50-" + idx + sfx, msg || "ERR");
+                set(prefix + "wp95-" + idx + sfx, "");
+                set(prefix + "wp99-" + idx + sfx, "");
+                set(prefix + "riops-" + idx + sfx, "ERR");
+                set(prefix + "rp50-" + idx + sfx, "");
+                set(prefix + "rp95-" + idx + sfx, "");
+                set(prefix + "rp99-" + idx + sfx, "");
+            }
+
+            function nbsTabletFillTableColumn(idx, jr) {
+                nbsTabletFillMetricsCells("nbs-sw-", idx, undefined, jr);
+            }
+
+            function nbsTabletFillTrialRows(idx, trialIdx, jr) {
+                nbsTabletFillMetricsCells("nbs-sw-", idx, trialIdx, jr);
+            }
+
+            function nbsTabletFillMedianRow(idx, jr) {
+                nbsTabletFillMetricsCells("nbs-sm-", idx, undefined, jr);
             }
 
             function nbsTabletSetColumnError(idx, msg) {
-                function set(id, val) {
-                    const el = document.getElementById(id);
-                    if (el) el.textContent = val;
-                }
-                set("nbs-sw-wiops-" + idx, "ERR");
-                set("nbs-sw-wp50-"  + idx, msg || "ERR");
-                set("nbs-sw-wp95-"  + idx, "");
-                set("nbs-sw-wp99-"  + idx, "");
-                set("nbs-sw-riops-" + idx, "ERR");
-                set("nbs-sw-rp50-"  + idx, "");
-                set("nbs-sw-rp95-"  + idx, "");
-                set("nbs-sw-rp99-"  + idx, "");
+                nbsTabletSetMetricsError("nbs-sw-", idx, undefined, msg);
+            }
+
+            function nbsTabletSetTrialError(idx, trialIdx, msg) {
+                nbsTabletSetMetricsError("nbs-sw-", idx, trialIdx, msg);
+            }
+
+            function nbsTabletSetMedianError(idx, msg) {
+                nbsTabletSetMetricsError("nbs-sm-", idx, undefined, msg);
             }
 
             function nbsTabletRefreshList() {
@@ -1361,6 +1506,13 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     nbsTabletStatus("Run error: select a target tablet first");
                     return;
                 }
+                const trialsParsed = nbsTabletParseTrials();
+                if (!trialsParsed.ok) {
+                    nbsTabletStatus("Run error: " + trialsParsed.error);
+                    return;
+                }
+                const trials = trialsParsed.trials;
+
                 const fromVal = nbsTabletTrim($("#nbs-run-inflight-from").val());
                 const toVal   = nbsTabletTrim($("#nbs-run-inflight-to").val());
                 const single  = nbsTabletTrim($("#nbs-run-max-inflight").val()) || "32";
@@ -1371,35 +1523,80 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 const delayBeforeSec = parseInt(
                     nbsTabletTrim($("#nbs-run-delay-before").val())) || 0;
 
-                nbsTabletRenderTableSkeleton(sweepValues);
-                nbsTabletStatus("Starting sweep over " + sweepValues.length + " value(s)…");
+                nbsTabletRenderDetailSkeleton(sweepValues, trials);
+                const medianDiv = document.getElementById("nbs-run-median-table");
+                if (medianDiv) {
+                    if (trials > 1) {
+                        medianDiv.style.display = "";
+                        nbsTabletRenderMedianSkeleton(sweepValues);
+                    } else {
+                        medianDiv.style.display = "none";
+                        medianDiv.innerHTML = "";
+                    }
+                }
+
+                let statusMsg = "Starting sweep over " + sweepValues.length + " value(s)";
+                if (trials > 1) {
+                    statusMsg += ", " + trials + " trials each";
+                }
+                statusMsg += "…";
+                nbsTabletStatus(statusMsg);
 
                 const progressDiv = document.getElementById("nbs-run-progress");
 
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
-                    nbsTabletStatus("Running MaxInFlight=" + v + " (" + (i+1) + "/" + sweepValues.length + ")...");
+                    const trialResults = [];
 
-                    // Show progress bar.
-                    if (progressDiv) {
-                        progressDiv.innerHTML =
-                            "<div class='progress' style='margin-top:8px'>" +
-                            "<div class='progress-bar progress-bar-striped active' " +
-                            "role='progressbar' style='width:0%;min-width:2em'>0%</div>" +
-                            "</div>" +
-                            "<small class='text-muted'>Running MaxInFlight=" + v + "...</small>";
-                        progressDiv.style.display = "";
+                    for (let t = 0; t < trials; t++) {
+                        let statusLine = "MaxInFlight=" + v + " (" + (i + 1) + "/" +
+                            sweepValues.length + ")";
+                        if (trials > 1) {
+                            statusLine += " trial " + (t + 1) + "/" + trials;
+                        }
+                        statusLine += "...";
+                        nbsTabletStatus(statusLine);
+
+                        if (progressDiv) {
+                            progressDiv.innerHTML =
+                                "<div class='progress' style='margin-top:8px'>" +
+                                "<div class='progress-bar progress-bar-striped active' " +
+                                "role='progressbar' style='width:0%;min-width:2em'>0%</div>" +
+                                "</div>" +
+                                "<small class='text-muted'>" + statusLine + "</small>";
+                            progressDiv.style.display = "";
+                        }
+
+                        try {
+                            const runInfo = await nbsTabletRunOnce(tabletId, v);
+                            const jr = await nbsTabletPollResult(
+                                runInfo.uuid, durationSec + delayBeforeSec, progressDiv);
+                            trialResults.push(jr);
+                            if (trials > 1) {
+                                nbsTabletFillTrialRows(i, t, jr);
+                            } else {
+                                nbsTabletFillTableColumn(i, jr);
+                            }
+                        } catch (e) {
+                            if (trials > 1) {
+                                nbsTabletSetTrialError(i, t, String(e));
+                            } else {
+                                nbsTabletSetColumnError(i, String(e));
+                            }
+                        }
+                        if (progressDiv) {
+                            progressDiv.style.display = "none";
+                        }
                     }
 
-                    try {
-                        const runInfo = await nbsTabletRunOnce(tabletId, v);
-                        const jr = await nbsTabletPollResult(
-                            runInfo.uuid, durationSec + delayBeforeSec, progressDiv);
-                        nbsTabletFillTableColumn(i, jr);
-                    } catch(e) {
-                        nbsTabletSetColumnError(i, String(e));
+                    if (trials > 1) {
+                        const medianJr = nbsTabletMedianByWriteIops(trialResults);
+                        if (medianJr) {
+                            nbsTabletFillMedianRow(i, medianJr);
+                        } else {
+                            nbsTabletSetMedianError(i, "ERR");
+                        }
                     }
-                    if (progressDiv) { progressDiv.style.display = "none"; }
                 }
                 nbsTabletStatus("Sweep complete.");
             }
@@ -1507,6 +1704,15 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                 <div class='row'>
                                     <div class='col-sm-4'>
                                         <div class='form-group'>
+                                            <label for='nbs-run-trials'>Trials per InFlight:</label>
+                                            <input id='nbs-run-trials' class='form-control' type='number' min='1' step='2' value='1' />
+                                            <p class='help-block'>1 = single run. Values &gt; 1 must be odd; each InFlight is run that many times.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
                                             <label for='nbs-run-max-inflight'>MaxInFlight (single run):</label>
                                             <input id='nbs-run-max-inflight' class='form-control' type='number' min='1' step='1' value='32' />
                                         </div>
@@ -1566,6 +1772,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                 </div>
                                 <div id='nbs-run-progress' style='display:none'></div>
                                 <div id='nbs-run-result-table'></div>
+                                <div id='nbs-run-median-table' style='margin-top:16px;display:none'></div>
                             </div>
                         </div>
                     </div>

@@ -11,9 +11,8 @@
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <yql/essentials/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -208,7 +207,7 @@ namespace NKikimr::NKqp::NOpt {
             YQL_ENSURE(RunningSubQueries[idx] == TActorId(), "Running " << idx << " second time");
             auto timeout = TimeoutSecs - (TMonotonic::Now() - Timer).Seconds();
             auto view = Hints->GetView(idx);
-            Cout << "Scheduling task " << idx << " with timeout " << timeout << " labels: " << view.Labels << Endl;
+            Cout << "Scheduling task " << idx << " with timeout " << timeout << " labels: " << JoinSeq(", ", view.Labels) << Endl;
             IActor* requestHandler = new TTrueCardinalitiesWorker(SelfId(), JoinSeq(',', view.Labels), Database, Asts[idx], view.Labels, CollectFinishedHints(), timeout);
             RunningSubQueries[idx] = Register(requestHandler, TMailboxType::HTSwap, ActorContext().ActorSystem()->AppData<TAppData>()->UserPoolId);
         }
@@ -360,17 +359,19 @@ namespace NKikimr::NKqp::NOpt {
 
     TMaybeNode<TExprBase> TKqpTrueCardinalities::OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx, TOptimizerTrueCardinalitiesHints* costBasedHints) {
         TCBOSettings settings{
-            .MaxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize),
+            .CBOTimeout = Config->CBOTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOTimeout),
+            .CBOHardTimeout = Config->CBOHardTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOHardTimeout),
             .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)};
 
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
+        bool useBlockJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
         bool enableShuffleElimination = false;
-        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
-        auto stats = TypesCtx.GetStats(node.Raw());
-        NYql::NDq::TTableAliasMap* tableAliases = stats ? stats->TableAliases.Get() : nullptr;
-        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, enableShuffleElimination, TypesCtx.OrderingsFSM, tableAliases));
+        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel, useBlockJoin);
+        auto stats = KqpCtx.KqpStats.GetStats(node.Raw());
+        TTableAliasMap* tableAliases = stats ? stats->TableAliases.Get() : nullptr;
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, enableShuffleElimination, KqpCtx.KqpStats.ShufflingsFSM, tableAliases));
 
-        TExprBase output = NYql::NDq::DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
+        TExprBase output = KqpOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, KqpCtx.KqpStats, optLevel,
                                                                   *opt, [](auto& rels, auto label, auto node, auto stat) {
                                                                       rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
                                                                   },
@@ -378,6 +379,7 @@ namespace NKikimr::NKqp::NOpt {
                                                                   KqpCtx.GetOptimizerHints(),
                                                                   enableShuffleElimination,
                                                                   &KqpCtx.ShufflingOrderingsByJoinLabels,
+                                                                  &KqpCtx.CBOStats,
                                                                   costBasedHints);
         return output;
     }
@@ -741,7 +743,7 @@ namespace NKikimr::NKqp::NOpt {
         Cout << "labels\toldCardinality\tnewCardinality" << Endl;
         for (size_t i = 0; i < CostBasedHints->Labels->size(); ++i) {
             auto view = CostBasedHints->GetView(i);
-            Cout << view.Labels << "\t" << view.EstimatedCardinalityHint << "\t" << view.TrueCards.TrueCardinalityHint << Endl;
+            Cout << JoinSeq(", ", view.Labels) << "\t" << view.EstimatedCardinalityHint << "\t" << view.TrueCards.TrueCardinalityHint << Endl;
         }
         KqpCtx.TrueCardinalityHints = CostBasedHints;
         return TStatus::Ok;

@@ -2,7 +2,6 @@
 #include "dq_opt_dphyp_solver.h"
 #include "dq_opt_make_join_hypergraph.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -331,19 +330,18 @@ public:
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
-        const TOptimizerHints& hints = {},
-        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
+        const TOptimizerHints& hints = {}
     ) override {
         auto relsCount = joinTree->Labels().size();
 
         if (EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff) {
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints, costBasedHints);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints, costBasedHints);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints);
         } else if (64 < relsCount && relsCount <= 128) {
-            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>>(joinTree, EnableShuffleElimination, hints, costBasedHints);
+            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>>(joinTree, EnableShuffleElimination, hints);
         } else if (128 < relsCount && relsCount <= 192) {
-            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>>(joinTree, EnableShuffleElimination, hints, costBasedHints);
+            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>>(joinTree, EnableShuffleElimination, hints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -379,8 +377,7 @@ private:
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
         bool postEnumerationShuffleElimination /* we eliminate shuffles during enum algo only in case of TDPHypSolverShuffleElimination */,
-        const TOptimizerHints& hints = {},
-        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
+        const TOptimizerHints& hints = {}
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
@@ -398,7 +395,7 @@ private:
             return joinTree;
         }
 
-        auto bestJoinOrder = solver.Solve(hints, costBasedHints);
+        auto bestJoinOrder = solver.Solve(hints);
         if (postEnumerationShuffleElimination) {
             Y_ENSURE(OrderingsFSM != nullptr);
 
@@ -439,7 +436,7 @@ private:
 
         joinNode->Stats.LogicalOrderings = fsm.CreateState();
         switch (joinNode->JoinAlgo) {
-            case EJoinAlgoType::GraceJoin: 
+            case EJoinAlgoType::GraceJoin:
             case EJoinAlgoType::ReverseBlockJoin:
             {
                 /* look at dphyp shuffle elimination EmitCsgCmp function. it has the same logic. */
@@ -598,8 +595,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     const TProviderCollectFunction& providerCollect,
     const TOptimizerHints& hints,
     bool enableShuffleElimination,
-    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
-    TOptimizerTrueCardinalitiesHints* costBasedHints
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
     int dummyEquiJoinCounter = 0;
     return DqOptimizeEquiJoinWithCosts(
@@ -612,8 +608,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         dummyEquiJoinCounter,
         hints,
         enableShuffleElimination,
-        shufflingOrderingsByJoinLabels,
-        costBasedHints
+        shufflingOrderingsByJoinLabels
     );
 }
 
@@ -627,8 +622,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     int& equiJoinCounter,
     const TOptimizerHints& hints,
     bool /* enableShuffleElimination */,
-    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
-    TOptimizerTrueCardinalitiesHints* costBasedHints
+    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
     if (optLevel <= 1) {
         return node;
@@ -697,7 +691,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt.JoinSearch(joinTree, hints, costBasedHints);
+        joinTree = opt.JoinSearch(joinTree, hints);
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

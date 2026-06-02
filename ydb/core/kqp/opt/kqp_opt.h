@@ -44,7 +44,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     ui32 OptLevel = 0;
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
     std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
-    std::shared_ptr<NYql::TOptimizerTrueCardinalitiesHints> TrueCardinalityHints{};
+    std::shared_ptr<NKikimr::NKqp::TOptimizerTrueCardinalitiesHints> TrueCardinalityHints{};
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
@@ -54,8 +54,6 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TOptimizerHints GetOptimizerHints();
 
     bool IsDataQuery() const;
-
-    NYql::TOptimizerHints GetOptimizerHints();
 
     bool IsScanQuery() const;
 

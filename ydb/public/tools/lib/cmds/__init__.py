@@ -331,7 +331,7 @@ def should_preserve_existing_config(target_config):
     If the metafile is removed while the data directory is kept, the existing
     config is also preserved instead of being regenerated.
     """
-    return os.path.exists(target_config) and os.path.getsize(target_config) > 0
+    return os.path.isfile(target_config) and os.path.getsize(target_config) > 0
 
 
 def resolve_deploy_config_action(config_path, target_config):

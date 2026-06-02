@@ -1289,7 +1289,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     return { ok: true, trials: 1 };
                 }
                 if (!/^[0-9]+$/.test(raw)) {
-                    return { ok: false, error: "Trials per InFlight must be a non-negative integer" };
+                    return { ok: false, error: "Trials per InFlight must be a positive integer" };
                 }
                 const trials = parseInt(raw, 10);
                 if (trials < 1) {

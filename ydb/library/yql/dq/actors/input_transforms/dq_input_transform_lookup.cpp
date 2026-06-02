@@ -400,18 +400,14 @@ private:
 #if 0 // TODO
             // Opportunistially populate LRU cache with partial fullscan results
             // (again, in case of MultiMatches, we cannot use partial results)
-            for (auto& [k, v]: *lookupResult) {
-                Y_DEBUG_ABORT_UNLESS(v);
-                LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+            if (!DisableLruCache) {
+                for (auto& [k, v]: *lookupResult) {
+                    Y_DEBUG_ABORT_UNLESS(v);
+                    LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+                }
             }
 #endif
         }
-<<<<<<< HEAD
-        if (!DisableLruCache) {
-            for (auto&& [k, v]: *lookupResult) {
-                LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
-            }
-=======
         if (fullscan) {
             Y_DEBUG_ABORT_UNLESS(lookupResult == FullscanRequest);
             lookupResult.reset();
@@ -429,13 +425,12 @@ private:
         } else {
             Y_ABORT_UNLESS(lookupResult == KeysForLookup);
             lookupResult.reset();
-            if (!FullscanReady) { // don't populate LRU cache when we have (complete) fullscan results
+            if (!FullscanReady && !DisableLruCache) { // don't populate LRU cache when we have (complete) fullscan results
                 for (auto& [k, v]: *KeysForLookup) {
                     LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
                 }
             }
             KeysForLookup->erase(KeysForLookup->begin(), KeysForLookup->end()); // don't ->clear();, it's O(reserved) instead of O(size)
->>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
         }
         auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;
         LastLruSize = (i64)LruCache->Size();

@@ -763,6 +763,10 @@ struct TEvBlobStorage {
         EvSyncToken,
         EvReleaseSyncToken,
         EvStartCompactionFromDefrag,
+        EvAcquireVDiskOperationToken,
+        EvVDiskOperationToken,
+        EvReleaseVDiskOperationToken,
+        EvStartupDataSyncDone,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -1547,7 +1551,7 @@ struct TEvBlobStorage {
             , BlockedGeneration(blockedGeneration)
         {}
 
-        TString Print(bool /*isFull*/) const {  
+        TString Print(bool /*isFull*/) const {
             TStringStream str;
             str << "TEvGetBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " TabletId# " << TabletId << " BlockedGeneration# " << BlockedGeneration;

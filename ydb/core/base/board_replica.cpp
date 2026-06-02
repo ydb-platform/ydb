@@ -8,7 +8,6 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BOARD_REPLICA
 
@@ -245,7 +244,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
                 {"msgGeneration", msgGeneration},
                 {"Info->ClusterStateGuid", Info->ClusterStateGuid},
                 {"msgGuid", msgGuid});
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }
     }
@@ -269,9 +268,9 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
     void Handle(TEvStateStorage::TEvReplicaBoardLookup::TPtr &ev) {
         auto &record = ev->Get()->Record;
         const auto &path = record.GetPath();
-        
+
         CheckConfigVersion(ev->Sender, ev->Get());
-        
+
         ui32 flags = 0;
         if (record.GetSubscribe()) {
             auto& pathSubscribeData  = PathToSubscribers[path];

@@ -14,10 +14,8 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATESTORAGE
-
 
 namespace NKikimr {
 namespace NStateStorageGuardian {

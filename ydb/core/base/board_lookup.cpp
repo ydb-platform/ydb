@@ -13,7 +13,6 @@
 
 #include <util/generic/xrange.h>
 #include <util/string/join.h>
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BOARD_LOOKUP
 

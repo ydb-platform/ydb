@@ -239,6 +239,8 @@ struct TEvPQ {
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
         EvRewindCommitResult,
+        EvProcessBatchRead,
+        EvProcessBatchReadResult,
         EvEnd,
     };
 
@@ -340,7 +342,7 @@ struct TEvPQ {
         TEvRead(const ui64 cookie, const ui64 offset, ui64 lastOffset, const ui16 partNo, const ui32 count,
                 const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size, const bool readToBlobEnd,
                 const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
-                bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {})
+                bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {}, bool canReadBatches = false)
             : Cookie(cookie)
             , Offset(offset)
             , PartNo(partNo)
@@ -357,6 +359,7 @@ struct TEvPQ {
             , PipeClient(pipeClient)
             , LastOffset(lastOffset)
             , ReplyTo(replyTo)
+            , CanReadBatches(canReadBatches)
         {}
 
         ui64 Cookie;
@@ -375,6 +378,7 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         TActorId ReplyTo;
+        bool CanReadBatches;
 
         bool IsInternal() {
             return !!ReplyTo;

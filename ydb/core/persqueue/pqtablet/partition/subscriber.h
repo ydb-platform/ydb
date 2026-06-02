@@ -52,6 +52,7 @@ struct TReadInfo {
 
     TBlobKeyTokens BlobKeyTokens;
     size_t CompactedBlobsCount = 0;
+    bool CanReadBatches = false;
 
     TReadInfo() = delete;
     TReadInfo(
@@ -69,7 +70,8 @@ struct TReadInfo {
         const bool isExternalRead,
         const TActorId& pipeClient,
         bool isInternal,
-        const TActorId& replyTo
+        const TActorId& replyTo,
+        bool canReadBatches = false
     )
         : User(user)
         , ClientDC(clientDC)
@@ -89,6 +91,7 @@ struct TReadInfo {
         , ReplyTo(replyTo)
         , LastOffset(lastOffset)
         , IsInternal(isInternal)
+        , CanReadBatches(canReadBatches)
     {}
 
     bool ReachedLastOffset() const {

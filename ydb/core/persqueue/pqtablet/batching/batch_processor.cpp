@@ -1,0 +1,55 @@
+#include "batch_processor.h"
+
+#include "consumer_batch_processor.h"
+
+namespace NKikimr::NPQ::NBatching {
+
+TBatchProcessor::TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId)
+    : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
+    , LogPrefix(TStringBuilder() << "BatchProcessor " << TabletId << ": ")
+{
+}
+
+const TString& TBatchProcessor::GetLogPrefix() const {
+    return LogPrefix;
+}
+
+void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
+    Become(&TThis::StateWork);
+}
+
+NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {
+    auto [it, inserted] = ConsumerProcessors.emplace(user, NActors::TActorId{});
+    if (inserted) {
+        it->second = RegisterWithSameMailbox(CreateConsumerBatchProcessor(TabletId, TabletActorId, user));
+    }
+    return it->second;
+}
+
+void TBatchProcessor::Handle(TEvProcessRead::TPtr& ev, const NActors::TActorContext& ctx) {
+    const auto actorId = GetOrCreateConsumerProcessor(ev->Get()->Context.User);
+    ctx.Send(actorId, new TEvProcessRead(std::move(ev->Get()->Context)));
+}
+
+void TBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, const NActors::TActorContext&) {
+    for (const auto& [_, actorId] : ConsumerProcessors) {
+        Send(actorId, new NActors::TEvents::TEvPoisonPill());
+    }
+    PassAway();
+}
+
+STFUNC(TBatchProcessor::StateWork) {
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvProcessRead, Handle);
+        HFunc(NActors::TEvents::TEvPoisonPill, Handle);
+    default:
+        LOG_W("Unexpected event in TBatchProcessor: " << ev->GetTypeRewrite());
+        break;
+    }
+}
+
+NActors::IActor* CreateBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId) {
+    return new TBatchProcessor(tabletId, tabletActorId);
+}
+
+} // namespace NKikimr::NPQ::NBatching

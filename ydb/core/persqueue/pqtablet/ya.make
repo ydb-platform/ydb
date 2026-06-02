@@ -23,6 +23,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    batching
     blob
     common
     partition

@@ -43,7 +43,11 @@ message TPersQueuePartitionRequest {
         optional int64 LastOffset = 17;
 
         optional uint64 SizeEstimate = 18;
+<<<<<<< HEAD
         optional bool ReadToBlobEnd = 19 [default = false];
+=======
+        optional bool CanReadBatches = 19 [default = false];
+>>>>>>> 303d4cf8f7d (LOGBROKER-10406 Start batch cut)
     }
 
     message TCmdUpdateReadMetrics {

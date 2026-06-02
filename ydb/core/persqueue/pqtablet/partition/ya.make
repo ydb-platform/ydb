@@ -33,6 +33,7 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/persqueue/common
     ydb/core/persqueue/events
+    ydb/core/persqueue/pqtablet/batching
     ydb/core/persqueue/pqtablet/blob
     ydb/core/persqueue/pqtablet/cache
     ydb/core/persqueue/pqtablet/common

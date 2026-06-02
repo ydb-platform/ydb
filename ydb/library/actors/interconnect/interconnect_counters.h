@@ -46,6 +46,7 @@ public:
     virtual void AddTotalBytesRead(ui64 value) = 0;
     virtual void UpdatePingTimeHistogram(ui64 value) = 0;
     virtual void UpdateIcQueueTimeHistogram(ui64 value) = 0;
+    virtual void UpdateNumEventsInQueueHistogram(ui64 value) = 0;
     virtual void UpdateRdmaReadTimeHistogram(ui64 value) = 0;
     virtual void UpdateOutputChannelTraffic(ui16 channel, ui64 value) = 0;
     virtual void UpdateOutputChannelEvents(ui16 channel) = 0;

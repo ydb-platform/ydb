@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_ut_common.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr::NKqp {
 
@@ -2326,6 +2327,111 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             auto cyrParam = TParamsBuilder().AddParam("$p").Utf8("я").Build().Build();
             ValidatePredicate(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == $p)", cyrParam);
             ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == $p)", {NJsonIndex::TToken{"\x09ключ", "$p"}}, cyrParam);
+        });
+    }
+
+    Y_UNIT_TEST(DmlDuringBuild) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetUseRealThreads(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            CreateTestTable(db, "Json");
+
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES
+                    (1, '{"a": 1}', 'row1'),
+                    (2, '{"b": 2}', 'row2'),
+                    (3, '{"c": 3}', 'row3');
+            )", TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return true;
+        });
+
+        TVector<TAutoPtr<IEventHandle>> capturedEvents;
+        int captured = 0;
+
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) -> NActors::TTestActorRuntimeBase::EEventAction {
+            if (captured < 1 && ev->GetTypeRewrite() == TEvDataShard::TEvBuildFulltextIndexRequest::EventType) {
+                captured++;
+                capturedEvents.push_back(ev.Release());
+                return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+            }
+
+            return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+        NYdb::NQuery::TAsyncExecuteQueryResult addIndexFuture;
+        kikimr.RunCall([&] {
+            addIndexFuture = db.ExecuteQuery(R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )", TTxControl::NoTx());
+            return true;
+        });
+
+        runtime->WaitFor("index build paused", [&] { return captured >= 1; });
+
+        kikimr.RunCall([&] {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES (4, '{"a": 4}', 'row4');
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return true;
+        });
+
+        kikimr.RunCall([&] {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx WHERE JSON_EXISTS(Text, '$.a');
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Requested index: json_idx is not ready to use");
+            return true;
+        });
+
+        kikimr.RunCall([&] {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/TestTable` WHERE JSON_EXISTS(Text, '$.a') ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u]];[[4u]]])", FormatResultSetYson(result.GetResultSet(0)));
+            return true;
+        });
+
+        for (auto& ev : capturedEvents) {
+            runtime->Send(ev.Release());
+        }
+
+        capturedEvents.clear();
+        runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
+        kikimr.RunCall([&] {
+            auto result = addIndexFuture.GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return true;
+        });
+
+        kikimr.RunCall([&] {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES (5, '{"a": 5}', 'row5');
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return true;
+        });
+
+        kikimr.RunCall([&] {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx WHERE JSON_EXISTS(Text, '$.a') ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u]];[[4u]];[[5u]]])", FormatResultSetYson(result.GetResultSet(0)));
+            return true;
         });
     }
 }

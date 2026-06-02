@@ -41,7 +41,6 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT(AsSet(hints).contains("BEGIN"));
         // Must not propose tail words yet.
         UNIT_ASSERT(!AsSet(hints).contains("TRANSACTION"));
-        UNIT_ASSERT(!AsSet(hints).contains("WORK"));
     }
 
     Y_UNIT_TEST(SuggestsBeginOnPrefixLowerCase) {
@@ -53,15 +52,6 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT(AsSet(hints).contains("BEGIN"));
     }
 
-    Y_UNIT_TEST(SuggestsStartOnPrefix) {
-        auto completer = MakeTclOnlyCompleter();
-        int contextLen = -1;
-        const TString text = "STA";
-        auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-        UNIT_ASSERT_VALUES_EQUAL(contextLen, 3);
-        UNIT_ASSERT(AsSet(hints).contains("START"));
-    }
-
     Y_UNIT_TEST(NextWordAfterBeginSpace) {
         auto completer = MakeTclOnlyCompleter();
         int contextLen = -1;
@@ -70,7 +60,7 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT_VALUES_EQUAL(contextLen, 0);
         const auto set = AsSet(hints);
         UNIT_ASSERT(set.contains("TRANSACTION"));
-        UNIT_ASSERT(set.contains("WORK"));
+        UNIT_ASSERT(!set.contains("WORK"));
         UNIT_ASSERT(set.contains("serializable-rw"));
         UNIT_ASSERT(set.contains("read-committed-rw"));
         UNIT_ASSERT(set.contains("snapshot-ro"));
@@ -123,20 +113,6 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT(!set.contains("WORK"));
     }
 
-    Y_UNIT_TEST(NextWordAfterStartTransactionSpace) {
-        auto completer = MakeTclOnlyCompleter();
-        int contextLen = -1;
-        const TString text = "START TRANSACTION ";
-        auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-        UNIT_ASSERT_VALUES_EQUAL(contextLen, 0);
-        const auto set = AsSet(hints);
-        UNIT_ASSERT(set.contains("serializable-rw"));
-        UNIT_ASSERT(set.contains("snapshot-ro"));
-        // Repeated phrase must NOT be proposed.
-        UNIT_ASSERT(!set.contains("START TRANSACTION serializable-rw"));
-        UNIT_ASSERT(!set.contains("TRANSACTION"));
-    }
-
     Y_UNIT_TEST(NoOnlineRoSuggestion) {
         auto completer = MakeTclOnlyCompleter();
         int contextLen = -1;
@@ -171,7 +147,7 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
             UNIT_ASSERT_VALUES_EQUAL(contextLen, 0);
             const auto set = AsSet(hints);
             UNIT_ASSERT(set.contains("TRANSACTION"));
-            UNIT_ASSERT(set.contains("WORK"));
+            UNIT_ASSERT(!set.contains("WORK"));
         }
     }
 
@@ -189,18 +165,8 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
             auto hints = completer->ApplyLight(text, std::string(text), contextLen);
             const auto set = AsSet(hints);
             UNIT_ASSERT(set.contains("TRANSACTION"));
-            UNIT_ASSERT(set.contains("WORK"));
+            UNIT_ASSERT(!set.contains("WORK"));
         }
-    }
-
-    Y_UNIT_TEST(EndForms) {
-        auto completer = MakeTclOnlyCompleter();
-        int contextLen = -1;
-        const TString text = "END ";
-        auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-        const auto set = AsSet(hints);
-        UNIT_ASSERT(set.contains("TRANSACTION"));
-        UNIT_ASSERT(!set.contains("WORK"));
     }
 
     Y_UNIT_TEST(NoTclSuggestionsForUnrelatedInput) {

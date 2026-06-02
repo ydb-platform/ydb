@@ -996,51 +996,6 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert "BEGIN" in result.stdout
         assert "COMMIT" in result.stdout
 
-    def test_begin_work_commit(self):
-        result = self.run_interactive_session(
-            ["BEGIN WORK", "SELECT 5;", "COMMIT WORK", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-        assert "5" in result.stdout
-
-    def test_start_transaction(self):
-        result = self.run_interactive_session(
-            ["START TRANSACTION", "SELECT 6;", "COMMIT", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-
-    def test_start_transaction_with_mode(self):
-        result = self.run_interactive_session(
-            ["START TRANSACTION snapshot-ro", "SELECT 7;", "COMMIT", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-
-    def test_end_aliases_commit(self):
-        result = self.run_interactive_session(
-            ["BEGIN", "SELECT 8;", "END", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "BEGIN" in result.stdout
-        assert "COMMIT" in result.stdout
-
-    def test_end_transaction_aliases_commit(self):
-        result = self.run_interactive_session(
-            ["BEGIN", "SELECT 9;", "END TRANSACTION", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "COMMIT" in result.stdout
-
     def test_rollback(self):
         result = self.run_interactive_session(
             ["BEGIN", "SELECT 4;", "ROLLBACK", "exit"],
@@ -1053,14 +1008,6 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
     def test_rollback_transaction(self):
         result = self.run_interactive_session(
             ["BEGIN", "SELECT 41;", "ROLLBACK TRANSACTION", "exit"],
-            self.tmp_path,
-        )
-        assert result.exit_code == 0
-        assert "ROLLBACK" in result.stdout
-
-    def test_rollback_work(self):
-        result = self.run_interactive_session(
-            ["BEGIN", "SELECT 42;", "ROLLBACK WORK", "exit"],
             self.tmp_path,
         )
         assert result.exit_code == 0
@@ -1257,6 +1204,18 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert "ROLLBACK" in result.stdout
         assert marker_name not in result.stdout
 
+    def test_select_after_rollback_runs_outside_transaction(self):
+        """After ROLLBACK the REPL must not reuse the closed transaction id."""
+        result = self.run_interactive_session(
+            ["BEGIN", "SELECT 1;", "ROLLBACK", "SELECT 2;", "exit"],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "Transaction not found" not in combined
+        assert "ROLLBACK" in result.stdout
+        assert "2" in result.stdout
+
     def test_commit_actually_persists_dml(self):
         """COMMIT after UPSERT must persist the row."""
         marker_id = 7778
@@ -1293,6 +1252,41 @@ class TestInteractiveTransactions(BaseSqlInteractiveTest):
         assert result.stdout.count("BEGIN") >= 3
         assert result.stdout.count("COMMIT") >= 2
         assert result.stdout.count("ROLLBACK") >= 1
+
+    def test_ddl_rejected_inside_transaction(self):
+        """CREATE TABLE must not be sent to the server while a transaction is open."""
+        ddl_table = f"ddl_blocked_{uuid.uuid4().hex}"
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                f"CREATE TABLE `{ddl_table}` (id Uint64, PRIMARY KEY (id));",
+                "ROLLBACK",
+                f"SELECT COUNT(*) FROM `{ddl_table}`;",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = (result.stdout + result.stderr).lower()
+        assert "cannot be executed inside an interactive transaction" in combined
+        assert "ROLLBACK" in result.stdout
+
+    def test_failed_query_invalidates_transaction(self):
+        """After a failed in-tx query the CLI must drop local tx state (server auto-rollback)."""
+        result = self.run_interactive_session(
+            [
+                "BEGIN",
+                "SELECT * FROM `/path/that/does/not/exist`;",
+                "SELECT 2;",
+                "exit",
+            ],
+            self.tmp_path,
+        )
+        assert result.exit_code == 0
+        combined = result.stdout + result.stderr
+        assert "automatically rolled back" in combined
+        assert "Transaction not found" not in combined
+        assert "2" in result.stdout
 
 
 class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
@@ -1340,6 +1334,46 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
         )
         child.expect(pattern, timeout=self.COMPLETION_TIMEOUT)
 
+    def _expect_no_keyword(self, child, keyword: str, *, timeout: float = 1):
+        pattern = ".*".join(keyword)
+        try:
+            child.expect(pattern, timeout=timeout)
+            raise AssertionError(f"{keyword!r} must not appear in completions")
+        except pexpect.TIMEOUT:
+            pass
+
+    def _wait_for_ready_after_begin(self, child):
+        """Wait until BEGIN finished and replxx is ready for the next line."""
+        child.expect("BEGIN", timeout=15)
+        # Replxx may not echo the full colored prompt into the pty buffer; the empty-line
+        # placeholder is a reliable readiness signal (same as other completion tests).
+        child.expect("Type YQL query", timeout=self.PROMPT_TIMEOUT)
+
+    def _send_line(self, child, line: str):
+        child.send(line)
+        child.send("\r")
+
+    def test_no_ddl_completion_inside_transaction(self):
+        """Inside a transaction TAB must hide destructive DDL but keep SHOW CREATE."""
+        child = self.spawn_interactive()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_prompt(child)
+            self._send_line(child, "BEGIN")
+            self._wait_for_ready_after_begin(child)
+            child.send("S")
+            child.send("\t")
+            # Replxx may split rendered keywords with ANSI escapes (ELECT ... S ... HOW CREATE).
+            self._expect_keyword(child, "ELECT")
+            self._expect_keyword(child, "HOW CREATE")
+            child.sendcontrol("u")
+            child.send("CRE")
+            child.send("\t")
+            self._expect_no_keyword(child, "CREATE")
+        finally:
+            self._discard_and_exit(child)
+            child.close()
+
     def test_tab_completes_beg_to_begin(self):
         """`BEG<TAB>` should expand to BEGIN."""
         child = self.spawn_interactive()
@@ -1380,19 +1414,6 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
             # Single expect: avoid false positives on "Server" in the welcome
             # banner (s.*e.*r matches) and require the full candidate list.
             self._expect_s_prefixed_tx_modes(child, "BEGIN s")
-        finally:
-            self._discard_and_exit(child)
-            child.close()
-
-    def test_tab_after_start_transaction_proposes_modes(self):
-        """`START TRANSACTION s<TAB>` proposes s-prefixed modes (no phrase repetition)."""
-        child = self.spawn_interactive()
-        try:
-            child.expect("Welcome to YDB CLI", timeout=15)
-            self._wait_for_prompt(child)
-            child.send("START TRANSACTION s")
-            child.send("\t")
-            self._expect_s_prefixed_tx_modes(child, "START TRANSACTION s")
         finally:
             self._discard_and_exit(child)
             child.close()

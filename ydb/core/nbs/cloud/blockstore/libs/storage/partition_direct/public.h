@@ -6,7 +6,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TVChunkConfig;
+class TVChunkConfig;
 
 class TVChunk;
 using TVChunkPtr = std::shared_ptr<TVChunk>;
@@ -22,6 +22,12 @@ struct TListPBufferResponse;
 struct TAggregatedListPBufferResponse;
 class IDirectBlockGroup;
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;
+
+class TRegion;
+using TRegionPtr = std::shared_ptr<TRegion>;
+
+class TDDiskDataCopier;
+using TDDiskDataCopierPtr = std::shared_ptr<TDDiskDataCopier>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1428,7 +1428,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         const bool distinctAll = !!GetSetting(setItem->Tail(), "distinct_all");
         auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-        // Group sets layoout:
+        // Group sets layout:
         //            group_sets
         //            /    |
         //         set0   set1  ...
@@ -1522,7 +1522,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                 // We have to use keys based on group set.
                 aggregationTraitsForSet.KeyColumns.clear();
                 TVector<std::pair<TInfoUnit, TExprNode::TPtr>> groupByKeysExpressionsMapForSet;
+                TAggregationTraits distinctAggregationTraitsPreAggregateForSet = distinctAggregationTraitsPreAggregate;
+                TAggregationTraits distinctAggregationTraitsPostAggregateForSet = distinctAggregationTraitsPostAggregate;
                 TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPostAggForSet = expressionsMapPostAgg;
+                TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPreAggForSet = expressionsMapPreAgg;
                 THashSet<ui32> indexInGroupBySet;
 
                 for (const TString& groupByIndex : groupByIndexes) {
@@ -1564,9 +1567,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                 }
 
                 auto aggregationForGroupSetResultExpr = BuildAggregationPipeline(
-                    resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMapForSet), std::move(distinctAggregationTraitsPreAggregate),
-                    std::move(aggregationTraitsForSet), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda,
-                    std::move(expressionsMapPostAggForSet), ctx, node->Pos());
+                    resultExpr, std::move(expressionsMapPreAggForSet), std::move(groupByKeysExpressionsMapForSet),
+                    std::move(distinctAggregationTraitsPreAggregateForSet), std::move(aggregationTraitsForSet),
+                    std::move(distinctAggregationTraitsPostAggregateForSet), havingFilterLambda, std::move(expressionsMapPostAggForSet), ctx, node->Pos());
 
                 if (rollupResultExpr) {
                     // clang-format off

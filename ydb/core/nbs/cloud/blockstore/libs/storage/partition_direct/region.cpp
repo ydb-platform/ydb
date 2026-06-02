@@ -43,10 +43,13 @@ TRegion::TRegion(
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
-        const auto vChunkConfig =
-            persisted ? *persisted : TVChunkConfig::Make(vChunkIndex);
+        const auto vChunkConfig = persisted ? *persisted
+                                            : TVChunkConfig::MakeDefault(
+                                                  vChunkIndex,
+                                                  DirectBlockGroupHostCount,
+                                                  DefaultPrimaryCount);
         Y_ABORT_UNLESS(vChunkConfig.IsValid());
-        Y_ABORT_UNLESS(vChunkConfig.VChunkIndex == vChunkIndex);
+        Y_ABORT_UNLESS(vChunkConfig.GetVChunkIndex() == vChunkIndex);
 
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
@@ -65,6 +68,14 @@ void TRegion::Run()
     for (const auto& vChunk: VChunks) {
         vChunk->Start();
     }
+}
+
+void TRegion::Stop()
+{
+    for (const auto& vChunk: VChunks) {
+        vChunk->Stop();
+    }
+    VChunks.clear();
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(

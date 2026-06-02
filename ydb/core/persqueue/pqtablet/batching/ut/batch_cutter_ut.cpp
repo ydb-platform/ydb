@@ -144,8 +144,8 @@ void AssertKafkaBatchCut(const TVector<TReadResult>& cut) {
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetOffset(), 11u);
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetMessageCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetMessageCount(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetMessageFormat(), NKikimrClient::STANDARD);
-    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetMessageFormat(), NKikimrClient::STANDARD);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[1].GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     UNIT_ASSERT(!cut[0].HasUncompressedSize());
     UNIT_ASSERT(!cut[1].HasUncompressedSize());
 
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
         const auto cut = TNoOpBatchCutter().Cut(readResult);
         UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cut[0].GetData(), "payload");
-        UNIT_ASSERT_VALUES_EQUAL(cut[0].GetMessageFormat(), NKikimrClient::STANDARD);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     }
 
     Y_UNIT_TEST(CutUncompressedKafkaBatchInDataChunk) {
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
         const auto cut = TKafkaBatchCutter().Cut(readResult);
         UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cut[0].GetData(), readResult.GetData());
-        UNIT_ASSERT_VALUES_EQUAL(cut[0].GetMessageFormat(), NKikimrClient::KAFKA_BATCH);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::KAFKA_BATCH));
     }
 }
 

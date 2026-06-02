@@ -134,6 +134,7 @@ enum ESimpleCounters : int;
     item(TxTruncateTable, 117) \
     item(TxReadOnlyCopyColumnTable, 118) \
     item(TxPrepareIndexValidation, 119) \
+    item(TxCreateFullBackupOp, 120) \
 
 // TX_STATE_TYPE_ENUM
 

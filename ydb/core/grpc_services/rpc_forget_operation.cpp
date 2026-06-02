@@ -44,6 +44,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return "[ForgetBackupCollectionRestore]";
         case TOperationId::COMPACTION:
             return "[ForgetForcedCompaction]";
+        case TOperationId::FULL_BACKUP:
+            return "[ForgetFullBackup]";
         default:
             return "[Untagged]";
         }
@@ -63,6 +65,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return new TEvBackup::TEvForgetBackupCollectionRestoreRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::COMPACTION:
             return new TEvForcedCompaction::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::FULL_BACKUP:
+            return new TEvBackup::TEvForgetFullBackupRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -75,7 +79,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             || kind == TOperationId::BUILD_INDEX
             || kind == TOperationId::INCREMENTAL_BACKUP
             || kind == TOperationId::RESTORE
-            || kind == TOperationId::COMPACTION;
+            || kind == TOperationId::COMPACTION
+            || kind == TOperationId::FULL_BACKUP;
     }
 
     void Handle(TEvExport::TEvForgetExportResponse::TPtr& ev) {
@@ -144,6 +149,15 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         Reply(record.GetStatus(), record.GetIssues());
     }
 
+    void Handle(TEvBackup::TEvForgetFullBackupResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvForgetFullBackupResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -160,6 +174,7 @@ public:
             case TOperationId::INCREMENTAL_BACKUP:
             case TOperationId::RESTORE:
             case TOperationId::COMPACTION:
+            case TOperationId::FULL_BACKUP:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
@@ -190,6 +205,7 @@ public:
             hFunc(NKqp::TEvForgetScriptExecutionOperationResponse, Handle);
             hFunc(TEvBackup::TEvForgetIncrementalBackupResponse, Handle);
             hFunc(TEvBackup::TEvForgetBackupCollectionRestoreResponse, Handle);
+            hFunc(TEvBackup::TEvForgetFullBackupResponse, Handle);
         default:
             return StateBase(ev);
         }

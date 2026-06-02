@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -13,6 +14,8 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 
 namespace NKikimr::NKqp {
@@ -78,6 +81,7 @@ public:
         TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
         bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
+        bool expectsResult, TTxAllocatorState::TPtr txAlloc,
         const TActorId& kqpTempTablesAgentActor)
         : PhyTx(phyTx)
         , QueryType(queryType)
@@ -91,6 +95,8 @@ public:
         , TempDirName(tempDirName)
         , RequestContext(std::move(ctx))
         , RequestType(requestType)
+        , ExpectsResult(expectsResult)
+        , TxAlloc(std::move(txAlloc))
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
     {
         YQL_ENSURE(RequestContext);
@@ -98,7 +104,7 @@ public:
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
-            nullptr,
+            TxAlloc,
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);
     }
 
@@ -686,6 +692,7 @@ public:
             const auto& value = future.GetValue();
             auto ev = MakeHolder<TEvPrivate::TEvResult>();
             ev->Result.SetStatus(value.Status());
+            ev->Result.OperationId = value.OperationId;
 
             if (value.Issues()) {
                 NYql::TIssue rootIssue(TStringBuilder() << "Executing " << NKikimrSchemeOp::EOperationType_Name(operationType));
@@ -1129,6 +1136,39 @@ public:
         response.SetStatus(GetYdbStatus(ev->Get()->Result));
         IssuesToMessage(ev->Get()->Result.Issues(), response.MutableIssues());
 
+        if (ExpectsResult && GetYdbStatus(ev->Get()->Result) == Ydb::StatusIds::SUCCESS && ev->Get()->Result.OperationId) {
+            YQL_ENSURE(TxAlloc);
+            auto guard = TxAlloc->TypeEnv.BindAllocator();
+
+            auto* utf8Type = NMiniKQL::TDataType::Create(
+                NUdf::TDataType<NUdf::TUtf8>::Id, TxAlloc->TypeEnv);
+            std::pair<TString, NMiniKQL::TType*> members[] = {
+                {"operation_id", utf8Type}
+            };
+            auto* structType = NMiniKQL::TStructType::Create(
+                members, 1, TxAlloc->TypeEnv);
+
+            const TString& opIdStr = *ev->Get()->Result.OperationId;
+            NUdf::TUnboxedValue* items = nullptr;
+            auto row = TxAlloc->HolderFactory.CreateDirectArrayHolder(1, items);
+            items[0] = NMiniKQL::MakeString(NUdf::TStringRef(opIdStr.data(), opIdStr.size()));
+
+            TKqpExecuterTxResult txResult(
+                /*isStream=*/false,
+                structType,
+                /*columnOrder=*/nullptr,
+                /*columnHints=*/nullptr,
+                /*queryResultIndex=*/TMaybe<ui32>(0));
+            NMiniKQL::TUnboxedValueBatch batch(structType);
+            batch.emplace_back(std::move(row));
+            txResult.Rows.swap(batch);
+            txResult.HasTrailingResult = true;
+
+            TVector<TKqpExecuterTxResult> results;
+            results.emplace_back(std::move(txResult));
+            ResponseEv->TxResults = std::move(results);
+        }
+
         Send(Target, ResponseEv.release());
         PassAway();
     }
@@ -1236,6 +1276,8 @@ private:
     ui64 SchemeShardTabletId = 0;
     TIntrusivePtr<TUserRequestContext> RequestContext;
     const TMaybe<TString> RequestType;
+    bool ExpectsResult = false;
+    TTxAllocatorState::TPtr TxAlloc;
     const TActorId KqpTempTablesAgentActor;
     TActorId AnalyzeActorId;
 };
@@ -1247,11 +1289,13 @@ IActor* CreateKqpSchemeExecuter(
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs,
-    TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
+    TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
+    bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, target, requestType, database, userToken, clientAddress,
-        temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx), kqpTempTablesAgentActor);
+        temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx),
+        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor);
 }
 
 } // namespace NKikimr::NKqp

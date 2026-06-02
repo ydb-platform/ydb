@@ -311,7 +311,6 @@ class Test(TestBase):
 
         vdisk_columns = [
             'VDiskId',
-            'NodeId:PDiskId',
             'VDiskSlotUsage',
             'VDiskRawUsage',
             'NormalizedOccupancy',

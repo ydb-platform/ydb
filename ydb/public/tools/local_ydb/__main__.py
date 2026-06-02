@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
+import os
 from ydb.public.tools.lib import cmds
 
 
@@ -159,6 +160,10 @@ To update cluster (stop + start):
         )
 
     arguments = parser.parse_args()
+    if arguments.config_path is None:
+        ydb_config = os.environ.get('YDB_CONFIG')
+        if ydb_config:
+            arguments.config_path = ydb_config
     arguments.ydb_working_dir = cmds.wrap_path(arguments.ydb_working_dir)
     arguments.ydb_binary_path = cmds.wrap_path(arguments.ydb_binary_path)
     arguments.ydb_udfs_dir = cmds.wrap_path(arguments.ydb_udfs_dir)

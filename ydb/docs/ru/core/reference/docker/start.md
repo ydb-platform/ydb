@@ -48,7 +48,16 @@ docker run "${docker_args[@]}"
 
 ### Переопределение файла конфигурации
 
-По умолчанию при запуске контейнера Docker для {{ ydb-short-name }} используется встроенный [файл конфигурации](../configuration/index.md), который обеспечивает стандартные параметры работы. Для переопределения файла конфигурации при запуске контейнера можно использовать аргумент `--config-path`, указав путь к своему файлу конфигурации, который предварительно примонтирован в контейнер:
+По умолчанию при запуске контейнера Docker для {{ ydb-short-name }} используется встроенный [файл конфигурации](../configuration/index.md), который обеспечивает стандартные параметры работы. Для переопределения файла конфигурации при запуске контейнера укажите путь к своему файлу конфигурации, который предварительно примонтирован в контейнер, одним из способов:
+
+- переменная окружения `YDB_CONFIG` (через `-e`);
+- аргумент `--config-path` в команде `docker run`.
+
+Если заданы оба параметра, используется `--config-path`.
+
+```bash
+docker run "${docker_args[@]}" -e YDB_CONFIG=/path/to/your/config/file
+```
 
 ```bash
 docker run "${docker_args[@]}" --config-path /path/to/your/config/file
@@ -105,10 +114,11 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
        -e GRPC_TLS_PORT=2135
        -e GRPC_PORT=2136
        -e MON_PORT=8765
+       -e YDB_CONFIG=/ydb_config/my-ydb-config.yaml
        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
    )
    
-   docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
+   docker run "${docker_args[@]}"
    ```
 
 В этом примере:

@@ -192,7 +192,7 @@ TKafkaBatch ParseKafkaBatch(TStringBuf data) {
     Y_UNUSED(reader.ReadInt32()); // crc
     batch.Attributes = reader.ReadInt16();
     if ((batch.Attributes & KCompressionMask) != 0) {
-        ythrow yexception() << "compressed Kafka record batches are not supported yet, attributes: " << batch.Attributes;
+        ythrow yexception() << "compressed Kafka record batches are not supported, attributes: " << batch.Attributes;
     }
 
     batch.LastOffsetDelta = reader.ReadInt32();

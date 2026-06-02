@@ -20,6 +20,7 @@ struct TReadAnswer {
     THolder<IEventBase> Event;
     bool IsInternal = false;
     TActorId ReplyTo;
+    bool NeedBatchProcessing = false;
 };
 
 struct TReadInfo {
@@ -110,7 +111,8 @@ struct TReadInfo {
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
         const bool isActive,
-        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor,
+        bool canReadBatches
     );
 
     TReadAnswer FormAnswer(
@@ -125,13 +127,14 @@ struct TReadInfo {
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
         const bool isActive,
-        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor,
+        bool canReadBatches
     ) {
         static TEvPQ::TEvBlobResponse fakeBlobResponse(0, TVector<TRequestedBlob>());
         if (!response) {
             response = &fakeBlobResponse;
         }
-        return FormAnswer(ctx, *response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive, postProcessor);
+        return FormAnswer(ctx, *response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive, postProcessor, canReadBatches);
     }
 
     bool UpdateUsage(const TClientBlob& blob,
@@ -148,7 +151,9 @@ struct TReadInfo {
                                          THolder<TEvPQ::TEvProxyResponse>& answer,
                                          bool& needStop,
                                          ui32& cnt, ui32& size, ui32& lastBlobSize,
-                                         const TActorContext& ctx);
+                                         const TActorContext& ctx,
+                                         bool canReadBatches,
+                                         bool& hasBatches);
 };
 
 struct TOffsetCookie {

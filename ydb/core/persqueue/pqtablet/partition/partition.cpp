@@ -1829,7 +1829,8 @@ void TPartition::OnReadComplete(TReadInfo& info,
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, GetStartOffset(), GetEndOffset(), Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), TabletActorId, Config.GetMeteringMode(), IsActive(),
-        GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
+        GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User),
+        info.CanReadBatches
     );
     auto* proxyResponse = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
 
@@ -1856,7 +1857,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(proxyResponse->Response->ByteSize());
     }
 
-    if (!info.CanReadBatches && BatchProcessorActor && proxyResponse) {
+    if (!info.CanReadBatches && BatchProcessorActor && proxyResponse && answer.NeedBatchProcessing) {
         ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext(
             info.User,
             info.Destination,

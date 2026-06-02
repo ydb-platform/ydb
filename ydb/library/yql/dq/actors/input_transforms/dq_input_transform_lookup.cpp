@@ -47,13 +47,7 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
-<<<<<<< HEAD
-        const THashMap<TString, TString>& secureParams,
-        size_t fullscanRowLimit = 5000)
-=======
-        TDqComputeActorWatermarks* watermarksTracker,
         const THashMap<TString, TString>& secureParams)
->>>>>>> 09f159dc6ea (dq/streamlookup join/fullscan: tunable limits and feature-flags (#35568))
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)

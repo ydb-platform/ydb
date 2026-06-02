@@ -265,17 +265,24 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TCreateStreamActor::Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev, const TActorContext& ctx) {
         const auto* result = ev->Get();
-        if (result->Status == Ydb::StatusIds::SUCCESS) {
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::DataStreams::V1::CreateStreamResponse(), ctx);
-        }
-        if (result->Status == Ydb::StatusIds::ALREADY_EXISTS) {
-            return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
+
+        switch(result->Status) {
+            case Ydb::StatusIds::SUCCESS:
+                return ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::DataStreams::V1::CreateStreamResponse(), ctx);
+            case Ydb::StatusIds::ALREADY_EXISTS:
+                return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
                                   static_cast<size_t>(NYds::EErrorCodes::IN_USE),
                                   TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " already exists");
+            case Ydb::StatusIds::INTERNAL_ERROR:
+            case Ydb::StatusIds::UNAVAILABLE:
+                return ReplyWithError(result->Status,
+                    static_cast<size_t>(NYds::EErrorCodes::ERROR),
+                    result->ErrorMessage);
+            default:
+                return ReplyWithError(result->Status,
+                                      static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
+                                      result->ErrorMessage);
         }
-        return ReplyWithError(result->Status,
-                              static_cast<size_t>(NYds::EErrorCodes::VALIDATION_ERROR),
-                              result->ErrorMessage);
     }
 
     void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev) {

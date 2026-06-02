@@ -1,5 +1,6 @@
 import os
 import tempfile
+import unittest
 
 from ydb.public.tools.lib.cmds import (
     generic_connector_config,
@@ -45,6 +46,10 @@ def test_should_preserve_existing_config():
             writer.write('')
         assert should_preserve_existing_config(target) is False
 
+        config_as_dir = os.path.join(tmpdir, 'config-as-dir')
+        os.mkdir(config_as_dir)
+        assert should_preserve_existing_config(config_as_dir) is False
+
 
 def test_resolve_deploy_config_action():
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -76,6 +81,6 @@ def test_same_config_path_resolves_symlinks():
         try:
             os.symlink(target, link)
         except OSError:
-            return
+            raise unittest.SkipTest('symlinks not supported on this filesystem')
         assert same_config_path(link, target) is True
         assert resolve_deploy_config_action(link, target) == 'preserve'

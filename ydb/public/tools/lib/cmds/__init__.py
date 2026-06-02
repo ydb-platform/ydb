@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
+import logging
 import shutil
 import signal
 import os
@@ -12,6 +13,8 @@ import types
 from six.moves.urllib.parse import urlparse
 
 import yatest
+
+logger = logging.getLogger(__name__)
 
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -428,13 +431,13 @@ def deploy(arguments):
         # This override only triggers on the very first deploy before the recipe metafile exists.
         # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
         target_config = os.path.join(configs_path, "config.yaml")
-        os.makedirs(configs_path, exist_ok=True)
         action = resolve_deploy_config_action(config_path, target_config)
         if action == 'copy':
             self.write_tls_data()
             shutil.copyfile(config_path, target_config)
             return
         if action == 'preserve':
+            logger.info('Preserving existing config at %s', target_config)
             self.write_tls_data()
             return
 

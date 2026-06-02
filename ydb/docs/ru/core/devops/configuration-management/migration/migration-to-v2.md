@@ -127,7 +127,7 @@
 8. Загрузить полученный ранее конфигурационный файл `config.yaml` в систему с помощью команды [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
     Команда запросит подтверждение на выполнение операции `This command may damage your cluster, do you want to continue? [y/N]`, в ответ на этот запрос необходимо согласиться и ввести `y`.
@@ -162,7 +162,7 @@
 11. Загрузить обновлённый конфигурационный файл в кластер с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
 12. Перезапустить все [узлы хранения](../../../concepts/glossary.md#storage-node) кластера с помощью процедуры [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md).
@@ -174,7 +174,7 @@
 15. Загрузить обновлённый конфигурационный файл в кластер:
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
     {% cut "Подробнее" %}

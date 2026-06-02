@@ -127,7 +127,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 8. Load the previously obtained configuration file `config.yaml` into the system using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
     The command will request confirmation to perform the operation `This command may damage your cluster, do you want to continue? [y/N]`, in response to this request you need to agree and enter `y`.
@@ -162,7 +162,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 11. Load the updated configuration file into the cluster using [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
 12. Restart all [storage nodes](../../../concepts/glossary.md#storage-node) of the cluster using the [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) procedure.
@@ -174,7 +174,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 15. Load the updated configuration file into the cluster:
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
     ```
 
     {% cut "More details" %}

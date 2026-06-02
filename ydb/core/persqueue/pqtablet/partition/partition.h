@@ -101,6 +101,15 @@ struct TTransaction {
         return {};
     }
 
+    TMaybe<ui64> GetStep() const {
+        if (Tx) {
+            return Tx->Step;
+        } else if (ProposeConfig) {
+            return ProposeConfig->Step;
+        }
+        return {};
+    }
+
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
     TActorId SupportivePartitionActor;

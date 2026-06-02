@@ -137,7 +137,6 @@ ydb/tests/compatibility test_data_type.py.TestDataType.test_parametrized_data_ty
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_add_columns[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_create_table[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_not_null[restart_prestable-26-3_to_stable-26-2-1]
-ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_not_null[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_nullable[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_set_default[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_example.py.TestExampleRestartToAnotherVersion.test_example[restart_prestable-26-3_to_stable-26-2-1]
@@ -575,7 +574,6 @@ ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompressio
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
-ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[row]
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1

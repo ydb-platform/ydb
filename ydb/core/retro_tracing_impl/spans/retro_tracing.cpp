@@ -4,7 +4,7 @@
 
 #include <ydb/library/actors/retro_tracing/retro_span.h>
 
-NRetroTracing::TRetroSpan* NRetroTracing::TRetroSpan::DeserializeImpl(
+NRetroTracing::TRetroSpan* NRetroTracing::DeserializeRetroSpanImpl(
         ui32 type, ui32 size, const void* data) {
     switch (type) {
 #define SPAN_TYPE(TSpanType, typeId)                                \

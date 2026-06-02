@@ -1,10 +1,11 @@
 LIBRARY()
 
 SRCS(
-    events.cpp
-    retro_collector.cpp
-    retro_span.cpp
-    span_buffer.cpp
+    collector/events.cpp
+    collector/retro_collector.cpp
+    collector/retro_span_deserialization.cpp
+    span/retro_span.cpp
+    span/span_buffer.cpp
 )
 
 PEERDIR(

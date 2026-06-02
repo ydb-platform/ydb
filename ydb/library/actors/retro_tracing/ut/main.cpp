@@ -5,6 +5,7 @@
 #include <util/stream/null.h>
 
 #include <ydb/library/actors/retro_tracing/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/retro_span_deserialization.h>
 #include <ydb/library/actors/retro_tracing/span_buffer.h>
 #include <ydb/library/actors/retro_tracing/universal_span.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -58,7 +59,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
             UNIT_ASSERT(end - start > TDuration::Seconds(2));
             span.GetRetroSpanPtr()->Serialize(buffer);
 
-            std::unique_ptr<TRetroSpan> deserialized = TRetroSpan::DeserializeToUnique(buffer);
+            std::unique_ptr<TRetroSpan> deserialized = DeserializeRetroSpanToUnique(buffer);
             const TTestSpan1* deserializedPtr = deserialized->Cast<TTestSpan1>();
             UNIT_ASSERT(deserializedPtr);
             UNIT_ASSERT_VALUES_EQUAL(deserializedPtr->GetStartTs(), start);
@@ -87,8 +88,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
 
             span.GetRetroSpanPtr()->Serialize(buffer);
 
-            std::unique_ptr<TRetroSpan> deserialized =
-                    TRetroSpan::DeserializeToUnique(buffer);
+            std::unique_ptr<TRetroSpan> deserialized = DeserializeRetroSpanToUnique(buffer);
             const TTestSpan2* deserializedPtr = deserialized->Cast<TTestSpan2>();
             UNIT_ASSERT(deserializedPtr);
             UNIT_ASSERT_VALUES_EQUAL(deserializedPtr->GetStartTs(), start);

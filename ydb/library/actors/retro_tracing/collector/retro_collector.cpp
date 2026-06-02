@@ -30,9 +30,11 @@ private:
 
     void ConvertAndSend(std::vector<std::unique_ptr<TRetroSpan>>&& spans) {
         for (const std::unique_ptr<TRetroSpan>& span : spans) {
-            std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
-            wilson->Attribute("type", "RETRO");
-            wilson->End();
+            Y_ABORT_UNLESS(span);
+            if (std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan()) {
+                wilson->Attribute("type", "RETRO");
+                wilson->End();
+            }
         }
     }
 

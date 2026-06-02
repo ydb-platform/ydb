@@ -61,15 +61,6 @@ void TRetroSpan::AttachToTrace(const NWilson::TTraceId& parentId) {
     SpanId = ParentId.Span(DefaultVerbosity);
 }
 
-TRetroSpan* TRetroSpan::Deserialize(const void* data) {
-    const TRetroSpan* base = reinterpret_cast<const TRetroSpan*>(data);
-    return TRetroSpan::DeserializeImpl(base->GetType(), base->GetSize(), data);
-}
-
-std::unique_ptr<TRetroSpan> TRetroSpan::DeserializeToUnique(const void* data) {
-    return std::unique_ptr<TRetroSpan>(TRetroSpan::Deserialize(data));
-}
-
 void TRetroSpan::Serialize(void* destination) const {
     std::memcpy(destination, GetData(), GetSize());
 }

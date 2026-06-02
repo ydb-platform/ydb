@@ -68,6 +68,7 @@ PEERDIR(
     ydb/library/actors/helpers
     ydb/library/actors/interconnect/address
     ydb/library/actors/interconnect/poller
+    ydb/library/actors/interconnect/retro_tracing
     ydb/library/actors/interconnect/rdma
     ydb/library/actors/interconnect/rdma/cq_actor
     ydb/library/actors/prof

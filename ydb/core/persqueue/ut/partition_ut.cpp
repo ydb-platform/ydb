@@ -2392,6 +2392,77 @@ Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
+Y_UNIT_TEST_F(OldPlanStep_SecondStaleCommitWhileKvInflight, TPartitionFixture)
+{
+    // Two stale commits: second arrives while first KV response is still pending — must not crash
+    // (TryAppendStaleTxMetaWrites runs again only after InFlight is cleared on write complete).
+    const TPartitionId partition{3};
+    const ui64 begin = 0;
+    const ui64 end = 10;
+    const ui64 step = 12345;
+    const ui64 txId1 = 67890;
+    const ui64 txId2 = 67891;
+
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=99999, .TxId=55555});
+
+    const TDuration noUnexpectedTxDoneWait = TDuration::MilliSeconds(200);
+
+    auto makeSerializedBody = [&](ui64 tid) -> NKikimrPQ::TTransaction {
+        NKikimrPQ::TTransaction tx;
+        tx.SetKind(NKikimrPQ::TTransaction::KIND_DATA);
+        tx.SetTxId(tid);
+        tx.SetState(NKikimrPQ::TTransaction::EXECUTED);
+        tx.SetStep(step);
+        auto* operation = tx.AddOperations();
+        operation->SetPartitionId(partition.InternalPartitionId);
+        return tx;
+    };
+
+    NKikimrPQ::TTransaction body1 = makeSerializedBody(txId1);
+    SendCommitTx(step, txId1, {.SerializedTx = std::move(body1)});
+
+    UNIT_ASSERT_C(!Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>(noUnexpectedTxDoneWait),
+                  "TEvTxDone before first KV");
+
+    auto kv1 = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
+    UNIT_ASSERT_C(kv1, "expected first stale-meta KV request");
+    const TString key1 = GetTxKey(txId1, partition.OriginalPartitionId);
+    bool found1 = false;
+    for (ui32 i = 0; i < kv1->Record.CmdWriteSize(); ++i) {
+        if (kv1->Record.GetCmdWrite(i).GetKey() == key1) {
+            found1 = true;
+            break;
+        }
+    }
+    UNIT_ASSERT_C(found1, "first KV must contain tx key " << key1);
+
+    NKikimrPQ::TTransaction body2 = makeSerializedBody(txId2);
+    SendCommitTx(step, txId2, {.SerializedTx = std::move(body2)});
+
+    UNIT_ASSERT_C(!Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>(noUnexpectedTxDoneWait),
+                  "TEvTxDone must not appear while first KV unanswered");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId1, .Partition=TPartitionId(partition)});
+
+    auto kv2 = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
+    UNIT_ASSERT_C(kv2, "expected second stale-meta KV after first completes");
+    const TString key2 = GetTxKey(txId2, partition.OriginalPartitionId);
+    bool found2 = false;
+    for (ui32 i = 0; i < kv2->Record.CmdWriteSize(); ++i) {
+        if (kv2->Record.GetCmdWrite(i).GetKey() == key2) {
+            found2 = true;
+            break;
+        }
+    }
+    UNIT_ASSERT_C(found2, "second KV must contain tx key " << key2);
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId2, .Partition=TPartitionId(partition)});
+}
+
 Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
 {
     const TPartitionId partition{3};

@@ -1493,6 +1493,164 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 nbsTabletSetMetricsError("nbs-sm-", idx, undefined, msg);
             }
 
+            function nbsTabletIopsStats(values) {
+                if (!values || values.length === 0) {
+                    return null;
+                }
+                const sorted = values.slice().sort(function(a, b) {
+                    return a - b;
+                });
+                return {
+                    min: sorted[0],
+                    max: sorted[sorted.length - 1],
+                    median: sorted[Math.floor(sorted.length / 2)]
+                };
+            }
+
+            function nbsTabletRenderIopsPlot(sweepValues, plotData) {
+                const plotDiv = document.getElementById("nbs-run-iops-plot");
+                if (!plotDiv || !sweepValues || sweepValues.length === 0) {
+                    return;
+                }
+
+                const writeColor = "#337ab7";
+                const readColor = "#f0ad4e";
+                const n = sweepValues.length;
+                const marginLeft = 60;
+                const marginRight = 20;
+                const marginTop = 40;
+                const marginBottom = 50;
+                const width = 800;
+                const height = 320;
+                const plotW = width - marginLeft - marginRight;
+                const plotH = height - marginTop - marginBottom;
+                const baseY = height - marginBottom;
+
+                function xAt(i) {
+                    if (n <= 1) {
+                        return marginLeft + plotW / 2;
+                    }
+                    return marginLeft + (i / (n - 1)) * plotW;
+                }
+
+                function yAt(v, yMax) {
+                    if (yMax <= 0) {
+                        return baseY;
+                    }
+                    return baseY - (v / yMax) * plotH;
+                }
+
+                let yMax = 1;
+                let showReads = false;
+                for (let i = 0; i < plotData.length; i++) {
+                    const p = plotData[i];
+                    const ws = nbsTabletIopsStats(p.writes);
+                    const rs = nbsTabletIopsStats(p.reads);
+                    if (ws) {
+                        yMax = Math.max(yMax, ws.max);
+                    }
+                    if (rs && rs.max > 0) {
+                        showReads = true;
+                        yMax = Math.max(yMax, rs.max);
+                    }
+                }
+                yMax = Math.ceil(yMax * 1.1);
+
+                let svg = "<h4 style='margin-top:0'>IOPS vs MaxInFlight</h4>";
+                svg += "<svg viewBox='0 0 " + width + " " + height +
+                    "' width='100%' style='max-width:800px;background:#fff' " +
+                    "xmlns='http://www.w3.org/2000/svg'>";
+
+                svg += "<line x1='" + marginLeft + "' y1='" + marginTop +
+                    "' x2='" + marginLeft + "' y2='" + baseY +
+                    "' stroke='#ccc' stroke-width='1'/>";
+                svg += "<line x1='" + marginLeft + "' y1='" + baseY +
+                    "' x2='" + (width - marginRight) + "' y2='" + baseY +
+                    "' stroke='#ccc' stroke-width='1'/>";
+
+                const yTicks = 5;
+                for (let t = 0; t <= yTicks; t++) {
+                    const val = Math.round((yMax * t) / yTicks);
+                    const y = yAt(val, yMax);
+                    svg += "<line x1='" + marginLeft + "' y1='" + y +
+                        "' x2='" + (width - marginRight) + "' y2='" + y +
+                        "' stroke='#eee' stroke-width='1'/>";
+                    svg += "<text x='" + (marginLeft - 6) + "' y='" + (y + 4) +
+                        "' text-anchor='end' font-size='10' fill='#666'>" + val + "</text>";
+                }
+
+                for (let i = 0; i < n; i++) {
+                    const x = xAt(i);
+                    svg += "<text x='" + x + "' y='" + (baseY + 16) +
+                        "' text-anchor='middle' font-size='11' fill='#333'>" +
+                        sweepValues[i] + "</text>";
+                }
+
+                const writeMedians = [];
+                const readMedians = [];
+
+                for (let i = 0; i < n; i++) {
+                    const x = xAt(i);
+                    const p = plotData[i] || { writes: [], reads: [] };
+                    const ws = nbsTabletIopsStats(p.writes);
+                    if (ws) {
+                        const yMin = yAt(ws.min, yMax);
+                        const yMaxP = yAt(ws.max, yMax);
+                        const yMed = yAt(ws.median, yMax);
+                        svg += "<line x1='" + x + "' y1='" + yMin +
+                            "' x2='" + x + "' y2='" + yMaxP +
+                            "' stroke='" + writeColor + "' stroke-width='2'/>";
+                        svg += "<circle cx='" + x + "' cy='" + yMed +
+                            "' r='4' fill='" + writeColor + "'/>";
+                        writeMedians.push(x + "," + yMed);
+                    }
+                    if (showReads) {
+                        const rs = nbsTabletIopsStats(p.reads);
+                        if (rs && rs.max > 0) {
+                            const yMinR = yAt(rs.min, yMax);
+                            const yMaxR = yAt(rs.max, yMax);
+                            const yMedR = yAt(rs.median, yMax);
+                            svg += "<line x1='" + x + "' y1='" + yMinR +
+                                "' x2='" + x + "' y2='" + yMaxR +
+                                "' stroke='" + readColor + "' stroke-width='2'/>";
+                            svg += "<circle cx='" + x + "' cy='" + yMedR +
+                                "' r='4' fill='" + readColor + "'/>";
+                            readMedians.push(x + "," + yMedR);
+                        }
+                    }
+                }
+
+                if (writeMedians.length >= 2) {
+                    svg += "<polyline points='" + writeMedians.join(" ") +
+                        "' fill='none' stroke='" + writeColor +
+                        "' stroke-width='1.5' stroke-dasharray='4,3'/>";
+                }
+                if (showReads && readMedians.length >= 2) {
+                    svg += "<polyline points='" + readMedians.join(" ") +
+                        "' fill='none' stroke='" + readColor +
+                        "' stroke-width='1.5' stroke-dasharray='4,3'/>";
+                }
+
+                const legX = width - marginRight - 90;
+                svg += "<line x1='" + legX + "' y1='28' x2='" + (legX + 20) +
+                    "' y2='28' stroke='" + writeColor + "' stroke-width='2'/>";
+                svg += "<circle cx='" + (legX + 10) + "' cy='28' r='3' fill='" +
+                    writeColor + "'/>";
+                svg += "<text x='" + (legX + 26) + "' y='32' font-size='11'>" +
+                    "Writes</text>";
+                if (showReads) {
+                    svg += "<line x1='" + legX + "' y1='46' x2='" + (legX + 20) +
+                        "' y2='46' stroke='" + readColor + "' stroke-width='2'/>";
+                    svg += "<circle cx='" + (legX + 10) + "' cy='46' r='3' fill='" +
+                        readColor + "'/>";
+                    svg += "<text x='" + (legX + 26) + "' y='50' font-size='11'>" +
+                        "Reads</text>";
+                }
+
+                svg += "</svg>";
+                plotDiv.innerHTML = svg;
+            }
+
             function nbsTabletRefreshList() {
                 $.get(window.location.pathname + "?mode=tablet_list", function(html) {
                     $("#nbs-tablet-list-container").html(html);
@@ -1535,6 +1693,11 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     }
                 }
 
+                const plotDiv = document.getElementById("nbs-run-iops-plot");
+                if (plotDiv) {
+                    plotDiv.innerHTML = "";
+                }
+
                 let statusMsg = "Starting sweep over " + sweepValues.length + " value(s)";
                 if (trials > 1) {
                     statusMsg += ", " + trials + " trials each";
@@ -1543,10 +1706,12 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 nbsTabletStatus(statusMsg);
 
                 const progressDiv = document.getElementById("nbs-run-progress");
+                const plotData = [];
 
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
                     const trialResults = [];
+                    plotData.push({ inflight: v, writes: [], reads: [] });
 
                     for (let t = 0; t < trials; t++) {
                         let statusLine = "MaxInFlight=" + v + " (" + (i + 1) + "/" +
@@ -1572,6 +1737,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                             const jr = await nbsTabletPollResult(
                                 runInfo.uuid, durationSec + delayBeforeSec, progressDiv);
                             trialResults.push(jr);
+                            plotData[i].writes.push(Math.round(jr.write_rps || 0));
+                            plotData[i].reads.push(Math.round(jr.read_rps || 0));
                             if (trials > 1) {
                                 nbsTabletFillTrialRows(i, t, jr);
                             } else {
@@ -1598,6 +1765,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         }
                     }
                 }
+                nbsTabletRenderIopsPlot(sweepValues, plotData);
                 nbsTabletStatus("Sweep complete.");
             }
         </script>
@@ -1773,6 +1941,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                 <div id='nbs-run-progress' style='display:none'></div>
                                 <div id='nbs-run-result-table'></div>
                                 <div id='nbs-run-median-table' style='margin-top:16px;display:none'></div>
+                                <div id='nbs-run-iops-plot' style='margin-top:16px'></div>
                             </div>
                         </div>
                     </div>

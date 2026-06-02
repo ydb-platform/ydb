@@ -381,8 +381,10 @@ public:
         } else if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             UploadFulltextRelevance(key, tokens);
             UploadDocRow(key, row, tokens.size());
+            LastProcessedKey = TSerializedCellVec(key);
         } else {
             UploadFulltextPlain(key, row, tokens);
+            LastProcessedKey = TSerializedCellVec(key);
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;

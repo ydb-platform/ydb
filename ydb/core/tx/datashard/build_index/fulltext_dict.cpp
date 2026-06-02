@@ -347,11 +347,11 @@ protected:
             ui64 docId = 0;
             ui32 freq = 0;
             while (rdr.Read(docId, freq)) {
-                LastTokenRows++;
-                Delta.Add(docId, freq);
                 if (Delta.GetCount() >= MaxSegmentDocuments) {
                     UploadSegment(false);
                 }
+                LastTokenRows++;
+                Delta.Add(docId, freq);
             }
         }
     }
@@ -502,7 +502,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             if (!request.GetPostingTableName()) {
                 badRequest(TStringBuilder() << "Empty output posting table name");
             }
-        } else {
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             if (request.GetPostingTableName()) {
                 badRequest(TStringBuilder() << "Output posting table name is set for a non-compact index");
             }
@@ -513,7 +513,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             if (!request.GetDictTableName()) {
                 badRequest(TStringBuilder() << "Empty output dictionary table name");
             }
-        } else {
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
             if (request.GetDictTableName()) {
                 badRequest(TStringBuilder() << "Output dict table name is set for a plain index");
             }

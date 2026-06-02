@@ -48,3 +48,5 @@ protected:
     } while (false)
 
 }  // namespace NActors::NStructuredLog
+
+#include "create_message_impl.h"

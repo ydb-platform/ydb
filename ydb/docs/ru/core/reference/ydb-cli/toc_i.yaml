@@ -146,7 +146,7 @@ items:
       href: workload-query.md
     - name: Fulltext нагрузка
       href: workload-fulltext.md
-    - name: Нагрузка Vector
+    - name: Vector нагрузка
       href: workload-vector.md
   - name: Работа с конфигурацией
     href: configs.md

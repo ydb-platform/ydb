@@ -79,4 +79,13 @@ void FillReduceFmrJob(
     IYtJobService::TPtr jobService
 );
 
+void FillFillFmrJob(
+    TFmrUserJob& fillJob,
+    const TFillTaskParams& fillTaskParams,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+);
+
 } // namespace NYql

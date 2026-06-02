@@ -26,6 +26,7 @@ RECURSE(
     counters
     describer
     fetcher
+    kafka_batch
     list_topics
     mlp
     partition_index_generator

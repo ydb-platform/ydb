@@ -1823,12 +1823,15 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TEvPQ::TEvBlobResponse* blobResponse,
                                 const TActorContext& ctx)
 {
+    const ui64 requestedOffset = info.Offset;
+    const ui16 requestedPartNo = info.PartNo;
+
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, GetStartOffset(), GetEndOffset(), Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), TabletActorId, Config.GetMeteringMode(), IsActive(),
         GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     );
-    const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
+    auto* proxyResponse = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
 
     if (blobResponse && HasError(*blobResponse)) {
         if (info.IsSubscription) {
@@ -1849,13 +1852,16 @@ void TPartition::OnReadComplete(TReadInfo& info,
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_HEAD_ONLY].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
         }
 
-        TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
+        AFL_ENSURE(proxyResponse)("description", "Expected TEvProxyResponse for successful read");
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(proxyResponse->Response->ByteSize());
     }
 
-    if (!info.CanReadBatches && BatchProcessorActor) {
-        ctx.Send(BatchProcessorActor, new NBatching::TEvProcessRead(NBatching::TReadProcessingContext(
+    if (!info.CanReadBatches && BatchProcessorActor && proxyResponse) {
+        ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext(
             info.User,
             info.Destination,
+            requestedOffset,
+            requestedPartNo,
             answer.Size,
             answer.IsInternal,
             info.ReplyTo,
@@ -1869,7 +1875,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
 
-void TPartition::Handle(NBatching::TEvProcessReadResult::TPtr& ev, const TActorContext& ctx) {
+void TPartition::Handle(NBatching::TEvProcessBatchResult::TPtr& ev, const TActorContext& ctx) {
     auto context = std::move(ev->Get()->Context);
     ctx.Send(ReplyTo(context.Destination, context.ReplyTo), context.Event.Release());
     OnReadRequestFinished(context.Destination, context.Size, context.User, ctx);

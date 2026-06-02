@@ -265,7 +265,7 @@ private:
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
-    void Handle(NBatching::TEvProcessReadResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NBatching::TEvProcessBatchResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
@@ -674,7 +674,7 @@ private:
             HFuncTraced(TEvKeyValue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvHandleWriteResponse, Handle);
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
-            HFuncTraced(NBatching::TEvProcessReadResult, Handle);
+            HFuncTraced(NBatching::TEvProcessBatchResult, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvRead, Handle);
             HFuncTraced(TEvPQ::TEvApproveReadQuota, Handle);

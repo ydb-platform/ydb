@@ -8,12 +8,17 @@
 
 namespace NKikimr::NPQ::NBatching {
 
+using TReadResult = NKikimrClient::TCmdReadResult::TResult;
+
+
 struct TReadProcessingContext {
     TReadProcessingContext() = default;
 
     TReadProcessingContext(
         TString user,
         ui64 destination,
+        ui64 offset,
+        ui16 partNo,
         ui64 size,
         bool isInternal,
         const NActors::TActorId& replyTo,
@@ -21,6 +26,8 @@ struct TReadProcessingContext {
         THolder<NActors::IEventBase> event)
         : User(std::move(user))
         , Destination(destination)
+        , Offset(offset)
+        , PartNo(partNo)
         , Size(size)
         , IsInternal(isInternal)
         , ReplyTo(replyTo)
@@ -31,6 +38,8 @@ struct TReadProcessingContext {
 
     TString User;
     ui64 Destination = 0;
+    ui64 Offset = 0;
+    ui16 PartNo = 0;
     ui64 Size = 0;
     bool IsInternal = false;
     NActors::TActorId ReplyTo;
@@ -38,8 +47,8 @@ struct TReadProcessingContext {
     THolder<NActors::IEventBase> Event;
 };
 
-struct TEvProcessRead : public NActors::TEventLocal<TEvProcessRead, TEvPQ::EvProcessBatchRead> {
-    explicit TEvProcessRead(TReadProcessingContext&& context)
+struct TEvProcessBatch : public NActors::TEventLocal<TEvProcessBatch, TEvPQ::EvProcessBatchRead> {
+    explicit TEvProcessBatch(TReadProcessingContext&& context)
         : Context(std::move(context))
     {
     }
@@ -47,8 +56,8 @@ struct TEvProcessRead : public NActors::TEventLocal<TEvProcessRead, TEvPQ::EvPro
     TReadProcessingContext Context;
 };
 
-struct TEvProcessReadResult : public NActors::TEventLocal<TEvProcessReadResult, TEvPQ::EvProcessBatchReadResult> {
-    explicit TEvProcessReadResult(TReadProcessingContext&& context)
+struct TEvProcessBatchResult : public NActors::TEventLocal<TEvProcessBatchResult, TEvPQ::EvProcessBatchReadResult> {
+    explicit TEvProcessBatchResult(TReadProcessingContext&& context)
         : Context(std::move(context))
     {
     }
@@ -62,7 +71,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void Handle(TEvProcessRead::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
 
     const TString& GetLogPrefix() const override;

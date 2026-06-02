@@ -26,9 +26,9 @@ NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& u
     return it->second;
 }
 
-void TBatchProcessor::Handle(TEvProcessRead::TPtr& ev, const NActors::TActorContext& ctx) {
+void TBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx) {
     const auto actorId = GetOrCreateConsumerProcessor(ev->Get()->Context.User);
-    ctx.Send(actorId, new TEvProcessRead(std::move(ev->Get()->Context)));
+    ctx.Send(actorId, new TEvProcessBatch(std::move(ev->Get()->Context)));
 }
 
 void TBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, const NActors::TActorContext&) {
@@ -40,7 +40,7 @@ void TBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, const NActo
 
 STFUNC(TBatchProcessor::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvProcessRead, Handle);
+        HFunc(TEvProcessBatch, Handle);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
         LOG_W("Unexpected event in TBatchProcessor: " << ev->GetTypeRewrite());

@@ -1,4 +1,5 @@
 #include "consumer_batch_processor.h"
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NBatching {
 
@@ -7,6 +8,8 @@ TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::T
     , User(std::move(user))
     , LogPrefix(TStringBuilder() << "ConsumerBatchProcessor " << TabletId << " [" << User << "]: ")
 {
+    BatchCutters.emplace(NKikimrClient::STANDARD, MakeHolder<TNoOpBatchCutter>());
+    BatchCutters.emplace(NKikimrClient::KAFKA_BATCH, MakeHolder<TKafkaBatchCutter>());
 }
 
 const TString& TConsumerBatchProcessor::GetLogPrefix() const {
@@ -17,9 +20,48 @@ void TConsumerBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
 }
 
-void TConsumerBatchProcessor::Handle(TEvProcessRead::TPtr& ev, const NActors::TActorContext& ctx) {
-    // TODO: split batched read results into separate messages for consumers that do not support batches.
-    ctx.Send(ev->Get()->Context.ResponseActor, new TEvProcessReadResult(std::move(ev->Get()->Context)));
+const IBatchCutter& TConsumerBatchProcessor::GetBatchCutter(NKikimrClient::EMessageFormat messageFormat) const {
+    auto it = BatchCutters.find(messageFormat);
+    AFL_ENSURE(it != BatchCutters.end())
+        ("description", "Unexpected message format in TConsumerBatchProcessor")
+        ("messageFormat", static_cast<ui32>(messageFormat));
+    return *it->second;
+}
+
+void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx) {
+    auto& context = ev->Get()->Context;
+
+    auto* event = context.Event.Get();
+    AFL_ENSURE(event)("description", "Unexpected empty event in TConsumerBatchProcessor");
+    AFL_ENSURE(event->Type() == TEvPQ::EvProxyResponse)
+        ("description", "Unexpected event type in TConsumerBatchProcessor")
+        ("eventType", event->Type());
+
+    auto* nativeEvent = static_cast<TEvPQ::TEvProxyResponse*>(event);
+    AFL_ENSURE(nativeEvent->Response->HasPartitionResponse())
+        ("description", "Unexpected TEvProxyResponse without PartitionResponse in TConsumerBatchProcessor");
+    AFL_ENSURE(nativeEvent->Response->GetPartitionResponse().HasCmdReadResult())
+        ("description", "Unexpected TEvProxyResponse without CmdReadResult in TConsumerBatchProcessor");
+
+    auto* readResult = nativeEvent->Response->MutablePartitionResponse()->MutableCmdReadResult();
+    auto* results = readResult->MutableResult();
+
+    TVector<TReadResult> originalResults;
+    originalResults.reserve(results->size());
+    for (const auto& result : *results) {
+        originalResults.push_back(result);
+    }
+    results->Clear();
+
+    for (const auto& originalResult : originalResults) {
+        const auto messageFormat = static_cast<NKikimrClient::EMessageFormat>(originalResult.GetMessageFormat());
+        auto cutResults = GetBatchCutter(messageFormat).Cut(originalResult);
+        for (auto& cutResult : cutResults) {
+            readResult->AddResult()->Swap(&cutResult);
+        }
+    }
+
+    ctx.Send(context.ResponseActor, new TEvProcessBatchResult(std::move(context)));
 }
 
 void TConsumerBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, const NActors::TActorContext&) {
@@ -28,7 +70,7 @@ void TConsumerBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, con
 
 STFUNC(TConsumerBatchProcessor::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvProcessRead, Handle);
+        HFunc(TEvProcessBatch, Handle);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
         LOG_W("Unexpected event in TConsumerBatchProcessor for user " << User << ": " << ev->GetTypeRewrite());

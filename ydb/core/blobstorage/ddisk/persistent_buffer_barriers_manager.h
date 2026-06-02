@@ -10,7 +10,7 @@ namespace NKikimr::NDDisk {
     struct TEraseBarrier {
         ui32 ChunkIdx;
         ui32 SectorIdx;
-        TPersistentBufferHeader Header;
+        TPersistentBufferBarriers Header;
     };
 
     struct TFastErase {
@@ -18,7 +18,7 @@ namespace NKikimr::NDDisk {
         ui32 OldSectorIdx;
         ui32 ChunkIdx;
         ui32 SectorIdx;
-        TPersistentBufferHeader Header;
+        TPersistentBufferFastErases Header;
     };
 
     struct TPersistentBufferBarriersManager {
@@ -49,8 +49,8 @@ namespace NKikimr::NDDisk {
         void RestoreBarriers(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
         bool AddBarrier(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);
 
-        bool Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferHeader& header);
-        std::vector<ui64> Uncompact(const char* data, bool isCompact);
+        bool Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header);
+        std::vector<ui64> Uncompact(const ui8* data, bool isCompact);
         ui32 GetErasesCount(ui64 tabletId);
         std::optional<TFastErase> Erase(ui64 tabletId, std::vector<ui64>& lsns, TPersistentBufferSpaceAllocator& allocator);
         bool AddErase(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);

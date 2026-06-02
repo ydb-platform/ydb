@@ -56,7 +56,7 @@ docker run "${docker_args[@]}"
 Если заданы оба параметра, используется `--config-path`.
 
 ```bash
-docker run "${docker_args[@]}" -e YDB_CONFIG=/path/to/your/config/file
+docker_args+=( -e YDB_CONFIG=/path/to/your/config/file ); docker run "${docker_args[@]}"
 ```
 
 ```bash

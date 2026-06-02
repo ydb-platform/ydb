@@ -26,6 +26,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr auto DefaultOracleThinkInterval = TDuration::Seconds(1);
+constexpr ui64 InitialDDiskSessionSeqNo = 1;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -93,15 +94,22 @@ TDirectBlockGroup::TDirectBlockGroup(
     {
         for (THostIndex i = 0; i < ids.size(); ++i) {
             const auto& ddiskId = ids[i];
+            const auto credentials =
+                type == EConnectionType::PBuffer
+                    ? NDDisk::TQueryCredentials::ToPersistentBuffer(
+                          TabletId,
+                          generation,
+                          std::nullopt)
+                    : NDDisk::TQueryCredentials::ToDDisk(
+                          TabletId,
+                          generation,
+                          InitialDDiskSessionSeqNo,
+                          std::nullopt);
             connections.push_back(TDDiskConnection{
                 .HostConnection = NTransport::THostConnection{
                     .ConnectionType = type,
                     .DDiskId = ddiskId,
-                    .Credentials = NDDisk::TQueryCredentials(
-                        TabletId,
-                        generation,
-                        std::nullopt,
-                        type == EConnectionType::PBuffer)}});
+                    .Credentials = credentials}});
 
             if (type == EConnectionType::PBuffer) {
                 NKikimrBlobStorage::NDDisk::TDDiskId pbufferId;

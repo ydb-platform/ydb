@@ -749,7 +749,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvReadPersistentBuffer::TPtr ev) {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
-        if ((!creds.FromPersistentBuffer || record.HasSelector()) &&
+        if ((!creds.IsInternal() || record.HasSelector()) &&
             !CheckQuery(*ev, &Counters.Interface.ReadPersistentBuffer)) {
             return;
         }

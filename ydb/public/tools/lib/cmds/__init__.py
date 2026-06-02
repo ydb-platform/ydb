@@ -326,8 +326,8 @@ def default_kikimr_config_path(working_dir):
 
 
 def should_write_default_config(config_path, target_config):
-    if config_path and os.path.abspath(config_path) != os.path.abspath(target_config):
-        return True
+    if config_path:
+        return os.path.abspath(config_path) != os.path.abspath(target_config)
     if os.path.exists(target_config) and os.path.getsize(target_config) > 0:
         return False
     return True

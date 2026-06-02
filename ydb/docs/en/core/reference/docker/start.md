@@ -62,8 +62,6 @@ docker run "${docker_args[@]}" \
 docker run "${docker_args[@]}" --config-path /path/to/your/config/file
 ```
 
-A configuration file mounted at the default path is not overwritten on the container's first start.
-
 For users who are not experienced with Docker, it's important to understand how to properly mount a configuration file into the container. Below is a step-by-step example:
 
 1. Run the container without specifying a configuration file and without mounting the data directory, so that it generates a default configuration:

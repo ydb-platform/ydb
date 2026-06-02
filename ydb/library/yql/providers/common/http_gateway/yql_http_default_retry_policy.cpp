@@ -76,4 +76,12 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, si
     return GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{.MaxTime = maxTime, .MaxRetries = maxRetries});
 }
 
+IHTTPGateway::TRetryPolicy::TPtr GetFqS3HttpRetryPolicy() {
+    return GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{
+        .MaxTime = TDuration::Seconds(5),
+        .MaxRetries = 3,
+        .RetriedCurlCodes = FqRetriedCurlCodes(),
+    });
+}
+
 }

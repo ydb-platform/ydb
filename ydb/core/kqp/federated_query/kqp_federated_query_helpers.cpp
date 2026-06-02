@@ -16,6 +16,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
@@ -220,8 +221,8 @@ namespace {
         config.SetMaxInFlightCount(2000);
         config.SetMaxSimulatenousDownloadsSize(2000000000);
         config.SetBuffersSizePerStream(5000000);
-        config.SetConnectionTimeoutSeconds(15);
-        config.SetRequestTimeoutSeconds(0);
+        config.SetConnectionTimeoutSeconds(NYql::FqHttpTimeoutSeconds);
+        config.SetRequestTimeoutSeconds(NYql::FqHttpTimeoutSeconds);
         return config;
     }
 

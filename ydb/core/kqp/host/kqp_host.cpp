@@ -1933,7 +1933,7 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Gateway = FederatedQuerySetup->HttpGateway;
-        state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        state->GatewayRetryPolicy = NYql::GetFqS3HttpRetryPolicy();
         state->ExecutorPoolId = AppData()->UserPoolId;
         state->ActorSystem = ActorSystem;
 

@@ -9,6 +9,7 @@
 #include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -530,37 +531,44 @@ private:
             throw yexception() << "Path prefix: '" << path << "' contains wildcards";
         }
 
-        plan.PathGenerator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy);
-        for (const auto& rule : plan.PathGenerator->GetRules()) {
-            YQL_ENSURE(rule.ColumnValues.size() == partitionedBy.size());
-            auto req = base;
-            req.Pattern = NYql::NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path << "/*");
-            req.PatternType = NYql::NS3Lister::ES3PatternType::Wildcard;
-            req.Prefix = req.Pattern.substr(0, NYql::NS3::GetFirstWildcardPos(req.Pattern));
-            plan.Requests.push_back(std::move(req));
-        }
-        return plan;
-    }
+            pathGenerator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy);
+            for (const auto& rule : pathGenerator->GetRules()) {
+                YQL_ENSURE(rule.ColumnValues.size() == partitionedBy.size());
+                
+                request.Pattern = NYql::NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path << "/*");
+                request.PatternType = NYql::NS3Lister::ES3PatternType::Wildcard;
+                request.Prefix = request.Pattern.substr(0, NYql::NS3::GetFirstWildcardPos(request.Pattern));
 
-    // Validate listing results, accumulate partition glob data, and return the first
-    // non-empty file entry across all listings. Throws on errors / empty listings (subject
-    // to ignoreEmptyListings).
-    static NYql::NS3Lister::TObjectListEntry SelectFirstNonEmptyFile(
-        const std::shared_ptr<TStringBuilder>& partByData,
-        bool shouldInferPartitions,
-        bool ignoreEmptyListings,
-        const TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>>& futures,
-        const TVector<NYql::NS3Lister::TListingRequest>& requests)
-    {
-        for (size_t i = 0; i < futures.size(); ++i) {
-            const auto& listRes = futures[i].GetValue();
-            if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
-                throw yexception() << std::get<NYql::NS3Lister::TListError>(listRes).Issues.ToString();
+                requests.push_back(request);
             }
-            const auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
-            if (entries.Objects.empty() && !ignoreEmptyListings) {
-                throw yexception() << "couldn't find files at " << requests[i].Pattern;
-            }
+        }
+
+        auto partByData = std::make_shared<TStringBuilder>();
+        if (shouldInferPartitions) {
+            *partByData << JoinSeq(",", partitionedBy);
+        }
+
+        TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>> futures;
+        auto httpGateway = NYql::IHTTPGateway::Make();
+        auto httpRetryPolicy = NYql::GetFqS3HttpRetryPolicy();
+        for (const auto& req : requests) {
+            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
+            futures.push_back(s3Lister->Next());
+        }
+
+        auto allFuture = NThreading::WaitExceptionOrAll(futures);
+        auto afterListing = allFuture.Apply([partByData, shouldInferPartitions, ignoreEmptyListings, futures = std::move(futures), requests = std::move(requests)](const NThreading::TFuture<void>& result) {
+            result.GetValue();
+            for (size_t i = 0; i < futures.size(); ++i) {
+                auto& listRes = futures[i].GetValue();
+                if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
+                    auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
+                    throw yexception() << error.Issues.ToString();
+                }
+                auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
+                if (entries.Objects.empty() && !ignoreEmptyListings) {
+                    throw yexception() << "couldn't find files at " << requests[i].Pattern;
+                }
 
             if (shouldInferPartitions) {
                 for (const auto& entry : entries.Objects) {

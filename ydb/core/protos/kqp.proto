@@ -887,8 +887,6 @@ message TKqpTableSinkSettings {
     optional bool NeedLookup = 27;
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
-    repeated uint32 NewFieldIndexes = 30;
-    repeated uint32 OldFieldIndexes = 31;
 }
 
 message TReadVectorTopK {

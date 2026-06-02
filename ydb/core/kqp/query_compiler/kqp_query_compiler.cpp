@@ -1763,7 +1763,7 @@ private:
 
         if (isStructOfNewAndOldValues) {
             AFL_ENSURE(Config->GetEnableIndexStreamWrite());
-            AFL_ENSURE(settings.Mode().StringValue() == "update_conditional"); // TODO: delete
+            AFL_ENSURE(settings.Mode().StringValue() == "update_conditional");
 
             settingsProto.SetInputRowFormat(NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS);
 

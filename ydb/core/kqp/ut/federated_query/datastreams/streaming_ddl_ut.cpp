@@ -1093,18 +1093,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             SetupMockConnectorTableDescription(connectorClient, {
                 .TableName = ydbTable,
                 .Columns = columns,
-<<<<<<< HEAD
-                .DescribeCount = 2,
-                // Now List Split is done after type annotation, that is the
-                // reason why this value equal to 4 not 5
-                .ListSplitsCount = WithFeatureFlag ? 4 : 0,
-=======
                 .DescribeCount = 2*combinations,
                 // 1 for table-vs-topic, 1 for compilation, doubled for *Bad query compilation
                 .ListSplitsCount = WithFeatureFlag ? (WithFullscanFlag ? 1 + 3 * 2 : 1 + 3 + 1) : 0,
                 // 1 for compilation (and another one for *Bad query compilation)
                 // 3 for lookups, doubled for fullscan mode
->>>>>>> 2f642f4bb35 (streamlookup join: tests for FullscanLimit option (#39897))
                 .ValidateListSplitsArgs = false
             });
 
@@ -1114,19 +1107,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 SetupMockConnectorTableData(connectorClient, {
                     .TableName = ydbTable,
                     .Columns = columns,
-<<<<<<< HEAD
-                    .NumberReadSplits = 3,
-                    .ValidateReadSplitsArgs = false,
-                    .ResultFactory = [&]() {
-                        readSplitsCount += 1;
-                        const auto payloadColumn = readSplitsCount < 3
-=======
                     .NumberReadSplits = (WithFullscanFlag ? 3*2 : 3),
                     .ValidateReadSplitsArgs = false,
                     .ResultFactory = [&]() {
                         readSplitsCount += 1;
                         const auto payloadColumn = readSplitsCount <= (WithFullscanFlag ? 4 : 2)
->>>>>>> 2f642f4bb35 (streamlookup join: tests for FullscanLimit option (#39897))
                             ? std::vector<std::string>{"P1", "P2", "P3"}
                             : std::vector<std::string>{"P4", "P5", "P6"};
 
@@ -2079,7 +2064,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 4,
+                .ListSplitsCount = 7,
                 .ValidateListSplitsArgs = false
             });
 
@@ -2088,7 +2073,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             SetupMockConnectorTableData(connectorClient, {
                 .TableName = ydbTable,
                 .Columns = columns,
-                .NumberReadSplits = 3,
+                .NumberReadSplits = 6,
                 .ValidateReadSplitsArgs = false,
                 .ResultFactory = [&]() {
                     return MakeRecordBatch(

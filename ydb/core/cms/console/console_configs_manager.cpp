@@ -77,8 +77,9 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
 
 void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
+        // Re-applying an unchanged body with the same version is silently accepted
+        // (idempotent fast path)
         if (opCtx.UpdatedConfig != MainYamlConfig || YamlDropped) {
-            auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             if (ClusterName != opCtx.Cluster) {
                 ythrow yexception() << "ClusterName mismatch"
                     << " expected " << ClusterName
@@ -91,6 +92,7 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
                     << " but got " << opCtx.Version;
             }
 
+            auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
             std::vector<TString> errors;
@@ -138,7 +140,12 @@ void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool 
         if (!force) {
             opCtx.Version = metadata.Version.value_or(0);
         } else {
-            opCtx.Version = YamlVersion;
+            ui32 currentVersion = 0;
+            if (auto it = DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != DatabaseYamlConfigs.end())
+            {
+                currentVersion = it->second.Version;
+            }
+            opCtx.Version = currentVersion;
         }
 
         opCtx.UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TDatabaseMetadata{
@@ -153,10 +160,22 @@ void TConfigsManager::ReplaceDatabaseConfigMetadata(const TString &config, bool 
 void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx) {
     try {
         TString currentConfig;
+        ui32 currentVersion = 0;
+
         if (auto it = DatabaseYamlConfigs.find(opCtx.TargetDatabase); it != DatabaseYamlConfigs.end()) {
             currentConfig = it->second.Config;
+            currentVersion = it->second.Version;
         }
+
+        // Re-applying an unchanged body with the same version is silently accepted
+        // (idempotent fast path)
         if (opCtx.UpdatedConfig != currentConfig) {
+            if (opCtx.Version != currentVersion) {
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << currentVersion
+                    << " but got " << opCtx.Version;
+            }
+
             auto databaseTree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
             auto databaseConfig = NYamlConfig::ParseConfig(databaseTree);
 

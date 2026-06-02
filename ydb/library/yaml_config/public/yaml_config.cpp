@@ -1630,6 +1630,13 @@ TString UpgradeStorageConfigVersion(const TString& config) {
     return ReplaceMetadata(config, metadata);
 }
 
+TString UpgradeDatabaseConfigVersion(const TString& config) {
+    auto metadata = GetDatabaseMetadata(config);
+    Y_ENSURE(metadata.Version);
+    *metadata.Version = *metadata.Version + 1;
+    return ReplaceMetadata(config, metadata);
+}
+
 } // namespace NKikimr::NYamlConfig
 
 template <>

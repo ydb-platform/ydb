@@ -55,8 +55,6 @@ docker run "${docker_args[@]}" \
   -v $(pwd)/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
 ```
 
-The mounted file is not overwritten on the container's first start.
-
 For users who are not experienced with Docker, it's important to understand how to properly mount a configuration file into the container. Below is a step-by-step example:
 
 1. Run the container without specifying a configuration file and without mounting the data directory, so that it generates a default configuration:

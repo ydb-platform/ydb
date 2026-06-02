@@ -63,6 +63,7 @@ ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine0
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine1
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine3
+ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine5
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine7
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStream
@@ -433,6 +434,7 @@ ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEn
 ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.CommitMessages_ReloadPQRB-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommit-autoPartitioningSupport-true
+ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommitCDC-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommit_LongReadSession-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.SkipMessagesWithObsoleteTimestampWithRetention
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.TestBasicRemote
@@ -806,6 +808,7 @@ ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[enforce_user_token_enabled]
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[require_counters_authentication]
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[require_healthcheck_authentication]
+ydb/tests/functional/security test_tablets_dev_ui_mon_auth.py.test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode
 ydb/tests/functional/split_merge/by_load test_split_merge_by_load.py.test_split_merge_by_load[tenant_db-follower]
 ydb/tests/functional/split_merge/by_load test_split_merge_by_load.py.test_split_merge_by_load[tenant_db-leader]
 ydb/tests/functional/statistics py3test.[test_analyze.py */*] chunk

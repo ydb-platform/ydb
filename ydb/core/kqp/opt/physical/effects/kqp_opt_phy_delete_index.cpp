@@ -200,6 +200,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     auto settings = TKqpDeleteRowsIndexSettings::Parse(del);
 
     if (settings.SkipLookup || (useStreamIndex && !needsKqpEffect)) {
+        // Stream Index with DELETE WHERE can avoid lookup in this case.
         TExprBase lookupKeys = (settings.SkipLookup && useStreamIndex)
             ? del.Input()
             : ProjectColumns(del.Input(), pk, ctx);

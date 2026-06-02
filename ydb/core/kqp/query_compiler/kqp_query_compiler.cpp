@@ -1847,9 +1847,9 @@ private:
                 THashSet<size_t> affectedKeysIndexes;
                 TVector<TStringBuf> lookupColumns;
 
+                THashSet<TStringBuf> columnsSet;
                 THashSet<TStringBuf> mainKeyColumnsSet;
                 {
-                    THashSet<TStringBuf> columnsSet;
                     for (const auto& columnName : columns) {
                         columnsSet.insert(columnName);
                     }
@@ -1912,6 +1912,7 @@ private:
 
                     const bool needLookup = needOldValues && !isStructOfNewAndOldValues;
                     settingsProto.SetNeedLookup(needLookup);
+
                     if (needOldValues) {
                         AFL_ENSURE(settings.Mode().StringValue() != "insert");
 
@@ -1923,8 +1924,15 @@ private:
                                     || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
                                 const auto& implTable = tableMeta->ImplTables[index];
 
-                                for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                                for (const auto& columnName : implTable->KeyColumnNames) {
                                     lookupColumnsSet.insert(columnName);
+                                }
+                                if (settings.Mode().StringValue() != "delete") {
+                                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                                        if (!columnsSet.contains(columnName)) {
+                                            lookupColumnsSet.insert(columnName);
+                                        }
+                                    }
                                 }
                             }
                         }

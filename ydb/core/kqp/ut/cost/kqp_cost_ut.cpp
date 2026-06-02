@@ -2771,7 +2771,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 0,
 
                     .WriteBytes = 20,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }
@@ -2796,7 +2796,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 1,
 
                     .WriteBytes = 36,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }
@@ -2846,7 +2846,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 0,
 
                     .WriteBytes = 20,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }
@@ -2871,7 +2871,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 1,
 
                     .WriteBytes = 36,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }

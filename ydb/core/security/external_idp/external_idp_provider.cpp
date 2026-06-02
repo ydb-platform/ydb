@@ -61,6 +61,22 @@ static const std::unordered_map<TString, std::function<void(TVerifier&, const TS
     {"RS512", [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs512(pubkey.c_str())); }},
 };
 
+static const std::unordered_map<TString, TString> SUPPORTED_KTYS = {
+    {"ES256", "EC"},
+    {"ES384", "EC"},
+    {"ES512", "EC"},
+    {"PS256", "RSA"},
+    {"PS384", "RSA"},
+    {"PS512", "RSA"},
+    {"RS256", "RSA"},
+    {"RS384", "RSA"},
+    {"RS512", "RSA"},
+};
+
+TString BuildKey(const TString& kty, const TString& kid) {
+    return kty + "-" + kid;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TDuration RandomizeJitter(const TDuration& jitter) {
@@ -467,44 +483,54 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     try {
         decoded.emplace(jwt::decode(msg->Token));
     } catch (const std::invalid_argument&) {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             "Token is not in correct format");
-        return;
     } catch (const std::exception& e) {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::UNAUTHORIZED, e.what());
-        return;
     }
 
     if (!decoded->has_key_id()) {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "No kid was found for token in"
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'");
-        return;
     }
     const TString kid = TString{decoded->get_key_id()};
 
     if (!decoded->has_algorithm()) {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "No algorithm was found for token in"
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid);
-        return;
     }
     const TString algorithm = TString{decoded->get_algorithm()};
 
-    const auto pem = JwksCache.Get(kid);
+    TString kty;
+    if (const auto it = SUPPORTED_KTYS.find(algorithm); it != SUPPORTED_KTYS.end()) {
+        kty = it->second;
+    } else {
+        return ReplyError(
+            ev->Sender, msg->Key,
+            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
+            TStringBuilder() << "Unsupported JWT algorithm for token in"
+                << " issuer=" << Config.GetIssuer()
+                << " token='" << MaskTicket(msg->Token) << "'"
+                << " kid=" << kid
+                << " algorithm=" << algorithm);
+    }
+
+    const auto pem = JwksCache.Get(BuildKey(kty, kid));
     if (!pem.Defined()) {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::UNAVAILABLE,
             TStringBuilder() << "No matching key was found for token in"
@@ -513,7 +539,6 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " kid=" << kid
                 << " algorithm=" << algorithm,
             true);
-        return;
     }
 
     auto verifier = jwt::verify();
@@ -526,7 +551,7 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         it != SUPPORTED_ALGORITHMS<decltype(verifier)>.end()) {
         it->second(verifier, *pem);
     } else {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "Unsupported JWT algorithm for token in"
@@ -534,7 +559,6 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
                 << " algorithm=" << algorithm);
-        return;
     }
     verifier.with_issuer(Config.GetIssuer());
 
@@ -551,10 +575,9 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     try {
         verifier.verify(*decoded);
     } catch (const std::exception& e) {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::UNAUTHORIZED, e.what());
-        return;
     }
 
     auto resp = MakeHolder<TEvExternalIdpProvider::TEvAuthenticateResponse>(msg->Key);
@@ -582,12 +605,11 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         return TString{claim.as_string()};
     });
     if (subject.empty()) {
-        ReplyError(
+        return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::UNAUTHORIZED,
             TStringBuilder() << "Token subject is empty (checked claim: '" << Config.GetSubjectClaimName() << "'"
                 << " fallback: 'sub')");
-        return;
     }
     resp->User = subject;
 
@@ -650,13 +672,11 @@ void TExternalIdpProvider::Handle(
     const auto* msg = ev->Get();
 
     if (DiscoveryRefresh.IsSameRequest(msg->Request)) {
-        HandleDiscoveryResponse(*msg, now);
-        return;
+        return HandleDiscoveryResponse(*msg, now);
     }
 
     if (JwksRefresh.IsSameRequest(msg->Request)) {
-        HandleJwksResponse(*msg, now);
-        return;
+        return HandleJwksResponse(*msg, now);
     }
 
     BLOG_E("Got unexpected HTTP response for issuer=" << Config.GetIssuer()
@@ -748,11 +768,24 @@ void TExternalIdpProvider::HandleJwksResponse(
     THashMap<TString, TString> newKeys;
     for (const auto& jwk : arr->Keys) {
         auto pubkey = jwk.CalculatePublicKey();
-        if (pubkey.empty()) {
+        if (!pubkey.has_value()) {
             BLOG_W("Skipping JWKS key with kid='" << jwk.KeyId << "': unsupported key format (no x5c)");
             continue;
         }
-        newKeys[jwk.KeyId] = std::move(pubkey);
+        switch (jwk.Type) {
+            case NSecurity::EJWKKeyType::RSA: {
+                newKeys[BuildKey("RSA", TString(jwk.KeyId))] = std::move(pubkey.value());
+                break;
+            }
+            case NSecurity::EJWKKeyType::EC: {
+                newKeys[BuildKey("EC", TString(jwk.KeyId))] = std::move(pubkey.value());
+                break;
+            }
+            default: {
+                BLOG_W("Skipping JWKS key with kid='" << jwk.KeyId << "': unsupported key type");
+                continue;
+            }
+        }
     }
     if (newKeys.empty()) {
         BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=No supported keys in JWKS response");

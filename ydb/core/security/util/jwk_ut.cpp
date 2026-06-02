@@ -23,13 +23,13 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
     Y_UNIT_TEST(KtyRSA) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Type, TKeyType::RSA);
+        UNIT_ASSERT_EQUAL(jwk->Type, EJWKKeyType::RSA);
     }
 
     Y_UNIT_TEST(KtyEC) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "EC"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Type, TKeyType::EC);
+        UNIT_ASSERT_EQUAL(jwk->Type, EJWKKeyType::EC);
     }
 
     Y_UNIT_TEST(KtyMissing) {
@@ -53,14 +53,14 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "use": "sig"})"));
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT(jwk->Usage.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Usage.value(), TUsage::SIG);
+        UNIT_ASSERT_EQUAL(jwk->Usage.value(), EJWKUsage::SIG);
     }
 
     Y_UNIT_TEST(UseEnc) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "use": "enc"})"));
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT(jwk->Usage.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Usage.value(), TUsage::ENC);
+        UNIT_ASSERT_EQUAL(jwk->Usage.value(), EJWKUsage::ENC);
     }
 
     Y_UNIT_TEST(UseMissing) {
@@ -84,14 +84,14 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
         })"));
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 8);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], TKeyOps::SIGN);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], TKeyOps::VERIFY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[2], TKeyOps::ENCRYPT);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[3], TKeyOps::DECRYPT);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[4], TKeyOps::WRAP_KEY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[5], TKeyOps::UNWRAP_KEY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[6], TKeyOps::DERIVE_KEY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[7], TKeyOps::DERIVE_BITS);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], EJWKKeyOps::SIGN);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], EJWKKeyOps::VERIFY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[2], EJWKKeyOps::ENCRYPT);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[3], EJWKKeyOps::DECRYPT);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[4], EJWKKeyOps::WRAP_KEY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[5], EJWKKeyOps::UNWRAP_KEY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[6], EJWKKeyOps::DERIVE_KEY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[7], EJWKKeyOps::DERIVE_BITS);
     }
 
     Y_UNIT_TEST(KeyOpsMissing) {
@@ -110,16 +110,16 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "key_ops": ["sign", "unknown", "verify"]})"));
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 2);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], TKeyOps::SIGN);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], TKeyOps::VERIFY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], EJWKKeyOps::SIGN);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], EJWKKeyOps::VERIFY);
     }
 
     Y_UNIT_TEST(KeyOpsNonStringValuesSkipped) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "key_ops": ["sign", 123, "verify"]})"));
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 2);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], TKeyOps::SIGN);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], TKeyOps::VERIFY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], EJWKKeyOps::SIGN);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], EJWKKeyOps::VERIFY);
     }
 
     Y_UNIT_TEST(KeyOpsNotArray) {
@@ -153,55 +153,55 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
     Y_UNIT_TEST(AlgRS256) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "RS256"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::RS256);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::RS256);
     }
 
     Y_UNIT_TEST(AlgRS384) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "RS384"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::RS384);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::RS384);
     }
 
     Y_UNIT_TEST(AlgRS512) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "RS512"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::RS512);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::RS512);
     }
 
     Y_UNIT_TEST(AlgES256) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "EC", "alg": "ES256"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::ES256);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::ES256);
     }
 
     Y_UNIT_TEST(AlgES384) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "EC", "alg": "ES384"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::ES384);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::ES384);
     }
 
     Y_UNIT_TEST(AlgES512) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "EC", "alg": "ES512"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::ES512);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::ES512);
     }
 
     Y_UNIT_TEST(AlgPS256) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "PS256"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::PS256);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::PS256);
     }
 
     Y_UNIT_TEST(AlgPS384) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "PS384"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::PS384);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::PS384);
     }
 
     Y_UNIT_TEST(AlgPS512) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "PS512"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::PS512);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::PS512);
     }
 
     Y_UNIT_TEST(AlgMissing) {
@@ -373,10 +373,10 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
             "x5t#S256": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"
         })"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Type, TKeyType::RSA);
-        UNIT_ASSERT_EQUAL(jwk->Usage.value(), TUsage::SIG);
+        UNIT_ASSERT_EQUAL(jwk->Type, EJWKKeyType::RSA);
+        UNIT_ASSERT_EQUAL(jwk->Usage.value(), EJWKUsage::SIG);
         UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 2);
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::RS256);
+        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJWKAlg::RS256);
         UNIT_ASSERT_VALUES_EQUAL(jwk->KeyId, "my-key-id");
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Url, "https://example.com/cert");
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Chain.size(), 1);
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TParseJWKSetTest) {
         })"));
         UNIT_ASSERT(jwkSet.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 1);
-        UNIT_ASSERT_EQUAL(jwkSet->Keys[0].Type, TKeyType::RSA);
+        UNIT_ASSERT_EQUAL(jwkSet->Keys[0].Type, EJWKKeyType::RSA);
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[0].KeyId, "key1");
     }
 
@@ -410,9 +410,9 @@ Y_UNIT_TEST_SUITE(TParseJWKSetTest) {
         })"));
         UNIT_ASSERT(jwkSet.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 2);
-        UNIT_ASSERT_EQUAL(jwkSet->Keys[0].Type, TKeyType::RSA);
+        UNIT_ASSERT_EQUAL(jwkSet->Keys[0].Type, EJWKKeyType::RSA);
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[0].KeyId, "rsa-key");
-        UNIT_ASSERT_EQUAL(jwkSet->Keys[1].Type, TKeyType::EC);
+        UNIT_ASSERT_EQUAL(jwkSet->Keys[1].Type, EJWKKeyType::EC);
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[1].KeyId, "ec-key");
     }
 
@@ -442,9 +442,9 @@ Y_UNIT_TEST_SUITE(TParseJWKSetTest) {
         })"));
         UNIT_ASSERT(jwkSet.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 2);
-        UNIT_ASSERT_EQUAL(jwkSet->Keys[0].Type, TKeyType::RSA);
+        UNIT_ASSERT_EQUAL(jwkSet->Keys[0].Type, EJWKKeyType::RSA);
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[0].KeyId, "valid");
-        UNIT_ASSERT_EQUAL(jwkSet->Keys[1].Type, TKeyType::EC);
+        UNIT_ASSERT_EQUAL(jwkSet->Keys[1].Type, EJWKKeyType::EC);
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[1].KeyId, "also-valid");
     }
 

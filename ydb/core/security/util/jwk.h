@@ -10,17 +10,17 @@
 
 namespace NKikimr::NSecurity {
 
-enum class TKeyType : ui8 {
+enum class EJWKKeyType : ui8 {
     RSA,
     EC,
 };
 
-enum class TUsage : ui8 {
+enum class EJWKUsage : ui8 {
     SIG,
     ENC,
 };
 
-enum class TKeyOps : ui8 {
+enum class EJWKKeyOps : ui8 {
     SIGN,
     VERIFY,
     ENCRYPT,
@@ -33,7 +33,7 @@ enum class TKeyOps : ui8 {
 
 // Use for asymmetric JWS: https://datatracker.ietf.org/doc/html/rfc7518#section-3
 // TODO(vlad-serikov): Also implement for JWE: https://datatracker.ietf.org/doc/html/rfc7518#section-4
-enum class TAlg : ui8 {
+enum class EJWKAlg : ui8 {
     RS256,
     RS384,
     RS512,
@@ -48,17 +48,17 @@ enum class TAlg : ui8 {
 // {kty, kid} - Unique identifier
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
 struct TJWK {
-    TKeyType Type; // `kty`
-    std::optional<TUsage> Usage; // `use`
-    std::vector<TKeyOps> KeyOperations; // `key_ops`
-    std::optional<TAlg> Algorithm; // `alg`
+    EJWKKeyType Type; // `kty`
+    std::optional<EJWKUsage> Usage; // `use`
+    std::vector<EJWKKeyOps> KeyOperations; // `key_ops`
+    std::optional<EJWKAlg> Algorithm; // `alg`
     std::string KeyId; // `kid`
     std::string X509Url; // `x5u`
     std::vector<std::string> X509Chain; // decoded `x5c` (in DER format)
     std::string X509CertificateSha1ThumbprintBytes; // decoded `x5t`
     std::string X509CertificateSha256ThumbprintBytes; // decoded `x5t#S256`
 
-    explicit TJWK(TKeyType type);
+    explicit TJWK(EJWKKeyType type);
 
     // Returns std::nullopt if parameters are missing or if validation/parsing failed.
     // Otherwise, returns the extracted public key.

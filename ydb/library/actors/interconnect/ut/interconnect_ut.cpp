@@ -716,7 +716,17 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
         auto nodeCounters = cluster.GetCounters()->FindSubgroup("nodeId", "2");
         UNIT_ASSERT_C(nodeCounters, "nodeId=2 counters were not created");
-        auto peerCounters = nodeCounters->FindSubgroup("peer");
+
+        TString peerLabel;
+        nodeCounters->EnumerateSubgroups([&](const TString& name, const TString& value) {
+            if (name == "peer") {
+                UNIT_ASSERT_C(peerLabel.empty(), "more than one peer counters subgroup");
+                peerLabel = value;
+            }
+        });
+        UNIT_ASSERT_C(!peerLabel.empty(), "peer counters were not created");
+        auto peerCounters = nodeCounters->FindSubgroup("peer", peerLabel);
+
         UNIT_ASSERT_C(peerCounters, "peer counters were not created");
 
         auto histogram = peerCounters->FindHistogram("NumEventsInQueue");

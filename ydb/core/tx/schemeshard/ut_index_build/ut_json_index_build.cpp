@@ -14,6 +14,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
 void DoCreateJsonTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
     TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "table"
@@ -39,6 +41,8 @@ Ydb::Table::TableIndex JsonIndexConfig() {
     index.mutable_global_json_index();
     return index;
 }
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
     Y_UNIT_TEST(Basic) {

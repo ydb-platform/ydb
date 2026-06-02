@@ -137,6 +137,9 @@ public:
             case TOperationId::RESTORE:
                 return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Cancel isn't supported for incremental restore yet");
 
+            case TOperationId::FULL_BACKUP:
+                return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Cancel isn't supported for full backup yet");
+
             default:
                 return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Unknown operation kind");
             }

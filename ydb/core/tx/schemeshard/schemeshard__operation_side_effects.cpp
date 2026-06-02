@@ -236,6 +236,8 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoTriggerDeleteShards(ss, ctx);
     DoTriggerDeleteSystemShards(ss, ctx);
 
+    DoFireFullBackupItemDone(ss, ctx);
+
     ResumeLongOps(ss, ctx);
 }
 
@@ -921,7 +923,28 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
         }
 
         TOperation::TPtr operation = ss->Operations.at(txId);
-        operation->DoneParts.insert(opId.GetSubTxId());
+        const bool partNewlyDone = operation->DoneParts.insert(opId.GetSubTxId()).second;
+
+        // Queue (not send) TEvFullBackupItemDone for tracked TxCopyTable sub-ops;
+        // sending must happen post-commit in ApplyOnComplete, not here in ApplyOnExecute.
+        // Gate on partNewlyDone because DoDoneParts is called twice per ApplyOnExecute
+        // (barrier-released ops), so without it we would enqueue duplicates.
+        // Restrict to TxCopyTable to avoid firing on the control op's own Done.
+        if (partNewlyDone && ss->FullBackups.contains(ui64(opId.GetTxId()))) {
+            auto* txState = ss->FindTx(opId);
+            if (txState && txState->TxType == TTxState::TxCopyTable) {
+                // EPathStateDrop means AbortUnsafe was triggered; any other state is success.
+                bool aborted = false;
+                if (auto* path = ss->PathsById.FindPtr(txState->TargetPathId)) {
+                    aborted = ((*path)->PathState == NKikimrSchemeOp::EPathState::EPathStateDrop);
+                }
+                PendingFullBackupItemDone.emplace_back(
+                    ui64(opId.GetTxId()),
+                    txState->TargetPathId,
+                    /*success=*/!aborted);
+            }
+        }
+
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Part operation is done"
                         << " id#" << opId
@@ -933,6 +956,19 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
 
         DoneTransactions.insert(opId.GetTxId());
     }
+}
+
+void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx) {
+    for (auto& [id, dstPathId, success] : PendingFullBackupItemDone) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Fire TEvFullBackupItemDone"
+                        << " fullBackupId#" << id
+                        << " dstPathId#" << dstPathId
+                        << " success#" << success);
+        ctx.Send(ss->SelfId(),
+            new TEvPrivate::TEvFullBackupItemDone(id, dstPathId, success));
+    }
+    PendingFullBackupItemDone.clear();
 }
 
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {

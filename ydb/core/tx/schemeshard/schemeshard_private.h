@@ -55,6 +55,7 @@ namespace TEvPrivate {
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
         EvProgressTablePartitionsFormatSweep,
+        EvFullBackupItemDone,
         EvEnd
     };
 
@@ -386,6 +387,19 @@ namespace TEvPrivate {
     struct TEvProgressTablePartitionsFormatSweep
         : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
     {};
+
+    // Sent self->self post-commit when a CopyTable sub-op of a tracked full backup finishes.
+    struct TEvFullBackupItemDone : public NActors::TEventLocal<TEvFullBackupItemDone, EvFullBackupItemDone> {
+        TEvFullBackupItemDone(ui64 fullBackupId, TPathId dstPathId, bool success)
+            : FullBackupId(fullBackupId)
+            , DstPathId(dstPathId)
+            , Success(success)
+        {}
+
+        const ui64 FullBackupId;
+        const TPathId DstPathId;
+        const bool Success;
+    };
 
 }; // TEvPrivate
 

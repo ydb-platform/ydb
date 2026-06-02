@@ -53,7 +53,7 @@ public:
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
-            auto* partitioningParams = params.MutablePartitioningParams();
+            auto* partitioningParams = params.AddPartitioningParams();
             partitioningParams->SetTopicPartitionsCount(partitionCount);
             partitioningParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioningParams->SetDqPartitionsCount(1);

@@ -319,6 +319,20 @@ def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
+def default_kikimr_config_path(working_dir):
+    if not working_dir:
+        return None
+    return os.path.join(working_dir, 'cluster', 'kikimr_configs', 'config.yaml')
+
+
+def should_write_default_config(config_path, target_config):
+    if config_path and os.path.abspath(config_path) != os.path.abspath(target_config):
+        return True
+    if os.path.exists(target_config) and os.path.getsize(target_config) > 0:
+        return False
+    return True
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -399,15 +413,26 @@ def deploy(arguments):
     )
 
     config_path = getattr(arguments, 'config_path', None)
-    if config_path:
-        def _write_proto_configs(self, configs_path):
-            # This override only triggers on the very first deploy before the recipe metafile exists.
-            # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
+    original_write_proto_configs = configuration.write_proto_configs
+
+    def _write_proto_configs(self, configs_path):
+        # This override only triggers on the very first deploy before the recipe metafile exists.
+        # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
+        target_config = os.path.join(configs_path, "config.yaml")
+        if config_path:
             self.write_tls_data()
             os.makedirs(configs_path, exist_ok=True)
-            shutil.copyfile(config_path, os.path.join(configs_path, "config.yaml"))
+            if os.path.abspath(config_path) != os.path.abspath(target_config):
+                shutil.copyfile(config_path, target_config)
+            return
 
-        configuration.write_proto_configs = types.MethodType(_write_proto_configs, configuration)
+        if not should_write_default_config(None, target_config):
+            self.write_tls_data()
+            return
+
+        original_write_proto_configs(configs_path)
+
+    configuration.write_proto_configs = types.MethodType(_write_proto_configs, configuration)
 
     cluster = KiKiMR(configuration)
     cluster.start()

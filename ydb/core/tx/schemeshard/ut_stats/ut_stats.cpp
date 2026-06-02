@@ -149,6 +149,8 @@ TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
+    constexpr ui64 WRITTEN_TOPIC_DATA_SIZE = 16975350; // unstable value, can change if internal message store changes
+
     Y_UNIT_TEST(ShouldNotBatchWhenDisabled) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
@@ -443,7 +445,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
-        Assert(3 * 2678400 * 17, 16975298); // 16975298 - it is unstable value. it can change if internal message store change
+        Assert(3 * 2678400 * 17, WRITTEN_TOPIC_DATA_SIZE);
     }
 
     Y_UNIT_TEST(TopicPeriodicStatMeteringModeRequest) {
@@ -506,10 +508,10 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
-        Assert(16975298, 0); // 16975298 - it is unstable value. it can change if internal message store change
+        Assert(WRITTEN_TOPIC_DATA_SIZE, 0);
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
-        UNIT_ASSERT_EQUAL_C(16975298, stats->Record.GetDataSize(), "DataSize from ReadBalancer " << stats->Record.GetDataSize());
+        UNIT_ASSERT_EQUAL_C(WRITTEN_TOPIC_DATA_SIZE, stats->Record.GetDataSize(), "DataSize from ReadBalancer " << stats->Record.GetDataSize());
         UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer " << stats->Record.GetUsedReserveSize());
 
         appData.PQConfig.SetBalancerWakeupIntervalSec(30);
@@ -517,7 +519,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         GracefulRestartTablet(runtime, balancerId, sender);
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
-        UNIT_ASSERT_EQUAL_C(16975298, stats->Record.GetDataSize(), "DataSize from ReadBalancer after reload");
+        UNIT_ASSERT_EQUAL_C(WRITTEN_TOPIC_DATA_SIZE, stats->Record.GetDataSize(), "DataSize from ReadBalancer after reload");
         UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer after reload");
     }
 

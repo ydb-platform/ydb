@@ -1,5 +1,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/partition/blob_key_filter.h>
@@ -187,6 +188,15 @@ protected:
         TMaybe<TPartitionId> Partition;
     };
 
+    /// Optional payload for TEvTxCommit (defaults match the old SendCommitTx(step, txId) behaviour).
+    struct TSendCommitTxOptions {
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
+        TEvPQ::TMessageGroupsPtr ExplicitMessageGroups;
+    };
+
     struct TChangePartitionConfigMatcher {
         TMaybe<TPartitionId> Partition;
     };
@@ -282,7 +292,7 @@ protected:
                            const TActorId& suppPartitionId = {});
     void WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher = TCalcPredicateMatcher::EmptyMatcher());
 
-    void SendCommitTx(ui64 step, ui64 txId);
+    void SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options = {});
     void SendRollbackTx(ui64 step, ui64 txId);
     void WaitCommitTxDone(const TTxDoneMatcher& matcher = {});
     void WaitRollbackTxDone(const TTxDoneMatcher& matcher = {});
@@ -1088,9 +1098,14 @@ void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& mat
     }
 }
 
-void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId)
+void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId);
+    TEvPQ::TMessageGroupsPtr explicitMessageGroups = options.ExplicitMessageGroups;
+    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId, std::move(explicitMessageGroups));
+    event->SerializedTx = options.SerializedTx;
+    event->TabletConfig = options.TabletConfig;
+    event->BootstrapConfig = options.BootstrapConfig;
+    event->PartitionsData = options.PartitionsData;
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -2328,6 +2343,8 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 
 Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 {
+    // Partition meta is ahead of the commit (stale replay). Tablet always sends SerializedTx on commit;
+    // partition must persist tx KV before TEvTxDone (stable-25-4 -> stable-26-1).
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -2337,7 +2354,41 @@ Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 
     CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=99999, .TxId=55555});
 
-    SendCommitTx(step, txId);
+    NKikimrPQ::TTransaction serializedTxBody;
+    serializedTxBody.SetKind(NKikimrPQ::TTransaction::KIND_DATA);
+    serializedTxBody.SetTxId(txId);
+    serializedTxBody.SetState(NKikimrPQ::TTransaction::EXECUTED);
+    serializedTxBody.SetStep(step);
+    auto* op = serializedTxBody.AddOperations();
+    op->SetPartitionId(partition.InternalPartitionId);
+
+    SendCommitTx(step, txId, {.SerializedTx = std::move(serializedTxBody)});
+
+    // Wait > 0: absence of TEvTxDone must be observable, not "we polled for zero simulated time".
+    const TDuration noUnexpectedTxDoneWait = TDuration::MilliSeconds(200);
+
+    // TEvTxDone must not be emitted before the stale-meta KV write is answered.
+    UNIT_ASSERT_C(!Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>(noUnexpectedTxDoneWait),
+                  "TEvTxDone must not precede KV response for stale commit with SerializedTx");
+
+    auto kv = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
+    UNIT_ASSERT_C(kv, "expected KV request with stale tx meta persist");
+
+    const TString expectedTxKey = GetTxKey(txId, partition.OriginalPartitionId);
+    bool hasSerializedTxWrite = false;
+    for (ui32 i = 0; i < kv->Record.CmdWriteSize(); ++i) {
+        if (kv->Record.GetCmdWrite(i).GetKey() == expectedTxKey) {
+            hasSerializedTxWrite = true;
+            break;
+        }
+    }
+    UNIT_ASSERT_C(hasSerializedTxWrite, "missing CmdWrite for serialized tx key " << expectedTxKey);
+
+    UNIT_ASSERT_C(!Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>(noUnexpectedTxDoneWait),
+                  "TEvTxDone must not arrive before SendCmdWriteResponse");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 

@@ -669,6 +669,72 @@
   auto session = topicClient.CreateWriteSession(settings);
   ```
 
+  Для нового высокоуровневого API записи в C++ SDK доступен интерфейс `IProducer` (заголовок `client/topic/producer.h`), который создаётся через `TTopicClient::CreateProducer`.
+
+  `IProducer` скрывает управление несколькими низкоуровневыми сессиями записи и автоматически выбирает партицию по ключу. Это удобно, когда приложение пишет в топик как в единый поток и не хочет самостоятельно управлять `IWriteSession` и `TContinuationToken`.
+
+  Базовые настройки задаются через `TProducerSettings`:
+
+  - `ProducerIdPrefix` — префикс producer id для подсессий записи;
+  - `PartitionChooserStrategy` — стратегия выбора партиции (`Bound` или `KafkaHash`);
+  - `PartitioningKeyHasher` — функция хеширования ключа для стратегии `Bound`.
+
+  При включенном автопартиционировании топика поддерживается только стратегия `Bound`.
+
+  Методы `IProducer`:
+
+  - `Write(TWriteMessage&&)` — кладет сообщение во внутренний буфер и возвращает `TWriteResult`;
+  - `Flush()` — дожидается гарантированной доставки накопленного буфера на сервер (`TFuture<TFlushResult>`);
+  - `Close(TDuration)` — закрывает продюсер и завершает отправку буфера в пределах таймаута.
+
+  Пример использования `IProducer`:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/topic/client.h>
+  #include <iostream>
+
+  auto producerSettings = NYdb::NTopic::TProducerSettings()
+      .Path("my-topic")
+      .ProducerIdPrefix("my-producer")
+      .MessageGroupId("orders-group")
+      .PartitionChooserStrategy(NYdb::NTopic::EPartitionChooserStrategy::Bound);
+
+  auto producer = topicClient.CreateProducer(producerSettings);
+
+  for (ui64 i = 1; i <= 3; ++i) {
+      NYdb::NTopic::TWriteMessage msg(
+          "user-42",                             // partitioning key
+          "payload-" + std::to_string(i),       // data
+          i                                      // explicit seqNo
+      );
+
+      auto writeResult = producer->Write(std::move(msg));
+      switch (writeResult.Status) {
+          case NYdb::NTopic::EWriteStatus::Queued:
+              break;
+          case NYdb::NTopic::EWriteStatus::Timeout:
+              std::cerr << "Write timeout, retry with same SeqNo\n";
+              break;
+          case NYdb::NTopic::EWriteStatus::Error:
+              std::cerr << "Write error: " << writeResult.ErrorMessage << "\n";
+              break;
+      }
+  }
+
+  auto flushResult = producer->Flush().GetValueSync();
+  if (flushResult.Status != NYdb::NTopic::EFlushStatus::Success) {
+      std::cerr << "Flush failed or producer closed\n";
+  }
+
+  auto closeResult = producer->Close(TDuration::Seconds(5));
+  if (closeResult.Status != NYdb::NTopic::ECloseStatus::Success &&
+      closeResult.Status != NYdb::NTopic::ECloseStatus::AlreadyClosed) {
+      std::cerr << "Close finished with non-success status\n";
+  }
+  ```
+
+  Полный пример с `TProducerSettings`, ретраями и разбором `TWriteResult` / `TFlushResult` см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
+
 - Go
 
   ```go
@@ -855,6 +921,33 @@
     return err
   }
   ```
+
+  Для нового способа записи по ключу в несколько партиций используйте `WithWriteToManyPartitions(...)` при создании писателя и заполняйте поле `Key` в `topicwriter.Message`.
+
+  Для топиков с [автопартиционированием](../../concepts/datamodel/topic.md#autopartitioning) рекомендуется маршрутизация `BoundPartitionChooser`: SDK обновляет границы партиций и продолжает корректно направлять сообщения по ключам после разделения партиций (split).
+
+  ```go
+  writer, err := db.Topic().StartWriter(topicPath,
+    topicoptions.WithWriteToManyPartitions(
+      topicoptions.WithProducerIDPrefix("orders-producer"),
+      topicoptions.WithWriterPartitionByKey(topicoptions.BoundPartitionChooser()),
+    ),
+  )
+  if err != nil {
+    return err
+  }
+  defer func() { _ = writer.Close(context.Background()) }()
+
+  err = writer.Write(ctx, topicwriter.Message{
+    Key:  "user-42",
+    Data: bytes.NewReader([]byte("order-created")),
+  })
+  if err != nil {
+    return err
+  }
+  ```
+
+  Подробный пример с маршрутизацией по ключу, альтернативными стратегиями (`KafkaHash` и `PartitionID`) и транзакционным вариантом см. в репозитории [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topicwriter_to_many_partitions.go).
 
 - Python
 

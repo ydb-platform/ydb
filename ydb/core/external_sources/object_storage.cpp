@@ -9,6 +9,7 @@
 #include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -399,11 +400,11 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         // Stage 3: kick off all listings in parallel.
         auto httpGateway = NYql::IHTTPGateway::Make();
-        auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        auto s3HttpRetryPolicy = NYql::GetFqS3HttpRetryPolicy();
         TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>> futures;
         futures.reserve(plan.Requests.size());
         for (const auto& req : plan.Requests) {
-            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
+            auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, s3HttpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
             futures.push_back(s3Lister->Next());
         }
         auto afterListing = NThreading::WaitExceptionOrAll(futures).Apply(

@@ -347,6 +347,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         std::vector<std::string> messages = {"key1value1"};
         messages.reserve(2 * executionsLimit + 1);
         for (ui64 i = 0; i < 2 * executionsLimit; ++i) {
+            Sleep(TDuration::Seconds(2)); // Wait for checkpoint completion
+
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     FORCE = TRUE
@@ -2114,6 +2116,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"time": 0, "event": "A", "host": "host1.example.com"})");
         ReadTopicMessage(outputTopicName, "A-P1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         connectorClient->LockReading();
         WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");

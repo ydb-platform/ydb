@@ -1449,6 +1449,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
               Columns { Name: "embedding" Type: "String" }
               Columns { Name: "prefix" Type: "String" }
               Columns { Name: "value" Type: "Utf8" }
+              Columns { Name: "json" Type: "Json" }
               KeyColumnNames: ["key"]
             }
             %s
@@ -1617,6 +1618,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance,
         {"value"});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalJsonIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["json"]
+              Type: EIndexTypeGlobalJson
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalJson,
+        {"json"});
     }
 
     Y_UNIT_TEST(AsyncIndexWithSyncInFly) {

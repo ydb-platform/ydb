@@ -1013,7 +1013,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(deferred.issues(), issues);
             TString tmp = issues.ToString();
-            TString expected = "<main>: Error: Path does not exist, code: 200200\n";
+            TString expected = "<main>: Error: Path `/Root/TheNotExistedDirectory` does not exist, code: 200200\n";
             UNIT_ASSERT_NO_DIFF(tmp, expected);
         }
     }

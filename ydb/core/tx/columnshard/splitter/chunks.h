@@ -63,6 +63,11 @@ private:
     ui32 CurrentArrayIndex = 0;
     ui32 CurrentRecordIndex = 0;
 
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> ApplyChunk(const std::shared_ptr<IPortionDataChunk>& chunk) const {
+        return Loader->ApplyVerified(
+            chunk->GetData(), chunk->GetRecordsCountVerified(), std::nullopt, chunk->GetAdditionalAccessorDataOptional());
+    }
+
 public:
     TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
         : Chunks(chunks)
@@ -75,7 +80,7 @@ public:
         CurrentArrayIndex = 0;
         CurrentRecordIndex = 0;
         if (Chunks.size()) {
-            CurrentArray = Loader->ApplyVerified(Chunks.front()->GetData(), Chunks.front()->GetRecordsCountVerified());
+            CurrentArray = ApplyChunk(Chunks.front());
             CurrentChunkArray.reset();
         }
     }
@@ -94,7 +99,7 @@ public:
 
     bool ReadNextChunk() {
         while (++CurrentArrayIndex < Chunks.size()) {
-            CurrentArray = Loader->ApplyVerified(Chunks[CurrentArrayIndex]->GetData(), Chunks[CurrentArrayIndex]->GetRecordsCountVerified());
+            CurrentArray = ApplyChunk(Chunks[CurrentArrayIndex]);
             CurrentChunkArray.reset();
             CurrentRecordIndex = 0;
             if (CurrentRecordIndex < CurrentArray->GetRecordsCount()) {

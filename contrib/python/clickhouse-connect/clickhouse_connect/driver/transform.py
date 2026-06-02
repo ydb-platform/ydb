@@ -1,14 +1,13 @@
 import logging
-from typing import Union
 
 from clickhouse_connect.datatypes import registry
 from clickhouse_connect.driver.common import write_leb128
+from clickhouse_connect.driver.compression import get_compressor
 from clickhouse_connect.driver.exceptions import StreamCompleteException, StreamFailureError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.npquery import NumpyResult
-from clickhouse_connect.driver.query import QueryResult, QueryContext
+from clickhouse_connect.driver.query import QueryContext, QueryResult
 from clickhouse_connect.driver.types import ByteSource
-from clickhouse_connect.driver.compression import get_compressor
 
 _EMPTY_CTX = QueryContext()
 
@@ -16,9 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class NativeTransform:
-    # pylint: disable=too-many-locals, too-many-statements, too-many-branches
     @staticmethod
-    def parse_response(source: ByteSource, context: QueryContext = _EMPTY_CTX) -> Union[NumpyResult, QueryResult]:
+    def parse_response(source: ByteSource, context: QueryContext = _EMPTY_CTX) -> NumpyResult | QueryResult:
         names = []
         col_types = []
         block_num = 0
@@ -71,6 +69,20 @@ class NativeTransform:
                         if not error_msg:
                             error_msg = extract_error_message(source.last_message)
                         raise StreamFailureError(error_msg) from None
+                    raise StreamFailureError("Stream ended unexpectedly (connection closed by server)") from ex
+
+                # Handle async streaming errors (ClientPayloadError from aiohttp)
+                if ex.__class__.__name__ == "ClientPayloadError":
+                    if source.last_message:
+                        error_msg = None
+                        exception_tag = getattr(source, "exception_tag", None)
+                        if exception_tag:
+                            error_msg = extract_exception_with_tag(source.last_message, exception_tag)
+                        if not error_msg:
+                            error_msg = extract_error_message(source.last_message)
+                        raise StreamFailureError(error_msg) from None
+                    raise StreamFailureError("Stream failed during read (connection closed by server)") from ex
+
                 raise
             block_num += 1
             return result_block
@@ -88,7 +100,7 @@ class NativeTransform:
                 yield next_block
 
         if context.use_numpy:
-            res_types = [col.dtype if hasattr(col, 'dtype') else 'O' for col in first_block]
+            res_types = [col.dtype if hasattr(col, "dtype") else "O" for col in first_block]
             return NumpyResult(gen(), tuple(names), tuple(col_types), res_types, source)
         return QueryResult(None, gen(), tuple(names), tuple(col_types), context.column_oriented, source)
 
@@ -112,15 +124,14 @@ class NativeTransform:
                     context.start_column(col_name)
                     try:
                         col_type.write_column(data, output, context)
-                    except Exception as ex:  # pylint: disable=broad-except
+                    except Exception as ex:
                         # This is hideous, but some low level serializations can fail while streaming
                         # the insert if the user has included bad data in the column.  We need to ensure that the
                         # insert fails (using garbage data) to avoid a partial insert, and use the context to
                         # propagate the correct exception to the user
-                        logger.error('Error serializing column `%s` into data type `%s`',
-                                     col_name, col_type.name, exc_info=True)
+                        logger.error("Error serializing column `%s` into data type `%s`", col_name, col_type.name, exc_info=True)
                         context.insert_exception = ex
-                        yield 'INTERNAL EXCEPTION WHILE SERIALIZING'.encode()
+                        yield b"INTERNAL EXCEPTION WHILE SERIALIZING"
                         return
                 yield compressor.compress_block(output)
             footer = compressor.flush()
@@ -130,8 +141,7 @@ class NativeTransform:
         return chunk_gen()
 
 
-# pylint: disable=too-many-return-statements,too-many-branches
-def extract_exception_with_tag(message: bytes, exception_tag: str) -> Union[str, None]:
+def extract_exception_with_tag(message: bytes, exception_tag: str) -> str | None:
     """Extract exception message from the new format with exception tag. Server v25.11+.
 
     Format: __exception__<TAG>\\r\\n<error message>\\r\\n<message_length> <TAG>__exception__\\r\\n
@@ -185,18 +195,18 @@ def extract_exception_with_tag(message: bytes, exception_tag: str) -> Union[str,
 
     try:
         return error_message.decode("utf-8", errors="replace").strip()
-    except Exception:  # pylint: disable=broad-except
+    except Exception:
         return error_message.decode("latin-1", errors="replace").strip()
 
 
 def extract_error_message(message: bytes) -> str:
     if len(message) > 1024:
         message = message[-1024:]
-    error_start = message.find('Code: '.encode())
+    error_start = message.find(b"Code: ")
     if error_start != -1:
         message = message[error_start:]
     try:
         message_str = message.decode()
     except UnicodeError:
-        message_str = f'unrecognized data found in stream: `{message.hex()[128:]}`'
+        message_str = f"unrecognized data found in stream: `{message.hex()[128:]}`"
     return message_str

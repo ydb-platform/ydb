@@ -136,6 +136,8 @@
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.0"
         },
+        null,
+        null,
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.1"
         }

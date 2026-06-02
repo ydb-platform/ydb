@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             PersId = node.GetPersistentBufferDDiskId();
             PBServiceId = MakeBlobStoragePersistentBufferId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
-
+            Cerr << "Changed node: " << node <<" pb: " << PersId << " pbs: " << PBServiceId << Endl;
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
             GreetDDisks();
@@ -191,6 +191,18 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const auto& [offsetInBytes, size, buffer] = item;
                 ourLsns.emplace(lsn, offsetInBytes, size);
             }
+            if (returnedLsns != ourLsns) {
+                Cerr << "returnedLsns: ";
+                for (auto lsn : returnedLsns) {
+                    Cerr << lsn << ", ";
+                }
+                Cerr << Endl;
+                Cerr << "     ourLsns: ";
+                for (auto lsn : ourLsns) {
+                    Cerr << lsn << ", ";
+                }
+                Cerr << Endl;
+            }
             UNIT_ASSERT_EQUAL(returnedLsns, ourLsns);
         }
 
@@ -264,6 +276,15 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
         }
 
+        void MoveBarrier(ui64 lsn = 0, ui32 tabletIdx = 0) {
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
+                PBCreds[tabletIdx], lsn)),
+                Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
+            UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+        }
+
         double ErasePB(ui64 lsn = 0, ui32 tabletIdx = 0) {
             if (lsn == 0) {
                 std::set<ui64> lsns;
@@ -304,7 +325,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return res;
         }
 
-        double BatchErasePB() {
+        double BatchErasePB(ui32 cnt = 0, bool continuous = false) {
             std::vector<std::tuple<ui64, ui32>> erases;
             std::set<ui64> lsns;
             for (ui64 lsn : PersistentBuffers | std::views::keys) {
@@ -313,19 +334,24 @@ Y_UNIT_TEST_SUITE(DDisk) {
             if (lsns.empty()) {
                 return -1;
             }
-            for (ui32 _ : xrange(RandomNumber(4u) + 1)) {
+            for (ui32 _ : xrange(cnt > 0 ? cnt : (RandomNumber(4u) + 1))) {
                 if (lsns.empty()) {
                     break;
                 }
                 auto lsn = lsns.begin();
-                std::advance(lsn, RandomNumber(lsns.size()));
+                if (!continuous) {
+                    std::advance(lsn, RandomNumber(lsns.size()));
+                }
                 erases.push_back({*lsn, PBCreds[0].Generation});
                 lsns.erase(lsn);
             }
 
             auto testErase = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
                 Cerr << "batch erase persistent buffer count# " << erases.size() << Endl;
-
+                for (auto lsn : erases) {
+                    Cerr << lsn << ", ";
+                }
+                Cerr << Endl;
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvBatchErasePersistentBuffer(
                     PBCreds[0], erases)), Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
@@ -461,83 +487,83 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
     Y_UNIT_TEST(Basic) {
         TDDiskTestContext f;
-        for (auto& item : f.AllocateDDiskBlockGroup()) {
-            for (auto& node : item.GetNodes()) {
-                f.ChangeTestingNode(node);
-                Cerr << "next iteration\n";
+        auto group = f.AllocateDDiskBlockGroup();
+        auto& item = group[0];
+        for (auto& node : item.GetNodes()) {
+            f.ChangeTestingNode(node);
+            Cerr << "next iteration\n";
 
-                for (ui32 iter = 0; iter < 1000; ++iter) {
-                    switch (RandomNumber(7u)) {
-                        case 0: {
-                            f.RandomWrite();
-                            break;
-                        }
-                        case 1: {
-                            f.RandomRead();
-                            break;
-                        }
-                        case 2: {
-                            f.ListPB();
-                            break;
-                        }
-                        case 3: {
-                            f.WritePB();
-                            break;
-                        }
-                        case 4: {
-                            f.ReadPB();
-                            break;
-                        }
-                        case 5: {
-                            f.ErasePB();
-                            break;
-                        }
-                        case 6: {
-                            f.SyncPB();
-                            break;
-                        }
+            for (ui32 iter = 0; iter < 1000; ++iter) {
+                switch (RandomNumber(7u)) {
+                    case 0: {
+                        f.RandomWrite();
+                        break;
+                    }
+                    case 1: {
+                        f.RandomRead();
+                        break;
+                    }
+                    case 2: {
+                        f.ListPB();
+                        break;
+                    }
+                    case 3: {
+                        f.WritePB();
+                        break;
+                    }
+                    case 4: {
+                        f.ReadPB();
+                        break;
+                    }
+                    case 5: {
+                        f.ErasePB();
+                        break;
+                    }
+                    case 6: {
+                        f.SyncPB();
+                        break;
                     }
                 }
-                ++f.VChunkIndex;
             }
+            ++f.VChunkIndex;
         }
     }
 
     Y_UNIT_TEST(PersistentBufferWithRestarts) {
         TDDiskTestContext f;
-        for (auto& item : f.AllocateDDiskBlockGroup()) {
-            for (auto& node : item.GetNodes()) {
-                f.ChangeTestingNode(node);
-                Cerr << "next iteration\n";
-                for (ui32 iter = 0; iter < 1000; ++iter) {
-                    if (iter % 400 == 399) {
-                        f.RestartNode();
+        auto group = f.AllocateDDiskBlockGroup();
+        auto& item = group[0];
+        for (auto& node : item.GetNodes()) {
+            f.ChangeTestingNode(node);
+            Cerr << "next iteration\n";
+            for (ui32 iter = 0; iter < 1000; ++iter) {
+                if (iter % 400 == 399) {
+                    f.RestartNode();
+                }
+                switch (RandomNumber(5u)) {
+                    case 0: {
+                        f.ListPB();
+                        break;
                     }
-                    switch (RandomNumber(5u)) {
-                        case 0: {
-                            f.ListPB();
-                            break;
-                        }
-                        case 1: {
-                            f.WritePB();
-                            break;
-                        }
-                        case 2: {
-                            f.ReadPB();
-                            break;
-                        }
-                        case 3: {
-                            f.ErasePB();
-                            break;
-                        }
-                        case 4: {
-                            f.BatchErasePB();
-                            break;
-                        }
+                    case 1: {
+                        f.WritePB();
+                        break;
+                    }
+                    case 2: {
+                        f.ReadPB();
+                        break;
+                    }
+                    case 3: {
+                        f.ErasePB();
+                        break;
+                    }
+                    case 4: {
+                        f.BatchErasePB();
+                        break;
                     }
                 }
-                ++f.VChunkIndex;
             }
+            ++f.VChunkIndex;
         }
     }
 
@@ -550,7 +576,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.ChangeTestingNode(node);
         for (ui32 i = 0; i < 10; ++i) {
             f.WritePB(0, RandomNumber(127u) + 1);
-            auto fs = f.ErasePB();
+            auto fs = f.BatchErasePB();
             UNIT_ASSERT(fs == 1);
         }
 
@@ -578,7 +604,118 @@ Y_UNIT_TEST_SUITE(DDisk) {
             freeSpace = fs >= 0 ? fs : freeSpace;
             Cerr << "freeSpace: " << freeSpace << Endl;
         }
-        UNIT_ASSERT(freeSpace == 1);
+        UNIT_ASSERT((1 - freeSpace) < 0.00001); // fast erase
+    }
+
+    Y_UNIT_TEST(PersistentBufferFastEraseFreeSpace) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+
+        auto info = f.GetPBInfo(false, true);
+        auto freeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        for (ui32 i = 1; i < 1001; ++i) {
+            if (i % 200 == 99) {
+                f.RestartNode();
+            }
+            ui32 sectorsCnt = 4;
+            f.WritePB(0, sectorsCnt);
+            info = f.GetPBInfo(false, true);
+            auto newFreeSectors = info->Get()->FreeSectors;
+            UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors - i * 5);
+            UNIT_ASSERT_EQUAL(0, info->Get()->TabletInfos[0].FastErasesCount);
+        }
+        info = f.GetPBInfo(false, true);
+        auto newFreeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors - 5000);
+        freeSectors = newFreeSectors;
+
+        for (ui32 i = 1; i < 101; ++i) {
+            if (i % 20 == 10) {
+                f.RestartNode();
+            }
+            f.BatchErasePB(10);
+            info = f.GetPBInfo(false, true);
+            newFreeSectors = info->Get()->FreeSectors;
+            UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors + i * 50 - 1);
+            if (i < 100) {
+                UNIT_ASSERT_EQUAL(i * 10, info->Get()->TabletInfos[0].FastErasesCount);
+            } else {
+                UNIT_ASSERT(info->Get()->TabletInfos.size() == 0);
+            }
+        }
+        info = f.GetPBInfo(false, true);
+        newFreeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(newFreeSectors, 131072 - 1);
+    }
+
+    Y_UNIT_TEST(PersistentBufferFastEraseFallback) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+
+        auto info = f.GetPBInfo(false, true);
+        auto freeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        for (ui32 i = 1; i < 5001; ++i) {
+            ui32 sectorsCnt = 4;
+            f.WritePB(0, sectorsCnt);
+        }
+        info = f.GetPBInfo(false, true);
+        auto newFreeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors - 25000);
+        freeSectors = newFreeSectors;
+
+        for (ui32 i = 1; i < 11; ++i) {
+            f.BatchErasePB(1);
+            info = f.GetPBInfo(false, true);
+            newFreeSectors = info->Get()->FreeSectors;
+            UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors + i * 5);
+            UNIT_ASSERT_EQUAL(0, info->Get()->TabletInfos[0].FastErasesCount);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferFastEraseSimpleCases) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+
+        auto info = f.GetPBInfo(false, true);
+        auto freeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        for (ui32 i = 1; i < 5001; ++i) {
+            ui32 sectorsCnt = 4;
+            f.WritePB(0, sectorsCnt);
+        }
+        info = f.GetPBInfo(false, true);
+        auto newFreeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors - 25000);
+        freeSectors = newFreeSectors;
+
+        for (ui32 i = 1; i < 39; ++i) {
+            f.BatchErasePB(100, true);
+            info = f.GetPBInfo(false, true);
+            newFreeSectors = info->Get()->FreeSectors;
+            UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors + i * 500 - 1);
+            UNIT_ASSERT_EQUAL(i * 100, info->Get()->TabletInfos[0].FastErasesCount);
+        }
+
+        // overfill erase sector - fallback to zeroing headers
+        f.BatchErasePB(100, true);
+        info = f.GetPBInfo(false, true);
+        newFreeSectors = info->Get()->FreeSectors;
+        UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors + 39 * 500 - 1);
+        UNIT_ASSERT_EQUAL(3800, info->Get()->TabletInfos[0].FastErasesCount);
+
+        //move barrier
+        f.MoveBarrier(2000);
+        f.BatchErasePB(100, true);
+        info = f.GetPBInfo(false, true);
+        UNIT_ASSERT_EQUAL(1900, info->Get()->TabletInfos[0].FastErasesCount);
     }
 
     Y_UNIT_TEST(PersistentBufferFillAndRead) {
@@ -682,7 +819,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
     }
 
-    Y_UNIT_TEST(PersistentBufferEraseSingleLsnNoBarrier) {
+    Y_UNIT_TEST(PersistentBufferEraseSingleLsnBarrier) {
         TDDiskTestContext f(1_MB);
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
@@ -692,7 +829,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 0);
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b[f.PBCreds[0].TabletId] == 1);
         }
     }
 
@@ -708,7 +846,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         f.ErasePB(5, 1); // one record left
         f.ErasePB(100, 4); // all records deleted
-        f.ErasePB(1, 0); // 1 record deleted, no barrier
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;

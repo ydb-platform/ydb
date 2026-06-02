@@ -20,14 +20,15 @@ THostRoles::THostRoles(size_t hostCount)
 THostRoles THostRoles::MakeRotating(
     size_t hostCount,
     ui32 vChunkIndex,
-    size_t primaryCount)
+    size_t primaryCount,
+    EHostRole secondaryRole)
 {
     Y_ABORT_UNLESS(hostCount <= MaxHostCount);
     Y_ABORT_UNLESS(primaryCount <= hostCount);
 
     THostRoles result(hostCount);
     for (size_t i = 0; i < hostCount; ++i) {
-        result.Assignments[i] = EHostRole::HandOff;
+        result.Assignments[i] = secondaryRole;
     }
     for (size_t i = 0; i < primaryCount; ++i) {
         const size_t idx = (i + vChunkIndex) % hostCount;

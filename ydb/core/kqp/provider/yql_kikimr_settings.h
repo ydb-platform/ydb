@@ -114,6 +114,7 @@ public:
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
+    NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
 
     /* Internal CBO constants for tuning */
     NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
@@ -135,9 +136,6 @@ public:
     NCommon::TConfSetting<double, Static> OptCBOConstsLeftSideByteSizeFactor;
     NCommon::TConfSetting<double, Static> OptCBOConstsRightSideByteSizeFactor;
     NCommon::TConfSetting<double, Static> OptCBOConstsOutputSideByteSizeFactor;
-
-    NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsMult;
-    NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsPow;
 
     NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSideMult;
     NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSidePow;
@@ -256,6 +254,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetDqHashOperatorsUseBlocks() const;
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
+    bool GetUseKqpTasksGraphV2() const;
 };
 
-}
+} // namespace NYql

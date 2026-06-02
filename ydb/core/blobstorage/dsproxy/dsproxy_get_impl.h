@@ -159,6 +159,11 @@ public:
         return ResponseIndex;
     }
 
+    ui32 GetOrderNumber(const TVDiskIdShort& vdiskId) const {
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdiskId), "incorrect VDiskId# %s", vdiskId.ToString().data());
+        return Info->GetOrderNumber(vdiskId);
+    }
+
     void GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets);
 
     void OnVGetResult(TLogContext &logCtx, TEvBlobStorage::TEvVGetResult &ev,
@@ -174,7 +179,7 @@ public:
         Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         TVDiskIdShort shortId(vdisk);
-        ui32 orderNumber = Info->GetOrderNumber(shortId);
+        ui32 orderNumber = GetOrderNumber(shortId);
         {
             NActors::NLog::EPriority priority = PriorityForStatusInbound(record.GetStatus());
             DSP_LOG_LOG_SX(logCtx, priority, "BPG12", "Handle TEvVGetResult"

@@ -10,6 +10,7 @@ SRCS(
     variator.cpp
     select.cpp
     bulk_upsert.cpp
+    wait_background_processes.cpp
 )
 
 PEERDIR(

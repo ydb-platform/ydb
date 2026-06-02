@@ -161,6 +161,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }
         });
+    REGISTER_SETTING(*this, UseKqpTasksGraphV2);
 
     /* CBO internal constants for tuning */
     REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
@@ -182,9 +183,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptCBOConstsLeftSideByteSizeFactor);
     REGISTER_SETTING(*this, OptCBOConstsRightSideByteSizeFactor);
     REGISTER_SETTING(*this, OptCBOConstsOutputSideByteSizeFactor);
-
-    REGISTER_SETTING(*this, OptCBOConstsInteractionsMult);
-    REGISTER_SETTING(*this, OptCBOConstsInteractionsPow);
 
     REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSideMult);
     REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSidePow);
@@ -352,4 +350,8 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
 }
 
+bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
+    return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
 }
+
+} // namespace NYql

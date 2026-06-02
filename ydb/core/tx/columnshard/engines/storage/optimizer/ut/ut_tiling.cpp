@@ -1,4 +1,5 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/tiling.h>
@@ -64,6 +65,8 @@ struct TTestPortion {
     NPortion::EProduced GetProduced() const {
         return Produced;
     }
+
+    void AddRuntimeFeature(const TPortionInfo::ERuntimeFeature /*feature*/) {};
 };
 
 using TTestAccumulator = Accumulator<ui64, TTestPortion>;
@@ -71,7 +74,7 @@ using TTestLastLevel = LastLevel<ui64, TTestPortion>;
 using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
 using TTestTiling = Tiling<ui64, TTestPortion>;
 
-TTestPortion::TConstPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
+TTestPortion::TPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);
 }
 
@@ -305,7 +308,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         TCounters counters;
         TTestTiling tiling(settings, counters);
 
-        TVector<TTestPortion::TConstPtr> portions;
+        TVector<TTestPortion::TPtr> portions;
         portions.reserve(122);
 
         ui64 nextId = 1000;

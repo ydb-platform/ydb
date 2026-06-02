@@ -64,8 +64,15 @@ namespace {
         , CountersParent(std::move(counters))
         , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
+        , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
+        if (IsPersistentBufferActor) {
+            SetActivityType(NKikimrServices::TActivity::BS_PERSISTENT_BUFFER);
+        } else {
+            SetActivityType(NKikimrServices::TActivity::BS_DDISK);
+        }
+
         StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
         if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME || BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_SSD) {
@@ -206,6 +213,7 @@ namespace {
     void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
         auto sourceType = ev->Get()->SourceType;
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             std::vector<TSegmentManager::TSegment> segments;
             ui64 syncId = SegmentManager.GetSync(ev->Cookie);
             SegmentManager.PopRequest(ev->Cookie, &segments);

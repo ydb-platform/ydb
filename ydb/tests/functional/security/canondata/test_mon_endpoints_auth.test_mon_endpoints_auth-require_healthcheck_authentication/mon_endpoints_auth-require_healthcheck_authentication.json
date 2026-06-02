@@ -26,6 +26,656 @@
         "root@builtin": 403
       }
     },
+    "/actors/blobstorageproxies": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/configs_dispatcher": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/console_configs_provider": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/dnameserver": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/dsproxynode": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/feature_flags": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/icb": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/interconnect": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_node": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_proxy": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_resource_manager": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_spilling_file": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/lease": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/logger": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/memory_tracker": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/netclassifier": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/nodewarden": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/pdisks": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/pql2": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/quoter_proxy": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/rb": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/row_dispatcher": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/schemeboard": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/sqsgc": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/statservice": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/actors/tablet_counters_aggregator": {
       "": {
         "__none__": 200,
@@ -50,6 +700,136 @@
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
+      }
+    },
+    "/actors/tenant_pool": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/vdisks": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/yq_control_plane_proxy": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/yq_health": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/cms": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
       }
     },
     "/counters": {
@@ -130,6 +910,110 @@
         "root@builtin": 200
       }
     },
+    "/fq_diag/fetcher": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/fq_diag/local_worker_manager": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/fq_diag/quotas": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/grpc": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/healthcheck": {
       "": {
         "__none__": 401,
@@ -181,6 +1065,58 @@
       }
     },
     "/internal": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/jquery.tablesorter.css": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/jquery.tablesorter.js": {
       "": {
         "__none__": 401,
         "user@builtin": 403,
@@ -258,6 +1194,110 @@
         "root@builtin": 400
       }
     },
+    "/memory/fragmentation": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/memory/heap": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/memory/peakheap": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/memory/statistics": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/monitoring/": {
       "": {
         "__none__": 200,
@@ -282,6 +1322,292 @@
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
+      }
+    },
+    "/node/1/monitoring": {
+      "": {
+        "__none__": 200,
+        "user@builtin": 200,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 200,
+        "user@builtin": 200,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 200,
+        "user@builtin": 200,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      }
+    },
+    "/nodetabmon": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/cancel": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/forget": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/get": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/list": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk/info": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk/restart": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk/status": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
       }
     },
     "/ping": {
@@ -310,7 +1636,293 @@
         "root@builtin": 200
       }
     },
+    "/query": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/query/script/execute": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/query/script/fetch": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/scheme": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/scheme/directory": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/static/css/bootstrap.min.css": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.eot": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.svg": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.ttf": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.woff": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/js/bootstrap.min.js": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/js/jquery.min.js": {
       "": {
         "__none__": 401,
         "user@builtin": 403,
@@ -362,6 +1974,266 @@
         "root@builtin": 200
       }
     },
+    "/storage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/storage/groups": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/tablet": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/tablets": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/trace": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/blobindexstat": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/evict": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/getblob": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/vdiskstat": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/ver": {
       "": {
         "__none__": 401,
@@ -377,6 +2249,162 @@
         "database@builtin": 403,
         "viewer@builtin": 403,
         "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/acl": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/autocomplete": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/browse": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/bscontrollerinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/bsgroupinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
         "root@builtin": 200
       },
       "?database=/Root/Tenant": {
@@ -414,30 +2442,1486 @@
         "root@builtin": 200
       }
     },
-    "/node/1/monitoring": {
+    "/viewer/check_access": {
       "": {
-        "__none__": 200,
-        "user@builtin": 200,
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/cluster": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
         "database@builtin": 200,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
       "?database=/Root": {
-        "__none__": 200,
-        "user@builtin": 200,
+        "__none__": 401,
+        "user@builtin": 403,
         "database@builtin": 200,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
       "?database=/Root/Tenant": {
-        "__none__": 200,
-        "user@builtin": 200,
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/commit_offset": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/compute": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
         "database@builtin": 200,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/config": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/content": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/counters": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/database_stats": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_consumer": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_replication": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_topic": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_transfer": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/feature_flags": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/graph": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/groups": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/healthcheck": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/hiveinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/hivestats": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/hotkeys": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/labeledcounters": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/metainfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/multipart_counter": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/netinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/nodeinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/nodelist": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/nodes": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/pdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/peers": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/plan2svg": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/pqconsumerinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/put_record": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/query": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/render": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/simple_counter": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/sse_counter": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/storage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/storage_stats": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/storage_usage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/sysinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tabletinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tabletcounters": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tenantinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tenants": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/topic_data": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/topicinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/config": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/nodeinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/nodelist": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/pdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/storage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/sysinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/tabletinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/vdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/vdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/whoami": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
       }
     }
   },
@@ -468,6 +3952,656 @@
         "root@builtin": 403
       }
     },
+    "/actors/blobstorageproxies": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/configs_dispatcher": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/console_configs_provider": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/dnameserver": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/dsproxynode": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/feature_flags": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/icb": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/interconnect": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_node": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_proxy": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_resource_manager": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/kqp_spilling_file": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/lease": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/logger": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/memory_tracker": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/netclassifier": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/nodewarden": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/pdisks": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/pql2": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/quoter_proxy": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/rb": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/row_dispatcher": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/schemeboard": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/sqsgc": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/statservice": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/actors/tablet_counters_aggregator": {
       "": {
         "__none__": 200,
@@ -492,6 +4626,136 @@
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
+      }
+    },
+    "/actors/tenant_pool": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/vdisks": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/yq_control_plane_proxy": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/actors/yq_health": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/cms": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
       }
     },
     "/counters": {
@@ -572,6 +4836,110 @@
         "root@builtin": 200
       }
     },
+    "/fq_diag/fetcher": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/fq_diag/local_worker_manager": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/fq_diag/quotas": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/grpc": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/healthcheck": {
       "": {
         "__none__": 401,
@@ -623,6 +4991,58 @@
       }
     },
     "/internal": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/jquery.tablesorter.css": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/jquery.tablesorter.js": {
       "": {
         "__none__": 401,
         "user@builtin": 403,
@@ -700,6 +5120,110 @@
         "root@builtin": 400
       }
     },
+    "/memory/fragmentation": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/memory/heap": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/memory/peakheap": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/memory/statistics": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/monitoring/": {
       "": {
         "__none__": 200,
@@ -724,6 +5248,292 @@
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
+      }
+    },
+    "/node/1/monitoring": {
+      "": {
+        "__none__": 200,
+        "user@builtin": 200,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 200,
+        "user@builtin": 200,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 200,
+        "user@builtin": 200,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      }
+    },
+    "/nodetabmon": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/cancel": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/forget": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/get": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/operation/list": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk/info": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk/restart": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/pdisk/status": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
       }
     },
     "/ping": {
@@ -752,7 +5562,293 @@
         "root@builtin": 200
       }
     },
+    "/query": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/query/script/execute": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/query/script/fetch": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/scheme": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/scheme/directory": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/static/css/bootstrap.min.css": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.eot": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.svg": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.ttf": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/fonts/glyphicons-halflings-regular.woff": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/js/bootstrap.min.js": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/static/js/jquery.min.js": {
       "": {
         "__none__": 401,
         "user@builtin": 403,
@@ -804,6 +5900,266 @@
         "root@builtin": 200
       }
     },
+    "/storage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 404,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/storage/groups": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/tablet": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/tablets": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/trace": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 404,
+        "monitoring@builtin": 404,
+        "root@builtin": 404
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/blobindexstat": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/evict": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/getblob": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/vdisk/vdiskstat": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
     "/ver": {
       "": {
         "__none__": 401,
@@ -819,6 +6175,162 @@
         "database@builtin": 403,
         "viewer@builtin": 403,
         "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/acl": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/autocomplete": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/browse": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/bscontrollerinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/bsgroupinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
         "root@builtin": 200
       },
       "?database=/Root/Tenant": {
@@ -856,30 +6368,1514 @@
         "root@builtin": 200
       }
     },
-    "/node/1/monitoring": {
+    "/viewer/check_access": {
       "": {
-        "__none__": 200,
-        "user@builtin": 200,
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/cluster": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
         "database@builtin": 200,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
       "?database=/Root": {
-        "__none__": 200,
-        "user@builtin": 200,
+        "__none__": 401,
+        "user@builtin": 403,
         "database@builtin": 200,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
       },
       "?database=/Root/Tenant": {
-        "__none__": 200,
-        "user@builtin": 200,
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/commit_offset": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/compute": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
         "database@builtin": 200,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/config": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/content": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/counters": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/database_stats": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_consumer": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_replication": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_topic": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/describe_transfer": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/feature_flags": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/graph": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/groups": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/healthcheck": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/hiveinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/hivestats": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/hotkeys": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/labeledcounters": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/metainfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/multipart_counter": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/netinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/nodeinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/nodelist": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/nodes": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/pdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/peers": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/plan2svg": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/pqconsumerinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/put_record": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/query": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/render": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/simple_counter": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/sse_counter": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/storage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/storage_stats": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/storage_usage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/sysinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tabletinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tabletcounters": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tenantinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/tenants": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/topic_data": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/topicinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 200,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/config": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/nodeinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/nodelist": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/pdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/storage": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/sysinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/tabletinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/v2/json/vdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/vdiskinfo": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    },
+    "/viewer/whoami": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 200,
+        "monitoring@builtin": 200,
+        "root@builtin": 200
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 200
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
+      }
+    }
+  },
+  "DELETE": {
+    "/scheme/directory": {
+      "": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 400,
+        "viewer@builtin": 400,
+        "monitoring@builtin": 400,
+        "root@builtin": 400
+      },
+      "?database=/Root/Tenant": {
+        "__none__": 401,
+        "user@builtin": 403,
+        "database@builtin": 403,
+        "viewer@builtin": 403,
+        "monitoring@builtin": 403,
+        "root@builtin": 403
       }
     }
   }

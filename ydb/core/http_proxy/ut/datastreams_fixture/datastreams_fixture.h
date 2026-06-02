@@ -112,7 +112,8 @@ public:
 
     THttpResult SendHttpRequestRaw(const TString& handler, const TString& target,
                                    const IOutputStream::TPart& body, const TString& authorizationStr,
-                                   const TString& contentType = "application/json");
+                                   const TString& contentType = "application/json",
+                                   const TString& securityToken = "");
 
     THttpResult SendHttpRequestRawSpecified(const TString& handler, const TString& target,
                                    const TString& host, const TString& date, const TString& userAgent,
@@ -122,7 +123,12 @@ public:
 
     THttpResult SendHttpRequest(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& authorizationStr,
-                                const TString& contentType = "application/json");
+                                const TString& contentType = "application/json",
+                                const TString& securityToken = "");
+
+    NJson::TJsonMap CreateQueueWithSecurityToken(NJson::TJsonMap request,
+                                                 const TString& securityToken = "root@builtin",
+                                                 ui32 expectedHttpCode = 200);
 
     THttpResult SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& host, const TString& date, const TString& userAgent,

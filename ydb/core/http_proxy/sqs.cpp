@@ -9,6 +9,8 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/ticket_parser.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
@@ -39,19 +41,6 @@ namespace NKikimr::NHttpProxy {
             return request.Getqueue_url();
         }
         return {};
-    }
-
-    template <class TRequest>
-    std::expected<TString, TString> MaybeGetDatabasePathFromSQSTopicQueueUrl(const TRequest& request) {
-        TString queueUrl = MaybeGetQueueUrl(request);
-        if (queueUrl.empty()) {
-            return {};
-        }
-        auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
-        if (!parsedQueueUrl.has_value()) {
-            return std::unexpected(std::move(parsedQueueUrl).error());
-        }
-        return parsedQueueUrl->Database;
     }
 
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
@@ -100,6 +89,7 @@ namespace NKikimr::NHttpProxy {
                     HFunc(TEvServerlessProxy::TEvErrorWithIssue, HandleErrorWithIssue);
                     HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
                     HFunc(TEvServerlessProxy::TEvToken, HandleToken);
+                    HFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleSecurityTokenAuth);
                     default:
                         HandleUnexpectedEvent(ev);
                         break;
@@ -107,14 +97,23 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
                               "' iam token size: " << HttpContext.IamToken.size());
 
-                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabasePath,
-                                                            HttpContext.SerializedUserToken, ctx.ActorSystem());
+                TMap<TString, TString> peerMetadata {
+                    {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
+                };
+
+                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
+                    std::move(Request),
+                    HttpContext.DatabasePath,
+                    HttpContext.SerializedUserToken,
+                    Nothing(),
+                    ctx.ActorSystem(),
+                    peerMetadata
+                );
                 RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                                     (const NThreading::TFuture<TProtoResponse>& future) {
                     auto& response = future.GetValueSync();
@@ -145,6 +144,30 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.CloudId = db.CloudId;
                     HttpContext.FolderId = db.FolderId;
                 }
+            }
+
+            void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+                const auto& token = ev->Get()->Token;
+                const bool isEnforceUserTokenRequirement = AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement;
+                if (ev->Get()->HasError()) {
+                    if (isEnforceUserTokenRequirement) {
+                        return ReplyWithYdbError(
+                            ctx,
+                            ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                            TString{ev->Get()->Error.Message});
+                    }
+                } else if (!token) {
+                    if (isEnforceUserTokenRequirement) {
+                        return ReplyWithYdbError(
+                            ctx,
+                            NYdb::EStatus::UNAUTHORIZED,
+                            "Access denied");
+                    }
+                } else {
+                    HttpContext.SerializedUserToken = token->GetSerializedToken();
+                    UserSid_ = token->GetUserSID();
+                }
+                SendGrpcRequestNoDriver(ctx);
             }
 
             void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
@@ -192,7 +215,9 @@ namespace NKikimr::NHttpProxy {
                     })
                 }, errorText.size(), errorText);
 
-                ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                if (AuthActor) {
+                    ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                }
 
                 TBase::Die(ctx);
             }
@@ -221,7 +246,9 @@ namespace NKikimr::NHttpProxy {
                     })
                 }, errorText.size(), errorText);
 
-                ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                if (AuthActor) {
+                    ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                }
 
                 TBase::Die(ctx);
             }
@@ -382,7 +409,6 @@ namespace NKikimr::NHttpProxy {
                     }
                     TopicPath = parsedQueueUrl->TopicPath;
                     ConsumerName = parsedQueueUrl->Consumer;
-                    IsFifo = parsedQueueUrl->Fifo;
 
                     if (!AssignDatabasePath(ctx, parsedQueueUrl->Database)) {
                         return;
@@ -401,6 +427,12 @@ namespace NKikimr::NHttpProxy {
                 if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
+                } else if (!HttpContext.SecurityToken.empty()) {
+                    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+                        .Ticket = HttpContext.SecurityToken,
+                        .Database = HttpContext.DatabasePath,
+                        .PeerName = HttpContext.SourceAddress,
+                    }));
                 } else {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(
@@ -419,10 +451,8 @@ namespace NKikimr::NHttpProxy {
 
         private:
             TInstant StartTime;
-            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
-            ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
@@ -430,7 +460,6 @@ namespace NKikimr::NHttpProxy {
             TString Method;
             TString TopicPath;
             TString ConsumerName;
-            bool IsFifo{};
             TRetryCounter RetryCounter;
 
             TActorId AuthActor;

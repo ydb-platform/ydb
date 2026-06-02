@@ -48,6 +48,7 @@ int NewInternalClient(int argc, char** argv) {
     };
 
     settings.EnableAiInteractive = true;
+    settings.EnableInteractiveTransactions = true;
 
     auto commandsRoot = MakeHolder<TClientCommandInternalRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client with experimental features support");

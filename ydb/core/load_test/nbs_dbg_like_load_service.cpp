@@ -205,6 +205,7 @@ private:
         });
 
         TStringStream str;
+        str << "<div id='nbs-tablet-list-container'>";
         str << "<div class='panel panel-default' style='margin-top:16px'>";
         str << "<div class='panel-heading'><strong>NbsLoad tablets (from Hive)</strong></div>";
         str << "<div class='panel-body'>";
@@ -229,14 +230,37 @@ private:
                 str << "<td>" << NbsTabletHtmlEscape(row.PoolCell) << "</td>";
                 str << "<td>" << NbsTabletHtmlEscape(row.NumDbgCell) << "</td>";
                 str << "<td>";
+                str << "<button type='button' class='btn btn-xs btn-primary' "
+                       "onClick='nbsTabletPrepareRun(\"" << tid << "\")'>Run</button> ";
                 str << "<button type='button' class='btn btn-xs btn-danger' "
                        "onClick='nbsTabletDeleteOwner(" << ownerIdx << ")'>Delete</button>";
                 str << "</td>";
                 str << "</tr>";
             }
             str << "</tbody></table>";
+            str << "<script>(function(){"
+                   "var rows=[";
+            bool firstRow = true;
+            for (const auto& row : Accum) {
+                const ui64 tid = row.Hive.GetTabletID();
+                const ui64 ownerIdx = row.Hive.HasTabletOwner()
+                    ? row.Hive.GetTabletOwner().GetOwnerIdx()
+                    : 0;
+                if (!firstRow) {
+                    str << ",";
+                }
+                firstRow = false;
+                str << "{tid:\"" << tid << "\",oi:" << ownerIdx << "}";
+            }
+            str << "];"
+                   "var maxOi=0;"
+                   "rows.forEach(function(r){if(r.oi>maxOi)maxOi=r.oi;});"
+                   "var ownerInput=document.getElementById('nbs-tablet-owner-idx');"
+                   "if(ownerInput)ownerInput.value=maxOi+1;"
+                   "})();</script>";
         }
         str << "</div></div>";
+        str << "</div>"; // nbs-tablet-list-container
         SendDone(str.Str());
     }
 
@@ -912,6 +936,15 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     .replace(/"/g, "\\\"");
             }
 
+            function nbsRunDisableReplicationChanged(cb) {
+                const readRatio = $("#nbs-run-read-ratio");
+                if (cb.checked) {
+                    readRatio.val("0").prop("disabled", true);
+                } else {
+                    readRatio.prop("disabled", false);
+                }
+            }
+
             function nbsTabletFieldInt(fieldId, fieldLabel, minValue) {
                 const raw = nbsTabletTrim($("#" + fieldId).val());
                 if (raw === "") {
@@ -1013,7 +1046,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 $("#nbs-tablet-create-proto-preview").val(alloc.ok ? alloc.proto : ("# " + alloc.error));
             }
 
-            function nbsTabletPostRaw(mode, owner, cfg, pools) {
+            function nbsTabletPostRaw(mode, owner, cfg, pools, onSuccess) {
                 nbsTabletStatus("HTTP request in flight (mode=" + mode + ")...");
                 nbsTabletResultClear();
                 $.ajax({
@@ -1034,6 +1067,9 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                             pre.textContent = body;
                             $("#nbs-tablet-result").empty().append(pre);
                         }
+                        if (xhr.status >= 200 && xhr.status < 300 && typeof onSuccess === "function") {
+                            onSuccess();
+                        }
                     }
                 });
             }
@@ -1049,7 +1085,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     nbsTabletStatus("Create validation error: " + alloc.error);
                     return;
                 }
-                nbsTabletPostRaw("tablet_create", owner, alloc.proto, alloc.storagePoolsText);
+                nbsTabletPostRaw("tablet_create", owner, alloc.proto, alloc.storagePoolsText, nbsTabletRefreshList);
             }
 
             function nbsTabletDeleteOwner(ownerIdx) {
@@ -1080,7 +1116,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                             $("#nbs-tablet-result").empty().append(pre);
                         }
                         if (xhr.status >= 200 && xhr.status < 300) {
-                            window.location.reload();
+                            nbsTabletRefreshList();
                         }
                     }
                 });
@@ -1093,26 +1129,290 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
             $(function() {
                 nbsTabletRefreshPreview();
             });
+
+            // ── Run workload / sweep ────────────────────────────────────────
+
+            function nbsTabletPrepareRun(tabletId) {
+                var inp = document.getElementById("nbs-tablet-run-tablet-id");
+                if (inp) inp.value = tabletId;
+                var lbl = document.getElementById("nbs-run-target-label");
+                if (lbl) lbl.textContent = "Target tablet: " + tabletId;
+                var panel = document.getElementById("nbs-run-panel");
+                if (panel) {
+                    panel.style.display = "";
+                    panel.scrollIntoView({behavior: "smooth", block: "start"});
+                }
+            }
+
+            function nbsTabletRunOnce(tabletId, maxInFlight) {
+                return new Promise(function(resolve, reject) {
+                    const params = {
+                        mode:                    "tablet_run",
+                        tablet_id:               String(tabletId),
+                        tag:                     nbsTabletTrim($("#nbs-run-tag").val()) || "0",
+                        duration_seconds:        nbsTabletTrim($("#nbs-run-duration").val()) || "0",
+                        delay_before_seconds:    nbsTabletTrim($("#nbs-run-delay-before").val()) || "15",
+                        max_in_flight:           String(maxInFlight),
+                        read_ratio_pct:          $("#nbs-run-disable-replication").is(":checked") ? "0" : (nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0"),
+                        read_write_size_kib:     nbsTabletTrim($("#nbs-run-size-kib").val()) || "4",
+                        sequential:              $("#nbs-run-sequential").is(":checked") ? "1" : "0",
+                        num_dbg_to_use:          nbsTabletTrim($("#nbs-run-num-dbg").val()) || "0",
+                        disable_replication:     $("#nbs-run-disable-replication").is(":checked") ? "1" : "0"
+                    };
+                    $.ajax({
+                        url: "",
+                        data: params,
+                        method: "POST",
+                        contentType: "application/x-protobuf-text",
+                        dataType: "json",
+                        success: function(result) {
+                            if (result.status === "ok") {
+                                resolve({uuid: result.uuid, tag: result.tag});
+                            } else {
+                                reject(new Error("Start failed: " + result.status));
+                            }
+                        },
+                        error: function(xhr) {
+                            reject(new Error("HTTP " + xhr.status + ": " + (xhr.responseText || "")));
+                        }
+                    });
+                });
+            }
+
+            function nbsTabletPollResult(uuid, durationSec, progressEl) {
+                return new Promise(function(resolve, reject) {
+                    const startTime = Date.now();
+                    let progressTimer = null;
+                    let pollTimer = null;
+                    let timeoutId = null;
+
+                    if (progressEl) {
+                        const bar = progressEl.querySelector(".progress-bar");
+                        progressTimer = setInterval(function() {
+                            const elapsed = (Date.now() - startTime) / 1000;
+                            if (durationSec > 0) {
+                                const pct = Math.min(100, elapsed / durationSec * 100);
+                                if (bar) {
+                                    bar.style.width = pct.toFixed(1) + "%";
+                                    bar.textContent = Math.floor(pct) + "%";
+                                }
+                            }
+                        }, 1000);
+                    }
+
+                    function cleanup() {
+                        if (progressTimer !== null) {
+                            clearInterval(progressTimer);
+                            progressTimer = null;
+                        }
+                        if (pollTimer !== null) {
+                            clearTimeout(pollTimer);
+                            pollTimer = null;
+                        }
+                        if (timeoutId !== null) {
+                            clearTimeout(timeoutId);
+                            timeoutId = null;
+                        }
+                        if (progressEl) {
+                            progressEl.style.display = "none";
+                        }
+                    }
+
+                    const pollTimeoutMs = durationSec * 1000 + 30_000;
+                    timeoutId = setTimeout(function() {
+                        cleanup();
+                        reject(new Error("poll timeout after " + Math.round(pollTimeoutMs / 1000) + "s"));
+                    }, pollTimeoutMs);
+
+                    let pollCount = 0;
+                    function poll() {
+                        pollCount++;
+                        $.ajax({
+                            url: window.location.pathname,
+                            data: {mode: "results"},
+                            headers: {Accept: "application/json"},
+                            method: "GET",
+                            dataType: "json",
+                            success: function(results) {
+                                if (!Array.isArray(results)) { scheduleNext(); return; }
+                                for (let i = 0; i < results.length; i++) {
+                                    if (results[i].uuid === uuid) {
+                                        cleanup();
+                                        const nodes = results[i].nodes;
+                                        const jr = (nodes && nodes.length > 0) ? nodes[0] : {};
+                                        resolve(jr);
+                                        return;
+                                    }
+                                }
+                                scheduleNext();
+                            },
+                            error: function() { scheduleNext(); }
+                        });
+                    }
+
+                    function scheduleNext() {
+                        pollTimer = setTimeout(poll, 2000);
+                    }
+
+                    // First poll after a short delay to let the run register.
+                    setTimeout(poll, 1500);
+                });
+            }
+
+            function nbsTabletBuildSweepValues(fromVal, toVal, singleVal) {
+                fromVal = parseInt(fromVal) || 0;
+                toVal   = parseInt(toVal)   || 0;
+                if (fromVal > 0 && toVal >= fromVal) {
+                    const vals = [];
+                    for (let v = fromVal; v <= toVal; v = v * 2) {
+                        vals.push(v);
+                    }
+                    return vals;
+                }
+                return [parseInt(singleVal) || 32];
+            }
+
+            function nbsTabletFmt2(v) {
+                return (typeof v === "number" && isFinite(v)) ? v.toFixed(2) : "-";
+            }
+
+            function nbsTabletRenderTableSkeleton(sweepValues) {
+                const tbl = document.getElementById("nbs-run-result-table");
+                if (!tbl) return;
+
+                let html = "<table class='table table-condensed table-bordered' style='margin-top:12px'>";
+                html += "<thead><tr>";
+                html += "<th rowspan='2' style='vertical-align:middle'>MaxInFlight</th>";
+                html += "<th rowspan='2' style='vertical-align:middle'>Direction</th>";
+                html += "<th>IOPS</th><th>p50 ms</th><th>p95 ms</th><th>p99 ms</th>";
+                html += "</tr></thead>";
+                html += "<tbody>";
+                for (let i = 0; i < sweepValues.length; i++) {
+                    const v = sweepValues[i];
+                    html += "<tr id='nbs-sweep-w-" + i + "'>";
+                    html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
+                    html += "<td>Writes</td>";
+                    html += "<td id='nbs-sw-wiops-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sw-wp50-"  + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sw-wp95-"  + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sw-wp99-"  + i + "'>&#9711;</td>";
+                    html += "</tr>";
+                    html += "<tr id='nbs-sweep-r-" + i + "'>";
+                    html += "<td>Reads</td>";
+                    html += "<td id='nbs-sw-riops-" + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sw-rp50-"  + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sw-rp95-"  + i + "'>&#9711;</td>";
+                    html += "<td id='nbs-sw-rp99-"  + i + "'>&#9711;</td>";
+                    html += "</tr>";
+                }
+                html += "</tbody></table>";
+                tbl.innerHTML = html;
+            }
+
+            function nbsTabletFillTableColumn(idx, jr) {
+                function set(id, val) {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = val;
+                }
+                const wIops = jr.write_rps !== undefined ? Math.round(jr.write_rps) : "-";
+                const rIops = jr.read_rps  !== undefined ? Math.round(jr.read_rps)  : "-";
+                set("nbs-sw-wiops-" + idx, wIops);
+                set("nbs-sw-wp50-"  + idx, nbsTabletFmt2(jr.write_p50));
+                set("nbs-sw-wp95-"  + idx, nbsTabletFmt2(jr.write_p95));
+                set("nbs-sw-wp99-"  + idx, nbsTabletFmt2(jr.write_p99));
+                set("nbs-sw-riops-" + idx, rIops);
+                set("nbs-sw-rp50-"  + idx, nbsTabletFmt2(jr.read_p50));
+                set("nbs-sw-rp95-"  + idx, nbsTabletFmt2(jr.read_p95));
+                set("nbs-sw-rp99-"  + idx, nbsTabletFmt2(jr.read_p99));
+            }
+
+            function nbsTabletSetColumnError(idx, msg) {
+                function set(id, val) {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = val;
+                }
+                set("nbs-sw-wiops-" + idx, "ERR");
+                set("nbs-sw-wp50-"  + idx, msg || "ERR");
+                set("nbs-sw-wp95-"  + idx, "");
+                set("nbs-sw-wp99-"  + idx, "");
+                set("nbs-sw-riops-" + idx, "ERR");
+                set("nbs-sw-rp50-"  + idx, "");
+                set("nbs-sw-rp95-"  + idx, "");
+                set("nbs-sw-rp99-"  + idx, "");
+            }
+
+            function nbsTabletRefreshList() {
+                $.get(window.location.pathname + "?mode=tablet_list", function(html) {
+                    $("#nbs-tablet-list-container").html(html);
+                });
+            }
+
+            async function nbsTabletSweep() {
+                const tabletId = nbsTabletTrim(
+                    $("#nbs-tablet-run-tablet-id").val());
+                if (!tabletId) {
+                    nbsTabletStatus("Run error: select a target tablet first");
+                    return;
+                }
+                const fromVal = nbsTabletTrim($("#nbs-run-inflight-from").val());
+                const toVal   = nbsTabletTrim($("#nbs-run-inflight-to").val());
+                const single  = nbsTabletTrim($("#nbs-run-max-inflight").val()) || "32";
+                const sweepValues = nbsTabletBuildSweepValues(fromVal, toVal, single);
+
+                const durationSec = parseInt(
+                    nbsTabletTrim($("#nbs-run-duration").val())) || 0;
+                const delayBeforeSec = parseInt(
+                    nbsTabletTrim($("#nbs-run-delay-before").val())) || 0;
+
+                nbsTabletRenderTableSkeleton(sweepValues);
+                nbsTabletStatus("Starting sweep over " + sweepValues.length + " value(s)…");
+
+                const progressDiv = document.getElementById("nbs-run-progress");
+
+                for (let i = 0; i < sweepValues.length; i++) {
+                    const v = sweepValues[i];
+                    nbsTabletStatus("Running MaxInFlight=" + v + " (" + (i+1) + "/" + sweepValues.length + ")...");
+
+                    // Show progress bar.
+                    if (progressDiv) {
+                        progressDiv.innerHTML =
+                            "<div class='progress' style='margin-top:8px'>" +
+                            "<div class='progress-bar progress-bar-striped active' " +
+                            "role='progressbar' style='width:0%;min-width:2em'>0%</div>" +
+                            "</div>" +
+                            "<small class='text-muted'>Running MaxInFlight=" + v + "...</small>";
+                        progressDiv.style.display = "";
+                    }
+
+                    try {
+                        const runInfo = await nbsTabletRunOnce(tabletId, v);
+                        const jr = await nbsTabletPollResult(
+                            runInfo.uuid, durationSec + delayBeforeSec, progressDiv);
+                        nbsTabletFillTableColumn(i, jr);
+                    } catch(e) {
+                        nbsTabletSetColumnError(i, String(e));
+                    }
+                    if (progressDiv) { progressDiv.style.display = "none"; }
+                }
+                nbsTabletStatus("Sweep complete.");
+            }
         </script>
     )___";
     HTML(str) {
         FORM() {
-            DIV_CLASS("form-group") {
-                LABEL_CLASS_FOR("", "nbs-tablet-owner-idx") {
-                    str << "Owner index (user TabletId):";
-                }
-                str << "<input id='nbs-tablet-owner-idx' name='owner_idx' "
-                       "type='number' value='1' />";
-            }
             str << R"___(
                 <div class='row'>
                     <div class='col-md-12'>
                         <div class='panel panel-default'>
-                            <div class='panel-heading'><strong>Create tablet</strong></div>
-                            <div class='panel-body'>
+                            <div class='panel-heading'>
+                                <a data-toggle='collapse' href='#nbs-create-body' style='cursor:pointer'>
+                                    <strong>Create tablet</strong>
+                                </a>
+                            </div>
+                            <div id='nbs-create-body' class='panel-body collapse'>
                                 <div class='form-group'>
-                                    <label for='nbs-tablet-create-tablet-id'>BSC TabletId:</label>
-                                    <input id='nbs-tablet-create-tablet-id' class='form-control nbs-tablet-builder' type='number' min='1' step='1' value='9000' />
+                                    <label for='nbs-tablet-owner-idx'>Owner index:</label>
+                                    <input id='nbs-tablet-owner-idx' name='owner_idx' type='number' min='1' step='1' value='1' />
                                 </div>
                                 <div class='form-group'>
                                     <label for='nbs-tablet-create-ddisk-pool'>DDiskPoolName:</label>
@@ -1146,6 +1446,10 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                 </div>
                                 <details class='form-group'>
                                     <summary>Advanced</summary>
+                                    <div class='form-group'>
+                                        <label for='nbs-tablet-create-tablet-id'>BSC TabletId:</label>
+                                        <input id='nbs-tablet-create-tablet-id' class='form-control nbs-tablet-builder' type='number' min='1' step='1' value='9000' />
+                                    </div>
                                     <div class='checkbox'>
                                         <label>
                                             <input id='nbs-tablet-create-non-default' class='nbs-tablet-builder' type='checkbox' />
@@ -1164,6 +1468,102 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 </div>
             )___";
             str << nbsTabletListHtml;
+            // ── Run workload panel ──────────────────────────────────────────
+            str << R"___(
+                <div id='nbs-run-panel' class='row' style='margin-top:16px;display:none'>
+                    <div class='col-md-12'>
+                        <div class='panel panel-primary'>
+                            <div class='panel-heading'><strong>Run workload</strong></div>
+                            <div class='panel-body'>
+                                <input type='hidden' id='nbs-tablet-run-tablet-id'>
+                                <div id='nbs-run-target-label' class='alert alert-info' style='margin-bottom:8px'></div>
+                                <div class='row'>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-tag'>Tag (0 = auto-assign):</label>
+                                            <input id='nbs-run-tag' class='form-control' type='number' min='0' step='1' value='0' />
+                                        </div>
+                                    </div>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-duration'>DurationSeconds:</label>
+                                            <input id='nbs-run-duration' class='form-control' type='number' min='0' step='1' value='60' />
+                                        </div>
+                                    </div>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-delay-before'>Measure after (warmup s):</label>
+                                            <input id='nbs-run-delay-before' class='form-control' type='number' min='0' step='1' value='15' />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-max-inflight'>MaxInFlight (single run):</label>
+                                            <input id='nbs-run-max-inflight' class='form-control' type='number' min='1' step='1' value='32' />
+                                        </div>
+                                    </div>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-inflight-from'>InFlightFrom (sweep start):</label>
+                                            <input id='nbs-run-inflight-from' class='form-control' type='number' min='1' step='1' placeholder='e.g. 1' />
+                                        </div>
+                                    </div>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-inflight-to'>InFlightTo (sweep end):</label>
+                                            <input id='nbs-run-inflight-to' class='form-control' type='number' min='1' step='1' placeholder='e.g. 128' />
+                                            <p class='help-block'>If both From/To set, sweeps MaxInFlight ×2 per step (From should be a power of 2; otherwise the last value may be below To).</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-read-ratio'>ReadRatioPct (0-100):</label>
+                                            <input id='nbs-run-read-ratio' class='form-control' type='number' min='0' max='100' step='1' value='0' />
+                                        </div>
+                                    </div>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-size-kib'>ReadWriteSizeKiB:</label>
+                                            <input id='nbs-run-size-kib' class='form-control' type='number' min='4' step='4' value='4' />
+                                        </div>
+                                    </div>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-num-dbg'>NumDirectBlockGroupsToUse (0=all):</label>
+                                            <input id='nbs-run-num-dbg' class='form-control' type='number' min='0' step='1' value='0' />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class='form-group'>
+                                    <div class='checkbox'>
+                                        <label>
+                                            <input id='nbs-run-sequential' type='checkbox' />
+                                            Sequential (round-robin address space instead of random)
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class='form-group'>
+                                    <div class='checkbox'>
+                                        <label>
+                                            <input id='nbs-run-disable-replication' type='checkbox' onchange='nbsRunDisableReplicationChanged(this)' />
+                                            Disable replication (single-PB write, skip DDisk flush)
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class='form-group'>
+                                    <button type='button' onClick='nbsTabletSweep()' class='btn btn-primary'>Run</button>
+                                </div>
+                                <div id='nbs-run-progress' style='display:none'></div>
+                                <div id='nbs-run-result-table'></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )___";
             DIV_CLASS("form-group") {
                 str << "<p id='nbs-tablet-status'></p>";
                 str << "<div id='nbs-tablet-result'></div>";

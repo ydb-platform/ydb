@@ -84,6 +84,26 @@ class TestSchemeDescribe:
         self.tmp_path = tmp_path
         set_ydb_cli_test_canondata_root()
 
+    def test_describe_external_data_source(self, ydb_cluster, ydb_database, ydb_client_session):
+        database_path = ydb_database
+        external_data_source = "external_data_source"
+        session_pool = ydb_client_session(database_path)
+        with session_pool.checkout() as session:
+            create_external_data_source(session, external_data_source)
+
+            output = execute_ydb_cli_command(
+                ydb_cluster.nodes[1],
+                database_path,
+                ["scheme", "describe", external_data_source],
+            )
+            # The pretty output is non-deterministic (it carries a creation timestamp),
+            # so assert on the rendered fields rather than comparing against canondata.
+            assert "<external-data-source> " + external_data_source in output
+            assert "Source type: ObjectStorage" in output
+            assert "Location: localhost:1" in output
+            assert "Auth method: NONE" in output
+            assert "Created:" in output
+
     def test_describe_external_table_references_json(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         external_data_source = "external_data_source"

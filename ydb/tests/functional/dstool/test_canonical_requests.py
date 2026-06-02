@@ -311,7 +311,6 @@ class Test(TestBase):
 
         vdisk_columns = [
             'VDiskId',
-            'NodeId:PDiskId',
             'VDiskSlotUsage',
             'VDiskRawUsage',
             'NormalizedOccupancy',
@@ -436,10 +435,34 @@ class Test(TestBase):
         retry_assertions(check_whiteboard_pdisk_info_available)
 
         vdisk_evict_cmd = ['vdisk', 'evict', '--ignore-degraded-group-check', '--ignore-failure-model-group-check']
+
+        def check_donors_dropped():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            for vslot in base_config.VSlot:
+                assert vslot.Status == 'READY'
+                assert len(vslot.Donors) == 0
+
+        def check_no_leaked_slots():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            num_active_slots_map = common.build_pdisk_usage_map(base_config, count_donors=True)
+            pdisk_whiteboard_info = common.fetch_json_info('pdiskinfo', nodes=pdisk_node_ids)
+            for pdisk_id in expected_pdisk_ids:
+                expected = num_active_slots_map.get(pdisk_id, 0)
+                wb_info = pdisk_whiteboard_info.get(pdisk_id, {})
+                assert wb_info['NumActiveSlots'] == expected
+
+        pdisk_columns = [
+            'NodeId:PDiskId',
+            'NumActiveSlots',
+            'LeakedSlots',
+        ]
+
         return [
             self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),
             self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode', with_grpc_calls=True),
-            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', allow_http_fetch=True),
+            retry_assertions(check_donors_dropped),
+            retry_assertions(check_no_leaked_slots),
+            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', '--columns', *pdisk_columns, allow_http_fetch=True),
         ]
 
     def test_pool_estimated_usage(self):

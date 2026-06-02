@@ -324,7 +324,7 @@ private:
         NYdb::CheckKind(GetKind(), kind, method);
     }
 
-    void CheckPreviousKind(ETypeKind kind, const std::string method) const {
+    void CheckPreviousKind(ETypeKind kind, const std::string& method) const {
         if (Path_.size() < 2) {
             FatalError("Expected container type.");
             return;

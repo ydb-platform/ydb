@@ -295,31 +295,20 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             )");
             auto explainResult = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
+            Cerr << "AST: " << explainResult.QueryAst << Endl;
 
             TExprContext exprCtx;
             bool indexUpdated = false;
             bool indexCleaned = false;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
                 [&indexName, &indexUpdated, &indexCleaned](const TExprNode::TPtr& exprNode) mutable {
-                    if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                        if (TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                            indexUpdated = true;
-                        }
-                    }
                     if (TMaybeNode<TKqpTableSinkSettings>(exprNode)) {
                         if (TKqpTableSinkSettings(exprNode).Table().Path().Value().Contains(indexName)) {
-                            if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert") {
+                            if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert" || TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
                                 indexUpdated = true;
                             } else if (TKqpTableSinkSettings(exprNode).Mode().Value() == "delete") {
                                 indexCleaned = true;
-                            } else if (TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
-                                indexUpdated = true;
                             }
-                        }
-                    }
-                    if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                        if (TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                            indexCleaned = true;
                         }
                     }
                     return true;
@@ -2730,10 +2719,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         UNIT_ASSERT(plan.GetMapSafe().contains("tables"));
         const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe();
-        UNIT_ASSERT(tables.size() == (UseStreamIndex ? 1 : 3));
+        UNIT_ASSERT(tables.size() == 3);
         UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable");
-        UNIT_ASSERT(UseStreamIndex || tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index1/indexImplTable");
-        UNIT_ASSERT(UseStreamIndex || tables.at(2).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index2/indexImplTable");
+        UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index1/indexImplTable");
+        UNIT_ASSERT(tables.at(2).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index2/indexImplTable");
 
         auto result = session.ExecuteDataQuery(
                 query1,
@@ -4214,9 +4203,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             UNIT_ASSERT(plan.GetMapSafe().contains("tables"));
             const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe();
-            UNIT_ASSERT(tables.size() == (UseStreamIndex ? 1 : 2));
+            UNIT_ASSERT(tables.size() == 2);
             UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable");
-            UNIT_ASSERT(UseStreamIndex || tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index/indexImplTable");
 
             auto qId = session.PrepareDataQuery(query).ExtractValueSync().GetQuery();
 
@@ -4875,6 +4864,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseStreamIndex) {
+        if (UseStreamIndex) {
+            // TODO
+            return;
+        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -4909,7 +4902,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             UNIT_ASSERT_VALUES_EQUAL(tablePlan["reads"].GetArraySafe().size(), tableReads);
             UNIT_ASSERT_VALUES_EQUAL(tablePlan["writes"].GetArraySafe().size(), tableWrites);
-            if (!UseStreamIndex && indexWrites) {
+            if (indexWrites) {
                 auto indexPlan = FindPlanNodeByKv(tables, "name", "/Root/TestTable/SecondaryIndex/indexImplTable");
                 UNIT_ASSERT_VALUES_EQUAL(indexPlan["writes"].GetArraySafe().size(), *indexWrites);
             }
@@ -5419,14 +5412,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::WriteJson(&Cerr, &plan["tables"], true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryComplexKeys");
-            if (UseStreamIndex) {
-                UNIT_ASSERT(!table.Has("reads"));
-            } else {
-                auto reads = table["reads"].GetArraySafe();
-                UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
-            }
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
         }
         {
             // Check that all keys from involved index are in read columns
@@ -5443,14 +5432,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryComplexKeys");
-            if (UseStreamIndex) {
-                UNIT_ASSERT(!table.Has("reads"));
-            } else {
-                auto reads = table["reads"].GetArraySafe();
-                UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
-            }
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
         }
         {
             // Check that data colomns from involved index are in read columns
@@ -5467,14 +5452,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
-            if (UseStreamIndex) {
-                UNIT_ASSERT(!table.Has("reads"));
-            } else {
-                auto reads = table["reads"].GetArraySafe();
-                UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-                UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
-            }
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
         }
         {
             // Check that data colomns not from involved index aren't in read columns

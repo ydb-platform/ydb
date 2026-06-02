@@ -159,7 +159,7 @@ TDirectReadSessionManager::TDirectReadSessionManager(
     TLog log
 )
     : ReadSessionSettings(settings)
-    , ServerSessionId(serverSessionId)
+    , ServerSessionId(std::move(serverSessionId))
     , ClientContext(clientContext)
     , ProcessorFactory(processorFactory)
     , ControlCallbacks(controlCallbacks)
@@ -332,7 +332,7 @@ TDirectReadSession::TDirectReadSession(
 )
     : ClientContext(clientContext)
     , ReadSessionSettings(settings)
-    , ServerSessionId(serverSessionId)
+    , ServerSessionId(std::move(serverSessionId))
     , ProcessorFactory(processorFactory)
     , NodeId(nodeId)
     , IncomingMessagesForControlSession(std::make_shared<TLockFreeQueue<Ydb::Topic::StreamDirectReadMessage::DirectReadResponse>>())

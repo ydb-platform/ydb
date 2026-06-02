@@ -3933,6 +3933,11 @@ message TReqStartShuffle
     required NYT.NProto.TGuid parent_transaction_id = 3;
     optional string medium = 4;
     optional int32 replication_factor = 5;
+    optional bool use_push_based_shuffle = 6 [default = false];
+
+    // Currently this field is required only when use_push_based_shuffle is set.
+    // COMPAT(apollo1321): Make this field required for both push and pull shuffle modes in 26.3.
+    optional NYT.NTableClient.NProto.TTableSchemaExt schema = 7;
 }
 
 message TRspStartShuffle

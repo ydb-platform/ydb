@@ -997,7 +997,10 @@ TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggr
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     // We assume that aggregation returns column is order [keys, states]
-    TVector<TInfoUnit> outputIU = KeyColumns;
+    TVector<TInfoUnit> outputIU;
+    if (!DistinctAll) {
+        outputIU = KeyColumns;
+    }
     for (const auto& aggTraits : AggregationTraitsList) {
         outputIU.push_back(aggTraits.ResultColName);
     }

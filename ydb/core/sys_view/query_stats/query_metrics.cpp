@@ -59,6 +59,13 @@ struct TQueryMetricsExtractorsMap :
         ADD_METRICS(DeleteRows, DeleteRows);
         ADD_METRICS(RequestUnits, RequestUnits);
 #undef ADD_METRICS
+
+        insert({S::LocksBrokenAsBreaker::ColumnId, [] (const E& entry) {
+            return TCell::Make<ui64>(entry.GetMetrics().GetLocksBrokenAsBreaker());
+        }});
+        insert({S::LocksBrokenAsVictim::ColumnId, [] (const E& entry) {
+            return TCell::Make<ui64>(entry.GetMetrics().GetLocksBrokenAsVictim());
+        }});
     }
 };
 

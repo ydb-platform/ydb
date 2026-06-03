@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -228,6 +229,8 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -248,9 +251,28 @@ struct TKqpTableWriterStatistics {
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
             AffectedPartitions.insert(perShardStats.GetShardId());
         }
+
+        LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+        LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    }
+
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim) {
+        NKqpProto::TKqpTaskExtraStats extraStats;
+        if (stats->HasExtra()) {
+            stats->GetExtra().UnpackTo(&extraStats);
+        }
+        extraStats.MutableLockStats()->SetBrokenAsBreaker(
+            extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
+        extraStats.MutableLockStats()->SetBrokenAsVictim(
+            extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
+        stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        LocksBrokenAsBreaker = 0;
+        LocksBrokenAsVictim = 0;
+
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats
             return;
@@ -273,7 +295,7 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-    
+
         ReadRows = 0;
         ReadBytes = 0;
         WriteRows = 0;
@@ -841,7 +863,7 @@ public:
                     getIssues());
             }
             return;
-        }        
+        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << TablePath << "`."
@@ -2412,7 +2434,7 @@ public:
                         {});
                     return false;
                 }
-                AFL_ENSURE(writeActor->GetTableId() == tableId);  
+                AFL_ENSURE(writeActor->GetTableId() == tableId);
                 return true;
             };
 
@@ -2535,7 +2557,7 @@ public:
         message.From = ev->Sender;
         message.Close = ev->Get()->Close;
         message.Data = ev->Get()->Data;
-        
+
         Process();
     }
 
@@ -2579,7 +2601,7 @@ public:
             if (isEmpty) {
                 OnFlushed();
             }
-        } 
+        }
         return true;
     }
 
@@ -2893,7 +2915,7 @@ public:
 
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
-            
+
             if (!isImmediateCommit) {
                 FillTopicsCommit(transaction, TxManager);
             }
@@ -3080,7 +3102,7 @@ public:
     void HandlePrepare(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
-        
+
         CA_LOG_D("Got ProposeTransactionResult" <<
               ", PQ tablet: " << tabletId <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
@@ -3097,7 +3119,7 @@ public:
     void HandleCommit(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
-        
+
         CA_LOG_D("Got ProposeTransactionResult" <<
               ", PQ tablet: " << tabletId <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
@@ -3738,6 +3760,11 @@ public:
                 return builder;
             }());
 
+        if (ev->Get()->Record.HasTxStats()) {
+            LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
+            LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
+        }
+
         OnCommitted(ev->Get()->Record.GetOrigin(), 0);
     }
 
@@ -3910,6 +3937,7 @@ public:
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->FillStats(&result);
         });
+        TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim);
         return result;
     }
 
@@ -3967,6 +3995,9 @@ private:
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
+
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 

@@ -237,12 +237,11 @@ public:
         NYql::IHTTPGateway::TPtr httpGateway, bool antlr4ParserIsAmbiguityError)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
-        , Config(MakeIntrusive<TKikimrConfiguration>())
+        , Antlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError)
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->SetAntlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError);
-        Config->SetEnableBatchUpdates(true);
+        InitConfig();
     }
 
     void Bootstrap() {
@@ -320,10 +319,16 @@ private:
                 YQL_ENSURE(false, "Unexpected query type: " << Query->Settings.QueryType);
         }
     }
+    void InitConfig() {
+        Config = MakeIntrusive<TKikimrConfiguration>();
+        Config->SetAntlr4ParserIsAmbiguityError(Antlr4ParserIsAmbiguityError);
+        Config->SetEnableBatchUpdates(true);
+    }
+
     void Continue() {
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId selfId = SelfId();
-        const ui32 generation = static_cast<ui32>(WakeupTag);
+        const ui32 generation = WakeupTag;
         auto callback = [actorSystem, selfId, generation](const TFuture<bool>& future) {
             bool finished = future.GetValue();
             auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(generation, finished);
@@ -526,6 +531,10 @@ private:
         MetadataLoader.reset();
         Gateway.Reset();
         KqpHost.Reset();
+        InitConfig();
+        ReplayDetails = NJson::TJsonValue();
+        TableMetadata.reset();
+        QueryId.clear();
         Become(&TThis::StateInit);
     }
 
@@ -685,9 +694,7 @@ private:
         GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), cluster, KqpSettings.Settings, false);
-        if (!Query->Database.empty()) {
-            Config->_KqpTablePathPrefix = database;
-        }
+        Config->_KqpTablePathPrefix = database;
 
         Config->SetSqlVersion(syntax);
         Config->FreezeDefaults();
@@ -701,7 +708,7 @@ private:
     }
 
     void Handle(TEvKqp::TEvContinueProcess::TPtr& ev) {
-        if (ev->Get()->QueryId != static_cast<ui32>(WakeupTag)) {
+        if (ev->Get()->QueryId != WakeupTag) {
             return;
         }
 
@@ -731,7 +738,8 @@ private:
 
 private:
     TActorId Owner;
-    ui64 WakeupTag = 0;
+    ui32 WakeupTag = 0;
+    bool Antlr4ParserIsAmbiguityError = false;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TString QueryId;
     std::unique_ptr<TKqpQueryId> Query;

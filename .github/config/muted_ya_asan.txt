@@ -69,6 +69,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWith
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumerWithFlag
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateStreamInIncorrectDb
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateStreamWithDifferentRetentions
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateStreamWithInvalidName
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.DifferentContentTypes
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.DoubleCreateStream
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ErroneousRequestGetRecords
@@ -233,6 +234,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageRetu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchLong
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesBasic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesFifoImmutable
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesInvalidValues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesMultiple
@@ -550,6 +552,7 @@ ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncomplet
 ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
+ydb/core/tx/sequenceproxy/ut unittest.sole chunk
 ydb/core/tx/sequenceshard/ut unittest.sole chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
@@ -1011,5 +1014,6 @@ ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_kafka/tests test_workload_topic.py.TestYdbTopicWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_agents_tab_navigation_matches_state_machine
+ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_tab_navigation_matches_state_machine_for_core_command_sequences
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

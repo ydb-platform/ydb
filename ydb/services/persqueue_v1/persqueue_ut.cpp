@@ -8590,7 +8590,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             bool res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
         }
-        {
+        for (bool pass = false; !pass; ) {
+            pass = true;
+            Sleep(TDuration::MilliSeconds(100));
             using namespace NYdb::NTopic;
             auto settings = TDescribeTopicSettings().IncludeStats(true);
             auto client = TTopicClient(server.Server->GetDriver());
@@ -8615,6 +8617,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.value().GetStartOffset(), 0);
                     UNIT_ASSERT_VALUES_EQUAL(stats.value().GetEndOffset(), nMsg);
                 } else {
+                    if (stats.value().GetStartOffset() == 0) {
+                        pass = false;
+                        continue; // wait for compaction & cleanup
+                    }
                     UNIT_ASSERT_GT(stats.value().GetStartOffset(),  0);
                     UNIT_ASSERT_VALUES_EQUAL(stats.value().GetEndOffset(), nMsg);
                 }

@@ -33,6 +33,11 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvSyncWithPBuffer>>
         FlushFromPBufferRequests;
 
+    THashMap<
+        ui64,
+        std::unique_ptr<TEvTransportPrivate::TEvBatchEraseFromPBuffer>>
+        BatchEraseFromPBufferRequests;
+
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvEraseFromPBuffer>>
         EraseFromPBufferRequests;
 
@@ -95,6 +100,10 @@ private:
         const NActors::TActorContext& ctx);
     void HandleWriteToDDiskResult(
         const NKikimr::NDDisk::TEvWriteResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleBatchErasePersistentBuffer(
+        const TEvTransportPrivate::TEvBatchEraseFromPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleErasePersistentBuffer(

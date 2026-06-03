@@ -37,6 +37,8 @@ struct IPartitionDirectService
     // local DB. Caller must ensure cfg.IsValid().
     virtual void UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
+
+    virtual void ReportCleanupBound(ui32 vChunkIndex, ui64 bound) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

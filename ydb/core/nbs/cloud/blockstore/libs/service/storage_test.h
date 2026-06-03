@@ -46,6 +46,12 @@ public:
     {
         Y_UNUSED(cfg);
     }
+
+    void ReportCleanupBound(ui32 vChunkIndex, ui64 bound) override
+    {
+        Y_UNUSED(vChunkIndex);
+        Y_UNUSED(bound);
+    }
 };
 
 struct TTestStorage: public IStorage

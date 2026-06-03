@@ -137,6 +137,9 @@ TFastPathService::TFastPathService(
     : ActorSystem(actorSystem)
     , PartitionActorId(partitionActorId)
     , StorageConfig(std::move(storageConfig))
+    , VChunkCleanupBounds(
+          (AlignUp(blockCount * blockSize, RegionSize) / RegionSize) *
+          (RegionSize / StorageConfig->GetVChunkSize()))
     , DiskId(diskId)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
@@ -257,14 +260,18 @@ TFastPathService::WriteBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
+    const ui64 lsn = GenerateSequenceNumber();
+    RegisterOutstandingLsn(lsn);
+    MaybeTriggerPBCleanup(lsn);
+
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        GenerateSequenceNumber(),
+        lsn,
         span->GetTraceId());
 
     result.Subscribe(
-        [weakSelf = weak_from_this(), span = std::move(span)]   //
+        [weakSelf = weak_from_this(), span = std::move(span), lsn]   //
         (const TFuture<TWriteBlocksLocalResponse>& f)
         {
             const auto& response = f.GetValue();
@@ -273,6 +280,7 @@ TFastPathService::WriteBlocksLocal(
             }
 
             if (auto self = weakSelf.lock()) {
+                self->CompleteOutstandingLsn(lsn);
                 self->Counters.RequestFinished(
                     EBlockStoreRequest::WriteBlocks,
                     !HasError(response.Error));
@@ -341,6 +349,64 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
 ui64 TFastPathService::GenerateSequenceNumber()
 {
     return ++SequenceGenerator;
+}
+
+void TFastPathService::RegisterOutstandingLsn(ui64 lsn)
+{
+    TGuard guard(OutstandingLock);
+    OutstandingLsns.insert(lsn);
+}
+
+void TFastPathService::CompleteOutstandingLsn(ui64 lsn)
+{
+    TGuard guard(OutstandingLock);
+    OutstandingLsns.erase(lsn);
+}
+
+ui64 TFastPathService::GetMinOutstandingLsn() const
+{
+    TGuard guard(OutstandingLock);
+    return OutstandingLsns.empty() ? Max<ui64>() : *OutstandingLsns.begin();
+}
+
+void TFastPathService::ReportCleanupBound(ui32 vChunkIndex, ui64 bound)
+{
+    Y_ABORT_UNLESS(vChunkIndex < VChunkCleanupBounds.size());
+    VChunkCleanupBounds[vChunkIndex].store(bound);
+}
+
+void TFastPathService::MaybeTriggerPBCleanup(ui64 lsn)
+{
+    const ui64 step = StorageConfig->GetPBCleanupLsnStep();
+    if (!step) {
+        return;
+    }
+    const ui64 last = LastCleanupLsn.load();
+    Y_DEBUG_ABORT_UNLESS(lsn >= last);
+    if (lsn - last < step) {
+        return;
+    }
+    LastCleanupLsn.store(lsn);
+    PBCleanup();
+}
+
+void TFastPathService::PBCleanup()
+{
+    const ui64 minOutstanding = GetMinOutstandingLsn();
+
+    ui64 cleanupBound = Max<ui64>();
+    for (const auto& bound: VChunkCleanupBounds) {
+        cleanupBound = std::min(cleanupBound, bound.load());
+    }
+    if (minOutstanding != Max<ui64>()) {
+        cleanupBound = std::min(cleanupBound, minOutstanding - 1);
+    }
+
+    if (cleanupBound != 0 && cleanupBound != Max<ui64>()) {
+        for (const auto& dbg: DirectBlockGroups) {
+            dbg->IssueBarrierErase(cleanupBound);
+        }
+    }
 }
 
 void TFastPathService::ScheduleDirtyMapDebugPrint()

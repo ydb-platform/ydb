@@ -94,11 +94,16 @@ public:
             THostIndex ddiskHostIndex,
             const TVector<TPBufferSegment>& segments,
             const NWilson::TTraceId& traceId)>;
-    using TEraseFromPBufferHandler =
+    using TBatchEraseFromPBufferHandler =
         std::function<NThreading::TFuture<TDBGEraseResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
             const TVector<TPBufferSegment>& segments,
+            const NWilson::TTraceId& traceId)>;
+    using TEraseFromPBufferHandler =
+        std::function<NThreading::TFuture<TDBGEraseResponse>(
+            THostIndex hostIndex,
+            ui64 lsn,
             const NWilson::TTraceId& traceId)>;
     using TDBGRestoreHandler =
         std::function<NThreading::TFuture<TDBGRestoreResponse>(
@@ -119,6 +124,7 @@ public:
     TWriteBlocksToPBufferHandler WriteBlocksToPBufferHandler;
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
+    TBatchEraseFromPBufferHandler BatchEraseFromPBufferHandler;
     TEraseFromPBufferHandler EraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
@@ -189,11 +195,21 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
+
+    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId) override;
+
+    void IssueBarrierErase(ui64 lsn) override;
+
+    // Records every lsn passed to IssueBarrierErase (tests assert on it).
+    TVector<ui64> IssuedBarrierErases;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;

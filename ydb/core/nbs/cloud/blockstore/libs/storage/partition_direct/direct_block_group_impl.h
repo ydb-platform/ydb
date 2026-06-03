@@ -106,11 +106,18 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
+
+    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId) override;
+
+    void IssueBarrierErase(ui64 lsn) override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
@@ -190,6 +197,7 @@ private:
 
     void Thinking();
     void ScheduleOracleThinking();
+
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;

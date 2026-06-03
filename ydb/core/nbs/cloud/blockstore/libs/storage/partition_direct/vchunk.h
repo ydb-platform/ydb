@@ -88,6 +88,8 @@ private:
 
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
+    void PublishCleanupBound();
+
     void DoStart();
     void DoStop();
 
@@ -142,6 +144,7 @@ private:
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
+    ui64 LastReportedCleanupBound = 0;
 
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;

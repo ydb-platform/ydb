@@ -237,6 +237,25 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
     return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
+void TVChunk::PublishCleanupBound()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    ui64 bound = 0;
+    if (DirtyMapRestored) {
+        const ui64 minInflightLsn = BlocksDirtyMap.GetMinInflightLsn();
+        bound = minInflightLsn == 0 ? Max<ui64>() : minInflightLsn - 1;
+    }
+
+    if (bound == LastReportedCleanupBound) {
+        return;
+    }
+    LastReportedCleanupBound = bound;
+    PartitionDirectService->ReportCleanupBound(
+        VChunkConfig.GetVChunkIndex(),
+        bound);
+}
+
 TString TVChunk::DebugPrintDirtyMap()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -283,6 +302,8 @@ void TVChunk::OnWriteBlocksResponse(
             response.CompletedWrites);
     }
 
+    PublishCleanupBound();
+
     bool ok = !HasError(response.Error);
     Counters.RequestFinished(EVChunkOperation::Write, ok);
 
@@ -324,6 +345,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
         BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
     }
     DirtyMapRestored = true;
+    PublishCleanupBound();
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
@@ -641,6 +663,8 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
         response.Host,
         response.EraseOk,
         response.EraseFailed);
+
+    PublishCleanupBound();
 
     for (size_t i = 0; i < response.EraseOk.size(); ++i) {
         Counters.RequestFinished(EVChunkOperation::Erase, true);

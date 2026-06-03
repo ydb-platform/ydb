@@ -93,6 +93,8 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvSyncWithPersistentBufferResult>(
         FlushFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
+        BatchEraseFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
         EraseFromPBufferRequests);
     RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
         ListPBufferEntriesRequests);
@@ -566,6 +568,40 @@ void TICStorageTransportActor::HandleWriteToDDiskResult(
     }
 }
 
+void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
+    const TEvTransportPrivate::TEvBatchEraseFromPBuffer::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    const ui64 requestId = ++RequestIdGenerator;
+    auto [it, inserted] = BatchEraseFromPBufferRequests.emplace(
+        requestId,
+        ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvBatchEraseFromPBuffer with requestId# %lu",
+        requestId);
+
+    auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
+        msg->Credentials);
+    for (auto lsn: msg->Lsns) {
+        request->AddErase(lsn, msg->Credentials.Generation);
+    }
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        msg->ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(msg->TraceId)));
+}
+
 void TICStorageTransportActor::HandleErasePersistentBuffer(
     const TEvTransportPrivate::TEvEraseFromPBuffer::TPtr& ev,
     const TActorContext& ctx)
@@ -580,14 +616,13 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvEraseFromPBuffer with requestId# %lu",
-        requestId);
+        "Sent TEvEraseFromPBuffer with requestId# %lu lsn# %lu",
+        requestId,
+        msg->Lsn);
 
-    auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
-        msg->Credentials);
-    for (auto lsn: msg->Lsns) {
-        request->AddErase(lsn, msg->Credentials.Generation);
-    }
+    auto request = std::make_unique<NDDisk::TEvErasePersistentBuffer>(
+        msg->Credentials,
+        msg->Lsn);
 
     SendWithUndeliveryTracking(
         ctx,
@@ -639,18 +674,24 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
         "Received TEvErasePersistentBufferResult with requestId# %lu",
         requestId);
 
+    if (auto* r = BatchEraseFromPBufferRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        request.Promise.SetValue(std::move(ev->Get()->Record));
+        BatchEraseFromPBufferRequests.erase(requestId);
+        return;
+    }
     if (auto* r = EraseFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
         request.Promise.SetValue(std::move(ev->Get()->Record));
         EraseFromPBufferRequests.erase(requestId);
-    } else {
-        // That means that request is already completed
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "ErasePersistentBufferEvent with requestId# %lu not found",
-            requestId);
+        return;
     }
+    // That means that request is already completed
+    LOG_ERROR(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "ErasePersistentBufferEvent with requestId# %lu not found",
+        requestId);
 }
 
 void TICStorageTransportActor::HandleReadPersistentBuffer(
@@ -1075,6 +1116,9 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(NDDisk::TEvWrite, HandleWriteToDDiskUndelivery);
         HFunc(NDDisk::TEvWriteResult, HandleWriteToDDiskResult);
 
+        HFunc(
+            TEvTransportPrivate::TEvBatchEraseFromPBuffer,
+            HandleBatchErasePersistentBuffer);
         HFunc(
             TEvTransportPrivate::TEvEraseFromPBuffer,
             HandleErasePersistentBuffer);

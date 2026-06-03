@@ -121,4 +121,6 @@ message TStorageServiceConfig
     // (each queue can be served by a different VHOST thread). Capped
     // at runtime by VhostThreadsCount.
     optional uint32 VhostQueuesCount = 25;
+
+    optional uint64 PBCleanupLsnStep = 26;
 }

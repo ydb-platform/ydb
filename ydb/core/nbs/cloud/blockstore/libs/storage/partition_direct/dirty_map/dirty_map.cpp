@@ -636,6 +636,11 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
     return *ReadyToErase.begin();
 }
 
+ui64 TBlocksDirtyMap::GetMinInflightLsn() const
+{
+    return Inflight.GetMinKey().value_or(0);
+}
+
 const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
     THostIndex host) const
 {

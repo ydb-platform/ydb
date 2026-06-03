@@ -188,11 +188,18 @@ public:
         const NWilson::TTraceId& traceId) = 0;
 
     // Batch operation to erase a list of PBuffer entries.
-    virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    virtual NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) = 0;
+
+    virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId) = 0;
+
+    virtual void IssueBarrierErase(ui64 lsn) = 0;
 
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(

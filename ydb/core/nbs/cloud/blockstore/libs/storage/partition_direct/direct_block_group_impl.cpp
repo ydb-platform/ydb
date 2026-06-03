@@ -772,7 +772,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
     return result;
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
+NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
@@ -795,11 +795,12 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         lsns.push_back(segment.Lsn);
     }
 
-    auto childSpan = CreateChildSpan(traceId, "NbsPartition.EraseFromPBuffer");
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.BatchEraseFromPBuffer");
 
     OnRequest(hostIndex, EOperation::Erase);
 
-    auto future = StorageTransport->EraseFromPBuffer(
+    auto future = StorageTransport->BatchEraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
         std::move(selectors),
         std::move(lsns),
@@ -849,6 +850,96 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         });
 
     return result;
+}
+
+NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
+    THostIndex hostIndex,
+    ui64 lsn,
+    const NWilson::TTraceId& traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvErasePersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
+    const auto startAt = TMonotonic::Now();
+
+    auto childSpan = CreateChildSpan(traceId, "NbsPartition.EraseFromPBuffer");
+
+    OnRequest(hostIndex, EOperation::Erase);
+
+    auto future = StorageTransport->EraseFromPBuffer(
+        PBufferConnections[hostIndex].HostConnection,
+        lsn,
+        childSpan.get());
+
+    auto promise = NewPromise<TDBGEraseResponse>();
+    auto result = promise.GetFuture();
+
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         childSpan = std::move(childSpan),
+         hostIndex,
+         startAt,
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TFuture<TEvErasePersistentBufferResult>& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [weakSelf,
+                 promise = std::move(promise),
+                 childSpan = std::move(childSpan),
+                 hostIndex,
+                 startAt,
+                 threadChecker,
+                 result = UnsafeExtractValue(f)]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    NProto::TError error = TranslateError(result);
+
+                    if (auto self = weakSelf.lock()) {
+                        self->OnResponse(
+                            hostIndex,
+                            TMonotonic::Now() - startAt,
+                            EOperation::Erase,
+                            error);
+                    }
+
+                    promise.SetValue(
+                        TDBGEraseResponse{.Error = std::move(error)});
+                });
+        });
+
+    return result;
+}
+
+void TDirectBlockGroup::IssueBarrierErase(ui64 lsn)
+{
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), lsn]()
+        {
+            auto self = weakSelf.lock();
+            if (!self) {
+                return;
+            }
+            LOG_DEBUG(
+                *self->ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "DBG[%lu] barrier-erase lsn=%lu on %lu PB hosts",
+                self->DirectBlockGroupIndex,
+                lsn,
+                self->PBufferConnections.size());
+            for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
+                auto future =
+                    self->EraseFromPBuffer(h, lsn, NWilson::TTraceId{});
+                Y_UNUSED(future);
+            }
+        });
 }
 
 NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(

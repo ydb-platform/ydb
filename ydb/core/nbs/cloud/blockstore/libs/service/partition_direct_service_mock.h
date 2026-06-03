@@ -37,6 +37,12 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     {
         Y_UNUSED(cfg);
     }
+
+    void ReportCleanupBound(ui32 vChunkIndex, ui64 bound) override
+    {
+        Y_UNUSED(vChunkIndex);
+        Y_UNUSED(bound);
+    }
 };
 
 using TPartitionDirectServiceMockPtr =

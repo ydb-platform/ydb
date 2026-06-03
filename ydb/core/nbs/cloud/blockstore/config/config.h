@@ -41,6 +41,7 @@ public:
     [[nodiscard]] TDuration GetDirtyMapDebugPrintInterval() const;
     [[nodiscard]] ui32 GetVhostThreadsCount() const;
     [[nodiscard]] ui32 GetVhostQueuesCount() const;
+    [[nodiscard]] ui64 GetPBCleanupLsnStep() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

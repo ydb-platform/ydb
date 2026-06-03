@@ -84,36 +84,11 @@ jobs:
               core.setFailed(`Open translation PR not found for head ${head}`);
               return;
             }
-            const rebuildLabel = {
-              name: 'rebuild_docs',
-              color: '0e8a16',
-              description: 'Trigger docs rebuild workflow',
-            };
-
-            try {
-              await github.rest.issues.addLabels({
-                owner,
-                repo,
-                issue_number: translationPr.number,
-                labels: [rebuildLabel.name],
-              });
-            } catch (error) {
-              if (error.status === 404) {
-                core.info(`Label ${rebuildLabel.name} was not found, creating it...`);
-                await github.rest.issues.createLabel({
-                  owner,
-                  repo,
-                  ...rebuildLabel,
-                });
-                await github.rest.issues.addLabels({
-                  owner,
-                  repo,
-                  issue_number: translationPr.number,
-                  labels: [rebuildLabel.name],
-                });
-              } else {
-                throw error;
-              }
-            }
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: translationPr.number,
+              labels: ['rebuild_docs'],
+            });
 
             core.info(`Added rebuild_docs to PR #${translationPr.number}`);

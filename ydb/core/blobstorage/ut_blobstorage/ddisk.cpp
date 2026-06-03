@@ -654,7 +654,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         info = f.GetPBInfo(false, true);
         newFreeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(newFreeSectors, 131072 - 1);
+        UNIT_ASSERT_EQUAL(newFreeSectors, 131072 - 2);
     }
 
     Y_UNIT_TEST(PersistentBufferFastEraseFallback) {

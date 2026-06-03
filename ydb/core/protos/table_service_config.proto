@@ -521,6 +521,7 @@ message TTableServiceConfig {
     message TDqChannelConfig {
         optional uint64 LocalChannelInflightBytes  = 1 [default = 8388608];
         optional uint64 RemoteChannelInflightBytes = 2 [default = 16777216];
+        optional uint64 RemoteChannelColdInflightBytes = 8 [default = 524288];
         optional uint64 RemoteSessionInflightBytes = 3 [default = 67108864];
         optional uint64 ReconciliationCount = 4 [default = 3];
         optional uint64 CleanupPeriodMs = 5 [default = 30000];

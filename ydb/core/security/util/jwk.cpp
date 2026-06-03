@@ -288,6 +288,7 @@ EJWKKeyType GetKeyType(EJWKAlg alg) {
         case EJWKAlg::ES384:
         case EJWKAlg::ES512:
             return EJWKKeyType::EC;
+        default: Y_UNREACHABLE();
     }
 }
 

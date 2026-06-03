@@ -14,15 +14,16 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/security/util.h>
 #include <ydb/library/services/services.pb.h>
-#include <util/random/random.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
+#include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
@@ -368,8 +369,8 @@ TString TExternalIdpProvider::TJWKsCache::GetHtml(const TInstant& now) const {
         html << "<tr><th scope=\"col\">Kid</th><th scope=\"col\">Public key</th></tr>";
         for (const auto& [kid, pem] : Keys) {
             html << "<tr>";
-            html << "<td scope=\"row\">" << kid << "</td>";
-            html << "<td>" << pem << "</td>";
+            html << "<td scope=\"row\">" << EncodeHtmlPcdata(kid) << "</td>";
+            html << "<td>" << EncodeHtmlPcdata(pem) << "</td>";
             html << "</tr>";
         }
 
@@ -445,6 +446,10 @@ void TExternalIdpProvider::RegisterCounters(const TActorContext& ctx) {
 
 void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
     const auto now = ctx.Now();
+
+    if (Config.HasIssuer()) {
+        Config.SetIssuer(StripStringRight(Config.GetIssuer(), EqualsStripAdapter('/')));
+    }
 
     DiscoveryRefresh = TRecurringPeriod(Config.GetDiscoveryPeriodicSettings(), now,
         Counters->GetSubgroup("component", "Discovery"));
@@ -788,10 +793,10 @@ void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorConte
     html << "<div>";
     html << "<table class='table table-hover simple-table1'>";
     html << "<tr><td scope=\"row\">Now</td><td>" << now << "</td></tr>";
-    html << "<tr><td scope=\"row\">Issuer</td><td>" << Config.GetIssuer() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Audience</td><td>" << Config.GetAudience() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Subject claim name</td><td>" << Config.GetSubjectClaimName() << "</td></tr>";
-    html << "<tr><td scope=\"row\">Groups claim name</td><td>" << Config.GetGroupsClaimName() << "</td></tr>";
+    html << "<tr><td scope=\"row\">Issuer</td><td>" << EncodeHtmlPcdata(Config.GetIssuer()) << "</td></tr>";
+    html << "<tr><td scope=\"row\">Audience</td><td>" << EncodeHtmlPcdata(Config.GetAudience()) << "</td></tr>";
+    html << "<tr><td scope=\"row\">Subject claim name</td><td>" << EncodeHtmlPcdata(Config.GetSubjectClaimName()) << "</td></tr>";
+    html << "<tr><td scope=\"row\">Groups claim name</td><td>" << EncodeHtmlPcdata(Config.GetGroupsClaimName()) << "</td></tr>";
     html << "</table>";
     html << "</div>";
 
@@ -799,7 +804,7 @@ void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorConte
     html << "<div>";
     html << "<table class='table table-hover simple-table1'>";
     html << "<caption>Common info</caption>";
-    html << "<tr><td scope=\"row\">Discovery URL</td><td>" << BuildDiscoveryUrl(Config.GetIssuer()) << "</td></tr>";
+    html << "<tr><td scope=\"row\">Discovery URL</td><td>" << EncodeHtmlPcdata(BuildDiscoveryUrl(Config.GetIssuer())) << "</td></tr>";
     html << "</table>";
     html << DiscoveryRefresh.GetHtml();
     html << "</div>";

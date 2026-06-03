@@ -27,6 +27,7 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 
 #include <util/generic/queue.h>
 #include <util/generic/strbuf.h>
@@ -1736,8 +1737,8 @@ private:
                             catch (const std::exception&) {
                                 payload = tokenData[1];
                             }
-                            html << "<tr><td>Header</td><td>" << header << "</td></tr>";
-                            html << "<tr><td>Payload</td><td>" << payload << "</td></tr>";
+                            html << "<tr><td>Header</td><td>" << EncodeHtmlPcdata(header) << "</td></tr>";
+                            html << "<tr><td>Payload</td><td>" << EncodeHtmlPcdata(payload) << "</td></tr>";
                         }
                     }
                     TDerived::WriteTokenRecordInfo(html, record);

@@ -8,6 +8,7 @@ PEERDIR(
     contrib/libs/jwt-cpp
     contrib/libs/openssl
     library/cpp/json
+    library/cpp/html/pcdata
     library/cpp/string_utils/base64
     ydb/core/base
     ydb/core/protos

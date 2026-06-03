@@ -564,6 +564,7 @@ public:
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
         , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
+        , ConstraintsTransformer(CreateKiSinkConstraintsTransformer(sessionCtx))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -600,6 +601,11 @@ public:
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
+    }
+
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer;
     }
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
@@ -1911,6 +1917,7 @@ private:
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
     const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
 };
 
 } // namespace

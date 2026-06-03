@@ -694,7 +694,9 @@ private:
         GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), cluster, KqpSettings.Settings, false);
-        Config->_KqpTablePathPrefix = database;
+        if (!database.empty()) {
+            Config->_KqpTablePathPrefix = database;
+        }
 
         Config->SetSqlVersion(syntax);
         Config->FreezeDefaults();

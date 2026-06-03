@@ -14,7 +14,7 @@ on:
         type: string
         default: ''
       test_size:
-        description: 'Test size: small, medium, large (default: small,medium)'
+        description: 'Test size: small, medium, large (default: small,medium,large)'
         required: false
         type: string
         default: small,medium,large

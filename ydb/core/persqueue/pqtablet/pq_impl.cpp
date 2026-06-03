@@ -2306,7 +2306,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,
                                        cmd.GetExternalOperation(),
-                                       pipeClient, TActorId{}, cmd.GetCanReadBatches());
+                                       pipeClient);
 
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }

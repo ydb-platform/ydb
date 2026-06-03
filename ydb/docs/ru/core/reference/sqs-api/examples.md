@@ -57,9 +57,6 @@ aws --endpoint "$ENDPOINT" \
 ```shell
 ENDPOINT="https://my_db.balancer.example.com:8443/Root/my_db"
 
-# создать топик (операция SQS CreateQueue)
-aws --endpoint "$ENDPOINT" sqs create-queue --queue-name "my_topic"
-
 # получить QueueUrl
 QUEUE_URL="$(aws --endpoint "$ENDPOINT" sqs get-queue-url --queue-name "my_topic" --query 'QueueUrl' --output text)"
 

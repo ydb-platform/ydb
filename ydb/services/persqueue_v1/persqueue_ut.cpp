@@ -8673,6 +8673,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(ConsumerAvailabilityPeriod) {
         TestConsumerAvailabilityPeriod(true);
+    }
+
+    Y_UNIT_TEST(ConsumerAvailabilityPeriodCleanup) {
         TestConsumerAvailabilityPeriod(false);
     }
 }

@@ -1838,6 +1838,9 @@ public:
     void PersistBuildIndexCreateBuildSequenceTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexCreateBuildSequenceTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
+    // Persists the fulltext rowid auto-provisioning intent + child-build linkage fields together.
+    void PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
     void PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexInitiateTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexInitiateTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);

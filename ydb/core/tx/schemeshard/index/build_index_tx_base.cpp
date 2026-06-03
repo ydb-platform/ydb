@@ -223,6 +223,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     switch (indexInfo.State) {
     case TIndexBuildInfo::EState::AlterMainTable:
     case TIndexBuildInfo::EState::CreateBuildSequence:
+    case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+    case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
     case TIndexBuildInfo::EState::Locking:
     case TIndexBuildInfo::EState::GatheringStatistics:
     case TIndexBuildInfo::EState::Initiating:

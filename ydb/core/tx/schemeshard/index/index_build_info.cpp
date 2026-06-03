@@ -311,6 +311,8 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::Invalid:
         case EState::AlterMainTable:
         case EState::CreateBuildSequence:
+        case EState::ProvisioningRowIdColumn:
+        case EState::ProvisioningRowIdUniqueIndex:
         case EState::Locking:
         case EState::GatheringStatistics:
         case EState::Initiating:

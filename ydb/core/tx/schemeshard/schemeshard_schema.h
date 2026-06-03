@@ -1475,6 +1475,16 @@ struct Schema : NIceDb::Schema {
         struct CreateBuildSequenceTxStatus : Column<51, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
         struct CreateBuildSequenceTxDone : Column<52, NScheme::NTypeIds::Bool> {};
 
+        // Fulltext rowid auto-provisioning. Parent fulltext build: intent flags, the auto unique-index
+        // name, and the ids of the spawned child builds. Child build: link to the parent and the
+        // shared-lock marker.
+        struct FulltextNeedsRowIdColumn : Column<53, NScheme::NTypeIds::Bool> {};
+        struct FulltextNeedsUniqueIndex : Column<54, NScheme::NTypeIds::Bool> {};
+        struct AutoUniqueIndexName : Column<55, NScheme::NTypeIds::Utf8> {};
+        struct RowIdColumnBuildId : Column<56, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1528,7 +1538,13 @@ struct Schema : NIceDb::Schema {
             SubState,
             CreateBuildSequenceTxId,
             CreateBuildSequenceTxStatus,
-            CreateBuildSequenceTxDone
+            CreateBuildSequenceTxDone,
+            FulltextNeedsRowIdColumn,
+            FulltextNeedsUniqueIndex,
+            AutoUniqueIndexName,
+            RowIdColumnBuildId,
+            RowIdUniqueBuildId,
+            ParentBuildId
         >;
     };
 

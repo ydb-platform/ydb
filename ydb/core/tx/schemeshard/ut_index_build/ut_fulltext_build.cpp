@@ -482,11 +482,13 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(RowIdOptIn_LegacyIntegerPkPathStillWorks) {
-        // Regression guard: when __rowId is absent, the old single-integer-PK requirement applies
-        // unchanged. A string PK without __rowId must be rejected.
+    Y_UNIT_TEST(RowIdOptIn_RejectsCustomPkWhenUniqueIndexDisabled) {
+        // A custom (non single integer) PK without __rowId would be auto-provisioned, but that requires
+        // the unique-index feature. With it disabled the build must be rejected, not silently fall back.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableAddUniqueIndex(false);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -500,8 +502,175 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
 
         Ydb::Table::TableIndex index = FulltextIndexConfig(false);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index,
-            Ydb::StatusIds::BAD_REQUEST);
+            Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
+    }
+
+    // Helpers for the auto-provisioning tests below: a table with a custom (Utf8) PK and NO __rowId
+    // column / unique index - the schemeshard provisions both when the fulltext index is built.
+
+    void DoCreateCustomPkTextTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    void DoWriteRowsCustomPk(TTestBasicRuntime& runtime) {
+        auto tableDesc = DescribePath(runtime, "/MyRoot/texts", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+        const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT(!tablePartitions.empty());
+        const ui64 textsTabletId = tablePartitions[0].GetDatashardId();
+
+        auto fnWriteRow = [&] (TString pk, TString text, TString data) {
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key   '( '('pk     (Utf8 '%s) ) ) )
+                    (let row   '( '('text   (String '"%s") )
+                                  '('data   (String '"%s") ) ) )
+                    (return (AsList (UpdateRow '__user__texts key row) ))
+                )
+            )", pk.c_str(), text.c_str(), data.c_str());
+
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, textsTabletId, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        };
+
+        fnWriteRow("pone",   "green apple",              "one");
+        fnWriteRow("ptwo",   "red apple and blue apple", "two");
+        fnWriteRow("pthree", "yellow apple",             "three");
+        fnWriteRow("pfour",  "red car",                  "four");
+    }
+
+    void EnableAutoProvisionFlags(TTestActorRuntime& runtime) {
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableFulltextIndex(true);
+        appData.FeatureFlags.SetEnableAddUniqueIndex(true);
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
+    }
+
+    Y_UNIT_TEST(AutoProvision_FirstFulltextBuildAddsRowIdAndUniqueIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                op.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                op.DebugString());
+        }
+
+        // The auto-provisioned unique index over __rowId exists and is Ready.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // The fulltext posting impl-table is keyed by [__ydb_token, __rowId].
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*ensureNoOther=*/ true),
+        });
+    }
+
+    Y_UNIT_TEST(AutoProvision_SecondFulltextBuildReusesInfra) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        // First fulltext index provisions __rowId + the unique index.
+        {
+            Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+            index.set_name("fulltext_one");
+            const ui64 buildTx = ++txId;
+            TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+            env.TestWaitNotification(runtime, buildTx);
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // Second fulltext index reuses the existing __rowId + unique index (no duplicates).
+        {
+            Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ true);
+            index.set_name("fulltext_two");
+            const ui64 buildTx = ++txId;
+            TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+            env.TestWaitNotification(runtime, buildTx);
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // Exactly one unique index over __rowId exists, and both fulltext indexes key by __rowId.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two/indexImplTable"), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*ensureNoOther=*/ true),
+        });
+    }
+
+    Y_UNIT_TEST(AutoProvision_SingleIntegerPkUnaffected) {
+        // A single integer PK keeps the legacy doc_id=PK behaviour: no __rowId / unique index added.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateTextTable(runtime, env, txId);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // No auto unique index was created.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
     }
 
     Y_UNIT_TEST_TWIN(ImportExport, Materialized) {

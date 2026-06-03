@@ -856,19 +856,23 @@ bool CheckSingleIntegerPrimaryKey(
     return true;
 }
 
-bool MaybeEnableFulltextRowIdMode(
+TFulltextRowIdClassification ClassifyFulltextRowId(
     const NSchemeShard::TTableInfo::TPtr& tableInfo,
     const TMap<TString, TPathId>& tableChildren,
     const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
-    NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
     TString& error)
 {
+    TFulltextRowIdClassification result;
+
     const auto indexType = GetIndexType(indexDesc);
     if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain &&
         indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
-        return true;
+        result.Plan = EFulltextRowIdPlan::NotApplicable;
+        return result;
     }
 
+    // Look for a live __rowId column on the main table.
     const NSchemeShard::TTableInfo::TColumn* rowIdColumn = nullptr;
     for (const auto& [_, column] : tableInfo->Columns) {
         if (column.IsDropped()) {
@@ -879,23 +883,10 @@ bool MaybeEnableFulltextRowIdMode(
             break;
         }
     }
-    if (!rowIdColumn) {
-        return true;
-    }
 
-    if (rowIdColumn->PType.GetTypeId() != NScheme::NTypeIds::Uint64) {
-        error = TStringBuilder()
-            << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn
-            << "' to be of type 'Uint64' but got " << NScheme::TypeName(rowIdColumn->PType);
-        return false;
-    }
-    if (!rowIdColumn->NotNull) {
-        error = TStringBuilder()
-            << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
-        return false;
-    }
-
-    bool hasUniqueIndexOnRowId = false;
+    // Scan the table children for a single-column GlobalUnique index over __rowId.
+    bool hasReadyUniqueIndexOnRowId = false;
+    bool hasUnreadyUniqueIndexOnRowId = false;
     for (const auto& [_, childPathId] : tableChildren) {
         const auto it = indexes.find(childPathId);
         if (it == indexes.end()) {
@@ -905,28 +896,105 @@ bool MaybeEnableFulltextRowIdMode(
         if (info->Type != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
             continue;
         }
-        if (info->State != NKikimrSchemeOp::EIndexStateReady) {
-            continue;
-        }
         if (info->IndexKeys.size() != 1) {
             continue;
         }
         if (info->IndexKeys.front() != NFulltext::RowIdColumn) {
             continue;
         }
-        hasUniqueIndexOnRowId = true;
-        break;
+        if (info->State == NKikimrSchemeOp::EIndexStateReady) {
+            hasReadyUniqueIndexOnRowId = true;
+        } else {
+            hasUnreadyUniqueIndexOnRowId = true;
+        }
     }
 
-    if (!hasUniqueIndexOnRowId) {
-        error = TStringBuilder()
-            << "Fulltext index over '" << NFulltext::RowIdColumn
-            << "' requires a Ready unique secondary index on '" << NFulltext::RowIdColumn << "'";
-        return false;
+    if (rowIdColumn) {
+        // A user-managed or previously auto-provisioned __rowId column exists: it must be well-formed.
+        if (rowIdColumn->PType.GetTypeId() != NScheme::NTypeIds::Uint64) {
+            error = TStringBuilder()
+                << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn
+                << "' to be of type 'Uint64' but got " << NScheme::TypeName(rowIdColumn->PType);
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        if (!rowIdColumn->NotNull) {
+            error = TStringBuilder()
+                << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+
+        if (hasReadyUniqueIndexOnRowId) {
+            result.Plan = EFulltextRowIdPlan::Reuse;
+            return result;
+        }
+        if (hasUnreadyUniqueIndexOnRowId) {
+            // A unique index on __rowId exists but is not Ready - either a concurrent build or an
+            // interrupted prior auto-provisioning. Refuse rather than create a duplicate.
+            error = TStringBuilder()
+                << "Fulltext index over '" << NFulltext::RowIdColumn << "' found a not-yet-Ready unique"
+                << " secondary index on '" << NFulltext::RowIdColumn << "'; wait for it to complete or drop"
+                << " index '" << NFulltext::RowIdUniqueIndexName << "' and retry";
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        // The column is fine but the unique index is missing - provision just the unique index.
+        result.Plan = EFulltextRowIdPlan::Provision;
+        result.NeedColumn = false;
+        result.NeedUniqueIndex = true;
+        return result;
     }
 
-    indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
-    return true;
+    // No __rowId column. A single integer PK keeps the legacy doc_id=PK behaviour.
+    const TTableColumns baseTableColumns = ExtractInfo(tableInfo);
+    TColumnTypes baseColumnTypes;
+    if (!ExtractTypes(tableInfo, baseColumnTypes, error)) {
+        result.Plan = EFulltextRowIdPlan::Error;
+        return result;
+    }
+
+    TString ignore;
+    if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", ignore)) {
+        result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        return result;
+    }
+
+    // Custom PK and no __rowId infrastructure at all - provision both the column and the unique index.
+    result.Plan = EFulltextRowIdPlan::Provision;
+    result.NeedColumn = true;
+    result.NeedUniqueIndex = true;
+    return result;
+}
+
+bool MaybeEnableFulltextRowIdMode(
+    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TMap<TString, TPathId>& tableChildren,
+    const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
+    NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error)
+{
+    const auto classification = ClassifyFulltextRowId(tableInfo, tableChildren, indexes, indexDesc, error);
+    switch (classification.Plan) {
+        case EFulltextRowIdPlan::NotApplicable:
+        case EFulltextRowIdPlan::LegacyIntegerPk:
+            return true;
+        case EFulltextRowIdPlan::Reuse:
+            indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+            return true;
+        case EFulltextRowIdPlan::Provision:
+            // This strict path expects the infrastructure to be present already; auto-provisioning is
+            // driven by ClassifyFulltextRowId in the build-service entry point (TTxCreate) instead.
+            if (error.empty()) {
+                error = TStringBuilder()
+                    << "Fulltext index over '" << NFulltext::RowIdColumn
+                    << "' requires a Ready unique secondary index on '" << NFulltext::RowIdColumn << "'";
+            }
+            return false;
+        case EFulltextRowIdPlan::Error:
+            return false;
+    }
+    return false;
 }
 
 bool IsCompatibleKeyTypes(

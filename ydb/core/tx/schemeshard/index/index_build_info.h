@@ -57,6 +57,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Invalid = 0,
         AlterMainTable = 5,
         CreateBuildSequence = 6,
+        // Fulltext rowid auto-provisioning: parent fulltext build spawns + awaits child builds for the
+        // __rowId column and the unique index on it, under the parent's shared lock.
+        ProvisioningRowIdColumn = 7,
+        ProvisioningRowIdUniqueIndex = 8,
         Locking = 10,
         GatheringStatistics = 20,
         Initiating = 30,
@@ -303,6 +307,23 @@ public:
     NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
+
+    // Fulltext rowid auto-provisioning (parent fulltext build): when a fulltext index is built on a
+    // custom-PK table without the rowid infrastructure, the parent build first spawns child builds -
+    // a BuildColumns child for the __rowId column (NeedColumn) and/or a BuildSecondaryUniqueIndex child
+    // for the unique index on __rowId (NeedUniqueIndex) - that run under the parent's shared lock,
+    // before the fulltext index itself is built. The child build ids are remembered for await + resume.
+    bool FulltextNeedsRowIdColumn = false;
+    bool FulltextNeedsUniqueIndex = false;
+    // Name of the auto-provisioned unique index (NFulltext::RowIdUniqueIndexName); persisted for
+    // restart determinism and so rollback targets the right child.
+    TString AutoUniqueIndexName;
+    TIndexBuildId RowIdColumnBuildId = TIndexBuildId();   // child BuildColumns id (0 if none/not yet spawned)
+    TIndexBuildId RowIdUniqueBuildId = TIndexBuildId();   // child BuildSecondaryUniqueIndex id
+
+    // Set on a spawned child build: links it back to the parent fulltext build so the child wakes the
+    // parent (Progress) when it reaches a terminal state. The child is otherwise a fully normal build.
+    TIndexBuildId ParentBuildId = TIndexBuildId();
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
@@ -617,6 +638,25 @@ public:
             row.template GetValueOrDefault<Schema::IndexBuild::CreateBuildSequenceTxDone>(
                 indexInfo->CreateBuildSequenceTxDone);
 
+        indexInfo->FulltextNeedsRowIdColumn =
+            row.template GetValueOrDefault<Schema::IndexBuild::FulltextNeedsRowIdColumn>(
+                indexInfo->FulltextNeedsRowIdColumn);
+        indexInfo->FulltextNeedsUniqueIndex =
+            row.template GetValueOrDefault<Schema::IndexBuild::FulltextNeedsUniqueIndex>(
+                indexInfo->FulltextNeedsUniqueIndex);
+        indexInfo->AutoUniqueIndexName =
+            row.template GetValueOrDefault<Schema::IndexBuild::AutoUniqueIndexName>(
+                indexInfo->AutoUniqueIndexName);
+        indexInfo->RowIdColumnBuildId =
+            row.template GetValueOrDefault<Schema::IndexBuild::RowIdColumnBuildId>(
+                indexInfo->RowIdColumnBuildId);
+        indexInfo->RowIdUniqueBuildId =
+            row.template GetValueOrDefault<Schema::IndexBuild::RowIdUniqueBuildId>(
+                indexInfo->RowIdUniqueBuildId);
+        indexInfo->ParentBuildId =
+            row.template GetValueOrDefault<Schema::IndexBuild::ParentBuildId>(
+                indexInfo->ParentBuildId);
+
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
@@ -771,9 +811,17 @@ public:
         return false;
     }
 
+    // True when this fulltext build still has rowid infrastructure to auto-provision (via sequential
+    // child builds) before it can build the fulltext index itself.
+    bool IsFulltextProvisioning() const {
+        return IsBuildFulltextIndex() && (FulltextNeedsRowIdColumn || FulltextNeedsUniqueIndex);
+    }
+
     bool IsPreparing() const {
         return State == EState::AlterMainTable ||
                State == EState::CreateBuildSequence ||
+               State == EState::ProvisioningRowIdColumn ||
+               State == EState::ProvisioningRowIdUniqueIndex ||
                State == EState::Locking ||
                State == EState::GatheringStatistics ||
                State == EState::Initiating;

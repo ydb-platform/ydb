@@ -162,16 +162,51 @@ public:
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;
             buildInfo->SerializeToProto(Self, &tmpConfig);
             auto& indexDesc = *tmpConfig.MutableIndex();
-            if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, tablePath.Base()->GetChildren(),
-                                                          Self->Indexes, indexDesc, explain)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
-            }
-            if (indexDesc.HasFulltextIndexDescription() &&
-                indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
-                // Persist the bit back to buildInfo so downstream steps (impl table descriptors,
-                // build scan) see the same opt-in decision.
+
+            // Decide how a fulltext index on this table obtains its doc_id. For a custom (non single
+            // integer) PK without the rowid infrastructure we auto-provision it: the build first spawns
+            // child builds for the __rowId column and/or the unique index on it (under this build's
+            // shared lock), then builds the fulltext index in rowid mode. See the provisioning prefix
+            // in build_index__progress.cpp.
+            const auto classification = NTableIndex::ClassifyFulltextRowId(
+                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes, indexDesc, explain);
+            auto enableRowIdMode = [&]() {
+                indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
                 std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo->SpecializedIndexDescription)
                     .SetUseRowIdAsDocId(true);
+            };
+            switch (classification.Plan) {
+                case NTableIndex::EFulltextRowIdPlan::Error:
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
+                case NTableIndex::EFulltextRowIdPlan::NotApplicable:
+                case NTableIndex::EFulltextRowIdPlan::LegacyIntegerPk:
+                    break;
+                case NTableIndex::EFulltextRowIdPlan::Reuse:
+                    enableRowIdMode();
+                    break;
+                case NTableIndex::EFulltextRowIdPlan::Provision: {
+                    if (!Self->EnableAddUniqueIndex) {
+                        return Reply(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                            << "Auto-provisioning '" << NTableIndex::NFulltext::RowIdColumn
+                            << "' for a fulltext index on a non-integer-PK table requires the unique-index feature");
+                    }
+                    buildInfo->FulltextNeedsRowIdColumn = classification.NeedColumn;
+                    buildInfo->FulltextNeedsUniqueIndex = classification.NeedUniqueIndex;
+                    buildInfo->AutoUniqueIndexName = NTableIndex::NFulltext::RowIdUniqueIndexName;
+                    if (classification.NeedUniqueIndex) {
+                        // The auto unique-index path must be free (a reusable Ready index would have been
+                        // classified as Reuse, not Provision).
+                        const auto autoUniquePath = tablePath.Child(buildInfo->AutoUniqueIndexName);
+                        if (autoUniquePath.IsResolved() && !autoUniquePath.IsDeleted()) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                                << "Cannot auto-provision the fulltext rowid unique index: path '"
+                                << autoUniquePath.PathString() << "' already exists");
+                        }
+                    }
+                    // The fulltext index runs in rowid mode once provisioning completes.
+                    enableRowIdMode();
+                    break;
+                }
             }
             if (!NTableIndex::CommonCheck(tableInfo, indexDesc,
                                           domainInfo->GetSchemeLimits(),
@@ -267,7 +302,16 @@ public:
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        buildInfo->State = TIndexBuildInfo::EState::Locking;
+        if (buildInfo->IsFulltextProvisioning()) {
+            Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
+            // Provision the rowid infrastructure (sequentially, via child builds) before this build
+            // takes its own lock and builds the fulltext index.
+            buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
+                ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
+                : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
+        } else {
+            buildInfo->State = TIndexBuildInfo::EState::Locking;
+        }
 
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->AddIndexBuild(buildInfo);

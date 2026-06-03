@@ -200,6 +200,56 @@ TPath GetBuildPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, const TSt
         .Dive(tableName);
 }
 
+// Fulltext rowid auto-provisioning: build a child TIndexBuildInfo that the parent fulltext build runs,
+// sequentially and before acquiring its own lock, to provision the rowid infrastructure. Each child is
+// a fully normal build (it takes and releases its own lock + snapshot via the standard pipeline) and
+// reports completion back to ParentBuildId. `buildColumn` selects between a BuildColumns child (adds +
+// backfills __rowId from a sequence) and a BuildSecondaryUniqueIndex child (the unique index over
+// [__rowId]). The caller has already allocated childId and persisted it on the parent; here we
+// construct, persist, and register the child, then return it for the caller to Progress.
+std::shared_ptr<TIndexBuildInfo> CreateRowIdProvisioningChild(
+    TSchemeShard* ss, NIceDb::TNiceDb& db, const TIndexBuildInfo& parent, bool buildColumn, TIndexBuildId childId)
+{
+    auto child = std::make_shared<TIndexBuildInfo>();
+    child->Id = childId;
+    child->DomainPathId = parent.DomainPathId;
+    child->TablePathId = parent.TablePathId;
+    child->ScanSettings = parent.ScanSettings;
+    child->MaxInProgressShards = parent.MaxInProgressShards;
+    child->StartTime = TAppData::TimeProvider->Now();
+    child->ParentBuildId = parent.Id;
+
+    if (buildColumn) {
+        child->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
+        child->TargetName = TPath::Init(parent.TablePathId, ss).PathString();
+        Ydb::Type uint64Type;
+        uint64Type.set_type_id(Ydb::Type::UINT64);
+        child->BuildColumns.push_back(TIndexBuildInfo::TColumnBuildInfo(
+            TIndexBuildInfo::TColumnBuildInfo::FromSequenceTag{},
+            NTableIndex::NFulltext::RowIdColumn,
+            uint64Type,
+            NTableIndex::NFulltext::RowIdSequenceName,
+            /*bitReverse=*/ true,
+            /*notNull=*/ true,
+            /*familyName=*/ ""));
+    } else {
+        child->BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
+        child->IndexType = NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        child->IndexName = parent.AutoUniqueIndexName;
+        child->IndexColumns = { NTableIndex::NFulltext::RowIdColumn };
+        // Empty ImplTableDescriptions -> the create-build-index composer uses defaults.
+    }
+
+    // Run the full standard pipeline starting from Locking (own lock + snapshot, cleanly released).
+    child->State = TIndexBuildInfo::EState::Locking;
+
+    ss->PersistCreateBuildIndex(db, *child);
+    ss->PersistBuildIndexFulltextProvisioning(db, *child);
+    ss->PersistBuildIndexState(db, *child);
+    ss->AddIndexBuild(child);
+    return child;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TTxId txId, const TPath& path)
 {
@@ -2390,6 +2440,50 @@ public:
                 Progress(BuildId);
             }
             break;
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn: {
+            if (!buildInfo.RowIdColumnBuildId) {
+                // Mint the child build id (assigned + child created in the AllocateResult handler).
+                AllocateTxId(BuildId);
+                break;
+            }
+            auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdColumnBuildId);
+            if (child && (*child)->IsDone()) {
+                ChangeState(BuildId, buildInfo.FulltextNeedsUniqueIndex
+                    ? TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex
+                    : TIndexBuildInfo::EState::Locking);
+                Progress(BuildId);
+            } else if (child && (*child)->IsCancelled()) {
+                // The child rolled back its own column on failure; the parent never locked, so it just
+                // transitions to Rejected (nothing of its own to unlock or drop).
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexAddIssue(db, buildInfo,
+                    TStringBuilder() << "Auto-provisioning of '" << NTableIndex::NFulltext::RowIdColumn
+                        << "' column failed (child build " << buildInfo.RowIdColumnBuildId << ")");
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejected);
+                Progress(BuildId);
+            }
+            // else: child still in progress - it calls Progress(parent) when it finishes.
+            break;
+        }
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex: {
+            if (!buildInfo.RowIdUniqueBuildId) {
+                AllocateTxId(BuildId);
+                break;
+            }
+            auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdUniqueBuildId);
+            if (child && (*child)->IsDone()) {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Locking);
+                Progress(BuildId);
+            } else if (child && (*child)->IsCancelled()) {
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexAddIssue(db, buildInfo,
+                    TStringBuilder() << "Auto-provisioning of the '" << buildInfo.AutoUniqueIndexName
+                        << "' unique index failed (child build " << buildInfo.RowIdUniqueBuildId << ")");
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejected);
+                Progress(BuildId);
+            }
+            break;
+        }
         case TIndexBuildInfo::EState::GatheringStatistics:
             ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
             Progress(BuildId);
@@ -2597,6 +2691,10 @@ public:
             break;
         case TIndexBuildInfo::EState::Done:
             SendNotificationsIfFinished(buildInfo);
+            // A provisioning child wakes its parent fulltext build to advance the prefix.
+            if (buildInfo.ParentBuildId) {
+                Progress(buildInfo.ParentBuildId);
+            }
             // stay calm keep status/issues
             break;
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
@@ -2638,6 +2736,9 @@ public:
             break;
         case TIndexBuildInfo::EState::Cancelled:
             SendNotificationsIfFinished(buildInfo);
+            if (buildInfo.ParentBuildId) {
+                Progress(buildInfo.ParentBuildId);
+            }
             // stay calm keep status/issues
             break;
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
@@ -2684,6 +2785,9 @@ public:
             break;
         case TIndexBuildInfo::EState::Rejected:
             SendNotificationsIfFinished(buildInfo);
+            if (buildInfo.ParentBuildId) {
+                Progress(buildInfo.ParentBuildId);
+            }
             // stay calm keep status/issues
             break;
         }
@@ -3571,6 +3675,10 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
+        // The provisioning prefix issues no scheme tx of its own (it delegates to child builds), so it
+        // never receives a tx-completion here.
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
@@ -3844,6 +3952,9 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
+        // The provisioning prefix issues no scheme tx of its own (it delegates to child builds).
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
@@ -3912,6 +4023,25 @@ public:
             if (!buildInfo.InitiateTxId) {
                 buildInfo.InitiateTxId = txId;
                 Self->PersistBuildIndexInitiateTxId(db, buildInfo);
+            }
+            break;
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+            if (!buildInfo.RowIdColumnBuildId) {
+                // Use the freshly allocated tx-id as the child build id and spawn the column build.
+                buildInfo.RowIdColumnBuildId = TIndexBuildId(ui64(txId));
+                Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ true,
+                    buildInfo.RowIdColumnBuildId);
+                Progress(child->Id);
+            }
+            break;
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
+            if (!buildInfo.RowIdUniqueBuildId) {
+                buildInfo.RowIdUniqueBuildId = TIndexBuildId(ui64(txId));
+                Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ false,
+                    buildInfo.RowIdUniqueBuildId);
+                Progress(child->Id);
             }
             break;
         case TIndexBuildInfo::EState::DropBuild:

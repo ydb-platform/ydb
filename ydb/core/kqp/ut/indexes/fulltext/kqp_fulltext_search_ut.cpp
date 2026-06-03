@@ -3300,6 +3300,93 @@ Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
     }
 }
 
+Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
+    // End-to-end: adding a fulltext index to a table with a custom (Utf8) PK and NO __rowId column /
+    // unique index must auto-provision both transparently, backfill existing rows, and serve search.
+    // A second fulltext index must reuse the same __rowId + unique index.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/AutoTexts` (
+                Pk Utf8 NOT NULL,
+                Text Utf8,
+                Data Utf8,
+                PRIMARY KEY (Pk)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/AutoTexts` (Pk, Text, Data) VALUES
+                ("pk-100"u, "cats love cats"u,        "cats data"u),
+                ("pk-200"u, "dogs chase small cats"u, "dogs data"u),
+                ("pk-300"u, "foxes love dogs"u,       "foxes data"u),
+                ("pk-400"u, "small birds"u,           "birds data"u);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        // No manual __rowId column / unique index - this single statement auto-provisions both.
+        TString query = R"sql(
+            ALTER TABLE `/Root/AutoTexts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        // Backfilled rows are searchable and resolve back to their original PK.
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/AutoTexts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "cats")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+        NYdb::TResultSetParser parser(resultSet);
+        THashSet<TString> seenPks;
+        while (parser.TryNextRow()) {
+            seenPks.emplace(TString{parser.ColumnParser("Pk").GetUtf8()});
+        }
+        UNIT_ASSERT(seenPks.contains("pk-100"));
+        UNIT_ASSERT(seenPks.contains("pk-200"));
+    }
+    {
+        // A second fulltext index reuses the existing __rowId + unique index.
+        TString query = R"sql(
+            ALTER TABLE `/Root/AutoTexts` ADD INDEX fulltext_data_idx
+                GLOBAL USING fulltext_plain
+                ON (Data)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/AutoTexts` VIEW `fulltext_data_idx`
+            WHERE FulltextMatch(Data, "foxes")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(TString{parser.ColumnParser("Pk").GetUtf8()}, "pk-300");
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

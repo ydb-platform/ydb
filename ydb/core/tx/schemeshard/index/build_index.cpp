@@ -237,6 +237,16 @@ void TSchemeShard::PersistBuildIndexCreateBuildSequenceTxDone(NIceDb::TNiceDb& d
         NIceDb::TUpdate<Schema::IndexBuild::CreateBuildSequenceTxDone>(indexInfo.CreateBuildSequenceTxDone));
 }
 
+void TSchemeShard::PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
+    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::FulltextNeedsRowIdColumn>(indexInfo.FulltextNeedsRowIdColumn),
+        NIceDb::TUpdate<Schema::IndexBuild::FulltextNeedsUniqueIndex>(indexInfo.FulltextNeedsUniqueIndex),
+        NIceDb::TUpdate<Schema::IndexBuild::AutoUniqueIndexName>(indexInfo.AutoUniqueIndexName),
+        NIceDb::TUpdate<Schema::IndexBuild::RowIdColumnBuildId>(indexInfo.RowIdColumnBuildId),
+        NIceDb::TUpdate<Schema::IndexBuild::RowIdUniqueBuildId>(indexInfo.RowIdUniqueBuildId),
+        NIceDb::TUpdate<Schema::IndexBuild::ParentBuildId>(indexInfo.ParentBuildId));
+}
+
 void TSchemeShard::PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::InitiateTxId>(indexInfo.InitiateTxId));

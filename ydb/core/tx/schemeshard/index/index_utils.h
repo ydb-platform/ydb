@@ -157,14 +157,41 @@ bool CheckSingleIntegerPrimaryKey(
     TStringBuf indexKind,
     TString& error);
 
-// For fulltext index creation: detect whether the main table is opted into using __rowId as doc_id.
-// Opt-in requires the main table to have a column named __rowId of type Uint64 NOT NULL AND a Ready
-// unique secondary index whose only key column is __rowId. When both prerequisites are satisfied,
-// sets indexDesc.MutableFulltextIndexDescription()->set_use_row_id_as_doc_id(true) and returns true.
-// If __rowId is present but invalid, or present without a matching unique index, returns false with
-// an explanatory error. If __rowId is absent the helper is a noop and returns true (the strict
-// single-integer-PK validation in CommonCheck applies as before).
-// For non-fulltext index types the helper is a noop and returns true.
+// Classification of how a fulltext index build should obtain its document id.
+enum class EFulltextRowIdPlan {
+    NotApplicable,    // the index is not a fulltext index - nothing to decide
+    LegacyIntegerPk,  // no __rowId column and a single integer PK - use the PK as doc_id (legacy)
+    Reuse,            // a valid __rowId column + Ready unique index on it already exist - reuse them
+    Provision,        // a custom (non-single-integer) PK without the full rowid infrastructure - the
+                      // schemeshard must auto-provision the missing parts (see NeedColumn/NeedUniqueIndex)
+    Error,            // an invalid state (e.g. malformed __rowId, or a half-built unique index)
+};
+
+struct TFulltextRowIdClassification {
+    EFulltextRowIdPlan Plan = EFulltextRowIdPlan::NotApplicable;
+    bool NeedColumn = false;       // the __rowId column must be added (and backfilled)
+    bool NeedUniqueIndex = false;  // the unique secondary index on __rowId must be created
+};
+
+// Classifies a fulltext index build against the main table's current schema. The rules mirror the
+// historical opt-in (a __rowId Uint64 NOT NULL column plus a Ready single-column GlobalUnique index on
+// __rowId enables rowid mode), but additionally distinguishes the "custom PK, infrastructure missing"
+// case so the schemeshard can auto-provision it. See EFulltextRowIdPlan. For a non-fulltext index the
+// plan is NotApplicable.
+TFulltextRowIdClassification ClassifyFulltextRowId(
+    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TMap<TString, TPathId>& tableChildren,
+    const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error);
+
+// Thin wrapper over ClassifyFulltextRowId for callers that only need to enable rowid mode when the
+// infrastructure already exists (the Reuse case). On Reuse it sets
+// indexDesc.MutableFulltextIndexDescription()->set_use_row_id_as_doc_id(true) and returns true.
+// NotApplicable / LegacyIntegerPk are noops that return true (the single-integer-PK validation in
+// CommonCheck applies as before). Provision / Error return false with an explanatory error - callers
+// on the strict path (e.g. the create-build-index sub-operation composer) treat that as a rejection;
+// the auto-provisioning entry point (TTxCreate) uses ClassifyFulltextRowId directly instead.
 bool MaybeEnableFulltextRowIdMode(
     const NSchemeShard::TTableInfo::TPtr& tableInfo,
     const TMap<TString, TPathId>& tableChildren,

@@ -403,16 +403,6 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     }
 
     for (const auto &action : request.GetActions()) {
-        if (capHit) {
-            if (schedule) {
-                auto *scheduledAction = scheduled.AddActions();
-                scheduledAction->CopyFrom(action);
-                scheduledAction->ClearIssue();
-            }
-            ++processedActions;
-            continue;
-        }
-
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -451,6 +441,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                           "MaxPermissions cap (%u) reached, deferring remaining actions",
                           maxPermissions);
                 capHit = true;
+                break;
             }
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
@@ -483,6 +474,21 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         ++processedActions;
     }
     ClusterInfo->RollbackLocks(point);
+
+    if (capHit && schedule && processedActions < static_cast<size_t>(request.ActionsSize())) {
+        const auto& allActions = request.GetActions();
+        auto* mutableActions = scheduled.MutableActions();
+        const size_t from = processedActions;
+
+        mutableActions->Reserve(mutableActions->size() + (allActions.size() - from));
+        std::for_each(allActions.begin() + from, allActions.end(),
+                      [mutableActions](const auto& action) {
+                          auto* scheduledAction = mutableActions->Add();
+                          scheduledAction->CopyFrom(action);
+                          scheduledAction->ClearIssue();
+                      });
+        processedActions = allActions.size();
+    }
 
     // Handle partial permission and reject cases. Partial permission requires
     // removal of rejected action status. Reject means we have to clear all

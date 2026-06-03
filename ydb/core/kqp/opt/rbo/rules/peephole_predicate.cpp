@@ -55,8 +55,7 @@ TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusiv
 
     TExprNode::TPtr afterPeephole;
     bool hasNonDeterministicFunctions;
-    // Using a special PeepholeTypeAnnTransformer.
-    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, &(ctx.PeepholeTypeAnnTransformer),
+    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, nullptr,
                                                  hasNonDeterministicFunctions);
         status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO] Peephole failed with status: " << status << Endl;

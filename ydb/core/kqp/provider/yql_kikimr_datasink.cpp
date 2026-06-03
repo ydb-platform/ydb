@@ -1,16 +1,18 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/utils/log/log.h>
-
-#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/services/metadata/optimization/abstract.h>
 
 namespace NYql {
+
 namespace {
 
 using namespace NKikimr;
@@ -542,8 +544,7 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
-class TKikimrDataSink : public TDataProviderBase
-{
+class TKikimrDataSink : public TDataProviderBase {
 public:
     TKikimrDataSink(
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
@@ -562,6 +563,7 @@ public:
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
+        , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -632,6 +634,12 @@ public:
 
         if (KikimrDataSinkFunctions().contains(node.Content())) {
             return true;
+        }
+
+        if (const auto* extendedTypeAnn = SessionCtx->GetInternalTypeAnnTransformer()) {
+            if (extendedTypeAnn->CanParse(node) || DqTypeAnnTransformer->CanParse(node)) {
+                return true;
+            }
         }
 
         return false;
@@ -1902,6 +1910,7 @@ private:
     TAutoPtr<IGraphTransformer> LogicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
+    const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
 };
 
 } // namespace

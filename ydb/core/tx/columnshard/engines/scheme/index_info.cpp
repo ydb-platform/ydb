@@ -214,7 +214,7 @@ bool TInsertPromoteOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EMo
     if (!Enabled || !BuildIndexesEnabled) {
         return false;
     }
-    if (mType == NEvWrite::EModificationType::Delete) {
+    if (mType != NEvWrite::EModificationType::Replace) {
         return false;
     }
     return MeetsMinBlobBytes(totalBlobBytes);
@@ -224,7 +224,7 @@ bool TInsertPromoteOptionsPolicy::ShouldPromoteCompactionOnInsert(const NEvWrite
     if (!Enabled) {
         return false;
     }
-    if (mType == NEvWrite::EModificationType::Delete) {
+    if (mType != NEvWrite::EModificationType::Replace) {
         return false;
     }
     return MeetsMinBlobBytes(totalBlobBytes);

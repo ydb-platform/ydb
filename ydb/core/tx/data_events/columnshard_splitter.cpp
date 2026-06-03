@@ -7,13 +7,13 @@ namespace NKikimr::NEvWrite {
 
 namespace {
 
-// Max serialized Arrow chunk per column shard in one bulk upsert / LongTx write.
-// SplitByBlobSize uses this as SizeLimit (checks unpacked GetBatchDataSize and serialized size).
-constexpr ui64 BulkUpsertShardWriteChunkLimit = 128ull * 1024 * 1024;
+// Fallback when AppData is unavailable; matches TColumnShardConfig default.
+constexpr ui64 DefaultBulkUpsertShardWriteChunkLimitBytes = 48ull * 1024 * 1024;
 
 ui64 GetBulkUpsertShardWriteChunkLimit() {
     if (AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
-        return BulkUpsertShardWriteChunkLimit;
+        return HasAppData() ? AppDataVerified().ColumnShardConfig.GetBulkUpsertShardWriteChunkLimitBytes()
+                            : DefaultBulkUpsertShardWriteChunkLimitBytes;
     }
     return NColumnShard::TLimits::GetMaxBlobSize() * 0.875;
 }

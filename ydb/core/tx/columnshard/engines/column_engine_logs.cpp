@@ -664,31 +664,11 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
     return true;
 }
 
-void TryPromoteInsertedPortionCompactionLevel(
-    const std::shared_ptr<TPortionInfo>& portionInfo, const TVersionedIndex& versionedIndex, TGranuleMeta& granule) {
-    if (portionInfo->GetPortionType() != EPortionType::Written || portionInfo->GetCompactionLevel()) {
-        return;
-    }
-    const auto schema = portionInfo->GetSchema(versionedIndex);
-    const auto& policy = schema->GetIndexInfo().GetInsertPromoteOptions();
-    const NEvWrite::EModificationType mType = portionInfo->GetMeta().GetDeletionsCount() == portionInfo->GetRecordsCount()
-                                                  ? NEvWrite::EModificationType::Delete
-                                                  : NEvWrite::EModificationType::Upsert;
-    if (!policy.ShouldPromoteCompactionOnInsert(mType, portionInfo->GetTotalBlobBytes()) || policy.CompactionTargetLevel) {
-        return;
-    }
-    const ui32 level = granule.GetOptimizerPlanner().GetAppropriateLevel(0, portionInfo->GetCompactionInfo());
-    if (level) {
-        portionInfo->MutableMeta().ResetCompactionLevel(level);
-    }
-}
-
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo) {
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
     AFL_VERIFY(portionInfo);
     auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
-    TryPromoteInsertedPortionCompactionLevel(portionInfo, GetVersionedIndex(), *granule);
     Counters->AddPortion(*portionInfo);
     granule->AppendPortion(portionInfo);
     if (portionInfo->HasRemoveSnapshot()) {
@@ -701,8 +681,6 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAcces
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
     auto granule = GetGranulePtrVerified(portionInfo->GetPortionInfo().GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionInfo().GetPortionId()));
-    auto portionInfoPtr = portionInfo->MutablePortionInfoPtr();
-    TryPromoteInsertedPortionCompactionLevel(portionInfoPtr, GetVersionedIndex(), *granule);
     Counters->AddPortion(portionInfo->GetPortionInfo());
     granule->AppendPortion(portionInfo);
     if (portionInfo->GetPortionInfo().HasRemoveSnapshot()) {

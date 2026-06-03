@@ -40,7 +40,6 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     STFUNC(StateWork);
 
-
     void ReplySuccess();
     void ReplyError(Ydb::StatusIds::StatusCode status, TString&& error);
 

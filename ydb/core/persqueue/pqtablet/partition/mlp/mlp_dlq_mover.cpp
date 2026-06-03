@@ -147,6 +147,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
         return ReplySuccess();
     }
 
+    Become(&TDLQMoverActor::StateWork);
     ProcessQueue();
 }
 
@@ -156,9 +157,11 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
 }
 
 void TDLQMoverActor::ProcessQueue() {
-    LOG_D("ProcessQueue");
-    Become(&TDLQMoverActor::StateWork);
+    if (PendingMessagesSize >= MaxPendingMessagesSize || Queue.empty()) {
+        return;
+    }
 
+    LOG_D("ProcessQueue Size=" << Queue.size() << ", PendingMessagesSize=" << PendingMessagesSize);
     SendToPQTablet(MakeEvPQRead(Settings.ConsumerName, Settings.PartitionId, Queue.front().Offset, 1));
 }
 
@@ -197,9 +200,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     Queue.pop_front();
 
     PendingMessagesSize += messageSize;
-    if (PendingMessagesSize < MaxPendingMessagesSize && !Queue.empty()) {
-        ProcessQueue();
-    }
+    ProcessQueue();
 }
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
@@ -234,8 +235,11 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
     }
 
     bool processingPaused = PendingMessagesSize >= MaxPendingMessagesSize;
+    AFL_ENSURE(PendingMessagesSize >= messageSize)
+        ("PendingMessagesSize", PendingMessagesSize)
+        ("messageSize", messageSize);
     PendingMessagesSize -= messageSize;
-    if (processingPaused && PendingMessagesSize < MaxPendingMessagesSize && !Queue.empty()) {
+    if (processingPaused) {
         ProcessQueue();
     }
 }

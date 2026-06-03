@@ -253,6 +253,11 @@ void TStreamingTestFixture::CreateTopic(const std::string& topicName, std::optio
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
 
+void TStreamingTestFixture::DropTopic(const std::string& topicName, bool local) {
+    const auto result = GetTopicClient(local)->DropTopic(topicName).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+
 void TStreamingTestFixture::WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition, bool local) {
     auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
         .Path(topicName)
@@ -306,10 +311,11 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
             }
         }
 
+        auto firstsView = received | std::views::transform([](const auto& p) { return p.first; });
         UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
             << "expected #" << expectedMessages.size() << " messages ("
             << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ", received) << ")");
+            << JoinSeq(", ",  std::vector<std::string>(firstsView.begin(), firstsView.end())) << ")");
 
         error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
         return false;
@@ -320,9 +326,9 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
         Sort(received);
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessages.size());
+    UNIT_ASSERT(received.size() == expectedMessages.size());
     for (size_t i = 0; i < received.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(received[i], expectedMessages[i]);
+        UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedMessages[i]);
     }
 }
 
@@ -379,7 +385,7 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     }
 
     auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString() << "\nQuery text:\n" << query);
 
     if (astValidator) {
         const auto& stats = result.GetStats();
@@ -390,7 +396,7 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     }
 
     if (!expectedError.empty()) {
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, "Query text:\n" << query);
     }
 
     return result.GetResultSets();

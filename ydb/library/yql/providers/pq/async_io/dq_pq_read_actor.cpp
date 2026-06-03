@@ -807,6 +807,7 @@ private:
     }
 
     static TPartitionKey MakePartitionKey(const TString& cluster, const NYdb::NTopic::TPartitionSession::TPtr& partitionSession) {
+        Y_DEBUG_ABORT_UNLESS(partitionSession, "Missing partition session for partition key creation");
         return { cluster, partitionSession->GetPartitionId() };
     }
 

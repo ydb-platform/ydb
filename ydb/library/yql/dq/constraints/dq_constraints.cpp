@@ -230,9 +230,7 @@ TStatus ConstraintDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
     map.reserve(replicate.Ref().ChildrenSize() - 1);
 
     for (size_t i = 1; i < replicate.Ref().ChildrenSize(); ++i) {
-        if (const auto& constraints = replicate.Ref().Child(i)->Tail().GetConstraintSet()) {
-            map.insert_unique(std::make_pair(i - 1, constraints));
-        }
+        map.insert_unique(std::make_pair(i - 1, replicate.Ref().Child(i)->Tail().GetConstraintSet()));
     }
 
     if (!map.empty()) {

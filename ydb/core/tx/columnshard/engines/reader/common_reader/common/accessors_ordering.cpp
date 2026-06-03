@@ -56,9 +56,12 @@ public:
         if (commonContext.GetScanOrbit() &&
             (NLWTrace::HasShuttles(*commonContext.GetScanOrbit()) || LWPROBE_ENABLED(ScanFinishFetchingAccessor))) {
             const TDuration fetchDuration = TMonotonic::Now() - StartTime;
-            LWTRACK(ScanFinishFetchingAccessor, *commonContext.GetScanOrbit(), commonContext.GetReadMetadata()->GetPathId().GetRawValue(),
-                commonContext.GetReadMetadata()->GetTabletId(), commonContext.GetReadMetadata()->GetTxId(), commonContext.GetScanId(),
-                BuildTopSourceIds(GetAccessorPortionIds()), fetchDuration);
+            LWTRACK(ScanFinishFetchingAccessor, *commonContext.GetScanOrbit(),
+                commonContext.GetReadMetadataPtrVerifiedAs<NCommon::TReadMetadata>()
+                    ->TableMetadataAccessor->GetPathIdVerified()
+                    .GetInternalPathId()
+                    .GetRawValue(), commonContext.GetReadMetadata()->GetTabletId(), commonContext.GetReadMetadata()->GetTxId(),
+                commonContext.GetScanId(), BuildTopSourceIds(GetAccessorPortionIds()), fetchDuration);
         }
         auto& collection = plainReader->MutableScanner().MutableSourcesCollection();
         collection.MutableConstructorsAs<TSourcesConstructorWithAccessorsImpl>().AddAccessors(std::move(Accessors));
@@ -100,9 +103,12 @@ void TAccessorsFetcherImpl::StartRequest(
     AFL_VERIFY(!InFlightRequests);
     const auto& commonContext = *context->GetCommonContext();
     if (commonContext.GetScanOrbit() && (NLWTrace::HasShuttles(*commonContext.GetScanOrbit()) || LWPROBE_ENABLED(ScanStartFetchingAccessor))) {
-        LWTRACK(ScanStartFetchingAccessor, *commonContext.GetScanOrbit(), commonContext.GetReadMetadata()->GetPathId().GetRawValue(),
-            commonContext.GetReadMetadata()->GetTabletId(), commonContext.GetReadMetadata()->GetTxId(), commonContext.GetScanId(),
-            BuildTopSourceIds(request->GetPortionIds()));
+        LWTRACK(ScanStartFetchingAccessor, *commonContext.GetScanOrbit(),
+            commonContext.GetReadMetadataPtrVerifiedAs<NCommon::TReadMetadata>()
+                ->TableMetadataAccessor->GetPathIdVerified()
+                .GetInternalPathId()
+                .GetRawValue(), commonContext.GetReadMetadata()->GetTabletId(), commonContext.GetReadMetadata()->GetTxId(),
+            commonContext.GetScanId(), BuildTopSourceIds(request->GetPortionIds()));
     }
     request->RegisterSubscriber(std::make_shared<TLocalPortionAccessorFetchingSubscriber>(context));
     context->GetCommonContext()->GetDataAccessorsManager()->AskData(std::move(request));

@@ -3,6 +3,7 @@
 #include <util/generic/size_literals.h>
 
 #include <algorithm>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <thread>

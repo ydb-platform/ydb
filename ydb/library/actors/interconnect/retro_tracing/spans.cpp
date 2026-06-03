@@ -1,5 +1,7 @@
 #include "spans.h"
 
+#include <cstring>
+
 namespace NActors {
 
 NRetroTracing::TRetroSpan* DeserializeInterconnectRetroSpan(ui32 type, ui32 size, const void* data) {

@@ -3,6 +3,8 @@
 #include <ydb/library/actors/retro_tracing/span/typed_retro_span.h>
 #include "test_spans.h"
 
+#include <cstring>
+
 namespace NRetroTracing {
 
 TRetroSpan* DeserializeRetroSpanImpl(ui32 type, ui32 size, const void* data) {

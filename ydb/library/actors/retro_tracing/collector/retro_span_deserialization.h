@@ -3,6 +3,7 @@
 #include <ydb/library/actors/retro_tracing/span/retro_span.h>
 
 #include <memory>
+#include <vector>
 
 namespace NRetroTracing {
 

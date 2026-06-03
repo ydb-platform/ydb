@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/retro_tracing/span/span_buffer.h>
 
+#include <cstring>
 #include <unordered_set>
 #include <vector>
 

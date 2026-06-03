@@ -20,18 +20,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[3]
+REPO_ROOT = SCRIPT_DIR.parents[2]
 
 DEFAULT_CANON = (
-    SCRIPT_DIR
-    / 'canondata'
+    REPO_ROOT
+    / 'ydb/tests/functional/security/canondata'
     / 'test_mon_endpoints_auth.test_mon_endpoints_auth-enforce_user_token_enabled'
     / 'mon_endpoints_auth-enforce_user_token_enabled.json'
 )
 
 DEFAULT_OUTPUT = SCRIPT_DIR / 'mon_endpoints_auth.md'
 
-VIEWER_DIR = REPO_ROOT / 'ydb/core/viewer'
+VIEWER_DIR = SCRIPT_DIR
 VIEWER_CPP = VIEWER_DIR / 'viewer.cpp'
 AUDIT_DENYLIST_CPP = REPO_ROOT / 'ydb/core/mon/audit/audit_denylist.cpp'
 

@@ -224,6 +224,8 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TQueryReplayEvents::TEvCompileRequest, Handle);
+                hFunc(TEvKqp::TEvContinueProcess, IgnoreStaleEvent);
+                hFunc(TEvents::TEvWakeup, IgnoreStaleEvent);
                 default:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in StateInit");
             }
@@ -287,13 +289,22 @@ private:
     void Continue() {
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId selfId = SelfId();
-        auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
+        const ui32 generation = static_cast<ui32>(WakeupTag);
+        auto callback = [actorSystem, selfId, generation](const TFuture<bool>& future) {
             bool finished = future.GetValue();
-            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
+            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(generation, finished);
             actorSystem->Send(selfId, processEv.Release());
         };
 
         AsyncCompileResult->Continue().Apply(callback);
+    }
+
+    void IgnoreStaleEvent(TEvKqp::TEvContinueProcess::TPtr& ev) {
+        Y_UNUSED(ev);
+    }
+
+    void IgnoreStaleEvent(TEvents::TEvWakeup::TPtr& ev) {
+        Y_UNUSED(ev);
     }
 
     NJson::TJsonValue ExtractQueryPlan(const TString& plan) {
@@ -587,16 +598,18 @@ private:
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
+        ++WakeupTag;
         StartCompilation();
         Continue();
 
-        ++WakeupTag;
         Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup(WakeupTag));
         Become(&TThis::StateCompile);
     }
 
     void Handle(TEvKqp::TEvContinueProcess::TPtr& ev) {
-        Y_ENSURE(!ev->Get()->QueryId);
+        if (ev->Get()->QueryId != static_cast<ui32>(WakeupTag)) {
+            return;
+        }
 
         if (!ev->Get()->Finished) {
             Continue();

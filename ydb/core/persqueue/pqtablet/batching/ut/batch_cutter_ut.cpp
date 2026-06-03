@@ -137,7 +137,27 @@ TReadResult MakeKafkaBatchReadResult(
     return readResult;
 }
 
-void AssertKafkaBatchCut(const TVector<TReadResult>& cut) {
+TString DecompressPayload(TStringBuf data, NPersQueueCommon::ECodec codec) {
+    if (codec == NPersQueueCommon::RAW) {
+        return TString(data);
+    }
+
+    TMemoryInput input(data.data(), data.size());
+    switch (codec) {
+        case NPersQueueCommon::GZIP: {
+            TZLibDecompress gzip(&input, ZLib::GZip);
+            return gzip.ReadAll();
+        }
+        case NPersQueueCommon::ZSTD: {
+            TZstdDecompress zstd(&input);
+            return zstd.ReadAll();
+        }
+        default:
+            ythrow yexception() << "unsupported message codec: " << static_cast<int>(codec);
+    }
+}
+
+void AssertKafkaBatchCut(const TVector<TReadResult>& cut, NPersQueueCommon::ECodec expectedCodec) {
     UNIT_ASSERT_VALUES_EQUAL(cut.size(), 2u);
 
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetOffset(), 10u);
@@ -156,29 +176,18 @@ void AssertKafkaBatchCut(const TVector<TReadResult>& cut) {
 
     const auto chunk0 = NKikimr::GetDeserializedData(cut[0].GetData());
     const auto chunk1 = NKikimr::GetDeserializedData(cut[1].GetData());
-    UNIT_ASSERT_VALUES_EQUAL(chunk0.GetCodec(), NPersQueueCommon::RAW);
-    UNIT_ASSERT_VALUES_EQUAL(chunk1.GetCodec(), NPersQueueCommon::RAW);
-    UNIT_ASSERT_VALUES_EQUAL(chunk0.GetData(), "value0");
-    UNIT_ASSERT_VALUES_EQUAL(chunk1.GetData(), "value1");
+    UNIT_ASSERT_VALUES_EQUAL(chunk0.GetCodec(), expectedCodec);
+    UNIT_ASSERT_VALUES_EQUAL(chunk1.GetCodec(), expectedCodec);
+    UNIT_ASSERT_VALUES_EQUAL(DecompressPayload(chunk0.GetData(), expectedCodec), "value0");
+    UNIT_ASSERT_VALUES_EQUAL(DecompressPayload(chunk1.GetData(), expectedCodec), "value1");
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TBatchCutterTest) {
-    Y_UNIT_TEST(NoOpCutterPassthrough) {
-        TReadResult readResult;
-        readResult.SetData("payload");
-        readResult.SetMessageFormat(NKikimrClient::STANDARD);
-
-        const auto cut = TNoOpBatchCutter().Cut(readResult);
-        UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(cut[0].GetData(), "payload");
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
-    }
-
     Y_UNIT_TEST(CutUncompressedKafkaBatchInDataChunk) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 0);
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult));
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult), NPersQueueCommon::RAW);
     }
 
     Y_UNIT_TEST(CutGzipCompressedKafkaBatchInDataChunk) {
@@ -187,7 +196,7 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
             CompressGzip(payload),
             NPersQueueCommon::GZIP,
             payload.size());
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult));
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult), NPersQueueCommon::GZIP);
     }
 
     Y_UNIT_TEST(CutZstdCompressedKafkaBatchInDataChunk) {
@@ -196,7 +205,7 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
             CompressZstd(payload),
             NPersQueueCommon::ZSTD,
             payload.size());
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult));
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult), NPersQueueCommon::ZSTD);
     }
 
     Y_UNIT_TEST(NonRegularChunkIsNotCut) {

@@ -19,14 +19,6 @@ void TConsumerBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
 }
 
-const IBatchCutter& TConsumerBatchProcessor::GetBatchCutter(NKikimrClient::EMessageFormat messageFormat) const {
-    auto it = BatchCutters.find(messageFormat);
-    AFL_ENSURE(it != BatchCutters.end())
-        ("description", "Unexpected message format in TConsumerBatchProcessor")
-        ("messageFormat", static_cast<ui32>(messageFormat));
-    return *it->second;
-}
-
 void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& context = ev->Get()->Context;
 
@@ -52,9 +44,15 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     }
     results->Clear();
 
-    for (const auto& originalResult : originalResults) {
+    for (auto& originalResult : originalResults) {
         const auto messageFormat = static_cast<NKikimrClient::EMessageFormat>(originalResult.GetMessageFormat());
-        auto cutResults = GetBatchCutter(messageFormat).Cut(originalResult);
+        auto it = BatchCutters.find(messageFormat);
+        if (it == BatchCutters.end()) {
+            readResult->AddResult()->Swap(&originalResult);
+            continue;
+        }
+
+        auto cutResults = it->second->Cut(originalResult);
         for (auto& cutResult : cutResults) {
             readResult->AddResult()->Swap(&cutResult);
         }

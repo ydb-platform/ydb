@@ -19,7 +19,6 @@ public:
 private:
     STFUNC(StateWork);
 
-    const IBatchCutter& GetBatchCutter(NKikimrClient::EMessageFormat messageFormat) const;
 
 private:
     const TString User;

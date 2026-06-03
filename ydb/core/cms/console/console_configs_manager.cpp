@@ -75,6 +75,28 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
     }
 }
 
+void BuildYamlConfigUnknownFields(
+    const TMap<TString, std::pair<TString, TString>>& unknownFields,
+    const TMap<TString, std::pair<TString, TString>>& deprecatedFields,
+    NKikimrConsole::TYamlConfigUnknownFields& out)
+{
+    out.Clear();
+    for (const auto& [path, info] : unknownFields) {
+        auto *f = out.AddFields();
+        f->SetPath(path);
+        f->SetName(info.first);
+        f->SetProto(info.second);
+        f->SetDeprecated(false);
+    }
+    for (const auto& [path, info] : deprecatedFields) {
+        auto *f = out.AddFields();
+        f->SetPath(path);
+        f->SetName(info.first);
+        f->SetProto(info.second);
+        f->SetDeprecated(true);
+    }
+}
+
 void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
         // Re-applying an unchanged body with the same version is silently accepted
@@ -549,6 +571,14 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         // ignore this as deprecated
         // now used only for disabling new config layout for older console
         YamlDropped = false;
+
+        // Restore the unknown-fields snapshot cached at upload time (no re-validation).
+        MainYamlConfigUnknownFields.Clear();
+        const TString serializedUnknownFields =
+            yamlConfigRowset.template GetValueOrDefault<Schema::YamlConfig::UnknownFields>(TString());
+        if (serializedUnknownFields) {
+            Y_PROTOBUF_SUPPRESS_NODISCARD MainYamlConfigUnknownFields.ParseFromString(serializedUnknownFields);
+        }
     }
 
     while (!databaseYamlConfigRowset.EndOfSet()) {

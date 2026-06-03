@@ -549,3 +549,58 @@ td {
   border-color: rgb(172, 41, 37);
   color: white;
 }
+
+/* Unknown / deprecated config field highlighting (monaco inline decorations). */
+.unknown-field-red {
+  background: rgba(255, 0, 0, 0.18);
+  border-bottom: 2px solid #d33;
+}
+
+.deprecated-field-amber {
+  background: rgba(255, 191, 0, 0.20);
+  border-bottom: 2px solid #d8a200;
+}
+
+/* Unknown-fields list widget. */
+.unknown-fields-list {
+  padding: 4px 12px;
+}
+
+.unknown-fields-ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.unknown-fields-ul li {
+  padding: 2px 0;
+  font-family: monospace;
+}
+
+.unknown-fields-clickable {
+  cursor: pointer;
+}
+
+.unknown-fields-clickable:hover {
+  text-decoration: underline;
+}
+
+.unknown-fields-badge {
+  display: inline-block;
+  min-width: 78px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 6px;
+  margin-right: 6px;
+  color: #fff;
+}
+
+.unknown-field-item .unknown-fields-badge {
+  background: #d33;
+}
+
+.deprecated-field-item .unknown-fields-badge {
+  background: #d8a200;
+}

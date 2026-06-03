@@ -325,6 +325,8 @@ private:
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
     bool YamlConfigEnabled = false;
+    // Unknown/deprecated fields detected in the resolved config (recomputed on each change).
+    NKikimrConsole::TYamlConfigUnknownFields ResolvedConfigUnknownFields;
 
 };
 
@@ -443,7 +445,12 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 {
     NKikimrConfig::TAppConfig newYamlProtoConfig = {};
 
+    ResolvedConfigUnknownFields.Clear();
+
     try {
+        TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector =
+            new NYamlConfig::TBasicUnknownFieldsCollector;
+
         NYamlConfig::ResolveAndParseYamlConfig(
             MainYamlConfig,
             VolatileYamlConfigs,
@@ -451,7 +458,17 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             newYamlProtoConfig,
             DatabaseYamlConfig,
             &ResolvedYamlConfig,
-            &ResolvedJsonConfig);
+            &ResolvedJsonConfig,
+            unknownFieldsCollector);
+
+        const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+        for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
+            auto *f = ResolvedConfigUnknownFields.AddFields();
+            f->SetPath(path);
+            f->SetName(info.first);
+            f->SetProto(info.second);
+            f->SetDeprecated(deprecatedPaths.contains(path));
+        }
     } catch (const yexception& ex) {
         BLOG_ERROR("Got invalid config from console error# " << ex.what());
     }
@@ -491,6 +508,18 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
 
     response.InsertValue("yaml_config", MainYamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
+
+    auto& unknownFields = response["unknown_fields"];
+    unknownFields.SetType(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& f : ResolvedConfigUnknownFields.GetFields()) {
+        NJson::TJsonValue item;
+        item.SetType(NJson::EJsonValueType::JSON_MAP);
+        item.InsertValue("path", f.GetPath());
+        item.InsertValue("name", f.GetName());
+        item.InsertValue("proto", f.GetProto());
+        item.InsertValue("deprecated", f.GetDeprecated());
+        unknownFields.AppendValue(std::move(item));
+    }
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
     
     auto state = GetState();
@@ -566,6 +595,14 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
 
             for (auto &node: ev->Get()->Nodes) {
                 str << "{'nodeName':'" << node.Host << "'}, ";
+            }
+
+            str << "];" << Endl
+                << "var unknownFields = [";
+
+            for (const auto& f : ResolvedConfigUnknownFields.GetFields()) {
+                str << "{'path':'" << f.GetPath() << "','name':'" << f.GetName()
+                    << "','proto':'" << f.GetProto() << "','deprecated':" << (f.GetDeprecated() ? "true" : "false") << "}, ";
             }
 
             str << "];" << Endl
@@ -857,6 +894,10 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                 str << "No storage config available. This is normal for non-seed-nodes initialization." << Endl;
                                 str << "</div>" << Endl;
                             }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("resolved-unknown-fields", "Unknown fields") {
+                            TAG_ATTRS(TDiv, {{"id", "resolved-unknown-fields-list"}, {"class", "unknown-fields-list"}}) { }
                         }
                         str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("resolved-yaml-config", "Resolved YAML config") {

@@ -68,8 +68,13 @@ TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     auto fit = formats.find(format);
     Y_VERIFY_S(fit != formats.end(), "Unexpected format: " << format);
 
-    auto cit = codecs.find(codec);
-    Y_VERIFY_S(cit != codecs.end(), "Unexpected codec: " << codec);
+    auto cit = codecs.begin();
+    if (fit->first == EDataFormat::Parquet) {
+        // Do not use additional suffixes
+    } else {
+        cit = codecs.find(codec);
+        Y_VERIFY_S(cit != codecs.end(), "Unexpected codec: " << codec);
+    }
 
     return Sprintf("%s%s", fit->second.c_str(), cit->second.c_str());
 }

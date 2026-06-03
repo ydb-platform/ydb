@@ -552,6 +552,87 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportParquetTableWithCompressionImpl(TBackupTestFixture &f, bool isOlap) {
+    Y_UNUSED(isOlap);
+
+    const int64_t numRows = 10000;
+    TString data = TString("Data") * 256;
+    auto expectedMaxDataSize = numRows * (4+data.size()) / 10;
+    {
+        for (ui32 i = 0; i < numRows;) {
+            TStringBuilder query;
+            query << "INSERT INTO `/Root/RecursiveFolderProcessing/Table0` (key, value) VALUES ";
+            for (ui32 j = 0; j < 1000 && i < numRows; ++j, ++i) {
+                query << ( j ? "," : "") << "(" << (i+1) << ",\"" << data << "\")";
+            }
+            query << ";";
+
+            auto res = f.YdbQueryClient()
+                        .ExecuteQuery(query, NQuery::TTxControl::NoTx())
+                        .GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+    }
+
+    TBackupTraits<TExportSettings> traits;
+    const TString prefix = traits.FilePrefix();
+    auto exportSettings = traits.MakeExportParquetSettings(f, "");
+    exportSettings
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/Table0", .Dst = "Table0"});
+
+    traits.SetCompression(exportSettings, "zstd");
+
+    {
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json",
+            prefix + "SchemaMapping/mapping.json",
+            prefix + "Table0/metadata.json",
+            prefix + "Table0/scheme.pb",
+            prefix + "Table0/permissions.pb",
+            prefix + "Table0/data_00.parquet",
+
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "Table0/metadata.json.sha256",
+            prefix + "Table0/scheme.pb.sha256",
+            prefix + "Table0/permissions.pb.sha256",
+            prefix + "Table0/data_00.parquet.sha256",
+        });
+    }
+
+    {
+        auto path = prefix + "Table0/data_00.parquet";
+        auto s3Data = f.GetS3Data();
+        auto dataIt = s3Data.find(path);
+        UNIT_ASSERT_C(dataIt != s3Data.end(), "data_00.parquet not found");
+        UNIT_ASSERT_LE_C(dataIt->second.size(), expectedMaxDataSize, fmt::format("data_00.parquet is too big: {}, max {}", dataIt->second.size(), expectedMaxDataSize));
+
+        auto value = dataIt->second;
+        auto input = std::make_shared<arrow::io::BufferReader>(
+            (const uint8_t *)(value.data()), int64_t(value.size()));
+
+        parquet::arrow::FileReaderBuilder reader_builder;
+        arrow::Status status;
+        status = reader_builder.Open(input);
+        UNIT_ASSERT_C(status.ok(), status.message());
+
+        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+        status = reader_builder.Build(&arrow_reader);
+        UNIT_ASSERT_C(status.ok(), status.message());
+
+        std::shared_ptr<arrow::Table> table;
+        status = arrow_reader->ReadTable(&table);
+        UNIT_ASSERT_C(status.ok(), status.message());
+        UNIT_ASSERT_EQUAL(numRows, table->num_rows());
+    }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ExportWithCommonSourcePathImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -1876,6 +1957,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ExportParquetWholeDatabase, IsOlap) {
         ExportParquetWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportParquetTableWithCompression, IsOlap) {
+        ExportParquetTableWithCompressionImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseWithEncryption, IsOlap) {

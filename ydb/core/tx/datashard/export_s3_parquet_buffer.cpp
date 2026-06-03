@@ -23,8 +23,6 @@
 #include <util/generic/buffer.h>
 #include <util/stream/buffer.h>
 
-#include <sstream>
-
 namespace NKikimr::NDataShard {
 
 namespace {
@@ -54,18 +52,16 @@ public:
 
     void ColumnsOrder(const TVector<ui32> &tags) override;
     bool Collect(const NTable::IScan::TRow &row) override;
-    virtual IEventBase *
-    PrepareEvent(bool last, NExportScan::IBuffer::TStats &stats) override;
+    IEventBase *PrepareEvent(bool last, NExportScan::IBuffer::TStats &stats) override;
     void Clear() override;
     bool IsFilled() const override;
     TString GetError() const override;
 
 private:
-    inline ui64 GetRowsLimit() const { return RowsLimit; }
-    inline ui64 GetBytesLimit() const { return MaxBytes; }
+    ui64 GetRowsLimit() const { return RowsLimit; }
+    ui64 GetBytesLimit() const { return MaxBytes; }
 
-    static NBackup::IChecksum *CreateChecksum(
-        const TMaybe<TS3ExportBufferSettings::TChecksumSettings> &settings);
+    static NBackup::IChecksum *CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings> &settings);
 
     bool Flush(bool last);
 
@@ -145,14 +141,14 @@ void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32> &tags) {
 
     auto schemaRes = NArrow::MakeArrowSchema(ydbColumns, notNullColumns);
     if (!schemaRes.ok()) {
-        ErrorString = (std::ostringstream() << "Failed to make arrow schema: " << schemaRes.status().message()).str();
+        ErrorString = (TStringBuilder() << "Failed to make arrow schema: " << schemaRes.status().message());
         return;
     }
     Schema.swap(schemaRes.ValueOrDie());
 
     arrow::Status status;
     if (!(status = BatchBuilder.Start(ydbColumns, Schema)).ok()) {
-        ErrorString = (std::ostringstream() << "Failed to start batch builder: " << status.message()).str();
+        ErrorString = (TStringBuilder() << "Failed to start batch builder: " << status.message());
         return;
     }
 
@@ -213,10 +209,7 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
                     arrowProps, &ArrowWriter))
             .ok()) {
 
-            ErrorString =
-                (std::ostringstream()
-                    << "Failed to open parquet file writer: " << status.message())
-                .str();
+            ErrorString = (TStringBuilder() << "Failed to open parquet file writer: " << status.message());
             return false;
         }
     }
@@ -227,29 +220,20 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
         batches.push_back(batch);
         auto tableResult = arrow::Table::FromRecordBatches(batches);
         if (!tableResult.ok()) {
-            ErrorString =
-                (std::ostringstream()
-                    << "Failed to make table from batches: " << tableResult.status().message())
-                .str();
+            ErrorString = (TStringBuilder() << "Failed to make table from batches: " << tableResult.status().message());
             return false;
         };
 
         auto table = tableResult.ValueOrDie();
         if (!(status = ArrowWriter->WriteTable(*table, table->num_rows())).ok()) {
-            ErrorString =
-                (std::ostringstream()
-                    << "Failed to write table to parquet file: " << status.message())
-                .str();
+            ErrorString = (TStringBuilder() << "Failed to write table to parquet file: " << status.message());
             return false;
         }
     }
 
     if (last) {
         if (!(status = ArrowWriter->Close()).ok()) {
-            ErrorString =
-                (std::ostringstream()
-                    << "Failed to close parquet file writer: " << status.message())
-                .str();
+            ErrorString = (TStringBuilder() << "Failed to close parquet file writer: " << status.message());
             return false;
         }
     }

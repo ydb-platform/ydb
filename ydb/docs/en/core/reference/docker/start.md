@@ -52,7 +52,7 @@ By default, when starting a Docker container for {{ ydb-short-name }}, a built-i
 
 ```bash
 docker run "${docker_args[@]}" \
-  -v $(pwd)/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
+  -v $(pwd)/ydb_config/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
 ```
 
 For users who are not experienced with Docker, it's important to understand how to properly mount a configuration file into the container. Below is a step-by-step example:

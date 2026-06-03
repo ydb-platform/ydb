@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include "write_request_bundle.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
@@ -24,17 +26,7 @@ class TBaseWriteRequestExecutor
     : public std::enable_shared_from_this<TBaseWriteRequestExecutor>
 {
 public:
-    struct TResponse
-    {
-        NProto::TError Error;
-        ui64 Lsn = 0;
-        // The PBuffer hosts where the attempt was made to write the data.
-        THostMask RequestedWrites;
-        // The PBuffer hosts where exactly the data was written and confirmed.
-        THostMask CompletedWrites;
-    };
-
-    using TReplyCallback = std::function<void(TResponse)>;
+    using TReplyCallback = std::function<void(TWriteRequestResponse)>;
     using TNotifyBelatedCallback = std::function<void(THostMask, ui64)>;
 
     TBaseWriteRequestExecutor(

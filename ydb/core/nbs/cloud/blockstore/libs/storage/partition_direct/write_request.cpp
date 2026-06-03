@@ -112,7 +112,7 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 
     Request->Sglist.Close();
 
-    ReplyCallback(TResponse{
+    ReplyCallback(TWriteRequestResponse{
         .Error = std::move(error),
         .Lsn = Lsn,
         .RequestedWrites = RequestedWrites,

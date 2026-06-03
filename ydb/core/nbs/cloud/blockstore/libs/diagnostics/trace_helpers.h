@@ -62,6 +62,38 @@ private:
     ui8 Verbosity;
 };
 
+template <typename T>
+class TTracedPromise2
+{
+public:
+    explicit TTracedPromise2(NWilson::TSpan* span, ui8 verbosity)
+        : Span(span)
+        , Verbosity(verbosity)
+    {}
+
+    NThreading::TFuture<T> GetFuture() const
+    {
+        return Promise.GetFuture();
+    }
+
+    void SetValue(T&& value)
+    {
+        auto span =
+            Span->CreateChild(Verbosity, "Reply", NWilson::EFlags::AUTO_END);
+        Promise.SetValue(std::move(value));
+    }
+
+    [[nodiscard]] bool HasValue() const
+    {
+        return Promise.HasValue();
+    }
+
+private:
+    NWilson::TSpan* Span;
+    NThreading::TPromise<T> Promise = NThreading::NewPromise<T>();
+    ui8 Verbosity;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

@@ -53,6 +53,12 @@ public:
     bool UseActorSystemThreadsInTopicClient = true;
     bool AllowTransparentSystemColumns = true;
     bool StreamingTopicsReadByDefault = true;
+<<<<<<< HEAD
+=======
+    bool UseYtflowEngine = false;
+    bool EnableTopicsPredicatePushdown = false;
+    bool EnablePqConstraintsTransformer = false;
+>>>>>>> 90f3e487526 (YQ-5302 passed streaming constraints (#39639))
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

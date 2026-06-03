@@ -655,8 +655,22 @@ public:
                 watermarksIdleTimeoutUs = out.Get<ui64>();
             } else if ("streaming" == settingName) {
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
+<<<<<<< HEAD
                     streamingTopicReadEnabled = *parseResult;
                     Add(props, StreamingTopicRead, ToString(*parseResult), pos, ctx);
+=======
+                    bool withStreamingValue = *parseResult;
+                    if (State_->StreamingTopicsReadByDefault && !withStreamingValue) {
+                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported in streaming query now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+                        return nullptr;
+                    }
+                    if (!State_->StreamingTopicsReadByDefault && withStreamingValue) {
+                        TIssue tableTopicReadWarning(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only");
+                        tableTopicReadWarning.Severity = TSeverityIds::S_WARNING;
+                        ctx.AddWarning(tableTopicReadWarning);
+                    }
+                    streamingTopicReadEnabled = withStreamingValue;
+>>>>>>> 90f3e487526 (YQ-5302 passed streaming constraints (#39639))
                 } else {
                     return {};
                 }

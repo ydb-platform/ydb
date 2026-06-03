@@ -194,6 +194,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        // First step of stream lookup join with DQ external sources (not kqp tables)
         TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -226,8 +227,15 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()) >= 2;
+<<<<<<< HEAD
         TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
+=======
+        TMaybeNode<TExprBase> output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
+        if (output) {
+            DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
+>>>>>>> 90f3e487526 (YQ-5302 passed streaming constraints (#39639))
         return output;
     }
 

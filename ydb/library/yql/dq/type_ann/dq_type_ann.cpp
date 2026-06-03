@@ -583,7 +583,126 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         rightTableLabels, join.JoinType(), join.JoinKeys(), ctx, isMultiget);
 }
 
+<<<<<<< HEAD
 } // unnamed
+=======
+TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    // BlockHashJoin expects 8 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
+    if (!EnsureArgsCount(*node, 8, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const auto& leftInputNode = *node->Child(0);
+    const auto& rightInputNode = *node->Child(1);
+    const auto& joinTypeNode = *node->Child(2);
+    auto& leftKeysNode = *node->Child(3);
+    auto& rightKeysNode = *node->Child(4);
+
+    if (!EnsureAtom(joinTypeNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const auto joinType = joinTypeNode.Content();
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
+                    << ", supported: Inner, Left, LeftSemi, LeftOnly"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    TTypeAnnotationNode::TListType leftItemTypes;
+    if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    // Remove length column
+    leftItemTypes.pop_back();
+
+    TTypeAnnotationNode::TListType rightItemTypes;
+    if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    // Remove length column
+    rightItemTypes.pop_back();
+
+    if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    std::vector<const TTypeAnnotationNode*> resultItems;
+
+    // Add left side columns
+    for (auto itemType : leftItemTypes) {
+        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    }
+
+    // Add right side columns
+    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
+        for (auto itemType : rightItemTypes) {
+            if (joinType == "Left") {
+                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+        }
+    }
+
+    // Add scalar length column at the end
+    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+    return IGraphTransformer::TStatus(TStatus::Ok);
+}
+
+class TDqTypeAnnotationTransformer final : public TVisitorTransformerBase {
+public:
+    TDqTypeAnnotationTransformer()
+        : TVisitorTransformerBase(/* failOnUnknown */ true)
+    {
+        AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&AnnotateDqBlockHashJoinCore)); // Handle BlockHashJoinCore callable (from peephole)
+        AddHandler({TDqStage::CallableName()}, Hndl(&AnnotateDqStage));
+        AddHandler({TDqPhyStage::CallableName()}, Hndl(&AnnotateDqPhyStage));
+        AddHandler({TDqOutput::CallableName()}, Hndl(&AnnotateDqOutput));
+        AddHandler({TDqCnHashShuffle::CallableName()}, Hndl(&AnnotateDqCnHashShuffle));
+        AddHandler({TDqCnStreamLookup::CallableName()}, Hndl(&AnnotateDqCnStreamLookup));
+        AddHandler({TDqCnResult::CallableName()}, Hndl(&AnnotateDqCnResult));
+        AddHandler({TDqCnValue::CallableName()}, Hndl(&AnnotateDqCnValue));
+        AddHandler({TDqCnMerge::CallableName()}, Hndl(&AnnotateDqCnMerge));
+        AddHandler({TDqReplicate::CallableName()}, Hndl(&AnnotateDqReplicate));
+        AddHandler({TDqJoin::CallableName()}, Hndl(&AnnotateDqJoin));
+        AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&AnnotateDqCrossJoin));
+        AddHandler({TDqSource::CallableName()}, Hndl(&AnnotateDqSource));
+        AddHandler({TDqSink::CallableName()}, Hndl(&AnnotateDqSink));
+        AddHandler({TDqTransform::CallableName()}, Hndl(&AnnotateDqTransform));
+        AddHandler({TDqQuery::CallableName()}, Hndl(&AnnotateDqQuery));
+        AddHandler({TDqPrecompute::CallableName()}, Hndl(&AnnotateDqPrecompute));
+        AddHandler({TDqPhyPrecompute::CallableName()}, Hndl(&AnnotateDqPhyPrecompute));
+        AddHandler({TDqPhyLength::CallableName()}, Hndl(&AnnotateDqPhyLength));
+        AddHandler({TDqPhyHashCombine::CallableName()}, Hndl(&AnnotateDqHashCombine));
+        AddHandler({TDqPhyWatermarkGenerator::CallableName()}, Hndl(&AnnotateDqWatermarkGenerator));
+        AddHandler({
+            TDqCnUnionAll::CallableName(),
+            TDqCnParallelUnionAll::CallableName(),
+            TDqCnMap::CallableName(),
+            TDqCnBroadcast::CallableName(),
+        }, Hndl(&AnnotateDqConnection));
+        AddHandler({
+            TDqPhyGraceJoin::CallableName(),
+            TDqPhyBlockHashJoin::CallableName(),
+            TDqPhyMapJoin::CallableName(),
+            TDqPhyJoinDict::CallableName(),
+        }, Hndl(&AnnotateDqMapOrDictJoin));
+    }
+};
+
+} // anonymous namespace
+>>>>>>> 90f3e487526 (YQ-5302 passed streaming constraints (#39639))
 
 const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprContext& ctx) {
     return GetDqOutputType(node.Output(), ctx);

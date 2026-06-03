@@ -577,8 +577,10 @@ class TCreateMaintenanceTask
                     " actions within one group are granted atomically");
             }
             if (actionGroupCount < maxInflightActions) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS,
-                    "max_inflight_actions is greater than the number of action groups");
+                Warnings.emplace_back(
+                    TStringBuilder()
+                    << "max_inflight_actions is greater than the number of action groups: "
+                    << maxInflightActions << " > " << actionGroupCount);
             }
         }
 

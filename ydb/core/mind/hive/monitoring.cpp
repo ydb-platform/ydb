@@ -700,6 +700,7 @@ public:
     const TActorId Source;
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     bool ChangeRequest = false;
+    std::optional<TString> Status;
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -986,7 +987,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (ChangeRequest) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ok\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"" << Status.value_or("ok") << "\"}"));
         } else {
             TStringStream str;
             RenderHTMLPage(str, ctx);

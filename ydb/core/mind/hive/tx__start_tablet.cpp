@@ -29,6 +29,7 @@ public:
         BLOG_D("THive::TTxStartTablet::Execute Tablet " << TabletId);
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
+            NIceDb::TNiceDb db(txc.DB);
             tablet->BootTime = TActivationContext::Now();
             // finish fast-move operation
             if (tablet->LastNodeId != 0 && tablet->LastNodeId != Local.NodeId()) {
@@ -45,7 +46,6 @@ public:
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStarting() || leader.IsBootingSuppressed() && External) {
-                    NIceDb::TNiceDb db(txc.DB);
                     leader.IncreaseGeneration();
                     db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
                 } else {

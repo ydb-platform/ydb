@@ -2005,8 +2005,12 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         }
 
 
+        const auto& kqpConfig = Config.GetKQPConfig();
+        const bool kqpEnabled = ServicesMask.EnableKqp
+            && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
+
         TDuration publishWarmupTimeout = TDuration::Zero();
-        if (ServicesMask.EnableKqp && Config.GetTableServiceConfig().GetEnableCompileCacheWarmup()
+        if (kqpEnabled && Config.GetTableServiceConfig().GetEnableCompileCacheWarmup()
                 && !appData->TenantName.empty()) {
             publishWarmupTimeout = NKqp::ImportWarmupConfigFromProto(
                 Config.GetTableServiceConfig().GetCompileCacheWarmupConfig()).HardDeadline;

@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/providers/s3/common/yql_s3_http_retry_policy.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -231,7 +231,7 @@ public:
     , CredentialsFactory(credentialsFactory)
     , ExternalEffect(externalEffect)
     , ActorSystem(NActors::TActivationContext::ActorSystem())
-    , RetryPolicy(NYql::GetFqS3HttpRetryPolicy())
+    , RetryPolicy(NYql::GetFqHTTPRetryPolicy())
     , RetryCount(GLOBAL_RETRY_LIMIT) {
         // ^^^ 3 retries in HTTP GW per operation
         // up to 100 retries at app level for all operations ^^^

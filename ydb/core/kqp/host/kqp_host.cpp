@@ -15,7 +15,6 @@
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/common/yql_s3_http_retry_policy.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
@@ -1934,7 +1933,7 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Gateway = FederatedQuerySetup->HttpGateway;
-        state->GatewayRetryPolicy = NYql::GetFqS3HttpRetryPolicy();
+        state->GatewayRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         state->ExecutorPoolId = AppData()->UserPoolId;
         state->ActorSystem = ActorSystem;
 

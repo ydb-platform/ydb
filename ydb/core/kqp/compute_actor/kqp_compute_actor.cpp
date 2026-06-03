@@ -23,7 +23,6 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
-#include <ydb/library/yql/providers/s3/common/yql_s3_http_retry_policy.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 
@@ -180,7 +179,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
 
     if (federatedQuerySetup) {
-        auto s3HttpRetryPolicy = NYql::GetFqS3HttpRetryPolicy();
+        auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         s3ActorsFactory->RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy, federatedQuerySetup->S3ReadActorFactoryConfig, nullptr, federatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
         s3ActorsFactory->RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
 

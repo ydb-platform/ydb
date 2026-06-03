@@ -41,7 +41,8 @@ enum EOperationType {
     SortedMerge = 6,
     Sort = 7,
     Reduce = 8,
-    Pull = 9
+    Pull = 9,
+    Fill = 10
 };
 
 enum class ETaskType {
@@ -54,7 +55,8 @@ enum class ETaskType {
     SortedMerge = 6,
     LocalSort = 7,
     Reduce = 8,
-    Pull = 9
+    Pull = 9,
+    Fill = 10
 };
 
 enum class EFmrComponent {
@@ -296,6 +298,9 @@ struct TTaskMergeResult {};
 
 struct TTaskMapResult {};
 
+struct TTaskFillResult {};
+
+
 struct TTaskSortedUploadResult {
     TString FragmentResultYson;
     ui64 FragmentOrder;
@@ -305,7 +310,7 @@ struct TTaskPullResult {
     TString Data; // YSON rows concatenated
 };
 
-using TTaskResult = std::variant<TTaskUploadResult, TTaskDownloadResult, TTaskMergeResult, TTaskMapResult, TTaskSortedUploadResult, TTaskPullResult>;
+using TTaskResult = std::variant<TTaskUploadResult, TTaskDownloadResult, TTaskMergeResult, TTaskMapResult, TTaskSortedUploadResult, TTaskPullResult, TTaskFillResult>;
 
 struct TStatistics {
     std::unordered_map<TFmrTableOutputRef, TTableChunkStats> OutputTables;
@@ -446,6 +451,16 @@ struct TMapTaskParams {
     EFmrJobType MapJobType;
 };
 
+struct TFillOperationParams {
+    std::vector<TFmrTableRef> Output;
+    TString SerializedFillJobState;
+};
+
+struct TFillTaskParams {
+    std::vector<TFmrTableOutputRef> Output;
+    TString SerializedFillJobState;
+};
+
 struct TSortOperationParams {
     std::vector<TOperationTableRef> Input;
     TFmrTableRef Output;
@@ -493,9 +508,9 @@ struct TReduceTaskParams {
     TReduceOperationSpec ReduceOperationSpec;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams>;
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams>;
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

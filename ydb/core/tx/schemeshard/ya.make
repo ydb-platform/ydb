@@ -34,6 +34,7 @@ RECURSE_FOR_TESTS(
     ut_filestore_reboots
     ut_incremental_restore
     ut_incremental_restore_reboots
+    ut_full_backup
     ut_index
     ut_index_build
     ut_index_build_reboots
@@ -156,6 +157,7 @@ SRCS(
     schemeshard__operation_copy_table.cpp
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_backup_collection.cpp
+    schemeshard__operation_create_full_backup_op.cpp
     schemeshard__operation_create_bsv.cpp
     schemeshard__operation_create_cdc_stream.cpp
     schemeshard__operation_create_continuous_backup.cpp
@@ -238,6 +240,11 @@ SRCS(
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
+    schemeshard_full_backup.cpp
+    schemeshard_full_backup__progress.cpp
+    schemeshard_full_backup__get.cpp
+    schemeshard_full_backup__list.cpp
+    schemeshard_full_backup__forget.cpp
     schemeshard_backup_incremental__forget.cpp
     schemeshard_backup_incremental__get.cpp
     schemeshard_backup_incremental__list.cpp

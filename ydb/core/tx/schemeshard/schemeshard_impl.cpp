@@ -222,6 +222,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ResumeImports(opts.ImportsIds, ctx);
     ResumeCdcStreamScans(opts.CdcStreamScans, ctx);
     ResumeIncrementalBackups(opts.IncrementalBackupIds, ctx);
+    ResumeFullBackups(opts.FullBackupIds, ctx);
 
     ParentDomainLink.SendSync(ctx);
 
@@ -1868,6 +1869,11 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
     case TTxState::TxIncrementalRestoreFinalize:
         return TPathElement::EPathState::EPathStateAlter; // Finalization is an alter operation to normalize path states
+    case TTxState::TxCreateFullBackupOp:
+        // The control op must not flip the backup-collection path to
+        // EPathStateCreate; concurrent-backup exclusion is enforced via
+        // BCPathToFullBackup, not path-state.
+        return oldState;
     }
     return oldState;
 }
@@ -5694,6 +5700,11 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvBackup::TEvGetBackupCollectionRestoreRequest, Handle);
         HFuncTraced(TEvBackup::TEvForgetBackupCollectionRestoreRequest, Handle);
         HFuncTraced(TEvBackup::TEvListBackupCollectionRestoresRequest, Handle);
+
+        HFuncTraced(TEvBackup::TEvGetFullBackupRequest, Handle);
+        HFuncTraced(TEvBackup::TEvForgetFullBackupRequest, Handle);
+        HFuncTraced(TEvBackup::TEvListFullBackupsRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvFullBackupItemDone, Handle);
         // } // NBackup
 
 
@@ -7659,6 +7670,11 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }
+    if (FullBackups.contains(ui64(txId))) {
+        // Control op completed; finalize the tracked record.
+        Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
+        executed = true;
+    }
     if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         HandleBackgroundCleaningCompletionResult(txId);
         executed = true;
@@ -8084,6 +8100,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
     Send(SysPartitionStatsCollector, ev.Release());
 
     tableInfo->SetPartitioning(std::move(newPartitioning));
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 }
 
 void TSchemeShard::MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
@@ -8113,6 +8132,9 @@ void TSchemeShard::MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, 
     }
 
     tableInfo->MovePartitioning(std::move(newPartitioning));
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 }
 
 void TSchemeShard::CopyPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
@@ -8136,6 +8158,9 @@ void TSchemeShard::CopyPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, 
     }
 
     tableInfo->CopyPartitioning(std::move(newPartitioning));
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 }
 
 void TSchemeShard::ApplySplitMerge(
@@ -8162,6 +8187,9 @@ void TSchemeShard::ApplySplitMerge(
     }
 
     tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx, now);
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 
     TVector<std::pair<ui64, ui64>> shardIndices;
     shardIndices.reserve(tableInfo->GetPartitions().size());

@@ -1034,7 +1034,7 @@ SendNextRead():
                 send TEvReadPersistentBuffer{
                          creds {TabletId, Generation,
                                 DDiskInstanceGuid     = dbg->PBGuid[k],
-                                FromPersistentBuffer  = true},
+                                RequestKind = REQUEST_KIND_TO_PERSISTENT_BUFFER},
                          BlockSelector{vChunkIndex, off, SizeBytes},
                          lsn, generation,
                          instruction = TReadInstruction(/*returnInRopePayload=*/true),
@@ -1064,7 +1064,7 @@ DDiskRead:
     send TEvRead{
              creds {TabletId, Generation,
                     DDiskInstanceGuid     = dbg->DDGuid[k],
-                    FromPersistentBuffer  = false},
+                    RequestKind = REQUEST_KIND_TO_DDISK},
              BlockSelector{vChunkIndex, off, SizeBytes},
              instruction = TReadInstruction(/*returnInRopePayload=*/true),
              cookie = (slot << 24) | (vChunkIndex << 8) | dbgIndex }
@@ -1258,7 +1258,7 @@ TQueryCredentials {
     TabletId,                          // = TabletId  (== Tag in normal flow)
     Generation,                        // = Generation (default 1)
     DDiskInstanceGuid,                 // per-peer; from TEvConnectResult
-    FromPersistentBuffer = false,      // true only on TEvReadPersistentBuffer
+    RequestKind,                       // TO_DDISK or TO_PERSISTENT_BUFFER by target
 }
 ```
 

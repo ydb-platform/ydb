@@ -2198,6 +2198,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
+    std::lock_guard guard(Lock);
     const auto delta = TInstant::Now() - LastActiveTime;
     if (delta < TDuration::Seconds(30)) {
         // Session ok, we got at least one event from server since last 1 minute

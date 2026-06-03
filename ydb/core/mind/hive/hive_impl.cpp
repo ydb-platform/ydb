@@ -2982,7 +2982,8 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
                 }
                 for (ui32 i = 0; i < group.GetFollowerCountForDataCenter(dataCenterId); ++i) {
                     TFollowerTabletInfo& follower = tablet.AddFollower(group);
-                    follower.NodeFilter.AllowedDataCenters = {dataCenterId};
+                    follower.NodeFilter.AllowedDataCenters.Clear();
+                    follower.NodeFilter.AllowedDataCenters.AddDataCenter(dataCenterId);
                     follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
                     db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),

@@ -1177,6 +1177,51 @@ void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
     }
 }
 
+void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
+    if (!p.Msg.PartitionKeys.empty()) {
+        for (const auto& [partitionKey, size] : p.Msg.PartitionKeys) {
+            AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
+        }
+    } else {
+        AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
+    }
+}
+
+bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& p) {
+    if (p.Msg.MessageCount <= 1) {
+        return true;
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableTopicMessagesBatching() || !AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()) {
+        CancelOneWriteOnWrite(ctx,
+                              TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
+                              p,
+                              NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
+    if (!p.Msg.MaxSeqNo.has_value()) {
+        CancelOneWriteOnWrite(ctx,
+                              TStringBuilder() << "MaxSeqNo is required for batch messages, partitionId: " << Partition,
+                              p,
+                              NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
+    if (*p.Msg.MaxSeqNo != p.Msg.SeqNo + p.Msg.MessageCount - 1) {
+        CancelOneWriteOnWrite(ctx,
+                              TStringBuilder() << "MaxSeqNo is inconsistent with MessageCount, partitionId: " << Partition
+                                               << ", seqNo: " << p.Msg.SeqNo
+                                               << ", maxSeqNo: " << *p.Msg.MaxSeqNo
+                                               << ", messageCount: " << p.Msg.MessageCount,
+                              p,
+                              NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
+    return true;
+}
+
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
                          "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
@@ -1190,7 +1235,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
+    SendInfoToAutopartitioningManager(p);
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
@@ -1206,6 +1251,10 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " EnableKafkaDeduplication=" << p.Msg.EnableKafkaDeduplication
             << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
+
+    if (!ValidateBatchMessage(ctx, p)) {
+        return false;
+    }
 
     if (p.Msg.EnableKafkaDeduplication &&
         sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined() &&
@@ -1242,6 +1291,18 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!p.Msg.DisableDeduplication &&
         ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
+        if (p.Msg.MaxSeqNo.has_value() && sourceId.SeqNo() && p.Msg.SeqNo < *sourceId.SeqNo()
+            && *sourceId.SeqNo() < *p.Msg.MaxSeqNo) {
+            CancelOneWriteOnWrite(ctx,
+                                    TStringBuilder() << "Batch write for sourceId: " << EscapeC(p.Msg.SourceId)
+                                    << " is already partially written: written seqNo=" << *sourceId.SeqNo()
+                                    << ", batch startSeqNo=" << p.Msg.SeqNo
+                                    << ", batch endSeqNo=" << *p.Msg.MaxSeqNo,
+                                    p,
+                                    NPersQueue::NErrorCode::BAD_REQUEST);
+            return false;
+        }
+
         if (poffset >= curOffset) {
             LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
@@ -1414,7 +1475,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(TString{p.Msg.SourceId}, p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey)); //remove curOffset when LB will report CTime
+                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
+                     p.Msg.MessageCount, p.Msg.MessageFormat); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1487,9 +1549,13 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 << " NewHead: " << BlobEncoder.NewHead
         );
 
-        sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp, p.Msg.ProducerEpoch);
+        sourceId.Update(
+            p.Msg.MaxSeqNo.value_or(p.Msg.SeqNo),
+            curOffset,
+            CurrentTimestamp,
+            p.Msg.ProducerEpoch);
 
-        ++curOffset;
+        curOffset += p.Msg.MessageCount;
         BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;

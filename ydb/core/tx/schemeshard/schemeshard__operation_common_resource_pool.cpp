@@ -109,13 +109,5 @@ TTxState& CreateTransaction(const TOperationId& operationId, const TOperationCon
     return txState;
 }
 
-void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
-    if (parentPath.Base()->HasActiveChanges()) {
-        const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
-                                    ? parentPath.Base()->CreateTxId
-                                    : parentPath.Base()->LastTxId;
-        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
-    }
-}
 
 }  // namespace NKikimr::NSchemeShard::NResourcePool

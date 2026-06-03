@@ -146,16 +146,6 @@ class TAlterExternalDataSource : public TSubOperation {
         return externalDataSource;
     }
 
-    void RegisterParentPathDependencies(const TOperationContext& context,
-                                        const TPath& parentPath) const {
-        if (parentPath.Base()->HasActiveChanges()) {
-            const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
-                                         ? parentPath.Base()->CreateTxId
-                                         : parentPath.Base()->LastTxId;
-            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
-        }
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -244,7 +234,7 @@ public:
         txState.State = TTxState::Propose;
         context.OnComplete.ActivateTx(OperationId);
 
-        RegisterParentPathDependencies(context, parentPath);
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,

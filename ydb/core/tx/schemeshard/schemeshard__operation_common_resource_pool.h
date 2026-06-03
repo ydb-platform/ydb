@@ -28,6 +28,4 @@ bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TRes
 
 TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType);
 
-void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);
-
 }  // namespace NKikimr::NSchemeShard::NResourcePool

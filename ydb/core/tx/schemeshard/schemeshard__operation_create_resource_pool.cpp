@@ -189,7 +189,7 @@ public:
         txState.State = TTxState::Propose;
         context.OnComplete.ActivateTx(OperationId);
 
-        NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 

@@ -19,7 +19,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
+const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg", "variance_1_1"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -320,6 +320,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     for (const auto& traits : aggregate->AggregationTraitsList) {
         const auto originalColName = traits.OriginalColName.GetFullName();
         const auto& aggFunction = traits.AggFunction;
+        Y_ENSURE(SupportedAggregationFunctions.contains(aggFunction), TStringBuilder() << "Unsupported aggregation function: " << aggFunction;);
         const auto resultColName = traits.ResultColName.GetFullName();
         const auto it = aggTraitsMap.find(originalColName);
         Y_ENSURE(it != aggTraitsMap.end());
@@ -331,12 +332,13 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
             Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for sum aggregation function");
         } else if (aggFunction == "avg") {
             Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for avg aggregation function");
+        } else if (aggFunction == "variance_1_1") {
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for variance aggregation function");
         }
 
         // Special case for scalar aggregation (aka aggregation with empty keys).
         if (aggregationPhase != EOpPhase::Intermediate && scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
-            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg")) {
-
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1")) {
             const auto it = intermediateAggregation.find(originalColName);
             // count -> count::intermediate + sum::final
             if ((it == intermediateAggregation.end()) || (it->second.first != "count")) {

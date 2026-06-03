@@ -3051,14 +3051,17 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (aggFunction == "count") {
             aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         } else if (aggFunction == "sum") {
-            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for sum aggregation function");
+            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for sum aggregation function.");
         } else if (aggFunction == "avg") {
-            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for avg aggregation function");
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for avg aggregation function.");
+        } else if (aggFunction == "variance_1_1") {
+            // I guess it's a same as avg.
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for variance aggregation function.");
         }
 
         // Special case for scalar aggregation (aka aggregation with empty keys).
         if (scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
-            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg")) {
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1")) {
             aggFieldType = ctx.MakeType<TOptionalExprType>(aggFieldType);
         }
 

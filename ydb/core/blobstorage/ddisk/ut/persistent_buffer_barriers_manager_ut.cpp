@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 100;
         std::vector<ui64> lsns = {10, 20};
 
-        auto result = mgr.Erase(tabletId, lsns, alloc);
+        auto result = mgr.Erase(tabletId, 1, lsns, alloc);
         UNIT_ASSERT(result.has_value());
 
         // IS_ERASE must be set.
@@ -140,13 +140,13 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         // First batch: 240 LSNs (fits raw).
         std::vector<ui64> firstBatch;
         for (ui64 i = 1; i <= 240; i++) firstBatch.push_back(i);
-        auto r1 = mgr.Erase(tabletId, firstBatch, alloc);
+        auto r1 = mgr.Erase(tabletId, 1, firstBatch, alloc);
         UNIT_ASSERT(r1.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 240u);
 
         std::vector<ui64> secondBatch;
         for (ui64 i = 241; i <= 540; i++) secondBatch.push_back(i);
-        auto r2 = mgr.Erase(tabletId, secondBatch, alloc);
+        auto r2 = mgr.Erase(tabletId, 1, secondBatch, alloc);
         UNIT_ASSERT(r2.has_value());
         UNIT_ASSERT(r2->Header.Header.Flags & TPersistentBufferHeader::IS_ERASE);
 
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT(added);
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(2000), MaxRawLsns + 1);
     }
-    
+
     Y_UNIT_TEST(AddEraseNonCompact) {
         auto mgr = MakeManager();
 
@@ -223,13 +223,13 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         // Register some erased LSNs: 10, 20, 30, 40, 50.
         std::vector<ui64> erasedLsns = {10, 20, 30, 40, 50};
-        auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
+        auto eraseResult = mgr.Erase(tabletId, 1, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 5u);
 
         // Move barrier to LSN=30: LSNs <= 30 (i.e. 10, 20, 30) must be removed.
         TPersistentBufferSectorInfo sector = MakeSector(0, 5);
-        mgr.MoveBarrier(tabletId, /*lsn=*/30, sector);
+        mgr.MoveBarrier(tabletId, 1, /*lsn=*/30, sector);
 
         // Only LSNs 40 and 50 should remain.
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 2u);
@@ -242,13 +242,13 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 400;
 
         std::vector<ui64> erasedLsns = {5, 15, 25};
-        auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
+        auto eraseResult = mgr.Erase(tabletId, 1, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 3u);
 
         // Advance barrier past all erased LSNs.
         TPersistentBufferSectorInfo sector = MakeSector(0, 10);
-        mgr.MoveBarrier(tabletId, /*lsn=*/100, sector);
+        mgr.MoveBarrier(tabletId, 1, /*lsn=*/100, sector);
 
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 0u);
     }
@@ -260,12 +260,12 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 500;
 
         std::vector<ui64> erasedLsns = {10, 20, 30, 40, 50};
-        auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
+        auto eraseResult = mgr.Erase(tabletId, 1, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
 
         // Barrier at LSN=15: only LSN 10 should be removed; 20,30,40,50 remain.
         TPersistentBufferSectorInfo sector = MakeSector(0, 7);
-        mgr.MoveBarrier(tabletId, /*lsn=*/15, sector);
+        mgr.MoveBarrier(tabletId, 1, /*lsn=*/15, sector);
 
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 4u);
     }
@@ -277,10 +277,10 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         // No Erase() called for this tablet – MoveBarrier must not crash.
         TPersistentBufferSectorInfo sector = MakeSector(0, 1);
-        mgr.MoveBarrier(tabletId, /*lsn=*/50, sector);
+        mgr.MoveBarrier(tabletId, 1, /*lsn=*/50, sector);
 
         // Barrier should be registered.
-        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 50u);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId).Lsn, 50u);
     }
 
     Y_UNIT_TEST(MoveBarrierProgressivelyCleansEraseLsns) {
@@ -290,22 +290,22 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 700;
 
         std::vector<ui64> erasedLsns = {10, 20, 30, 40, 50, 60, 70, 80};
-        auto eraseResult = mgr.Erase(tabletId, erasedLsns, alloc);
+        auto eraseResult = mgr.Erase(tabletId, 1, erasedLsns, alloc);
         UNIT_ASSERT(eraseResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 8u);
 
         TPersistentBufferSectorInfo sector1 = MakeSector(0, 2);
-        mgr.MoveBarrier(tabletId, /*lsn=*/25, sector1);
+        mgr.MoveBarrier(tabletId, 1, /*lsn=*/25, sector1);
         // LSNs 10, 20 removed; 30,40,50,60,70,80 remain.
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 6u);
 
         TPersistentBufferSectorInfo sector2 = MakeSector(0, 3);
-        mgr.MoveBarrier(tabletId, /*lsn=*/55, sector2);
+        mgr.MoveBarrier(tabletId, 1, /*lsn=*/55, sector2);
         // LSNs 30,40,50 removed; 60,70,80 remain.
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 3u);
 
         TPersistentBufferSectorInfo sector3 = MakeSector(0, 4);
-        mgr.MoveBarrier(tabletId, /*lsn=*/80, sector3);
+        mgr.MoveBarrier(tabletId, 1, /*lsn=*/80, sector3);
         // All remaining LSNs removed.
         UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 0u);
     }
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 800;
         std::vector<ui64> lsns = {1, 2};
 
-        auto result = mgr.Erase(tabletId, lsns, alloc);
+        auto result = mgr.Erase(tabletId, 1, lsns, alloc);
         UNIT_ASSERT(!result.has_value());
     }
 
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         const ui64 tabletId = 900;
         std::vector<ui64> lsns = {42};  // only 1 LSN
 
-        auto result = mgr.Erase(tabletId, lsns, alloc);
+        auto result = mgr.Erase(tabletId, 1, lsns, alloc);
         UNIT_ASSERT(!result.has_value());
     }
 
@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             bh.Header.PersistentBufferUniqueId = 1;
             bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
             bh.Header.RecordIdx = 0;
-            bh.Barriers[0] = {tabletId, /*Lsn=*/30};
+            bh.Barriers[0] = {tabletId, /*Lsn=*/30, 1};
             mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
 
             // RestoreBarriers needs records > barrier to keep the tablet alive.
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             pbsForBarrier[{tabletId, 0}] = std::move(buf);
             mgr.RestoreBarriers(pbsForBarrier, alloc);
         }
-        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 30u);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId).Lsn, 30u);
 
         // Set up an erase record with LSNs: 10, 20, 30, 40, 50.
         {
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             bh.Header.PersistentBufferUniqueId = 1;
             bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
             bh.Header.RecordIdx = 0;
-            bh.Barriers[0] = {tabletId, /*Lsn=*/100};
+            bh.Barriers[0] = {tabletId, /*Lsn=*/100, 1};
             mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
 
             std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbsForBarrier;
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             pbsForBarrier[{tabletId, 0}] = std::move(buf);
             mgr.RestoreBarriers(pbsForBarrier, alloc);
         }
-        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId).Lsn, 100u);
 
         // Erase LSNs all ≤ barrier=100.
         {
@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         auto mgr = MakeManager();
 
         const ui64 tabletId = 1003;
-        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId).Lsn, 0u);
 
         // Erase record with LSNs: 5, 15, 25.
         {

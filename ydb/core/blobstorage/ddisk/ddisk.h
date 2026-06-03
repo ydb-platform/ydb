@@ -255,7 +255,7 @@ struct TPersistentBufferFormat {
     ui32 MaxChunkRestoreInflight = 8;
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
     ui64 PerTabletStorageLimit = 4096_MB;
-    ui32 MaxBarriersLimit = 64;
+    ui32 MaxBarriersLimit = 128;
     ui32 MaxPendingEventsQueueSize = 1024;
     bool EnableFastErases = true;
 };

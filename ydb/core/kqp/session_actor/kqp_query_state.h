@@ -357,7 +357,16 @@ public:
                 }
 
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
-                    addTable(source.GetFullTextSource().GetTable());
+                    const auto& fullText = source.GetFullTextSource();
+                    addTable(fullText.GetTable());
+                    // The compiled plan also pins each index impl table's (dict/docs/stats/posting)
+                    // schema version, and those advance independently of the main table (e.g. on
+                    // build finalize). Track them too, otherwise a cached plan with a stale impl-table
+                    // version is never invalidated and every read fails with SCHEME_ERROR until the
+                    // plan is evicted.
+                    for (const auto& indexTable : fullText.GetIndexTables()) {
+                        addTable(indexTable.GetTable());
+                    }
                 }
             }
 

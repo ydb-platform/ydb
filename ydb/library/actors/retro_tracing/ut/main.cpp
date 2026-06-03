@@ -4,10 +4,10 @@
 #include <util/random/random.h>
 #include <util/stream/null.h>
 
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
-#include <ydb/library/actors/retro_tracing/retro_span_deserialization.h>
-#include <ydb/library/actors/retro_tracing/span_buffer.h>
-#include <ydb/library/actors/retro_tracing/universal_span.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
+#include <ydb/library/actors/retro_tracing/span/span_buffer.h>
+#include <ydb/library/actors/retro_tracing/span/universal_span.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 

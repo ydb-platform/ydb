@@ -1,5 +1,7 @@
 #include "retro_span_deserialization.h"
 
+#include <ydb/library/actors/retro_tracing/span/span_buffer.h>
+
 #include <unordered_set>
 #include <vector>
 
@@ -34,7 +36,7 @@ std::vector<std::unique_ptr<TRetroSpan>> GetSpansImpl(const TTraceIdSet& traceId
     TRetroSpan spanHeader(0, sizeof(TRetroSpan));
 
     auto callback = [&] {
-        for (ui32 pos = 0; pos < BufferSize; pos += CellSize) {
+        for (ui32 pos = 0; pos < SpanBufferSize; pos += SpanCellSize) {
             const void* ptr = readBuffer.data() + pos;
             std::memcpy(
                 reinterpret_cast<void*>(&spanHeader),

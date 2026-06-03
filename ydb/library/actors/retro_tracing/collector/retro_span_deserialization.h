@@ -1,6 +1,6 @@
 #pragma once
 
-#include "retro_span.h"
+#include <ydb/library/actors/retro_tracing/span/retro_span.h>
 
 #include <memory>
 

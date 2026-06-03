@@ -1,5 +1,4 @@
 #include "span_buffer.h"
-#include "retro_span_deserialization.h"
 
 #include <util/generic/size_literals.h>
 
@@ -14,13 +13,11 @@ namespace NRetroTracing {
 
 class TSpanCircleBuffer {
 private:
-    static constexpr ui32 CellSize = 1 << 10;
-    static constexpr ui32 BufferSize = 4 << 20;
-    static constexpr ui32 Capacity = BufferSize / CellSize;
+    static constexpr ui32 Capacity = SpanBufferSize / SpanCellSize;
     static constexpr ui32 CapacityMask = Capacity - 1;
 
 public:
-    using TBuffer = std::array<char, BufferSize>;
+    using TBuffer = std::array<char, SpanBufferSize>;
 
 public:
     void WriteSpan(const TRetroSpan* span) {
@@ -30,7 +27,7 @@ public:
         }
 
         ui32 spanSize = span->GetSize();
-        if (spanSize == 0 || spanSize > CellSize) {
+        if (spanSize == 0 || spanSize > SpanCellSize) {
             // invalid span size, reject span
             return;
         }
@@ -43,7 +40,7 @@ public:
             }
             ui64 head = Head & CapacityMask;
             std::memcpy(
-                static_cast<void*>(Buffer.data() + head * CellSize),
+                static_cast<void*>(Buffer.data() + head * SpanCellSize),
                 static_cast<const void*>(span),
                 spanSize);
             ++Head;
@@ -53,7 +50,7 @@ public:
     void CopyData(TBufferData* destination) {
         std::lock_guard guard(Lock);
         std::memcpy(static_cast<void*>(destination->data()),
-                static_cast<const void*>(Buffer.data()), BufferSize);
+                static_cast<const void*>(Buffer.data()), SpanBufferSize);
     }
 
 private:
@@ -61,8 +58,6 @@ private:
     ui64 Head = 0;
     std::mutex Lock;
 };
-
-// char TSpanCircleBuffer::TmpBuffer[BufferSize] = {0};
 
 static thread_local std::shared_ptr<TSpanCircleBuffer> SpanBuffer;
 static std::mutex SpanBufferMutex;

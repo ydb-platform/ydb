@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/actors/retro_tracing/retro_span.h>
-#include <ydb/library/actors/retro_tracing/retro_span_namespace.h>
-#include <ydb/library/actors/retro_tracing/typed_retro_span.h>
-#include <ydb/library/actors/retro_tracing/universal_span.h>
+#include <ydb/library/actors/retro_tracing/span/retro_span.h>
+#include <ydb/library/actors/retro_tracing/span/retro_span_namespace.h>
+#include <ydb/library/actors/retro_tracing/span/typed_retro_span.h>
+#include <ydb/library/actors/retro_tracing/span/universal_span.h>
 #include <util/system/yassert.h>
 
 namespace NActors {

@@ -5,8 +5,9 @@ SRCS(
     span_buffer.cpp
 )
 
-END()
-
-RECURSE_FOR_TESTS(
-    ut
+PEERDIR(
+    contrib/libs/opentelemetry-proto
+    ydb/library/actors/wilson
 )
+
+END()

@@ -8,11 +8,9 @@ SRCS(
 
 PEERDIR(
     contrib/libs/opentelemetry-proto
+    ydb/library/actors/core
+    ydb/library/actors/retro_tracing/span
     ydb/library/actors/wilson
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

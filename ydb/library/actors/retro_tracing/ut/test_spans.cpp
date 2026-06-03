@@ -1,6 +1,6 @@
 #include <ydb/library/actors/interconnect/retro_tracing/spans.h>
-#include <ydb/library/actors/retro_tracing/retro_span_deserialization.h>
-#include <ydb/library/actors/retro_tracing/typed_retro_span.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
+#include <ydb/library/actors/retro_tracing/span/typed_retro_span.h>
 #include "test_spans.h"
 
 namespace NRetroTracing {

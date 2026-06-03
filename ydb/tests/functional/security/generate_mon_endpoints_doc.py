@@ -33,6 +33,7 @@ DEFAULT_OUTPUT = SCRIPT_DIR / 'mon_endpoints_auth.md'
 
 VIEWER_DIR = REPO_ROOT / 'ydb/core/viewer'
 VIEWER_CPP = VIEWER_DIR / 'viewer.cpp'
+AUDIT_DENYLIST_CPP = REPO_ROOT / 'ydb/core/mon/audit/audit_denylist.cpp'
 
 CHECK_ACCESS_PATTERN = re.compile(
     r'CheckAccess(Monitoring|Viewer|Administration)\s*\(',
@@ -58,13 +59,12 @@ TOKEN_ORDER = [
 ]
 
 GROUPS = [
-    ('anonymus', 'Группа 1 — anonymus (no token)'),
-    ('public', 'Группа 2 — public'),
-    ('database', 'Группа 3 — database'),
-    ('viewer', 'Группа 4 — viewer'),
-    ('monitoring', 'Группа 5 — monitoring'),
-    ('admin', 'Группа 6 — admin'),
-    ('unavailable', 'Группа 7 — unavailable'),
+    ('anonymus', 'Anonymus (no token)'),
+    ('public', 'Public'),
+    ('database', 'Database'),
+    ('viewer', 'Viewer'),
+    ('monitoring', 'Monitoring'),
+    ('admin', 'Admin'),
 ]
 
 ACCESS_LEVEL_RANK = {
@@ -86,56 +86,17 @@ LEVEL_LABELS = {
     'admin': 'root@builtin',
 }
 
-# Target access level overrides (planned policy, not always matching current HTTP behavior).
-TARGET_LEVEL_OVERRIDES: dict[str, str] = {}
-
-# Mon pages with AuthMode::Disabled in viewer.cpp (target: public without token).
-PUBLIC_TARGET_PATHS = {
-    '/viewer/capabilities',
-    '/monitoring/',
-}
-
-# Paths that cannot be raised to monitoring_allowed_sids in the target model (stay at lower level).
-CANNOT_RAISE_TO_MONITORING_PREFIXES = (
-    '/viewer/acl',
-    '/viewer/describe',
-    '/scheme',
-    '/query',
-    '/operation',
-    '/storage',
-)
-
-STATIC_PREFIXES = ('/static/', '/lwtrace/mon/static')
-STATIC_EXACT = {
-    '/jquery.tablesorter.js',
-    '/jquery.tablesorter.css',
-}
-
-AUDIT_EXCEPTION_NO_LOG = {
-    '/internal': 'псевдостатика; нет смысла логировать',
-}
-
-AUDIT_FORCE_LOG_PATHS = {
-    '/viewer/acl',
-    '/viewer/describe',
-    '/viewer/json/acl',
-    '/viewer/json/describe',
-}
-
-
 @dataclass(frozen=True)
 class Row:
     endpoint: str
     method: str
     query: str
-    current_level: str
-    target_level: str
+    access_level: str
     audited: bool
-    comment: str
 
     @property
     def group(self) -> str:
-        return self.current_level
+        return self.access_level
 
 
 def _is_success(code: int) -> bool:
@@ -317,68 +278,39 @@ def _parse_viewer_endpoint_access(viewer_cpp: Path) -> dict[str, str]:
     return result
 
 
-def _is_static(path: str) -> bool:
-    if path in STATIC_EXACT:
-        return True
-    return any(path.startswith(prefix) for prefix in STATIC_PREFIXES)
+def _parse_audit_denylist(cpp_path: Path) -> list[tuple[str, bool]]:
+    if not cpp_path.is_file():
+        return []
+    text = cpp_path.read_text(encoding='utf-8')
+    pattern = re.compile(
+        r'\{\s*\.Path\s*=\s*"([^"]+)"(?:,\s*\.Recursive\s*=\s*(true|false))?\s*\}',
+    )
+    entries: list[tuple[str, bool]] = []
+    for path, recursive in pattern.findall(text):
+        entries.append((path, recursive == 'true'))
+    return entries
 
 
-def _target_access_level(path: str, viewer_access: dict[str, str]) -> str:
-    if path in TARGET_LEVEL_OVERRIDES:
-        return TARGET_LEVEL_OVERRIDES[path]
-    if path in PUBLIC_TARGET_PATHS:
-        return 'public'
-    if path in viewer_access:
-        return viewer_access[path]
-    if path.startswith('/viewer/') or path == '/viewer':
-        return 'database'
-    if path.startswith('/actors/') or path in ('/cms', '/grpc', '/trace', '/nodetabmon', '/tablets', '/tablet'):
-        return 'monitoring'
-    if path.startswith('/memory/'):
-        return 'monitoring'
-    if path.startswith('/fq_diag/'):
-        return 'monitoring'
-    if path.startswith('/vdisk') or path.startswith('/pdisk'):
-        return 'monitoring'
-    if path.startswith('/healthcheck'):
-        return 'monitoring'
-    if path.startswith('/counters'):
-        return 'public'
-    if path in ('/ping', '/status', '/ver', '/login', '/followercounters', '/labeledcounters'):
-        return 'public'
-    if path.startswith('/monitoring'):
-        return 'public'
-    if path.startswith('/internal'):
-        return 'monitoring'
-    if path.startswith('/node/'):
-        return 'monitoring'
-    if any(path.startswith(prefix) for prefix in CANNOT_RAISE_TO_MONITORING_PREFIXES):
-        return 'database'
-    return 'monitoring'
+def _path_in_denylist(path: str, denylist: list[tuple[str, bool]]) -> bool:
+    for pattern, recursive in denylist:
+        if recursive:
+            if path == pattern or path.startswith(pattern.rstrip('/') + '/'):
+                return True
+        elif path == pattern:
+            return True
+    return False
 
 
-def _target_audited(method: str, path: str, target_level: str) -> bool:
+def _audited(method: str, path: str, denylist: list[tuple[str, bool]]) -> bool:
     path_only = path.split('?')[0]
-
-    if method == 'OPTIONS':
-        return False
 
     if method in ('POST', 'PUT', 'DELETE'):
         return True
 
-    if path_only in AUDIT_FORCE_LOG_PATHS:
-        return True
-
-    if path_only in AUDIT_EXCEPTION_NO_LOG or path_only.startswith('/internal/'):
+    if method == 'OPTIONS':
         return False
 
-    if _is_static(path_only):
-        return False
-
-    if target_level in ('monitoring', 'admin'):
-        return True
-
-    return False
+    return not _path_in_denylist(path_only, denylist)
 
 
 def _format_endpoint(path: str, query: str) -> str:
@@ -405,6 +337,7 @@ def _iter_rows(
     all_queries: bool,
     viewer_access: dict[str, str],
     policy_levels: dict[str, str],
+    denylist: list[tuple[str, bool]],
 ) -> list[Row]:
     rows: list[Row] = []
 
@@ -431,23 +364,22 @@ def _iter_rows(
                     )
                 ]
             for query, status_by_token in query_items:
-                current, comment = resolve_access_level(
+                current, _comment = resolve_access_level(
                     path,
                     status_by_token,
                     policy_levels=policy_levels,
                     viewer_access=viewer_access,
                 )
-                target = _target_access_level(path, viewer_access)
-                audited = _target_audited(method, path, target)
+                if current == 'unavailable':
+                    continue
+                audited = _audited(method, path, denylist)
                 rows.append(
                     Row(
                         endpoint=_format_endpoint(path, query),
                         method=method,
                         query=query,
-                        current_level=current,
-                        target_level=target,
+                        access_level=current,
                         audited=audited,
-                        comment=comment,
                     )
                 )
     rows.sort(key=lambda r: (r.group, r.endpoint, r.method, r.query))
@@ -458,7 +390,15 @@ def _audit_cell(audited: bool) -> str:
     return 'логируется' if audited else 'не логируется'
 
 
-def _render_markdown(rows: list[Row], canon_path: Path) -> str:
+def _format_denylist(denylist: list[tuple[str, bool]]) -> str:
+    entries = [
+        f'`{path}`{" рекурсивно" if recursive else ""}'
+        for path, recursive in denylist
+    ]
+    return ', '.join(entries)
+
+
+def _render_markdown(rows: list[Row], canon_path: Path, denylist: list[tuple[str, bool]]) -> str:
     lines: list[str] = [
         '# Monitoring HTTP endpoints',
         '',
@@ -467,26 +407,44 @@ def _render_markdown(rows: list[Row], canon_path: Path) -> str:
         '',
         f'Источник: `{_display_path(canon_path)}`',
         '',
-        '## Правила аудит-логирования (целевое состояние)',
+        '## Иерархия доступа',
         '',
-        '- Все модифицирующие методы, кроме OPTIONS, аудируются.',
-        '- Все запросы уровня `monitoring_allowed_sids` и `admin_allowed_sids` становятся аудируемыми, '
-        'кроме статики.',
-        '- Ограниченный набор эндпойнтов, у которых нельзя поднять уровень до `monitoring_allowed_sids`.',
-        '- Обращения в `/viewer/acl`, `/viewer/describe` к объектам без схемных прав становятся аудируемыми '
-        '(решение по внутреннему отказу, не по внешнему HTTP-коду).',
-        '- Исключения: `/internal` (псевдостатика).',
+        'Тестовая конфигурация использует встроенные SID: `database@builtin` в `database_allowed_sids`, '
+        '`viewer@builtin` в `viewer_allowed_sids`, `monitoring@builtin` в `monitoring_allowed_sids`, '
+        '`root@builtin` в `administration_allowed_sids`.',
         '',
-        '## Как определяется «текущий уровень»',
+        'Доступ наследуется сверху вниз: `administration_allowed_sids` включает права monitoring, viewer '
+        'и database; `monitoring_allowed_sids` включает права viewer и database; `viewer_allowed_sids` '
+        'включает права database.',
         '',
-        '- Для anonymus/public/database уровней **400** считается признаком, что запрос прошёл '
-        'access check и дошёл до валидации handler.',
-        '- Для viewer+ уровней **2xx** из canon считается успешным доступом.',
-        '- Если **2xx** нет, для ручек viewer+ уровень берётся из политики handler '
-        '(`CheckAccessViewer` / `CheckAccessMonitoring` / `CheckAccessAdministration` в C++), '
-        'а не из первого **400** в canon.',
-        '- **400** в комментарии для viewer+ — диагностика (невалидный метод/body/параметры), '
-        'а не доказательство, что этого токена достаточно для действия.',
+        '## Аудит логгирование',
+        '',
+        'Аудит сейчас определяется denylist из `core/mon/audit/audit_denylist.cpp`:',
+        '',
+        '- `POST`, `PUT`, `DELETE` логируются всегда.',
+        '- `OPTIONS` не логируется.',
+        '- Остальные методы логируются, если URL не попал в denylist.',
+        f'- Текущий denylist: {_format_denylist(denylist)}.',
+        '',
+        '## Как скрипт распределяет endpoints по уровням прав',
+        '',
+        'Скрипт читает canon `test_mon_endpoints_auth`: для каждого `method + path + query` там есть '
+        'HTTP-статусы для запросов без токена и с токенами `user@builtin`, `database@builtin`, '
+        '`viewer@builtin`, `monitoring@builtin`, `root@builtin`.',
+        '',
+        'Для каждого `method + path` по умолчанию выбирается один query-вариант: вариант с минимальным '
+        'уровнем прав; при равенстве предпочитается пустой query, затем лексикографический порядок. '
+        'Опция `--all-queries` выводит все query-варианты.',
+        '',
+        'Уровень прав endpoint определяется минимальным доступом, с которым запрос проходит access check:',
+        '',
+        '- Для уровней прав anonymus/public/database статус `2xx` или `400` '
+        'означает, что запрос дошёл до handler; `400` здесь считается ошибкой валидации запроса после '
+        'пройденного access check.',
+        '- Для `viewer_allowed_sids`, `monitoring_allowed_sids` и `administration_allowed_sids` успешным '
+        'доступом считается `2xx`. Если `2xx` нет, уровень прав берётся из политики handler или из регистрации '
+        'viewer endpoint.',
+        '- Endpoints, для которых нет успешного доступа и не найдена политика handler, в документ не выводятся.',
         '',
     ]
 
@@ -502,18 +460,14 @@ def _render_markdown(rows: list[Row], canon_path: Path) -> str:
             lines.append('_Нет эндпойнтов._')
             lines.append('')
             continue
-        lines.append(
-            '| Endpoint | Метод | Текущий уровень | Аудит лог | Комментарий |'
-        )
-        lines.append('| --- | --- | --- | --- | --- |')
+        lines.append('| Endpoint | Метод | Аудит лог |')
+        lines.append('| --- | --- | --- |')
         for row in group_rows:
             lines.append(
-                '| `{endpoint}` | {method} | {current} | {audit} | {comment} |'.format(
+                '| `{endpoint}` | {method} | {audit} |'.format(
                     endpoint=row.endpoint.replace('|', '\\|'),
                     method=row.method,
-                    current=row.current_level,
                     audit=_audit_cell(row.audited),
-                    comment=row.comment.replace('|', '\\|'),
                 )
             )
         lines.append('')
@@ -548,13 +502,15 @@ def main() -> None:
     canon = _load_canon(args.canon)
     viewer_access = _parse_viewer_endpoint_access(VIEWER_CPP)
     policy_levels = _parse_handler_policy_levels(VIEWER_DIR)
+    denylist = _parse_audit_denylist(AUDIT_DENYLIST_CPP)
     rows = _iter_rows(
         canon,
         all_queries=args.all_queries,
         viewer_access=viewer_access,
         policy_levels=policy_levels,
+        denylist=denylist,
     )
-    markdown = _render_markdown(rows, args.canon)
+    markdown = _render_markdown(rows, args.canon, denylist)
     args.output.write_text(markdown, encoding='utf-8')
     print(f'Wrote {len(rows)} rows to {args.output}')
 

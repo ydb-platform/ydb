@@ -230,7 +230,7 @@ struct TEvTransportPrivate
     struct TSyncWithPBuffer: TDisableCopyMove
     {
         using TResult =
-            NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+            NKikimrBlobStorage::NDDisk::TEvSyncResult;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;

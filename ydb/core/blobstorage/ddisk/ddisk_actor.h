@@ -40,8 +40,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
 #define LIST_COUNTERS_INTERFACE_OPS(XX) \
     XX(Write) \
     XX(Read) \
-    XX(SyncWithPersistentBuffer) \
-    XX(SyncWithDDisk) \
+    XX(Sync) \
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
     XX(ErasePersistentBuffer) \
@@ -635,11 +634,6 @@ namespace NKikimr::NDDisk {
         };
 
         struct TSyncInFlight {
-            enum ESourceKind {
-                ESK_DDISK,
-                ESK_PERSISTENT_BUFFER
-            };
-
             TActorId Sender;
             ui64 Cookie;
             TActorId InterconnectionSessionId;
@@ -650,7 +644,6 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex = 0;
             ui64 FirstRequestId = Max<ui64>();
             TStringBuilder ErrorReason;
-            ESourceKind SourceKind;
         };
 
         using TSyncIt = THashMap<ui64, TSyncInFlight>::iterator;
@@ -660,23 +653,15 @@ namespace NKikimr::NDDisk {
         THashSet<ui64> SyncReadCookiesInFlight;
         TSegmentManager SegmentManager;
 
-        void Handle(TEvSyncWithPersistentBuffer::TPtr ev);
-        void Handle(TEvSyncWithDDisk::TPtr ev);
+        void Handle(TEvSync::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
         void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvPrivate::TEvInternalSyncWriteResult::TPtr ev);
 
-        struct TSyncWithPersistentBufferPolicy;
-        struct TSyncWithDDiskPolicy;
-
-        template <typename TPolicy, typename TEventPtr>
-        void HandleSync(TEventPtr ev);
-
         template <typename TEventPtr>
         void InternalSyncReadResult(TEventPtr ev);
 
-        template <typename TResultEvent, typename TCounters>
-        std::unique_ptr<IEventHandle> MakeSyncResult(const TSyncInFlight& sync, TCounters& counters) const;
+        std::unique_ptr<IEventHandle> MakeSyncResult(const TSyncInFlight& sync);
 
         void ReplySync(TSyncIt it);
 

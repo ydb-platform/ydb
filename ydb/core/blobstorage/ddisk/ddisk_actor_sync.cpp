@@ -8,64 +8,11 @@
 
 namespace NKikimr::NDDisk {
 
-    struct TDDiskActor::TSyncWithPersistentBufferPolicy {
-        using TResultEvent = TEvSyncWithPersistentBufferResult;
-
-        static constexpr TSyncInFlight::ESourceKind SourceKind = TSyncInFlight::ESK_PERSISTENT_BUFFER;
-
-        static auto& GetCounters(TDDiskActor& actor) {
-            return actor.Counters.Interface.SyncWithPersistentBuffer;
-        }
-
-        static TActorId MakeSourceActorId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
-            return MakeBlobStoragePersistentBufferId(node, pdiskId, ddiskSlotId);
-        }
-
-        static std::unique_ptr<IEventBase> MakeResult(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
-            return std::make_unique<TResultEvent>(status, errorReason);
-        }
-
-        template <typename TSegment>
-        static IEventBase* MakeReadQuery(const TQueryCredentials& sourceCreds,
-                const TBlockSelector& selector, const TSegment& segment) {
-            return new TEvReadPersistentBuffer(sourceCreds, selector, segment.GetLsn(), segment.GetGeneration(), TReadInstruction(true));
-        }
-    };
-
-    struct TDDiskActor::TSyncWithDDiskPolicy {
-        using TResultEvent = TEvSyncWithDDiskResult;
-
-        static constexpr TSyncInFlight::ESourceKind SourceKind = TSyncInFlight::ESK_DDISK;
-
-        static auto& GetCounters(TDDiskActor& actor) {
-            return actor.Counters.Interface.SyncWithDDisk;
-        }
-
-        static TActorId MakeSourceActorId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
-            return MakeBlobStorageDDiskId(node, pdiskId, ddiskSlotId);
-        }
-
-        static std::unique_ptr<IEventBase> MakeResult(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
-            return std::make_unique<TResultEvent>(status, errorReason);
-        }
-
-        template <typename TSegment>
-        static IEventBase* MakeReadQuery(const TQueryCredentials& sourceCreds,
-                const TBlockSelector& selector, const TSegment&) {
-            return new TEvRead(sourceCreds, selector, TReadInstruction(true));
-        }
-    };
-
-    template <typename TPolicy, typename TEventPtr>
-    void TDDiskActor::HandleSync(TEventPtr ev) {
+    void TDDiskActor::Handle(TEvSync::TPtr ev) {
         STLOG(PRI_TRACE, BS_DDISK, BSDD22,
             "TDDiskActor::HandleSync", (DDiskId, DDiskId), (Msg, ev->Get()->Record));
 
-        auto& counters = TPolicy::GetCounters(*this);
+        auto& counters = Counters.Interface.Sync;
         if (!CheckQuery(*ev, &counters)) {
             return;
         }
@@ -99,36 +46,36 @@ namespace NKikimr::NDDisk {
                 << " DDiskId# " << DDiskId);
             cleanupSyncState();
             counters.Reply(false);
-            SendReply(*ev, TPolicy::MakeResult(status, std::move(errorReason)));
+            SendReply(*ev, std::make_unique<TEvSyncResult>(status, std::move(errorReason)));
         };
 
-        if (!record.SegmentsSize()) {
+        if (!record.SourcesSize()) {
+            reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "sources must be non-empty");
+            return;
+        }
+
+        size_t segmentCount = 0;
+        for (const auto& source : record.GetSources()) {
+            segmentCount += source.SegmentsSize();
+        }
+        if (!segmentCount) {
             reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "segments must be non-empty");
             return;
         }
 
-        auto getSource = [&](const auto& source, TActorId *actorId, ui64 *ddiskInstanceGuid) {
+        auto getSource = [&](const auto& source, bool fromPersistentBuffer, TActorId *actorId, ui64 *ddiskInstanceGuid) {
             if (!source.HasDDiskId()) {
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     "source ddisk id must be set");
                 return false;
             }
             const auto& ddiskId = source.GetDDiskId();
-            *actorId = TPolicy::MakeSourceActorId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
+            *actorId = fromPersistentBuffer
+                ? MakeBlobStoragePersistentBufferId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId())
+                : MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
             *ddiskInstanceGuid = source.GetDDiskInstanceGuid();
             return true;
         };
-
-        TActorId defaultSourceActorId;
-        ui64 defaultSourceInstanceGuid = 0;
-        if (!record.HasSource()) {
-            reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                "source must be set");
-            return;
-        }
-        if (!getSource(record.GetSource(), &defaultSourceActorId, &defaultSourceInstanceGuid)) {
-            return;
-        }
 
         const ui64 syncId = NextSyncId++;
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
@@ -145,15 +92,14 @@ namespace NKikimr::NDDisk {
             .Span={},
             .Creds=creds,
             .Requests={},
-            .ErrorReason={},
-            .SourceKind=TPolicy::SourceKind
+            .ErrorReason={}
         }).first;
         auto& sync = syncIt->second;
         sync.Span = std::move(span);
 
         std::optional<ui64> vChunkIndex;
 
-        sync.Requests.reserve(record.SegmentsSize());
+        sync.Requests.reserve(segmentCount);
 
         auto validateSelector = [&](const TBlockSelector& selector, TStringBuf selectorName) {
             if (selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
@@ -173,82 +119,100 @@ namespace NKikimr::NDDisk {
             return true;
         };
 
-        for (const auto& segment : record.GetSegments()) {
-            const TBlockSelector selector(segment.GetSelector());
-
-            TActorId sourceActorId = defaultSourceActorId;
-            ui64 sourceInstanceGuid = defaultSourceInstanceGuid;
-            if (segment.HasSource()) {
-                if (!getSource(segment.GetSource(), &sourceActorId, &sourceInstanceGuid)) {
+        for (const auto& source : record.GetSources()) {
+            for (const auto& segment : source.GetSegments()) {
+                const TBlockSelector selector(segment.GetSelector());
+                const bool fromPersistentBuffer =
+                    segment.HasPersistentBufferSegment();
+                if (!segment.HasDDiskSegment() &&
+                    !segment.HasPersistentBufferSegment())
+                {
+                    reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                        "segment kind must be set");
                     return;
                 }
-            }
 
-            if (!vChunkIndex) {
-                vChunkIndex = selector.VChunkIndex;
-            } else if (*vChunkIndex != selector.VChunkIndex) {
-                reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                    "Segments must be in one VChunk");
-                return;
-            }
-
-            if (!validateSelector(selector, "segment")) {
-                return;
-            }
-
-            sync.RequestsInFlight++;
-            std::vector<TSegmentManager::TOutdatedRequest> outdated;
-            const TSegmentManager::TSegment segmentRange{selector.OffsetInBytes, selector.OffsetInBytes + selector.Size};
-            ui64 requestId = 0;
-            SegmentManager.PushRequest(creds.TabletId, *vChunkIndex, syncId, segmentRange, &requestId, &outdated);
-
-            if (sync.FirstRequestId == Max<ui64>()) {
-                sync.FirstRequestId = requestId;
-            } else {
-                Y_ABORT_UNLESS(requestId == sync.FirstRequestId + sync.Requests.size());
-            }
-
-            sync.Requests.emplace_back(TSyncReadRequest{
-                .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
-                .Selector=selector
-            });
-
-            for (auto& [outdatedSyncId, outdatedRequestId] : outdated) {
-                auto outdatedIt = SyncsInFlight.find(outdatedSyncId);
-                if (outdatedIt == SyncsInFlight.end()) {
-                    continue;
+                TActorId sourceActorId;
+                ui64 sourceInstanceGuid = 0;
+                if (!getSource(source, fromPersistentBuffer, &sourceActorId, &sourceInstanceGuid)) {
+                    return;
                 }
-                auto& outdatedSync = outdatedIt->second;
-                auto& request = outdatedSync.Requests[outdatedRequestId - outdatedSync.FirstRequestId];
-                const auto prevStatus = std::exchange(request.Status, NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
-                if (prevStatus == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
-                    if (--outdatedSync.RequestsInFlight == 0) {
-                        ReplySync(outdatedIt);
+
+                if (!vChunkIndex) {
+                    vChunkIndex = selector.VChunkIndex;
+                } else if (*vChunkIndex != selector.VChunkIndex) {
+                    reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                        "Segments must be in one VChunk");
+                    return;
+                }
+
+                if (!validateSelector(selector, "segment")) {
+                    return;
+                }
+
+                sync.RequestsInFlight++;
+                std::vector<TSegmentManager::TOutdatedRequest> outdated;
+                const TSegmentManager::TSegment segmentRange{selector.OffsetInBytes, selector.OffsetInBytes + selector.Size};
+                ui64 requestId = 0;
+                SegmentManager.PushRequest(creds.TabletId, *vChunkIndex, syncId, segmentRange, &requestId, &outdated);
+
+                if (sync.FirstRequestId == Max<ui64>()) {
+                    sync.FirstRequestId = requestId;
+                } else {
+                    Y_ABORT_UNLESS(requestId == sync.FirstRequestId + sync.Requests.size());
+                }
+
+                sync.Requests.emplace_back(TSyncReadRequest{
+                    .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
+                    .Selector=selector
+                });
+
+                for (auto& [outdatedSyncId, outdatedRequestId] : outdated) {
+                    auto outdatedIt = SyncsInFlight.find(outdatedSyncId);
+                    if (outdatedIt == SyncsInFlight.end()) {
+                        continue;
+                    }
+                    auto& outdatedSync = outdatedIt->second;
+                    auto& request = outdatedSync.Requests[outdatedRequestId - outdatedSync.FirstRequestId];
+                    const auto prevStatus = std::exchange(request.Status, NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
+                    if (prevStatus == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+                        if (--outdatedSync.RequestsInFlight == 0) {
+                            ReplySync(outdatedIt);
+                        }
                     }
                 }
-            }
 
-            Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
-            const TQueryCredentials sourceCreds = TQueryCredentials::ForInternal(
-                creds.TabletId,
-                creds.Generation,
-                std::make_optional(sourceInstanceGuid));
-            Send(sourceActorId,
-                TPolicy::MakeReadQuery(sourceCreds, selector, segment),
-                IEventHandle::FlagTrackDelivery,
-                requestId,
-                sync.Span.GetTraceId());
+                Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
+                const TQueryCredentials sourceCreds = TQueryCredentials::ForInternal(
+                    creds.TabletId,
+                    creds.Generation,
+                    std::make_optional(sourceInstanceGuid));
+                std::unique_ptr<IEventBase> readQuery;
+                if (fromPersistentBuffer) {
+                    const auto& persistentBufferSegment =
+                        segment.GetPersistentBufferSegment();
+                    readQuery = std::make_unique<TEvReadPersistentBuffer>(
+                        sourceCreds,
+                        selector,
+                        persistentBufferSegment.GetLsn(),
+                        persistentBufferSegment.GetGeneration(),
+                        TReadInstruction(true));
+                } else {
+                    readQuery = std::make_unique<TEvRead>(
+                        sourceCreds,
+                        selector,
+                        TReadInstruction(true));
+                }
+                Send(
+                    sourceActorId,
+                    readQuery.release(),
+                    IEventHandle::FlagTrackDelivery,
+                    requestId,
+                    sync.Span.GetTraceId());
+            }
         }
 
         sync.VChunkIndex = *vChunkIndex;
-    }
-
-    void TDDiskActor::Handle(TEvSyncWithPersistentBuffer::TPtr ev) {
-        HandleSync<TSyncWithPersistentBufferPolicy>(std::move(ev));
-    }
-
-    void TDDiskActor::Handle(TEvSyncWithDDisk::TPtr ev) {
-        HandleSync<TSyncWithDDiskPolicy>(std::move(ev));
     }
 
     template <typename TEventPtr>
@@ -411,15 +375,14 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    template <typename TResultEvent, typename TCounters>
-    std::unique_ptr<IEventHandle> TDDiskActor::MakeSyncResult(const TSyncInFlight& sync, TCounters& counters) const {
-        std::unique_ptr<TResultEvent> ev;
+    std::unique_ptr<IEventHandle> TDDiskActor::MakeSyncResult(const TSyncInFlight& sync) {
+        std::unique_ptr<TEvSyncResult> ev;
         if (sync.ErrorReason) {
-            ev = std::make_unique<TResultEvent>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, sync.ErrorReason);
-            counters.Reply(false);
+            ev = std::make_unique<TEvSyncResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, sync.ErrorReason);
+            Counters.Interface.Sync.Reply(false);
         } else {
-            ev = std::make_unique<TResultEvent>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            counters.Reply(true);
+            ev = std::make_unique<TEvSyncResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+            Counters.Interface.Sync.Reply(true);
         }
 
         for (const auto& request : sync.Requests) {
@@ -433,23 +396,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::ReplySync(TSyncIt it) {
         Y_VERIFY(it != SyncsInFlight.end());
         auto& sync = it->second;
-        std::unique_ptr<IEventHandle> h;
-
-        switch (sync.SourceKind) {
-            case TSyncInFlight::ESK_PERSISTENT_BUFFER:
-                h = MakeSyncResult<TEvSyncWithPersistentBufferResult>(
-                    sync,
-                    Counters.Interface.SyncWithPersistentBuffer);
-                break;
-            case TSyncInFlight::ESK_DDISK:
-                h = MakeSyncResult<TEvSyncWithDDiskResult>(
-                    sync,
-                    Counters.Interface.SyncWithDDisk);
-                break;
-            default:
-                Y_ABORT("Unexpected sync source kind");
-                break;
-        }
+        auto h = MakeSyncResult(sync);
 
         if (sync.InterconnectionSessionId) {
             h->Rewrite(TEvInterconnect::EvForward, sync.InterconnectionSessionId);

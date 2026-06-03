@@ -289,7 +289,7 @@ void BasicWriteRead(EWriteMode writeMode)
         [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
     {
         if (ev->GetTypeRewrite() ==
-            NDDisk::TEvSyncWithPersistentBuffer::EventType)
+            NDDisk::TEvSync::EventType)
         {
             if (syncRequestsCount++ < 3) {
                 runtime->Schedule(

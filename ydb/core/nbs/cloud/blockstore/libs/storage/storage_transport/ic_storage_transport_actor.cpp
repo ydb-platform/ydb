@@ -90,7 +90,7 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvWritePersistentBufferResult>(
         WriteToPBufferRequests);
     RejectAllPending<NDDisk::TEvWriteResult>(WriteToDDiskRequests);
-    RejectAllPending<NDDisk::TEvSyncWithPersistentBufferResult>(
+    RejectAllPending<NDDisk::TEvSyncResult>(
         FlushFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
         BatchEraseFromPBufferRequests);
@@ -918,7 +918,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         "Sent TEvSyncWithPBuffer with requestId# %lu",
         requestId);
 
-    auto request = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
+    auto request = std::make_unique<NDDisk::TEvSync>(
         msg->Credentials,
         std::make_tuple(
             msg->PBufferId.NodeId,
@@ -928,7 +928,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
 
     Y_ABORT_UNLESS(msg->Selectors.size() == msg->Lsns.size());
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {
-        request->AddSegment(
+        request->AddSegmentFromPB(
+            0,
             msg->Selectors[i],
             msg->Lsns[i],
             msg->Credentials.Generation);
@@ -943,7 +944,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
-    const NKikimr::NDDisk::TEvSyncWithPersistentBuffer::TPtr& ev,
+    const NKikimr::NDDisk::TEvSync::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     const ui64 requestId = ev->Cookie;
@@ -951,14 +952,12 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvSyncWithPersistentBuffer undelivery with "
-        "requestId# %lu",
+        "Received NDDisk::TEvSync undelivery with requestId# %lu",
         requestId);
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
-        auto result =
-            NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult();
+        auto result = NKikimrBlobStorage::NDDisk::TEvSyncResult();
         SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         FlushFromPBufferRequests.erase(requestId);
@@ -973,7 +972,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
-    const NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
+    const NDDisk::TEvSyncResult::TPtr& ev,
     const TActorContext& ctx)
 {
     const ui64 requestId = ev->Cookie;
@@ -981,7 +980,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvSyncWithPersistentBufferResult with requestId# %lu",
+        "Received TEvSyncResult with requestId# %lu",
         requestId);
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
@@ -1148,10 +1147,10 @@ STFUNC(TICStorageTransportActor::StateWork)
             TEvTransportPrivate::TEvSyncWithPBuffer,
             HandleSyncWithPersistentBuffer);
         HFunc(
-            NKikimr::NDDisk::TEvSyncWithPersistentBuffer,
+            NKikimr::NDDisk::TEvSync,
             HandleSyncWithPersistentBufferUndelivery);
         HFunc(
-            NKikimr::NDDisk::TEvSyncWithPersistentBufferResult,
+            NKikimr::NDDisk::TEvSyncResult,
             HandleSyncWithPersistentBufferResult);
 
         HFunc(

@@ -297,4 +297,5 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsFormatShardIdx = 271 [default = false];
     optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
     optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
+    optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
 }

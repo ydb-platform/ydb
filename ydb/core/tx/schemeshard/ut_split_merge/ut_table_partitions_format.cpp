@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/http/http.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -33,15 +34,22 @@ namespace {
 
 TString PostSweepAction(TTestActorRuntime& runtime, ui64 schemeShard, const TString& params) {
     auto sender = runtime.AllocateEdgeActor();
-    const TString query = TStringBuilder()
-        << "/app?TabletID=" << schemeShard
-        << "&Action=TablePartitionsFormatSweep"
-        << params
-    ;
-    auto req = std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(query, HTTP_METHOD_POST);
-    runtime.SendToPipe(schemeShard, sender, req.release(), 0, {});
-    auto r = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteHttpInfoRes>(sender);
-    return r->Get()->Html;
+    TString redirectLocation;
+    {
+        const TString query = TStringBuilder() << "/app?TabletID=" << schemeShard << "&Action=TablePartitionsFormatSweep" << params;
+        runtime.SendToPipe(schemeShard, sender, new NActors::NMon::TEvRemoteHttpInfo(query, HTTP_METHOD_POST), 0, {});
+        auto r = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteBinaryInfoRes>(sender);
+        NHttp::THttpParser<NHttp::THttpResponse> parser(r->Get()->Blob);
+        NHttp::THeaders headers(parser.Headers);
+        redirectLocation = headers.Get("Location");
+    }
+    // `Location` is relative to the original query base, needs adding `/` prefix.
+    {
+        const TString query = TStringBuilder() << "/" << redirectLocation;
+        runtime.SendToPipe(schemeShard, sender, new NActors::NMon::TEvRemoteHttpInfo(query, HTTP_METHOD_GET), 0, {});
+        auto r = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteHttpInfoRes>(sender);
+        return r->Get()->Html;
+    }
 }
 
 // Get table partitions format counters by parsing AdminRequest mon page.
@@ -274,11 +282,9 @@ Y_UNIT_TEST_SUITE(TTablePartitionsFormat) {
         UNIT_ASSERT_C(r.Contains("Currently: <code>Idle</code>"), r);
         UNIT_ASSERT_C(r.Contains("Tables: 0 in <code>position</code>, 0 in <code>shardidx</code>, total 0"), r);
 
+        // Nothing will be run on zero tables
         r = PostSweepAction(runtime, TTestTxConfig::SchemeShard, "&Start=1&format=shardidx");
         UNIT_ASSERT_C(r.Contains("Start: OK"), r);
-        UNIT_ASSERT_C(r.Contains("Currently: <code>Running</code>"), r);
-
-        r = PostSweepAction(runtime, TTestTxConfig::SchemeShard, "");
         UNIT_ASSERT_C(r.Contains("Currently: <code>Idle</code>"), r);
     }
 
@@ -309,10 +315,6 @@ Y_UNIT_TEST_SUITE(TTablePartitionsFormat) {
         // Try to run sweep when all tables already converted
         r = PostSweepAction(runtime, TTestTxConfig::SchemeShard, "&Start=1&format=shardidx");
         UNIT_ASSERT_C(r.Contains("Start: OK"), r);
-        UNIT_ASSERT_C(r.Contains("Currently: <code>Running</code>"), r);
-        UNIT_ASSERT_VALUES_EQUAL("Tables: 0 in <code>position</code>, 1 in <code>shardidx</code>, total 1", GetTableFormatCounters(r));
-
-        r = PostSweepAction(runtime, TTestTxConfig::SchemeShard, "");
         UNIT_ASSERT_C(r.Contains("Currently: <code>Idle</code>"), r);
         UNIT_ASSERT_VALUES_EQUAL("Tables: 0 in <code>position</code>, 1 in <code>shardidx</code>, total 1", GetTableFormatCounters(r));
     }

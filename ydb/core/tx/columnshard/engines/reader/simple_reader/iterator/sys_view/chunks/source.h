@@ -20,6 +20,10 @@ private:
         return GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, Schema->GetIndexInfo());
     }
 
+    virtual TString GetEntityStorageId(const ui32 entityId) const override {
+        return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
+    }
+
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
         return 0;
     }

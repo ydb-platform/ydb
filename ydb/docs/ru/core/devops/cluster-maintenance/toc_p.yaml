@@ -1,0 +1,3 @@
+items:
+- name: Замена диска в кластере {{ ydb-short-name }}
+  href: disk-replacement.md

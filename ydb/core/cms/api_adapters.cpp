@@ -375,6 +375,10 @@ class TPermissionResponseProcessor
 protected:
     using TBase = TPermissionResponseProcessor<TDerived, TEvRequest>;
 
+    // Soft warnings collected during request processing that should be returned
+    // to the client alongside the successful response.
+    TVector<TString> Warnings;
+
 public:
     using TAdapterActor<TDerived, TEvRequest, TEvCms::TEvMaintenanceTaskResponse>::TAdapterActor;
 
@@ -451,6 +455,12 @@ public:
             for (const auto& action : request.Request.GetActions()) {
                 ConvertAction(action, *GetActionGroupState(result)->add_action_states());
             }
+        }
+
+        for (const auto& warning : Warnings) {
+            auto& issue = *response->Record.AddIssues();
+            issue.set_severity(NYql::TSeverityIds::S_WARNING);
+            issue.set_message(warning);
         }
 
         this->Reply(std::move(response));
@@ -530,20 +540,20 @@ class TCreateMaintenanceTask
             return false;
         }
 
-        const ui32 actionGroupsCount = request.action_groups().size();
+        const ui32 actionGroupCount = request.action_groups().size();
         for (const auto& group : request.action_groups()) {
-            const ui32 actionsCount = group.actions().size();
-            if (actionsCount < 1) {
+            const ui32 actionCount = group.actions().size();
+            if (actionCount < 1) {
                 Reply(Ydb::StatusIds::BAD_REQUEST, "Empty actions");
                 return false;
             }
 
-            if (!GetCmsState()->EnableSingleCompositeActionGroup && actionsCount > 1) {
+            if (!GetCmsState()->EnableSingleCompositeActionGroup && actionCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableSingleCompositeActionGroup is off");
                 return false;
             }
 
-            if (actionGroupsCount > 1 && actionsCount > 1) {
+            if (actionGroupCount > 1 && actionCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
                     << "A task can have either a single composite action group or many action groups"
                     << " with only one action");
@@ -559,14 +569,14 @@ class TCreateMaintenanceTask
 
         const ui32 maxInflightActions = request.task_options().max_inflight_actions();
         if (maxInflightActions > 0) {
-            const bool hasSingleCompositeActionGroup = actionGroupsCount == 1
+            const bool hasSingleCompositeActionGroup = actionGroupCount == 1
                 && request.action_groups(0).actions().size() > 1;
             if (hasSingleCompositeActionGroup) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS,
+                Warnings.emplace_back(
                     "max_inflight_actions is not applicable to a single composite action group:"
-                    << " actions within one group are granted atomically");
+                    " actions within one group are granted atomically");
             }
-            if (actionGroupsCount < maxInflightActions) {
+            if (actionGroupCount < maxInflightActions) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS,
                     "max_inflight_actions is greater than the number of action groups");
             }

@@ -732,7 +732,7 @@ Installing {{ ydb-short-name }} for operation in unsecured mode is performed in 
 
    ```bash
    export LD_LIBRARY_PATH=/opt/ydb/lib
-   ydb admin cluster bootstrap --uuid <строка>
+   ydb admin cluster bootstrap --uuid <string>
    echo $?
    ```
 6. The database creation command is executed in the following form:

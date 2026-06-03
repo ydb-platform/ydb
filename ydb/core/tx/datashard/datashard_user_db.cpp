@@ -280,30 +280,46 @@ void TDataShardUserDb::InsertFulltext(
             segmentTag = it.first;
         }
     }
+    const auto keyTypeId = userTable.KeyColumnTypes.at(1).GetTypeId();
+    const ui32 keySize = (keyTypeId == NScheme::NTypeIds::Uint64 || keyTypeId == NScheme::NTypeIds::Int64 ? 8 : 4);
+    const ui64 keyTypeMin = (keyTypeId == NScheme::NTypeIds::Uint64 ? 0
+        : (keyTypeId == NScheme::NTypeIds::Int64 ? INT64_MIN
+        : (keyTypeId == NScheme::NTypeIds::Uint32 ? 0 : INT32_MIN)));
+    const ui64 keyTypeMax = (keyTypeId == NScheme::NTypeIds::Uint64 ? UINT64_MAX
+        : (keyTypeId == NScheme::NTypeIds::Int64 ? INT64_MAX
+        : (keyTypeId == NScheme::NTypeIds::Uint32 ? UINT32_MAX : INT32_MAX)));
+    const bool keySigned = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+    auto asKey = [&](const TCell& cell) {
+        if (keyTypeId == NScheme::NTypeIds::Uint64 || keyTypeId == NScheme::NTypeIds::Int64) {
+            return cell.AsValue<ui64>();
+        } else {
+            return (ui64)cell.AsValue<ui32>();
+        }
+    };
 
     bool isPartitionBegin = false;
-    ui64 beginMaxId = 0;
+    ui64 beginMaxId = keyTypeMin;
     const auto& rangeFrom = userTable.Range.From.GetCells();
     const auto& rangeTo = userTable.Range.To.GetCells();
     if (rangeFrom.size() == 3 &&
         rangeFrom[2].Size() > 0 &&
         key[0].ToStringBuf() == rangeFrom[0].AsBuf()) {
         isPartitionBegin = true;
-        beginMaxId = rangeFrom[1].AsValue<ui64>();
+        beginMaxId = asKey(rangeFrom[1]);
         ui64 beginGen = rangeFrom[2].AsValue<ui64>();
-        if (!userTable.Range.FromInclusive && beginGen == UINT64_MAX && beginMaxId == UINT64_MAX) {
+        if (!userTable.Range.FromInclusive && beginGen == UINT64_MAX && beginMaxId == keyTypeMax) {
             isPartitionBegin = false;
         }
     }
 
-    ui64 endMaxId = UINT64_MAX;
+    ui64 endMaxId = keyTypeMax;
     ui64 endGen = UINT64_MAX;
     if (rangeTo.size() == 3 &&
         rangeTo[2].Size() > 0 &&
         key[0].ToStringBuf() == rangeTo[0].AsBuf()) {
         // Adding segments into the first part of token lists is allowed when split between two shards
         // But in that case, we have to limit lists by maxid/gen from the partitioning key instead of UINT64_MAX/UINT64_MAX
-        endMaxId = rangeTo[1].AsValue<ui64>();
+        endMaxId = asKey(rangeTo[1]);
         endGen = rangeTo[2].AsValue<ui64>();
         if (!userTable.Range.ToInclusive) {
             if (!endGen) {
@@ -339,7 +355,7 @@ void TDataShardUserDb::InsertFulltext(
     auto txObserver = GetReadTxObserver(tableId);
     InvisibleRowSkips = 0;
 
-    NFulltext::TDeltaReader reader(rowSegment, withRelevance);
+    NFulltext::TDeltaReader reader(rowSegment, withRelevance, keySigned);
 
     ui64 maxGen = UINT64_MAX;
     auto insertSegments = [&](bool unlimited, ui64 lastMaxId, ui64 lastGen, bool added, NFulltext::IDeltaReader& reader) {
@@ -350,7 +366,7 @@ void TDataShardUserDb::InsertFulltext(
         }
         bool last = false;
         NFulltext::TDeltaWriter wr;
-        wr.Reset(withRelevance);
+        wr.Reset(withRelevance, keySigned);
         while (!last) {
             while (true) {
                 wr.Add(docId, freq);
@@ -371,14 +387,14 @@ void TDataShardUserDb::InsertFulltext(
             auto newSegment = wr.GetBuf();
             TVector<TRawTypeValue> newKey;
             newKey.push_back(key[0]);
-            newKey.emplace_back(&maxId, sizeof(maxId), NScheme::NTypeIds::Uint64);
+            newKey.emplace_back(&maxId, keySize, keyTypeId);
             newKey.emplace_back(&gen, sizeof(gen), NScheme::NTypeIds::Uint64);
             TVector<const NIceDb::TUpdateOp> newOps;
             newOps.emplace_back(addedTag, NTable::ECellOp::Set, TRawTypeValue(&added, 1, NScheme::NTypeIds::Bool));
             newOps.emplace_back(segmentTag, NTable::ECellOp::Set, TRawTypeValue(newSegment.data(), newSegment.size(), NScheme::NTypeIds::String));
             UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, newKey, newOps, userCtx);
             IncreaseUpdateCounters(newKey, newOps);
-            wr.Reset(withRelevance);
+            wr.Reset(withRelevance, keySigned);
         }
         return true;
     };
@@ -399,7 +415,7 @@ void TDataShardUserDb::InsertFulltext(
         case NTable::EReady::Data: {
             auto existingKey = iter->GetKey().Cells();
             if (existingKey[0].AsBuf() == key[0].ToStringBuf()) {
-                maxId = existingKey[1].AsValue<ui64>();
+                maxId = asKey(existingKey[1]);
                 gen = existingKey[2].AsValue<ui64>();
             }
             IncreaseSelectCounters(existingKey);
@@ -433,7 +449,7 @@ void TDataShardUserDb::InsertFulltext(
             if (existingKey[0].AsBuf() != key[0].ToStringBuf()) {
                 break;
             }
-            auto nextMaxId = existingKey[1].AsValue<ui64>();
+            auto nextMaxId = asKey(existingKey[1]);
             IncreaseSelectCounters(existingKey);
             if (nextMaxId != maxId) {
                 break;
@@ -458,7 +474,7 @@ void TDataShardUserDb::InsertFulltext(
         ui64 maxId = 0, gen = 0;
         auto minKey = TVector<const TRawTypeValue>{
             key[0],
-            TRawTypeValue(&docId, sizeof(docId), NScheme::NTypeIds::Uint64),
+            TRawTypeValue(&docId, keySize, keyTypeId),
             TRawTypeValue(&zero, sizeof(zero), NScheme::NTypeIds::Uint64),
         };
         if (!findMaxId(minKey, maxId, gen)) {
@@ -487,7 +503,7 @@ void TDataShardUserDb::InsertFulltext(
             // Read all rows for this MaxId and merge/compact them
             TVector<TVector<ui8>> segments;
             NFulltext::TMultiDeltaReader merger;
-            merger.Reset(withRelevance);
+            merger.Reset(withRelevance, keySigned);
             merger.Add(rowAdded, &reader);
             if (!scanMaxId(maxId, minKey, segments, merger)) {
                 return;
@@ -503,7 +519,7 @@ void TDataShardUserDb::InsertFulltext(
             insertSegments(true/*unlimited*/, maxId, gen, rowAdded, reader);
             reader.Save();
         }
-        reader.SetMaxId(UINT64_MAX);
+        reader.SetMaxId(keyTypeMax);
     }
 }
 

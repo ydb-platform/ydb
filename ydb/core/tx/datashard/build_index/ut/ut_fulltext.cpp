@@ -107,13 +107,13 @@ namespace NKikimr {
             return std::move(index);
         }
 
-        void CreateMainTable(Tests::TServer::TPtr server, TActorId sender) {
+        void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, const char* keyType = "Uint64") {
             TShardedTableOptions options;
             options.EnableOutOfOrder(true);
             options.Shards(1);
             options.AllowSystemColumnNames(false);
             options.Columns({
-                {"key", "Uint64", true, true},
+                {"key", keyType, true, true},
                 {"text", "String", false, false},
                 {"data", "String", false, false},
             });
@@ -151,13 +151,13 @@ namespace NKikimr {
             CreateShardedTable(server, sender, "/Root", "table-index", options);
         }
 
-        void CreateDocsTable(Tests::TServer::TPtr server, TActorId sender) {
+        void CreateDocsTable(Tests::TServer::TPtr server, TActorId sender, const char* keyType = "Uint64") {
             TShardedTableOptions options;
             options.EnableOutOfOrder(true);
             options.Shards(1);
             options.AllowSystemColumnNames(true);
             options.Columns({
-                {"key", "Uint64", true, true},
+                {"key", keyType, true, true},
                 {"data", "String", false, false},
                 {DocLengthColumn, TokenCountTypeName, false, false},
             });
@@ -834,7 +834,7 @@ key = 4, data = (empty maybe), __ydb_length = 2
 )");
         }
 
-        Y_UNIT_TEST_TWIN(BuildCompact, WithRelevance) {
+        void DoTestBuildCompact(bool WithRelevance, const char *keyType = "Uint64") {
             TPortManager pm;
             TServerSettings serverSettings(pm.GetPort(2134));
             serverSettings.SetDomainName("Root");
@@ -847,14 +847,14 @@ key = 4, data = (empty maybe), __ydb_length = 2
 
             InitRoot(server, sender);
 
-            CreateMainTable(server, sender);
+            CreateMainTable(server, sender, keyType);
             FillMainTable(server, sender);
-            CreateFulltextCompactTable(server, sender, "table-index");
+            CreateFulltextCompactTable(server, sender, "table-index", keyType);
             if (WithRelevance) {
-                CreateDocsTable(server, sender);
+                CreateDocsTable(server, sender, keyType);
             }
 
-            auto reply = DoBuildRaw(server, sender, [](auto& request) {
+            auto reply = DoBuildRaw(server, sender, [&](auto& request) {
                 if (WithRelevance) {
                     request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
                 } else {
@@ -869,7 +869,8 @@ key = 4, data = (empty maybe), __ydb_length = 2
             Cerr << index << Endl;
 
             if (WithRelevance) {
-                UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
+                if (keyType[0] == 'U') {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
 __ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x01\x41\x02\x01\n\
 __ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
 __ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
@@ -877,6 +878,16 @@ __ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1,
 __ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x02\n\
 __ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x03\n\
 ");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x41\x02\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x06\n\
+");
+                }
                 auto docs = ReadShardedTable(server, kDocsTable);
                 Cerr << "Docs:" << Endl;
                 Cerr << docs << Endl;
@@ -886,7 +897,8 @@ key = 3, data = (empty maybe), __ydb_length = 2
 key = 4, data = (empty maybe), __ydb_length = 2
 )");
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
+                if (keyType[0] == 'U') {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
 __ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
 __ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
 __ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
@@ -894,8 +906,35 @@ __ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1,
 __ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x02\n\
 __ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x03\n\
 ");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x06\n\
+");
+                }
             }
         }
+
+        Y_UNIT_TEST_TWIN(BuildCompactUint64, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Uint64");
+        }
+
+        Y_UNIT_TEST_TWIN(BuildCompactInt64, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Int64");
+        }
+
+        Y_UNIT_TEST_TWIN(BuildCompactUint32, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Uint32");
+        }
+
+        Y_UNIT_TEST_TWIN(BuildCompactInt32, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Int32");
+        }
+
     } // Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan)
 
 } // namespace NKikimr

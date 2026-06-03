@@ -97,6 +97,8 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     ui64 MaxSegmentDocuments = 0;
 
     TVector<NScheme::TTypeInfo> KeyTypes;
+    NScheme::TTypeId KeyTypeId;
+    bool Signed = false;
     TSerializedTableRange RequestedRange;
     TSerializedTableRange TableRange;
     TSerializedCellVec LastProcessedKey;
@@ -122,6 +124,7 @@ public:
         , Generation(request.GetMinGeneration())
         , MaxGeneration(request.GetMaxGeneration())
         , KeyTypes(table.KeyColumnTypes)
+        , KeyTypeId(table.KeyColumnTypes[0].GetTypeId())
         , TableRange(table.Range)
         , Request(std::move(request))
         , ResponseActorId{responseActorId}
@@ -141,6 +144,7 @@ public:
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
         TextAnalyzers = Request.settings().columns().at(0).analyzers();
+        Signed = (KeyTypeId == NScheme::NTypeIds::Int64 || KeyTypeId == NScheme::NTypeIds::Int32);
 
         auto tags = GetAllTags(table);
         auto types = GetAllTypes(table);
@@ -207,7 +211,7 @@ public:
         case NKikimrTxDataShard::EFulltextIndexType::JsonCompact:
             {
                 Ydb::Type type;
-                type.set_type_id(Ydb::Type::UINT64);
+                NScheme::ProtoFromTypeInfo(KeyTypes.at(0), type);
                 uploadTypes->emplace_back(MaxIdColumn, type);
             }
             {
@@ -328,7 +332,12 @@ public:
         }
         if (Compact) {
             Y_ENSURE(key.size() == 1);
-            ui64 docId = key[0].AsValue<ui64>();
+            ui64 docId;
+            if (KeyTypeId == NScheme::NTypeIds::Uint64 || KeyTypeId == NScheme::NTypeIds::Int64) {
+                docId = key[0].AsValue<ui64>();
+            } else {
+                docId = key[0].AsValue<ui32>();
+            }
             std::sort(tokens.begin(), tokens.end());
             ui32 freq = 1;
             for (size_t i = 0; i < tokens.size(); i++) {
@@ -340,11 +349,11 @@ public:
                 if (state.Token.empty()) {
                     state.Token = tokens[i];
                     state.Gen = Generation;
-                    state.Segment.Reset(WithRelevance);
+                    state.Segment.Reset(WithRelevance, Signed);
                     BufferedBytes += tokens[i].size(); // count token sizes
                 } else if (!state.Segment.GetCount()) {
                     EmptyTokenBytes -= tokens[i].size();
-                    state.Segment.Reset(WithRelevance);
+                    state.Segment.Reset(WithRelevance, Signed);
                 }
                 TokensBySize.erase(&state);
                 BufferedBytes -= state.Segment.GetBuf().size();
@@ -471,7 +480,11 @@ public:
         auto segment = state.Segment.GetBuf();
         TVector<TCell> uploadKey(::Reserve(3));
         uploadKey.push_back(TCell(state.Token));
-        uploadKey.push_back(TCell::Make(state.Segment.GetMaxId()));
+        if (KeyTypeId == NScheme::NTypeIds::Uint64 || KeyTypeId == NScheme::NTypeIds::Int64) {
+            uploadKey.push_back(TCell::Make(state.Segment.GetMaxId()));
+        } else {
+            uploadKey.push_back(TCell::Make((ui32)state.Segment.GetMaxId()));
+        }
         uploadKey.push_back(TCell::Make(state.Gen));
         TVector<TCell> uploadValue(::Reserve(2));
         uploadValue.push_back(TCell::Make(true));
@@ -757,6 +770,22 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         for (auto dataColumn : request.GetDataColumns()) {
             if (!tags.contains(dataColumn)) {
                 badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
+            }
+        }
+
+        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
+            if (userTable.KeyColumnTypes.size() != 1) {
+                badRequest(TStringBuilder() << "Source table must have a single key column");
+            } else {
+                auto keyTypeId = userTable.KeyColumnTypes[0].GetTypeId();
+                if (keyTypeId != NScheme::NTypeIds::Uint64 &&
+                    keyTypeId != NScheme::NTypeIds::Int64 &&
+                    keyTypeId != NScheme::NTypeIds::Uint32 &&
+                    keyTypeId != NScheme::NTypeIds::Int32) {
+                    badRequest(TStringBuilder() << "Source table must have a single uint64/uint32/int64/int32 key column");
+                }
             }
         }
 

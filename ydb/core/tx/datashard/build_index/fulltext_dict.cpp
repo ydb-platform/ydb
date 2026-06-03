@@ -78,6 +78,9 @@ protected:
 
     TTags ScanTags;
     TBatchRowsUploader Uploader;
+    bool KeyIs32 = false;
+    bool Signed = false;
+    ui64 MaxKey = UINT64_MAX;
 
     TBufferData* DictBuf = nullptr;
     TBufferData* PostingBuf = nullptr;
@@ -125,6 +128,11 @@ public:
     {
         LOG_I("Create " << Debug());
 
+        auto keyTypeId = table.KeyColumnTypes.at(1).GetTypeId();
+        KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
+        Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+        MaxKey = (KeyIs32 ? (Signed ? INT32_MAX : UINT32_MAX) : (Signed ? INT64_MAX : UINT64_MAX));
+
         auto types = GetAllTypes(table);
         auto addType = [&](auto& uploadTypes, const auto& column) {
             auto typeInfo = types.at(column);
@@ -159,7 +167,7 @@ public:
             PostingBuf = Uploader.AddDestination(request.GetPostingTableName(), std::move(uploadTypes));
 
             WithFreq = (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
-            Delta.Reset(WithFreq);
+            Delta.Reset(WithFreq, Signed);
             MaxSegmentDocuments = request.GetMaxSegmentDocuments();
             if (!MaxSegmentDocuments) {
                 MaxSegmentDocuments = gFulltextMaxSegment;
@@ -343,7 +351,7 @@ protected:
             // and all their ranges are unique, so we can just concatenate all lists by token
             Y_ENSURE(row[0].AsValue<bool>());
             TConstArrayRef<ui8> inBuf((ui8*)row[1].AsBuf().data(), row[1].AsBuf().size());
-            TDeltaReader rdr(inBuf, WithFreq);
+            TDeltaReader rdr(inBuf, WithFreq, Signed);
             ui64 docId = 0;
             ui32 freq = 0;
             while (rdr.Read(docId, freq)) {
@@ -363,7 +371,7 @@ protected:
             auto maxId = Delta.GetMaxId();
             TVector<TCell> uploadKey = {
                 TCell(LastToken),
-                TCell::Make(isLast ? UINT64_MAX : maxId),
+                KeyIs32 ? TCell::Make((ui32)(isLast ? MaxKey : maxId)) : TCell::Make(isLast ? MaxKey : maxId),
                 TCell::Make(UINT64_MAX),
             };
             TVector<TCell> uploadValue = {
@@ -372,7 +380,7 @@ protected:
             };
             PostingBuf->AddRow(uploadKey, uploadValue);
         }
-        Delta.Reset(WithFreq);
+        Delta.Reset(WithFreq, Signed);
     }
 
     void FinishToken(bool last)

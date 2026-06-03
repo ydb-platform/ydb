@@ -1069,6 +1069,7 @@ private:
     TRowsBatcher RowBatcher;
 };
 
+template<class TDocId>
 class TFulltextTokenizeProjection : public IFulltextTokenizeProjection {
 public:
     TFulltextTokenizeProjection(
@@ -1100,7 +1101,7 @@ public:
     }
 
     void AddRow(TConstArrayRef<TCell> row) override {
-        ui64 docId = row[Indexes[1]].AsValue<ui64>();
+        ui64 docId = (ui64)row[Indexes[1]].AsValue<TDocId>();
         auto text = row[Indexes[0]].AsBuf();
         TVector<TString> tokens;
         switch (TextTypeId) {
@@ -1149,7 +1150,7 @@ public:
         std::sort(sortedTokens.begin(), sortedTokens.end());
         // Fixed column order: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
         TVector<TCell> cells(5);
-        cells[1] = TCell::Make((ui64)0);
+        cells[1] = TCell::Make((TDocId)0);
         cells[2] = TCell::Make((ui64)0);
         cells[3] = TCell::Make(Added);
         // indexImplDictTable columns: __ydb_token, __ydb_freq
@@ -1163,8 +1164,10 @@ public:
                 docIds.push_back(docId);
                 totalFreq += freq;
             }
-            std::sort(docIds.begin(), docIds.end());
-            wr.Reset(WithFreq);
+            std::sort(docIds.begin(), docIds.end(), [](ui64 a, ui64 b) {
+                return (TDocId)a < TDocId(b);
+            });
+            wr.Reset(WithFreq, std::is_signed<TDocId>::value);
             if (WithFreq) {
                 for (const auto& docId: docIds) {
                     wr.Add(docId, docFreqs[docId]);
@@ -1216,7 +1219,8 @@ public:
     }
 
 private:
-    ui32 TextTypeId = 0;
+    NScheme::TTypeId TextTypeId = 0;
+    NScheme::TTypeId KeyTypeId = 0;
     ui64 TotalDocLength = 0;
     ui64 DocCount = 0;
     ui32 DocsColumns = 0;
@@ -1324,7 +1328,17 @@ IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     const Ydb::Table::FulltextIndexSettings& settings,
     TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    return MakeIntrusive<TFulltextTokenizeProjection>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    switch (columnTypes[1].GetTypeId()) {
+    case NScheme::NTypeIds::Uint64:
+        return MakeIntrusive<TFulltextTokenizeProjection<ui64>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Uint32:
+        return MakeIntrusive<TFulltextTokenizeProjection<ui32>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Int64:
+        return MakeIntrusive<TFulltextTokenizeProjection<i64>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    case NScheme::NTypeIds::Int32:
+        return MakeIntrusive<TFulltextTokenizeProjection<i32>>(columnTypes, withFreq, added, settings, indexes, std::move(alloc));
+    }
+    AFL_ENSURE(false)("Unsupported primary key type", columnTypes[1].GetTypeId());
 }
 
 std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {

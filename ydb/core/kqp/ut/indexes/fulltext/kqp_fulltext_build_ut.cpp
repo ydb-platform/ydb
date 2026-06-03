@@ -3003,8 +3003,8 @@ Y_UNIT_TEST(FulltextIndexCreateTableWithStringKey) {
         "primary key column 'Key' to be of type 'Uint64', 'Int64', 'Uint32' or 'Int32' but got String");
 }
 
-Y_UNIT_TEST(FulltextIndexCreateTableWithUint32Key) {
-    auto kikimr = Kikimr();
+Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithUint32Key, Compact) {
+    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3049,8 +3049,8 @@ Y_UNIT_TEST(FulltextIndexCreateTableWithUint32Key) {
     }
 }
 
-Y_UNIT_TEST(FulltextIndexCreateTableWithInt32Key) {
-    auto kikimr = Kikimr();
+Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithInt32Key, Compact) {
+    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3097,9 +3097,9 @@ Y_UNIT_TEST(FulltextIndexCreateTableWithInt32Key) {
 
 // Positive tests: Serial PK types (auto-incrementing, backed by signed integers)
 
-Y_UNIT_TEST(FulltextIndexCreateTableWithSerialKey) {
+Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithSerialKey, Compact) {
     // Serial / Serial4 -> Int32 backend
-    auto kikimr = Kikimr();
+    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3144,9 +3144,9 @@ Y_UNIT_TEST(FulltextIndexCreateTableWithSerialKey) {
     }
 }
 
-Y_UNIT_TEST(FulltextIndexCreateTableWithBigSerialKey) {
+Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithBigSerialKey, Compact) {
     // Serial8 / BigSerial -> Int64 backend
-    auto kikimr = Kikimr();
+    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     {

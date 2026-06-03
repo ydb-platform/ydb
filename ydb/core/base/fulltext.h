@@ -27,14 +27,13 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
 
 class TDeltaWriter {
     TVector<ui8> Buf;
-    ui64 MinId = 0;
     ui64 MaxId = 0;
     ui64 Count = 0;
     bool WithFreq = false;
+    bool Sign = false;
 public:
-    void Reset(bool withFreq);
+    void Reset(bool withFreq, bool sign);
     void Add(ui64 DocId, ui32 Freq);
-    ui64 GetMinId() const;
     ui64 GetMaxId() const;
     ui64 GetCount() const;
     TConstArrayRef<ui8> GetBuf() const;
@@ -51,14 +50,13 @@ class TDeltaReader: public IDeltaReader {
     size_t Pos = 0;
     ui64 LastId = 0;
     bool WithFreq = false;
+    bool Sign = false;
     ui64 MaxId = UINT64_MAX;
     size_t SavedPos = 0;
     ui64 SavedLastId = 0;
 public:
-    TDeltaReader(TConstArrayRef<ui8> buf, bool withFreq);
+    TDeltaReader(TConstArrayRef<ui8> buf, bool withFreq, bool sign);
     bool Read(ui64& docId, ui32& freq) override;
-    size_t GetPos() const;
-    ui64 GetLastId() const;
     void Save();
     void Restore();
     void SetMaxId(ui64 maxId);
@@ -80,14 +78,18 @@ class TMultiDeltaReader: public IDeltaReader {
     TItem NextItem = { 0, 0, 0 };
     bool Started = false;
     bool WithFreq = false;
+    bool Sign = false;
     bool OneLeft = false;
     static bool CompareItems(const TItem& a, const TItem& b) {
         return a.DocId > b.DocId; // min-heap
     }
+    static bool CompareSigned(const TItem& a, const TItem& b) {
+        return (i64)a.DocId > (i64)b.DocId; // min-heap
+    }
     void Consume(ui32 rdrId, TReaderRef& rdr);
     void SelectNext();
 public:
-    void Reset(bool withFreq);
+    void Reset(bool withFreq, bool sign);
     void Add(bool added, TDeltaReader* rdr);
     void Add(bool added, TConstArrayRef<ui8> buf);
     void Start();

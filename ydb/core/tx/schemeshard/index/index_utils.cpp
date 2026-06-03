@@ -431,6 +431,7 @@ auto CalcFulltextCompactImplTableDescImpl(
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns;
+    Y_ENSURE(tableColumns.Keys.size() == 1);
     for (const auto & keyColumn: tableColumns.Keys) {
         indexColumns.insert(keyColumn);
     }
@@ -447,6 +448,8 @@ auto CalcFulltextCompactImplTableDescImpl(
         tokenColumnType = textColumnInfo.GetTypeId();
     }
 
+    auto idType = baseColumnTypes.at(tableColumns.Keys.at(0)).GetTypeId();
+
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
@@ -462,8 +465,8 @@ auto CalcFulltextCompactImplTableDescImpl(
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::MaxIdColumn);
-        col->SetType("Uint64");
-        col->SetTypeId(Ydb::Type::UINT64);
+        col->SetType(NScheme::TypeName(idType));
+        col->SetTypeId(idType);
         col->SetNotNull(true);
         implTableDesc.AddKeyColumnNames(NFulltext::MaxIdColumn);
     }

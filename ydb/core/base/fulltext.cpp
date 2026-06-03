@@ -511,16 +511,16 @@ ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
     return r;
 }
 
-TDeltaReader::TDeltaReader(TConstArrayRef<ui8> buf, bool withFreq)
-{
+TDeltaReader::TDeltaReader(TConstArrayRef<ui8> buf, bool withFreq, bool sign) {
     Buf = buf;
     Pos = 0;
     LastId = 0;
     WithFreq = withFreq;
+    Sign = sign;
+    MaxId = (sign ? INT64_MAX : UINT64_MAX);
 }
 
-bool TDeltaReader::Read(ui64& docId, ui32& freq)
-{
+bool TDeltaReader::Read(ui64& docId, ui32& freq) {
     if (Pos >= Buf.size()) {
         return false;
     }
@@ -531,8 +531,12 @@ bool TDeltaReader::Read(ui64& docId, ui32& freq)
     } else {
         docId = LastId + ReadVarint(Buf, Pos);
     }
+    if (!prevPos && Sign) {
+        // Decode first item as zigzag
+        docId = (docId >> 1) ^ -(docId & 1);
+    }
     freq = hasFreq ? ReadVarint(Buf, Pos) : 1;
-    if (docId > MaxId) {
+    if (Sign ? ((i64)docId > (i64)MaxId) : (docId > MaxId)) {
         Pos = prevPos;
         return false;
     }
@@ -540,118 +544,88 @@ bool TDeltaReader::Read(ui64& docId, ui32& freq)
     return true;
 }
 
-size_t TDeltaReader::GetPos() const
-{
-    return Pos;
-}
-
-ui64 TDeltaReader::GetLastId() const
-{
-    return LastId;
-}
-
-void TDeltaReader::Save()
-{
+void TDeltaReader::Save() {
     SavedPos = Pos;
     SavedLastId = LastId;
 }
 
-void TDeltaReader::Restore()
-{
+void TDeltaReader::Restore() {
     Pos = SavedPos;
     LastId = SavedLastId;
 }
 
-void TDeltaReader::SetMaxId(ui64 maxId)
-{
+void TDeltaReader::SetMaxId(ui64 maxId) {
     MaxId = maxId;
 }
 
-void TDeltaWriter::Reset(bool withFreq)
-{
+void TDeltaWriter::Reset(bool withFreq, bool sign) {
     Buf.clear();
-    MinId = 0;
     MaxId = 0;
     Count = 0;
     WithFreq = withFreq;
+    Sign = sign;
 }
 
-void TDeltaWriter::Add(ui64 DocId, ui32 Freq)
-{
-    Y_ENSURE(DocId > MaxId || !Count);
-    if (!Count) {
-        MinId = DocId;
+void TDeltaWriter::Add(ui64 DocId, ui32 Freq) {
+    ui64 diff = DocId-MaxId;
+    Y_ENSURE(DocId != MaxId && diff < 0x8000000000000000 || !Count);
+    if (!Count && Sign) {
+        // Encode first item as zigzag, same as in protobuf
+        i64 sdiff = (i64)diff;
+        diff = (sdiff << 1) ^ (sdiff >> 63);
     }
     if (WithFreq) {
-        AddVarintWithFlag(Buf, DocId - MaxId, Freq > 1);
+        AddVarintWithFlag(Buf, diff, Freq > 1);
         if (Freq > 1) {
             AddVarint(Buf, Freq);
         }
     } else {
-        AddVarint(Buf, DocId - MaxId);
+        AddVarint(Buf, diff);
     }
     MaxId = DocId;
     Count++;
 }
 
-ui64 TDeltaWriter::GetMinId() const
-{
-    return MinId;
-}
-
-ui64 TDeltaWriter::GetMaxId() const
-{
+ui64 TDeltaWriter::GetMaxId() const {
     return MaxId;
 }
 
-ui64 TDeltaWriter::GetCount() const
-{
+ui64 TDeltaWriter::GetCount() const {
     return Count;
 }
 
-TConstArrayRef<ui8> TDeltaWriter::GetBuf() const
-{
+TConstArrayRef<ui8> TDeltaWriter::GetBuf() const {
     return Buf;
 }
 
-void TMultiDeltaReader::Reset(bool withFreq)
-{
+void TMultiDeltaReader::Reset(bool withFreq, bool sign) {
     Readers.clear();
     Items.clear();
     WithFreq = withFreq;
+    Sign = sign;
     OneLeft = false;
     Started = false;
 }
 
-void TMultiDeltaReader::Add(bool added, TDeltaReader* rdr)
-{
+void TMultiDeltaReader::Add(bool added, TDeltaReader* rdr) {
     Y_ENSURE(!Started);
     Readers.push_back({ rdr, added });
 }
 
-void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf)
-{
+void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
     Y_ENSURE(!Started);
     if (!buf.size()) {
         return;
     }
-    auto rdr = std::make_unique<TDeltaReader>(buf, WithFreq);
+    auto rdr = std::make_unique<TDeltaReader>(buf, WithFreq, Sign);
     Readers.push_back({ rdr.get(), added });
     OwnedReaders.push_back(std::move(rdr));
 }
 
-void TMultiDeltaReader::Start()
-{
+void TMultiDeltaReader::Start() {
     Started = true;
     if (Readers.size() == 1) {
         OneLeft = true;
-        if (!Readers[0].Added) {
-            // Single deleted segment = should not happen, but empty
-            ui64 docId = 0;
-            ui32 freq = 1;
-            while (Readers[0].Reader->Read(docId, freq)) {
-            }
-        }
     } else {
         for (size_t i = 0; i < Readers.size(); i++) {
             Consume(i+1, Readers[i]);
@@ -660,32 +634,36 @@ void TMultiDeltaReader::Start()
     }
 }
 
-void TMultiDeltaReader::SelectNext()
-{
-    std::pop_heap(Items.begin(), Items.end(), CompareItems);
+void TMultiDeltaReader::SelectNext() {
+    std::pop_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
     NextItem = Items.back();
     Items.pop_back();
     auto& rdr = Readers[NextItem.RdrId-1];
     Consume(NextItem.RdrId, rdr);
 }
 
-void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr)
-{
+void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr) {
     ui64 docId = 0;
     ui32 freq = 1;
     if (rdr.Reader->Read(docId, freq)) {
         Items.push_back(TItem{docId, (rdr.Added ? (i32)freq : -(i32)freq), rdrId});
-        std::push_heap(Items.begin(), Items.end(), CompareItems);
+        std::push_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
     }
 }
 
-bool TMultiDeltaReader::Read(ui64& docId, ui32& freq)
-{
+bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
     Y_ENSURE(Started);
-    TItem cur = NextItem;
     if (OneLeft) {
+        if (!Readers[0].Added) {
+            // Single deleted segment = should not happen, but empty
+            ui64 docId = 0;
+            ui32 freq = 1;
+            while (Readers[0].Reader->Read(docId, freq)) {
+            }
+        }
         return Readers[0].Reader->Read(docId, freq);
     }
+    TItem cur = NextItem;
     while (Items.size() > 0) {
         SelectNext();
         if (cur.DocId == NextItem.DocId) {

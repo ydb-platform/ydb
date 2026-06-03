@@ -906,7 +906,7 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
     }
 
     void FreeReader() {
-        Reader.Reset(WithFreq);
+        Reader.Reset(WithFreq, std::is_signed<TDocId>::value);
         Started = false;
         if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
             Results.erase(Results.begin(), Results.begin()+ResultIdx+1);
@@ -919,7 +919,7 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
     }
 public:
     TCompactTokenStream(bool withFreq): WithFreq(withFreq) {
-        Reader.Reset(WithFreq);
+        Reader.Reset(WithFreq, std::is_signed<TDocId>::value);
     }
 
     bool IsEof() override {
@@ -928,7 +928,6 @@ public:
     }
 
     TDocId GetMaxKey() const override {
-        // FIXME: Support signed types correctly
         return (TDocId)MaxDocId;
     }
 
@@ -952,7 +951,7 @@ public:
             }
         }
         auto lastRow = result->GetCells(result->GetRowsCount()-1);
-        MaxDocId = lastRow[0].AsValue<ui64>();
+        MaxDocId = lastRow[0].AsValue<TDocId>();
         Results.push_back(std::move(result));
         StartReader();
     }
@@ -3555,7 +3554,14 @@ static NScheme::TTypeId GetDocIdTypeId(const NKikimrKqp::TKqpFullTextSourceSetti
     YQL_ENSURE(info.GetTable().GetPath().EndsWith(NTableIndex::ImplTable));
     const auto& keyColumns = info.GetKeyColumns();
     YQL_ENSURE(keyColumns.size() >= 1);
-    return static_cast<NScheme::TTypeId>(keyColumns[keyColumns.size() - 1].GetTypeId());
+    size_t idx = keyColumns.size() - 1;
+    if (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
+        settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
+        settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
+        YQL_ENSURE(keyColumns.size() == 3);
+        idx = 1; // __ydb_max_id
+    }
+    return static_cast<NScheme::TTypeId>(keyColumns[idx].GetTypeId());
 }
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,

@@ -841,9 +841,10 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     }
 
     Y_UNIT_TEST_QUAD(TestWideModeBypass, UseLLVM, UseFlow) {
-        RunDqCombineWideTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
+        auto endState = RunDqCombineWideTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
             return new TWideKVStream(ctx, 100000, 1, columnTypes, keyWidth, refMap);
         });
+        UNIT_ASSERT_C(endState.WasBypassActive, "Bypass should have been activated");
     }
 
     Y_UNIT_TEST_QUAD(TestBlockModeNoInput, UseLLVM, UseFlow) {
@@ -869,7 +870,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         auto endState = RunDqCombineBlockTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
             return new TBlockKVStream(ctx, 200000, 1, 40000, columnTypes, keyWidth, refMap);
         });
-        UNIT_ASSERT_C(UseLLVM || endState.WasBypassActive, "Bypass should have been activated");
+        UNIT_ASSERT_C(endState.WasBypassActive, "Bypass should have been activated");
     }
 
     Y_UNIT_TEST_QUAD(TestWideModeAggregationNoInput, UseLLVM, UseFlow) {

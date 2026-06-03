@@ -563,7 +563,7 @@ constexpr const float MaxCompressionRatio = 32.0;
 constexpr const float IncompressibleThresholdRatio = 0.9;
 constexpr const size_t CombineMemorySampleRowCount = 16384ULL; // sample size for row weight estimation in Combine mode, in rows
 constexpr const size_t SpillingMemorySampleRowCount = 1000ULL; // sample size for row weight estimation in Aggregate mode when trying to spill, in rows
-constexpr const size_t LowerFixedRowCount = CombineMemorySampleRowCount; // minimum viable hash table size, rows
+constexpr const size_t LowerFixedRowCount = 1024ULL; // minimum viable hash table size, rows
 constexpr const size_t UpperFixedRowCount = 128 * 1024ULL; // maximum hash table size, rows (fixed constant for now)
 constexpr const size_t BucketBits = 7;
 constexpr const size_t NumBuckets = 1ULL << BucketBits;
@@ -1337,6 +1337,8 @@ protected:
         }
 
         // If we have achieved a "good" compression ratio (defined by a constant) then we probably don't need to resize the map further
+        // The compression ratio is the amount of input keys vs. the amount of unique input keys;
+        // we only check this at most once, after counting input rows from the state initialization up to the moment the hash map starts to drain.
         if (!Map->GetSize() || (static_cast<double>(InputRows) / Map->GetSize() >= MaxCompressionRatio)) {
             return;
         }
@@ -1367,12 +1369,10 @@ protected:
             }
         }
 
-        if (unbounded || totalMem == 0) {
-            // Use a small fixed-size map if we could not estimate memory usage for some of the key/state columns
-            MaxRowCount = LowerFixedRowCount;
-        } else {
+        if (!unbounded && totalMem > 0) {
             MaxRowCount = GetStaticMaxRowCount(totalMem / Map->GetSize(), MemoryLimit);
         }
+        // If we can't guess the memory usage, we'll keep the same small table; it's 0.25MB for 16K 16-byte cells currently, no need to shrink it further
     }
 
     void PrepareForNewBatch()
@@ -1524,7 +1524,7 @@ protected:
     TCoroTask CurrentAsyncTask;
 
     const bool CanBypass;
-    const TDqHashCombineTestParams& TestParams;
+    const TDqHashCombineTestParams TestParams;
 };
 
 class TWideAggregationState: public TBaseAggregationState

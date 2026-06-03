@@ -3,6 +3,8 @@ name: Rebuild documentation
 on:
   pull_request_target:
     types: [labeled]
+    paths:
+      - 'ydb/docs/**'
 
 jobs:
   build-docs:
@@ -13,6 +15,9 @@ jobs:
       group: docs-build-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -29,3 +34,21 @@ jobs:
           revision: "pr-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
           cli-version: stable
+
+      - name: Remove rebuild_docs label
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'rebuild_docs',
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }

@@ -57,25 +57,63 @@ jobs:
             const repo = context.repo.repo;
             const sourcePr = context.payload.pull_request.number;
             const head = `${owner}:ydbdoc-review/pr-${sourcePr}`;
+            let translationPr = null;
 
-            const { data: pulls } = await github.rest.pulls.list({
-              owner,
-              repo,
-              state: 'open',
-              head,
-              per_page: 1,
-            });
+            // Translation PR creation can lag a bit right after doc_translate push.
+            for (let attempt = 1; attempt <= 6; attempt++) {
+              const { data: pulls } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: 'open',
+                head,
+                per_page: 1,
+              });
 
-            if (!pulls[0]) {
+              if (pulls[0]) {
+                translationPr = pulls[0];
+                break;
+              }
+
+              if (attempt < 6) {
+                core.info(`Translation PR not found yet (${attempt}/6), retrying...`);
+                await new Promise((resolve) => setTimeout(resolve, 5000));
+              }
+            }
+
+            if (!translationPr) {
               core.setFailed(`Open translation PR not found for head ${head}`);
               return;
             }
+            const rebuildLabel = {
+              name: 'rebuild_docs',
+              color: '0e8a16',
+              description: 'Trigger docs rebuild workflow',
+            };
 
-            await github.rest.issues.addLabels({
-              owner,
-              repo,
-              issue_number: pulls[0].number,
-              labels: ['rebuild_docs'],
-            });
+            try {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: translationPr.number,
+                labels: [rebuildLabel.name],
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                core.info(`Label ${rebuildLabel.name} was not found, creating it...`);
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  ...rebuildLabel,
+                });
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: translationPr.number,
+                  labels: [rebuildLabel.name],
+                });
+              } else {
+                throw error;
+              }
+            }
 
-            core.info(`Added rebuild_docs to PR #${pulls[0].number}`);
+            core.info(`Added rebuild_docs to PR #${translationPr.number}`);

@@ -207,11 +207,12 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
 }
 
 bool TInsertPromoteOptionsPolicy::MeetsMinBlobBytes(const ui64 totalBlobBytes) const {
-    return MinBlobBytes == 0 || totalBlobBytes >= MinBlobBytes;
+    const ui64 minBlobBytes = MinBlobBytes.value_or(0);
+    return minBlobBytes == 0 || totalBlobBytes >= minBlobBytes;
 }
 
 bool TInsertPromoteOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
-    if (!Enabled || !BuildIndexesEnabled) {
+    if (!Enabled.value_or(false) || !BuildIndexesEnabled.value_or(false)) {
         return false;
     }
     if (mType != NEvWrite::EModificationType::Replace) {
@@ -221,7 +222,7 @@ bool TInsertPromoteOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EMo
 }
 
 bool TInsertPromoteOptionsPolicy::ShouldPromoteCompactionOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
-    if (!Enabled) {
+    if (!Enabled.value_or(false)) {
         return false;
     }
     if (mType != NEvWrite::EModificationType::Replace) {
@@ -231,10 +232,11 @@ bool TInsertPromoteOptionsPolicy::ShouldPromoteCompactionOnInsert(const NEvWrite
 }
 
 ui32 TInsertPromoteOptionsPolicy::ResolveFixedCompactionLevelOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
-    if (!ShouldPromoteCompactionOnInsert(mType, totalBlobBytes) || !CompactionTargetLevel) {
+    const ui32 compactionTargetLevel = CompactionTargetLevel.value_or(0);
+    if (!ShouldPromoteCompactionOnInsert(mType, totalBlobBytes) || !compactionTargetLevel) {
         return 0;
     }
-    return CompactionTargetLevel;
+    return compactionTargetLevel;
 }
 
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
@@ -245,10 +247,18 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     }
     if (optionsProto.HasInsertPromoteOptions()) {
         const auto& options = optionsProto.GetInsertPromoteOptions();
-        InsertPromoteOptions.Enabled = options.GetEnabled();
-        InsertPromoteOptions.MinBlobBytes = options.GetMinBlobBytes();
-        InsertPromoteOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
-        InsertPromoteOptions.CompactionTargetLevel = options.GetCompactionTargetLevel();
+        if (options.HasEnabled()) {
+            InsertPromoteOptions.Enabled = options.GetEnabled();
+        }
+        if (options.HasMinBlobBytes()) {
+            InsertPromoteOptions.MinBlobBytes = options.GetMinBlobBytes();
+        }
+        if (options.HasBuildIndexesEnabled()) {
+            InsertPromoteOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+        }
+        if (options.HasCompactionTargetLevel()) {
+            InsertPromoteOptions.CompactionTargetLevel = options.GetCompactionTargetLevel();
+        }
     }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =

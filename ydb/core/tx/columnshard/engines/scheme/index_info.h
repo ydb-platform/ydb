@@ -71,10 +71,14 @@ public:
 };
 
 struct TInsertPromoteOptionsPolicy {
-    bool Enabled = false;
-    ui64 MinBlobBytes = 0;
-    bool BuildIndexesEnabled = false;
-    ui32 CompactionTargetLevel = 0;
+    std::optional<bool> Enabled;
+    std::optional<ui64> MinBlobBytes;
+    std::optional<bool> BuildIndexesEnabled;
+    std::optional<ui32> CompactionTargetLevel;
+
+    bool IsConfigured() const {
+        return Enabled || MinBlobBytes || BuildIndexesEnabled || CompactionTargetLevel;
+    }
 
     bool MeetsMinBlobBytes(ui64 totalBlobBytes) const;
     bool ShouldBuildIndexesOnInsert(NEvWrite::EModificationType mType, ui64 totalBlobBytes) const;

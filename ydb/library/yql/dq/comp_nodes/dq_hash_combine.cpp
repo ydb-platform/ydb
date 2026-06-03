@@ -22,7 +22,6 @@
 #include <util/system/backtrace.h>
 
 #include <yql/essentials/utils/yql_panic.h>
-#include <util/system/mutex.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -1197,7 +1196,6 @@ public:
             } else {
                 MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
             }
-            //AggregationBypassed = true;
         } else {
             MaxRowCount = 64ULL * 1024;
             MapAutoGrowEnabled = true;
@@ -1641,7 +1639,7 @@ public:
             if (!IsAggregation) {
                 PrepareForNewBatch();
             } else {
-                //Map.Reset();
+                Map.Reset();
                 Store->Clear();
             }
             Draining = false;
@@ -1857,7 +1855,7 @@ public:
     }
 
     TUnboxedValue* const* GetInputBuffer() override {
-        if (CurrentInputBatchPtr < CurrentInputBatchSize) {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks) {
             return nullptr;
         }
         return Ctx.WideFields.data() + WideFieldsIndex;

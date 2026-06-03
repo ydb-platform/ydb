@@ -202,9 +202,7 @@ protected:
     }
 
     ui64 NextSample() {
-        if (CurrKey > Samples.end()) {
-            ythrow yexception() << "out of samples" << Endl;
-        }
+        UNIT_ASSERT_C(CurrKey < Samples.end(), "out of samples");
         return *(CurrKey++);
     }
 
@@ -248,10 +246,22 @@ public:
             ythrow yexception() << "width " << expectedWidth << " expected";
         }
 
+        // Allow production of superlong blocks that will have to be sliced after being processed
+        struct TOversizedBlockTypeInfoHelper: public TTypeInfoHelper {
+            TOversizedBlockTypeInfoHelper()
+                : TTypeInfoHelper()
+            {
+            }
+
+            ui64 GetMaxBlockBytes() const override {
+                return 100_MB;
+            }
+        };
+
         TVector<std::unique_ptr<IArrayBuilder>> builders;
         std::transform(Types.cbegin(), Types.cend(), std::back_inserter(builders),
         [&](const auto& type) {
-            return MakeArrayBuilder(TTypeInfoHelper(), type, Context.ArrowMemoryPool, BlockSize, &Context.Builder->GetPgBuilder());
+            return MakeArrayBuilder(TOversizedBlockTypeInfoHelper(), type, Context.ArrowMemoryPool, BlockSize, &Context.Builder->GetPgBuilder());
         });
 
         size_t count = 0;
@@ -850,14 +860,14 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
 
     Y_UNIT_TEST_QUAD(TestBlockModeMultiBlocks, UseLLVM, UseFlow) {
         auto endState = RunDqCombineBlockTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
-            return new TBlockKVStream(ctx, 20000, 5, 8192, columnTypes, keyWidth, refMap);
+            return new TBlockKVStream(ctx, 20000, 10, 40000, columnTypes, keyWidth, refMap);
         });
         UNIT_ASSERT_C(!endState.WasBypassActive, "Bypass should NOT have been activated");
     }
 
     Y_UNIT_TEST_QUAD(TestBlockModeBypass, UseLLVM, UseFlow) {
         auto endState = RunDqCombineBlockTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
-            return new TBlockKVStream(ctx, 100000, 1, 8192, columnTypes, keyWidth, refMap);
+            return new TBlockKVStream(ctx, 200000, 1, 40000, columnTypes, keyWidth, refMap);
         });
         UNIT_ASSERT_C(UseLLVM || endState.WasBypassActive, "Bypass should have been activated");
     }

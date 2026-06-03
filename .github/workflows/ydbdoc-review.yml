@@ -52,6 +52,7 @@ jobs:
       - name: Trigger docs rebuild for translation PR
         uses: actions/github-script@v8
         with:
+          github-token: ${{ secrets.YDBDOC_PUSH_PAT }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -81,7 +82,7 @@ jobs:
             }
 
             if (!translationPr) {
-              core.setFailed(`Open translation PR not found for head ${head}`);
+              core.warning(`Open translation PR not found for head ${head}. rebuild_docs was not added; rebuild can be triggered manually.`);
               return;
             }
             await github.rest.issues.addLabels({

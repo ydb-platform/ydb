@@ -34,10 +34,6 @@ const std::map<i64, TString> THistorgamBorders::TimeBordersMicroseconds = [] {
             map[base] = ToString(base) + "us";
         }
     }
-    base = 1'000'000;
-    for (auto i = 0; i < 9; i++, base += 1'000'000) {
-        map[base] = ToString(base / 1'000'000) + "s";
-    }
     return map;
 }();
 

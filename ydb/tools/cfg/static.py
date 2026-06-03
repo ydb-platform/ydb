@@ -354,22 +354,6 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("column_shard_config")
 
     @property
-    def scan_grouped_memory_limiter_config(self):
-        return self.__cluster_details.get_service("scan_grouped_memory_limiter_config")
-
-    @property
-    def comp_grouped_memory_limiter_config(self):
-        return self.__cluster_details.get_service("comp_grouped_memory_limiter_config")
-
-    @property
-    def portions_metadata_cache(self):
-        return self.__cluster_details.get_service("portions_metadata_cache")
-
-    @property
-    def composite_conveyor_config(self):
-        return self.__cluster_details.get_service("composite_conveyor_config")
-
-    @property
     def data_shard_config(self):
         return self.__cluster_details.get_service("data_shard_config")
 
@@ -537,18 +521,6 @@ class StaticConfigGenerator(object):
 
         if self.column_shard_config:
             normalized_config["column_shard_config"] = self.column_shard_config
-
-        if self.scan_grouped_memory_limiter_config:
-            normalized_config["scan_grouped_memory_limiter_config"] = self.scan_grouped_memory_limiter_config
-
-        if self.comp_grouped_memory_limiter_config:
-            normalized_config["comp_grouped_memory_limiter_config"] = self.comp_grouped_memory_limiter_config
-
-        if self.portions_metadata_cache:
-            normalized_config["portions_metadata_cache"] = self.portions_metadata_cache
-
-        if self.composite_conveyor_config:
-            normalized_config["composite_conveyor_config"] = self.composite_conveyor_config
 
         if self.data_shard_config:
             normalized_config["data_shard_config"] = self.data_shard_config

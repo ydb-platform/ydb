@@ -68,7 +68,8 @@ TColumnStorageStats GetStableColumnStats(
     const TString selectQuery = BuildInsertedColumnStatsQuery(tablePath, columnName);
     auto tableClient = runner.GetTableClient();
     std::optional<TColumnStorageStats> statsPred;
-    while (true) {
+    constexpr ui64 maxAttempts = 60;
+    for (ui64 attempt = 0; attempt < maxAttempts; ++attempt) {
         TColumnStorageStats stats;
         for (auto&& row : ExecuteScanQuery(tableClient, selectQuery, false)) {
             for (auto&& cell : row) {
@@ -88,6 +89,8 @@ TColumnStorageStats GetStableColumnStats(
         statsPred = stats;
         Sleep(TDuration::Seconds(1));
     }
+    UNIT_FAIL(TStringBuilder() << "column stats did not stabilize within timeout for column " << columnName);
+    return {};
 }
 
 ui64 CountActiveNonInsertedColumnStats(

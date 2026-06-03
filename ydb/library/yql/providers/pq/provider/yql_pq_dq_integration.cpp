@@ -737,7 +737,9 @@ public:
                         return nullptr;
                     }
                     if (!State_->StreamingTopicsReadByDefault && withStreamingValue) {
-                        ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only"));
+                        TIssue tableTopicReadWarning(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only");
+                        tableTopicReadWarning.Severity = TSeverityIds::S_WARNING;
+                        ctx.AddWarning(tableTopicReadWarning);
                     }
                     streamingTopicReadEnabled = withStreamingValue;
                 } else {

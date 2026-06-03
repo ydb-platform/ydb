@@ -31,7 +31,7 @@
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/common/yql_s3_http_retry_policy.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
@@ -245,7 +245,7 @@ void Init(
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {
-        auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.MaxTime = TDuration::Max(), .RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        auto s3HttpRetryPolicy = NYql::GetFqS3HttpRetryPolicy();
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);

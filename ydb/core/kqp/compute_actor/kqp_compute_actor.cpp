@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/providers/s3/common/yql_s3_http_retry_policy.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 

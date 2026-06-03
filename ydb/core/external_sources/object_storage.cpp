@@ -9,7 +9,7 @@
 #include <ydb/core/external_sources/object_storage/inference/infer_config.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/protos/external_sources.pb.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/common/yql_s3_http_retry_policy.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>

@@ -20,6 +20,4 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries = std::numeric_limits<size_t>::max()); // Zero means default maxTime
 
-IHTTPGateway::TRetryPolicy::TPtr GetFqS3HttpRetryPolicy();
-
 }

@@ -11,6 +11,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     util.cpp
+    yql_s3_http_retry_policy.cpp
 )
 
 PEERDIR(

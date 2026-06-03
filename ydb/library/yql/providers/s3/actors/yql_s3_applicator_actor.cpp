@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/common/yql_s3_http_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>

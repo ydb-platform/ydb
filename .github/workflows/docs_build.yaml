@@ -67,7 +67,9 @@ jobs:
 
       - name: Save PR number to inputs artifact
         if: github.event_name == 'workflow_dispatch'
-        run: printf '%s' '${{ inputs.pull_number }}' > ./inputs/pr-number
+        env:
+          PULL_NUMBER: ${{ inputs.pull_number }}
+        run: printf '%s' "$PULL_NUMBER" > ./inputs/pr-number
 
       - name: Upload inputs artifact
         if: github.event_name == 'workflow_dispatch'

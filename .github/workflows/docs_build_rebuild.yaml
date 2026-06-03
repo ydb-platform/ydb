@@ -3,8 +3,6 @@ name: Rebuild documentation
 on:
   pull_request_target:
     types: [labeled]
-    paths:
-      - 'ydb/docs/**'
 
 jobs:
   build-docs:
@@ -18,6 +16,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      issues: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -40,6 +39,7 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
+            // Always clear trigger label so manual re-run is a single re-add.
             try {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,

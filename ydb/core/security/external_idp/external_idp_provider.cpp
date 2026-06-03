@@ -77,13 +77,11 @@ TString BuildKey(const TString& kty, const TString& kid) {
 }
 
 TString BuildDiscoveryUrl(TString issuer) {
-    while (issuer.EndsWith('/')) {
-        issuer.pop_back();
-    }
     return TStringBuilder() << issuer << "/.well-known/openid-configuration";
 }
 
-TDuration RandomizeJitter(const TDuration& jitter) {
+// returns a value in [50%, 100%] of its input
+TDuration ApplyDownwardJitter(const TDuration& jitter) {
     const ui64 half = jitter.MilliSeconds() / 2;
     const ui64 range = jitter.MilliSeconds() - half + 1;
     const ui64 randomMs = half + RandomNumber<ui64>(range);
@@ -93,7 +91,7 @@ TDuration RandomizeJitter(const TDuration& jitter) {
 TDuration CalculateRetry(const TDuration& minPeriod, const TDuration& maxPeriod, ui64 attempt) {
     const auto backoff = minPeriod + TDuration::Seconds(1ul << Min(attempt, 20ul));
     const auto clamped = Min(backoff, maxPeriod);
-    return RandomizeJitter(clamped);
+    return ApplyDownwardJitter(clamped);
 }
 
 NMonitoring::TBucketBounds ResponseTimeBuckets() {
@@ -265,7 +263,7 @@ void TExternalIdpProvider::TRecurringPeriod::OnSuccessReceived(TInstant now) {
     OnReceived(now);
 
     RetryCount = 0;
-    Scheduled = now + RandomizeJitter(SuccessRefreshPeriod);
+    Scheduled = now + ApplyDownwardJitter(SuccessRefreshPeriod);
 
     Successes->Inc();
 }
@@ -343,6 +341,10 @@ void TExternalIdpProvider::TJWKsCache::Update(const TInstant& now, THashMap<TStr
 }
 
 void TExternalIdpProvider::TJWKsCache::Clear() {
+    if (Count() == 0) {
+        return;
+    }
+
     Keys.clear();
     KeyCount->Set(0);
 }
@@ -683,14 +685,14 @@ void TExternalIdpProvider::HandleDiscoveryResponse(
         }
     };
 
-    if (const auto err = resp.GetError(); !err.empty()) {
-        const TString msg = TStringBuilder() << "Discovery fetch network error: " << err;
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=" << msg);
+    if (resp.Response == nullptr) {
+        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery failed: " << resp.Error);
         return;
     }
 
-    if (resp.Response == nullptr) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery response is empty");
+    if (resp.Response->Status != "200") {
+        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery fetch network error"
+            << " (" << resp.Response->Status << ") " << resp.Response->Message);
         return;
     }
 
@@ -730,14 +732,14 @@ void TExternalIdpProvider::HandleJwksResponse(
         }
     };
 
-    if (const auto err = resp.GetError(); !err.empty()) {
-        const TString msg = TStringBuilder() << "JWKS fetch network error: " << err;
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=" << msg);
+    if (resp.Response == nullptr) {
+        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=JWKs response failed: " << resp.Error);
         return;
     }
 
-    if (resp.Response == nullptr) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=JWKS response is empty");
+    if (resp.Response->Status != "200") {
+        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=JWKs fetch network error"
+            << " (" << resp.Response->Status << ")" << " " << resp.Response->Message);
         return;
     }
 
@@ -813,7 +815,7 @@ void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorConte
     html << "<div>";
     html << "<table class='table table-hover simple-table1'>";
     html << "<caption>Common info</caption>";
-    html << "<tr><td scope=\"row\">URL</td><td>" << JwksUrl << "</td></tr>";
+    html << "<tr><td scope=\"row\">URL</td><td>" << EncodeHtmlPcdata(JwksUrl) << "</td></tr>";
     html << "</table>";
     html << JwksRefresh.GetHtml();
 
@@ -846,7 +848,7 @@ void TExternalIdpProvider::ReplyError(
     BLOG_W("Authentication failed in ExternalIdp"
         << " issuer=" << Config.GetIssuer()
         << " key=" << MaskTicket(key)
-        << " status=" << static_cast<int>(status)
+        << " status=" << status
         << " retryable=" << retryable
         << " message=" << message);
 

@@ -18,6 +18,8 @@ PEERDIR(
     ydb/library/services
 )
 
+GENERATE_ENUM_SERIALIZATION(external_idp_provider.h)
+
 END()
 
 RECURSE_FOR_TESTS(

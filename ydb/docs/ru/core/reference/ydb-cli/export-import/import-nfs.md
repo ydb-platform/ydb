@@ -49,7 +49,7 @@
 
 При успешном исполнении команда `import nfs` выводит сводную информацию о поставленной в очередь операции загрузки из NFS, в заданном опцией `--format` формате. Фактическая загрузка производится сервером асинхронно. В сводной информации выводится ID операции, который может быть использован в дальнейшем для проверки статуса и действий с операцией:
 
-- В режиме вывода `pretty` (по умолчанию) идентификатор операции показывается в выделенном псевдографикой поле id:
+{% include [import-operation-result-pretty-intro.md](_includes/import-operation-result-pretty-intro.md) %}
 
   ```text
   ┌───────────────────────────────────────────┬───────┬─────...
@@ -61,7 +61,7 @@
   ...
   ```
 
-- В режиме вывода `proto-json-base64` идентификатор находится в атрибуте "id":
+{% include [import-operation-result-json-intro.md](_includes/import-operation-result-json-intro.md) %}
 
   ```json
   {"id":"ydb://import/8?id=281474976788395&kind=fs","ready":true, ... }
@@ -69,38 +69,17 @@
 
 ### Статус загрузки {#status}
 
-Загрузка данных выполняется в фоновом режиме. Получить информацию о статусе и прогрессе загрузки можно вызовом команды `operation get`, параметром которой должен быть передан **заключенный в кавычки** идентификатор операции, например:
+{% include [import-operation-status-intro.md](_includes/import-operation-status-intro.md) %}
 
-``` bash
+```bash
 {{ ydb-cli }} -p quickstart operation get "ydb://import/8?id=281474976788395&kind=fs"
 ```
 
-Формат вывода `operation get` также устанавливается опцией `--format`.
-
-Несмотря на то, что идентификатор операции имеет формат URL, не гарантируется, что он будет сохранен в дальнейшем. Его нужно интерпретировать только как строку.
-
-Завершение загрузки отслеживается по изменению атрибута "progress":
-
-- В режиме вывода `pretty` (по умолчанию) успешно завершенная операция отражается значением "Done" в выделенном псевдографикой поле `progress`:
-
-  ```text
-  ┌───── ... ──┬───────┬─────────┬──────────┬─...
-  | id         | ready | status  | progress | ...
-  ├──────... ──┼───────┼─────────┼──────────┼─...
-  | ydb:/...   | true  | SUCCESS | Done     | ...
-  ├╴╴╴╴╴ ... ╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴╴┴╴...
-  ...
-  ```
-
-- В режиме вывода `proto-json-base64` завершенная операция отражается значением `PROGRESS_DONE` атрибута `progress`:
-
-  ```json
-  {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
-  ```
+{% include [import-operation-status-after-get.md](_includes/import-operation-status-after-get.md) %}
 
 ### Завершение операции загрузки {#forget}
 
-После выполнения загрузки воспользуйтесь командой `operation forget` для того, чтобы загрузка была удалена из перечня операций:
+{% include [import-operation-forget-intro.md](_includes/import-operation-forget-intro.md) %}
 
 ```bash
 {{ ydb-cli }} -p quickstart operation forget "ydb://import/8?id=281474976788395&kind=fs"
@@ -114,7 +93,7 @@
 {{ ydb-cli }} -p quickstart operation list import/nfs
 ```
 
-Формат вывода `operation list` также устанавливается опцией `--format`.
+{% include [import-operation-list-tail.md](_includes/import-operation-list-tail.md) %}
 
 ## Примеры {#examples}
 

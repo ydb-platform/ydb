@@ -574,6 +574,300 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         }
     }
 
+    // ── Generation-aware barrier semantics ──────────────────────────────────
+
+    // MoveBarrier to a higher generation must clear ALL previously accumulated
+    // erase LSNs (they belong to the old generation and are no longer relevant).
+    Y_UNIT_TEST(MoveBarrierNewGenerationClearsAllEraseLsns) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2001;
+
+        // Register erases for generation 1.
+        std::vector<ui64> erasedLsns = {10, 20, 30, 40, 50};
+        auto eraseResult = mgr.Erase(tabletId, /*generation=*/1, erasedLsns, alloc);
+        UNIT_ASSERT(eraseResult.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 5u);
+
+        // Move barrier to generation 2 (higher generation).
+        // All erase LSNs from generation 1 must be discarded.
+        TPersistentBufferSectorInfo sector = MakeSector(0, 5);
+        mgr.MoveBarrier(tabletId, /*generation=*/2, /*lsn=*/1, sector);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetErasesCount(tabletId), 0u,
+            "All erase LSNs from old generation must be cleared when barrier moves to a new generation");
+    }
+
+    // MoveBarrier within the same generation must NOT clear erase LSNs that are
+    // above the new barrier LSN.
+    Y_UNIT_TEST(MoveBarrierSameGenerationKeepsLsnsAboveBarrier) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2002;
+
+        std::vector<ui64> erasedLsns = {5, 10, 15, 20, 25};
+        auto eraseResult = mgr.Erase(tabletId, /*generation=*/3, erasedLsns, alloc);
+        UNIT_ASSERT(eraseResult.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 5u);
+
+        // Move barrier within the same generation to LSN=12.
+        // LSNs 5, 10 (≤12) must be removed; 15, 20, 25 must remain.
+        TPersistentBufferSectorInfo sector = MakeSector(0, 6);
+        mgr.MoveBarrier(tabletId, /*generation=*/3, /*lsn=*/12, sector);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetErasesCount(tabletId), 3u,
+            "Only LSNs above the barrier must remain after MoveBarrier within the same generation");
+    }
+
+    // CanFastErase must return false when the barrier is on a different generation
+    // than the one being erased.
+    Y_UNIT_TEST(CanFastEraseReturnsFalseForDifferentGeneration) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2003;
+
+        // Set barrier at generation 1.
+        TPersistentBufferSectorInfo sector = MakeSector(0, 1);
+        mgr.MoveBarrier(tabletId, /*generation=*/1, /*lsn=*/10, sector);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId).Generation, 1u);
+
+        // Fast erase for generation 2 must be disallowed.
+        UNIT_ASSERT_C(!mgr.CanFastErase(tabletId, /*generation=*/2),
+            "CanFastErase must return false when barrier generation != requested generation");
+
+        // Fast erase for generation 1 (same as barrier) must be allowed.
+        UNIT_ASSERT_C(mgr.CanFastErase(tabletId, /*generation=*/1),
+            "CanFastErase must return true when barrier generation == requested generation");
+    }
+
+    // CanFastErase must return false when no barrier exists yet (generation 0).
+    Y_UNIT_TEST(CanFastEraseReturnsFalseWhenNoBarrier) {
+        auto mgr = MakeManager();
+
+        const ui64 tabletId = 2004;
+        // No barrier set → GetBarrier returns {tabletId, 0, 0}.
+        UNIT_ASSERT_C(!mgr.CanFastErase(tabletId, /*generation=*/1),
+            "CanFastErase must return false when no barrier has been set");
+    }
+
+    // Erase() must reset its accumulated LSNs when called with a higher generation
+    // than the one stored in the erase record.
+    Y_UNIT_TEST(EraseResetsLsnsOnGenerationBump) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2005;
+
+        // First erase batch for generation 1.
+        std::vector<ui64> batch1 = {10, 20, 30};
+        auto r1 = mgr.Erase(tabletId, /*generation=*/1, batch1, alloc);
+        UNIT_ASSERT(r1.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 3u);
+
+        // Second erase batch for generation 2 (higher).
+        // The old LSNs from generation 1 must be discarded; only the new batch counts.
+        std::vector<ui64> batch2 = {5, 15};
+        auto r2 = mgr.Erase(tabletId, /*generation=*/2, batch2, alloc);
+        UNIT_ASSERT(r2.has_value());
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetErasesCount(tabletId), 2u,
+            "Erase must reset accumulated LSNs when generation increases");
+    }
+
+    // RestoreErases must discard erase records whose generation does not match
+    // any entry in persistentBuffers (old-generation records already cleaned up).
+    Y_UNIT_TEST(RestoreErasesDropsRecordForMissingGeneration) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2006;
+
+        // Simulate an erase record for generation 1 that was persisted.
+        {
+            TPersistentBufferFastErases eh{};
+            memset(&eh, 0, sizeof(eh));
+            eh.Header.Flags = TPersistentBufferHeader::IS_ERASE;
+            eh.Header.RecordLsn = 1;
+            eh.Header.PersistentBufferUniqueId = 1;
+            eh.Header.NodeId = 1; eh.Header.PDiskId = 1; eh.Header.SlotId = 1;
+            eh.TabletId = tabletId;
+            eh.Generation = 1;
+            ui64 lsns[] = {5, 15, 25};
+            for (int i = 0; i < 3; i++) {
+                memcpy(eh.CompactLsns + i * 8, &lsns[i], 8);
+            }
+            mgr.AddErase((TPersistentBufferHeader*)&eh, /*chunkIdx=*/0, /*sectorIdx=*/2);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 3u);
+
+        // persistentBuffers only has generation 2 records (generation 1 was already
+        // cleaned up by RestoreBarriers or never written).
+        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        {
+            TPersistentBuffer buf;
+            buf.Records[5] = {};
+            pbs[{tabletId, 2}] = std::move(buf);
+        }
+
+        mgr.RestoreErases(pbs, alloc);
+
+        // The erase record for generation 1 must be dropped because there is no
+        // {tabletId, 1} entry in persistentBuffers.
+        // The generation-2 record must remain untouched.
+        auto pbIt = pbs.find({tabletId, 2});
+        UNIT_ASSERT_C(pbIt != pbs.end(), "Generation-2 record must survive");
+        UNIT_ASSERT_C(pbIt->second.Records.count(5), "LSN 5 in generation 2 must not be erased");
+    }
+
+    // RestoreBarriers must remove all records from older generations when the
+    // barrier is on a newer generation.
+    Y_UNIT_TEST(RestoreBarriersRemovesOldGenerationRecords) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2007;
+
+        // Set up a barrier at generation 2, LSN=5.
+        {
+            TPersistentBufferBarriers bh{};
+            memset(&bh, 0, sizeof(bh));
+            memcpy(bh.Header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+            bh.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+            bh.Header.RecordLsn = 1;
+            bh.Header.PersistentBufferUniqueId = 1;
+            bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
+            bh.Header.RecordIdx = 0;
+            bh.Barriers[0] = {tabletId, /*Lsn=*/5, /*Generation=*/2};
+            mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
+        }
+
+        // persistentBuffers has records from generation 1 (old) and generation 2 (current).
+        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        {
+            // Generation 1 records — all must be removed.
+            TPersistentBuffer buf1;
+            buf1.Records[1] = {};
+            buf1.Records[100] = {};
+            pbs[{tabletId, 1}] = std::move(buf1);
+
+            // Generation 2 records — LSN ≤ 5 removed, LSN > 5 kept.
+            TPersistentBuffer buf2;
+            buf2.Records[3] = {};   // ≤ barrier LSN 5 → removed
+            buf2.Records[10] = {};  // > barrier LSN 5 → kept
+            pbs[{tabletId, 2}] = std::move(buf2);
+        }
+
+        mgr.RestoreBarriers(pbs, alloc);
+
+        // Generation 1 must be completely gone.
+        UNIT_ASSERT_C(pbs.find({tabletId, 1}) == pbs.end(),
+            "All generation-1 records must be removed when barrier is at generation 2");
+
+        // Generation 2: only LSN > 5 must survive.
+        auto it2 = pbs.find({tabletId, 2});
+        UNIT_ASSERT_C(it2 != pbs.end(), "Generation-2 entry must still exist");
+        UNIT_ASSERT_C(!it2->second.Records.count(3), "LSN 3 (≤ barrier) must be removed");
+        UNIT_ASSERT_C(it2->second.Records.count(10), "LSN 10 (> barrier) must remain");
+    }
+
+    // LSN 1 in generation 2 must be independent from LSN 1 in generation 1.
+    // Writing LSN 1 in gen=2 after LSN 1 in gen=1 must not be treated as a duplicate.
+    Y_UNIT_TEST(LsnResetAcrossGenerations) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2008;
+
+        // Erase LSN 1 in generation 1.
+        std::vector<ui64> batch1 = {1, 2};
+        auto r1 = mgr.Erase(tabletId, /*generation=*/1, batch1, alloc);
+        UNIT_ASSERT(r1.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 2u);
+
+        // Now erase LSN 1 in generation 2 — must start fresh.
+        std::vector<ui64> batch2 = {1, 2};
+        auto r2 = mgr.Erase(tabletId, /*generation=*/2, batch2, alloc);
+        UNIT_ASSERT(r2.has_value());
+        // After generation bump, old LSNs are cleared; only the new batch (2 LSNs) counts.
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetErasesCount(tabletId), 2u,
+            "LSN counter must reset when generation increases");
+    }
+
+    // MoveBarrier to a new generation must update the stored barrier generation.
+    Y_UNIT_TEST(MoveBarrierUpdatesGeneration) {
+        auto mgr = MakeManager();
+
+        const ui64 tabletId = 2009;
+
+        TPersistentBufferSectorInfo s1 = MakeSector(0, 1);
+        mgr.MoveBarrier(tabletId, /*generation=*/1, /*lsn=*/10, s1);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId).Generation, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(tabletId).Lsn, 10u);
+
+        TPersistentBufferSectorInfo s2 = MakeSector(0, 2);
+        mgr.MoveBarrier(tabletId, /*generation=*/2, /*lsn=*/1, s2);
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetBarrier(tabletId).Generation, 2u,
+            "Barrier generation must be updated after MoveBarrier to a new generation");
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetBarrier(tabletId).Lsn, 1u,
+            "Barrier LSN must be set to the new value after generation bump");
+    }
+
+    // RestoreBarriers with duplicate barrier records: the one with the higher
+    // generation (or higher LSN within the same generation) must win.
+    Y_UNIT_TEST(RestoreBarriersDuplicateHigherGenerationWins) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator(1024, 0);
+
+        const ui64 tabletId = 2010;
+
+        // First barrier record: generation 1, LSN 50.
+        {
+            TPersistentBufferBarriers bh{};
+            memset(&bh, 0, sizeof(bh));
+            memcpy(bh.Header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+            bh.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+            bh.Header.RecordLsn = 1;
+            bh.Header.PersistentBufferUniqueId = 1;
+            bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
+            bh.Header.RecordIdx = 0;
+            bh.Barriers[0] = {tabletId, /*Lsn=*/50, /*Generation=*/1};
+            mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
+        }
+
+        // Second barrier record (different sector): generation 2, LSN 5.
+        // Higher generation must win even though LSN is lower.
+        {
+            TPersistentBufferBarriers bh{};
+            memset(&bh, 0, sizeof(bh));
+            memcpy(bh.Header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+            bh.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+            bh.Header.RecordLsn = 2;
+            bh.Header.PersistentBufferUniqueId = 1;
+            bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
+            bh.Header.RecordIdx = 0;
+            bh.Barriers[0] = {tabletId, /*Lsn=*/5, /*Generation=*/2};
+            mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/2);
+        }
+
+        // persistentBuffers: only generation-2 records survive (gen-1 was cleaned up).
+        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        {
+            TPersistentBuffer buf;
+            buf.Records[10] = {};
+            pbs[{tabletId, 2}] = std::move(buf);
+        }
+
+        mgr.RestoreBarriers(pbs, alloc);
+
+        // The generation-2 barrier (LSN=5) must be active.
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetBarrier(tabletId).Generation, 2u,
+            "Higher-generation barrier must win during restore");
+        UNIT_ASSERT_VALUES_EQUAL_C(mgr.GetBarrier(tabletId).Lsn, 5u,
+            "Barrier LSN must match the winning (higher-generation) record");
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NKikimr::NDDisk

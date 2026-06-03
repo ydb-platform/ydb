@@ -27,7 +27,7 @@ namespace NKikimr::NDDisk {
             ui32 ChunkIdx = Max<ui32>();
             ui32 SectorIdx = Max<ui32>();
             ui64 HeaderLsn = 0;
-            ui32 Generation;
+            ui32 Generation = 0;
         };
 
         ui64 PersistentBufferUniqueId;
@@ -52,7 +52,7 @@ namespace NKikimr::NDDisk {
 
         bool Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header);
         std::vector<ui64> Uncompact(const ui8* data, bool isCompact);
-        bool CanFastErase(ui64 tabletId, ui64 generation);
+        bool CanFastErase(ui64 tabletId, ui32 generation);
         ui32 GetErasesCount(ui64 tabletId);
         std::optional<TFastErase> Erase(ui64 tabletId, ui32 generation, std::vector<ui64>& lsns, TPersistentBufferSpaceAllocator& allocator);
         bool AddErase(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);

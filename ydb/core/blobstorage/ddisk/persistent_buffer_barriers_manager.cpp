@@ -125,7 +125,7 @@ namespace NKikimr::NDDisk {
         barrier.ChunkIdx = newSector.ChunkIdx;
         barrier.SectorIdx = newSector.SectorIdx;
 
-        if (barrier.Header.Barriers[pos].Generation >= generation
+        if (barrier.Header.Barriers[pos].Generation > generation
             || (barrier.Header.Barriers[pos].Generation == generation && barrier.Header.Barriers[pos].Lsn >= lsn)) {
             STLOG(PRI_ERROR, BS_DDISK, BSDD29, "TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous", (TabletId, tabletId), (Lsn, lsn), (PrevLsn, barrier.Header.Barriers[pos].Lsn));
         }
@@ -179,7 +179,7 @@ namespace NKikimr::NDDisk {
                     }
                 }
                 while (it != persistentBuffers.end() && std::get<0>(it->first) == barrier.TabletId) {
-                    if (std::get<0>(it->first) <= barrier.TabletId) {
+                    if (std::get<1>(it->first) < barrier.Generation) {
                         it = persistentBuffers.erase(it);
                         continue;
                     }
@@ -404,7 +404,7 @@ namespace NKikimr::NDDisk {
         return it->second.Lsns.size();
     }
 
-    bool TPersistentBufferBarriersManager::CanFastErase(ui64 tabletId, ui64 generation) {
+    bool TPersistentBufferBarriersManager::CanFastErase(ui64 tabletId, ui32 generation) {
         const auto barrier = GetBarrier(tabletId);
         return barrier.Generation == generation;
     }

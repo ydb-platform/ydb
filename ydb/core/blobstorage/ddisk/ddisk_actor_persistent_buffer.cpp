@@ -1286,7 +1286,7 @@ namespace NKikimr::NDDisk {
             const TPersistentBuffer& buffer = it->second;
             auto recordIt = buffer.Records.begin();
             while (recordIt != buffer.Records.end()
-                && (recordIt->first <= lsn || std::get<0>(it->first) < creds.Generation)) {
+                && (recordIt->first <= lsn || std::get<1>(it->first) < creds.Generation)) {
                 erases.emplace_back(recordIt->first, std::get<1>(it->first));
                 recordIt++;
             }

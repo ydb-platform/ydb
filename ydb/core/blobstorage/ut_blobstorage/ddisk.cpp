@@ -491,6 +491,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto& item = group[0];
         for (auto& node : item.GetNodes()) {
             f.ChangeTestingNode(node);
+            f.MoveBarrier(0, 0);
+
             Cerr << "next iteration\n";
 
             for (ui32 iter = 0; iter < 1000; ++iter) {
@@ -535,6 +537,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto& item = group[0];
         for (auto& node : item.GetNodes()) {
             f.ChangeTestingNode(node);
+            f.MoveBarrier(0, 0);
+
             Cerr << "next iteration\n";
             for (ui32 iter = 0; iter < 1000; ++iter) {
                 if (iter % 400 == 399) {
@@ -579,6 +583,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto fs = f.BatchErasePB();
             UNIT_ASSERT(fs == 1);
         }
+        f.MoveBarrier(0, 0);
 
         double occupiedSpace = 0;
 
@@ -612,10 +617,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
 
         auto info = f.GetPBInfo(false, true);
         auto freeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        UNIT_ASSERT_EQUAL(freeSectors, 131072 - 1);
         for (ui32 i = 1; i < 1001; ++i) {
             if (i % 200 == 99) {
                 f.RestartNode();
@@ -656,10 +662,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
 
         auto info = f.GetPBInfo(false, true);
         auto freeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        UNIT_ASSERT_EQUAL(freeSectors, 131072 - 1);
         for (ui32 i = 1; i < 5001; ++i) {
             ui32 sectorsCnt = 4;
             f.WritePB(0, sectorsCnt);
@@ -683,10 +690,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
 
         auto info = f.GetPBInfo(false, true);
         auto freeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        UNIT_ASSERT_EQUAL(freeSectors, 131072 - 1);
         for (ui32 i = 1; i < 5001; ++i) {
             ui32 sectorsCnt = 4;
             f.WritePB(0, sectorsCnt);

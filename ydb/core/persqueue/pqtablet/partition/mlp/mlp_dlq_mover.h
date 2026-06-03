@@ -56,7 +56,8 @@ private:
 
     TString ProducerId;
     std::deque<TDLQMessage> Queue;
-    std::deque<TDLQMessage> Pending;
+    std::deque<std::pair<TDLQMessage, ui64>> Pending;
+    ui64 PendingMessagesSize = 0;
 
     Ydb::StatusIds::StatusCode ResponseStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     TString Error;

@@ -8,6 +8,7 @@ namespace NKikimr::NPQ::NMLP {
 namespace {
 
 static constexpr ui64 CacheSubscribeCookie = 1;
+static constexpr ui64 MaxPendingMessagesSize = 100_MB;
 
 }
 
@@ -19,10 +20,6 @@ TDLQMoverActor::TDLQMoverActor(TDLQMoverSettings&& settings)
 }
 
 void TDLQMoverActor::Bootstrap() {
-    if (Queue.empty()) {
-        return ReplySuccess();
-    }
-
     Become(&TDLQMoverActor::StateDescribe);
     if (Settings.DestinationTopic.StartsWith("sqs://")) {
         auto tokensStr = Settings.DestinationTopic.substr("sqs://"sv.size());
@@ -146,6 +143,10 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
         Queue.pop_front();
     }
 
+    if (Queue.empty()) {
+        return ReplySuccess();
+    }
+
     ProcessQueue();
 }
 
@@ -157,10 +158,6 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
 void TDLQMoverActor::ProcessQueue() {
     LOG_D("ProcessQueue");
     Become(&TDLQMoverActor::StateWork);
-
-    if (Queue.empty()) {
-       return;
-    }
 
     SendToPQTablet(MakeEvPQRead(Settings.ConsumerName, Settings.PartitionId, Queue.front().Offset, 1));
 }
@@ -175,6 +172,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
     AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
+    auto messageSize = result->GetData().size();
 
     LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << Queue.front().SeqNo);
 
@@ -195,10 +193,13 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
     Send(PartitionWriterActorId, std::move(writeRequest));
 
-    Pending.emplace_back(Queue.front());
+    Pending.emplace_back(Queue.front(), messageSize);
     Queue.pop_front();
 
-    ProcessQueue();
+    PendingMessagesSize += messageSize;
+    if (PendingMessagesSize < MaxPendingMessagesSize && !Queue.empty()) {
+        ProcessQueue();
+    }
 }
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
@@ -223,12 +224,19 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: unexpected result");
     }
 
-    Processed.emplace_back(Pending.front().Offset, Pending.front().SeqNo);
+    auto [message, messageSize] = Pending.front();
+    Processed.emplace_back(message.Offset, message.SeqNo);
     Pending.pop_front();
 
     LOG_D("Queue: " << Queue.size() << " Pending: " << Pending.size() << " Processed: " << Processed.size());
     if (Queue.empty() && Pending.empty()) {
         return ReplySuccess();
+    }
+
+    bool processingPaused = PendingMessagesSize >= MaxPendingMessagesSize;
+    PendingMessagesSize -= messageSize;
+    if (processingPaused && PendingMessagesSize < MaxPendingMessagesSize && !Queue.empty()) {
+        ProcessQueue();
     }
 }
 

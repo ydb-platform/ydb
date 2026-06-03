@@ -191,7 +191,6 @@ ydb/tests/compatibility test_in_memory.py.TestInMemoryRestartToAnotherVersion.te
 ydb/tests/compatibility test_in_memory.py.TestInMemoryRolling.test_in_memory_rolling[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_stable-26-2-1]
-ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_stable-26-2-1_and_stable-26-1-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-26-1-1_to_stable-26-2-1]

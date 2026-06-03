@@ -122,11 +122,14 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
     Building = false;
 }
 
-void TPhantomFlagStorageState::Recover(TPhantomFlagStorageSnapshot&& snapshot) {
+void TPhantomFlagStorageState::Recover(TPhantomFlagThresholds&& thresholdsBatch, bool eof) {
     STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS10,
-            VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"));
-    Building = false;
-    Thresholds.Merge(std::move(snapshot.Thresholds));
+            VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"),
+            (Eof, eof));
+    Thresholds.Merge(std::move(thresholdsBatch));
+    if (eof) {
+        Building = false;
+    }
 }
 
 void TPhantomFlagStorageState::Deactivate() {
@@ -150,7 +153,11 @@ void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot:
         STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS05,
                 VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
                 (FlagsCount, StoredFlags.size()));
-        auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(TPhantomFlagStorageSnapshot(StoredFlags, Thresholds));
+        auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(
+                TPhantomFlags(StoredFlags),
+                TPhantomFlagThresholds(Thresholds),
+                std::unordered_set<ui32>{},
+                /*eof=*/true);
         TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, res.release()));
     }
 }

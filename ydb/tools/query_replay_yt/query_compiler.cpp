@@ -201,9 +201,9 @@ class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
         NYql::IHTTPGateway::TPtr httpGateway, bool antlr4ParserIsAmbiguityError)
-        : ModuleResolverState(moduleResolverState)
+        : Antlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError)
+        , ModuleResolverState(moduleResolverState)
         , KqpSettings()
-        , Antlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError)
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {

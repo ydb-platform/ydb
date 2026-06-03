@@ -80,6 +80,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     common/result_set_format/ut
+    tools/hash_test
 )
 
 IF (NOT OS_WINDOWS)

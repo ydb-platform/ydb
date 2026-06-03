@@ -193,6 +193,14 @@ NProto::TTaskPullResult TaskPullResultToProto(const TTaskPullResult& taskPullRes
 
 TTaskPullResult TaskPullResultFromProto(const NProto::TTaskPullResult& protoTaskPullResult);
 
+NProto::TFillOperationParams FillOperationParamsToProto(const TFillOperationParams& fillOperationParams);
+
+TFillOperationParams FillOperationParamsFromProto(const NProto::TFillOperationParams& protoFillOperationParams);
+
+NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskParams);
+
+TFillTaskParams FillTaskParamsFromProto(const NProto::TFillTaskParams& protoFillTaskParams);
+
 NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult);
 
 TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult);

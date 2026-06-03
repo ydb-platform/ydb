@@ -49,8 +49,10 @@ void DumpToFile(
     Sort(
         dumps,
         [](const TDBGDumpResponse::TVChunkDump& lhs,
-           const TDBGDumpResponse::TVChunkDump& rhs) {
-            return lhs.VChunkConfig.VChunkIndex < rhs.VChunkConfig.VChunkIndex;
+           const TDBGDumpResponse::TVChunkDump& rhs)
+        {
+            return lhs.VChunkConfig.GetVChunkIndex() <
+                   rhs.VChunkConfig.GetVChunkIndex();
         });
 
     auto dirPath = TString("/tmp/dirty_map/");
@@ -170,6 +172,12 @@ TFastPathService::~TFastPathService()
         NKikimrServices::NBS_PARTITION,
         "TFastPathService::Destroy %s",
         DiskId.Quote().c_str());
+
+    // TODO. Should stop and destroy regions before TFastPathService
+    // destruction.
+    for (const auto& region: Regions) {
+        region->Stop();
+    }
 }
 
 void TFastPathService::Run()

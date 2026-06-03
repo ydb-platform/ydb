@@ -151,8 +151,7 @@ namespace NKikimr::NBsController {
         }
 
         const auto& spToGroups = StoragePoolGroups.Get();
-        auto r = spToGroups.equal_range(id);
-        for (auto it = r.first; it != r.second; ++it) {
+        for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
             if (!group->BridgeGroupInfo && group->ErasureSpecies != storagePool.ErasureSpecies) {
@@ -167,7 +166,7 @@ namespace NKikimr::NBsController {
                 throw TExError() << "can't invoke DefineStoragePool against DDisk pool";
             }
             if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
-                for (auto it = r.first; it != r.second; ++it) {
+                for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
                     GroupContentChanged.insert(it->second);
                 }
             }
@@ -231,9 +230,9 @@ namespace NKikimr::NBsController {
             throw TExError() << "can't invoke DeleteStoragePool against DDisk pool";
         }
 
-        auto &storagePoolGroups = StoragePoolGroups.Unshare();
-        auto range = storagePoolGroups.equal_range(id);
-        for (auto it = range.first; it != range.second; ++it) {
+        auto& storagePoolGroups = StoragePoolGroups.Unshare();
+        for (auto it = storagePoolGroups.lower_bound({id, Min<TGroupId>()});
+                it != storagePoolGroups.end() && it->first == id; it = storagePoolGroups.erase(it)) {
             const TGroupId groupId = it->second;
             if (const TGroupInfo *groupInfo = Groups.Find(groupId)) {
                 for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
@@ -244,7 +243,6 @@ namespace NKikimr::NBsController {
                 throw TExError() << "GroupId# " << groupId << " not found";
             }
         }
-        storagePoolGroups.erase(range.first, range.second);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& /*cmd*/, TStatus& status) {
@@ -445,17 +443,15 @@ namespace NKikimr::NBsController {
         TVector<TGroupId> groups;
         std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
         if (!groups) {
-            for (auto it = storagePoolGroups.lower_bound(originId); it != storagePoolGroups.end() && it->first == originId; ++it) {
+            for (auto it = storagePoolGroups.lower_bound({originId, Min<TGroupId>()});
+                    it != storagePoolGroups.end() && it->first == originId; ++it) {
                 groups.push_back(it->second);
             }
         }
 
         for (TGroupId groupId : groups) {
             // find the group belonging to the origin storage pool and remove it from the multimap
-            auto p = storagePoolGroups.equal_range(originId);
-            if (auto it = std::find(p.first, p.second, TMultiMap<TBoxStoragePoolId, TGroupId>::value_type(originId, groupId)); it != p.second) {
-                storagePoolGroups.erase(it);
-            } else {
+            if (!storagePoolGroups.erase({originId, groupId})) {
                 throw TExError() << "GroupId# " << groupId << " not found in origin StoragePoolId# " << originId;
             }
 
@@ -500,7 +496,8 @@ namespace NKikimr::NBsController {
         TVector<TGroupId> groups;
         std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
         if (groups.empty()) {
-            for (auto it = storagePoolGroups.lower_bound(poolId); it != storagePoolGroups.end() && it->first == poolId; ++it) {
+            for (auto it = storagePoolGroups.lower_bound({poolId, Min<TGroupId>()});
+                    it != storagePoolGroups.end() && it->first == poolId; ++it) {
                 groups.push_back(it->second);
             }
         }
@@ -815,6 +812,31 @@ namespace NKikimr::NBsController {
         vslot->IsReady = false;
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& /*status*/) {
+        for (ui32 groupId : cmd.GetGroupIds()) {
+            const TGroupInfo *groupInfo = Groups.Find(TGroupId::FromValue(groupId));
+            if (!groupInfo) {
+                throw TExGroupNotFound(groupId);
+            }
+            for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
+                DestroyVSlot(vslot->VSlotId);
+            }
+
+            // adjust number of groups in storage pool
+            auto& storagePools = StoragePools.Unshare();
+            const auto spIt = storagePools.find(groupInfo->StoragePoolId);
+            Y_ABORT_UNLESS(spIt != storagePools.end());
+            --spIt->second.NumGroups;
+
+            // remove group from storage pool group mapping
+            auto& storagePoolGroups = StoragePoolGroups.Unshare();
+            const size_t numErased = storagePoolGroups.erase({spIt->first, groupInfo->ID});
+            Y_ABORT_UNLESS(numErased == 1);
+
+            DeleteExistingGroup(groupInfo->ID);
+        }
     }
 
 } // NKikimr::NBsController

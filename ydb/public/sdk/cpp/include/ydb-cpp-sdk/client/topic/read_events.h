@@ -91,7 +91,7 @@ struct TReadSessionEvent {
     struct TDataReceivedEvent: public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
         struct TMessageInformation {
             TMessageInformation(uint64_t offset,
-                                std::string producerId,
+                                std::string_view producerId,
                                 uint64_t seqNo,
                                 TInstant createTime,
                                 TInstant writeTime,

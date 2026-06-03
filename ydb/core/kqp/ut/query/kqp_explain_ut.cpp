@@ -1258,8 +1258,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
-
-        Cerr << plan << Endl;
+        NJson::WriteJson(&Cerr, &plan, true);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
@@ -1289,9 +1288,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], fullScansCount);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], (UseStreamIndex ? 1 : 0)); // TODO: 0
         }
 
-        if (!UseStreamIndex) {
+        {
             const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
             UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
 
@@ -1306,8 +1306,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 1);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("tables").GetArraySafe().size(), 1);
         }
     }
 
@@ -1398,14 +1396,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
-
-        Cerr << plan << Endl;
+        NJson::WriteJson(&Cerr, &plan, true);
 
         auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
-        UNIT_ASSERT_VALUES_EQUAL(updatesCount, (UseStreamIndex ? 1 : 0)); // Rows have beed read already, so it's better to use upsert.
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 0); // Rows have beed read already, so it's better to use upsert.
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 0 : 2));
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
@@ -1425,18 +1422,16 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
                 }
             };
 
-            if (!UseStreamIndex) {
-                countOperationsByType("reads");
-            }
+            countOperationsByType("reads");
             countOperationsByType("writes");
 
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], (UseStreamIndex ? 0 : 1));
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], (UseStreamIndex ? 1 : 0));
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
-            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 1);
         }
 
-        if (!UseStreamIndex) {
+        {
             const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
             UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
 
@@ -1590,6 +1585,45 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto dataAfter = readTable();
         UNIT_ASSERT_VALUES_EQUAL_C(dataBefore, dataAfter,
             "EXPLAIN should not modify data, but table contents changed");
+    }
+
+    Y_UNIT_TEST(UpsertWithIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto tableBuilder = db.GetTableBuilder();
+        tableBuilder
+            .AddNullableColumn("Key", EPrimitiveType::String)
+            .AddNullableColumn("IndexedCol", EPrimitiveType::String)
+            .AddNullableColumn("Value", EPrimitiveType::String);
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Idx", std::vector<std::string>{"IndexedCol"});
+        auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto explainResult = querySession.ExecuteQuery(
+            Q1_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, IndexedCol, Value) VALUES
+                ("k1", "idx1", "val1");
+            )"),
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+        UNIT_ASSERT(explainResult.GetStats().has_value());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        Cerr << WriteJson(plan, /*formatOutput*/ true, /*sortkeys*/ false, /*validateUtf8*/ true) << Endl;
+
+        
     }
 }
 

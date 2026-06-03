@@ -56,7 +56,6 @@ namespace NKikimr::NHttpProxy {
             , IamToken(context.IamToken)
             , Authorize(!context.Driver)
             , DatabasePath(CanonizePath(context.DatabasePath))
-            , StreamName(context.StreamName)
             , SourceAddress(context.SourceAddress)
         {
         }
@@ -325,7 +324,6 @@ namespace NKikimr::NHttpProxy {
         TString CloudId;
         TString DatabaseId;
         TString DatabasePath;
-        TString StreamName;
         TString SourceAddress;
     };
 

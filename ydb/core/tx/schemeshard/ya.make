@@ -34,6 +34,7 @@ RECURSE_FOR_TESTS(
     ut_filestore_reboots
     ut_incremental_restore
     ut_incremental_restore_reboots
+    ut_full_backup
     ut_index
     ut_index_build
     ut_index_build_reboots
@@ -109,6 +110,7 @@ SRCS(
     schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
+    schemeshard__monitoring.h
     schemeshard__notify.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
@@ -155,6 +157,7 @@ SRCS(
     schemeshard__operation_copy_table.cpp
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_backup_collection.cpp
+    schemeshard__operation_create_full_backup_op.cpp
     schemeshard__operation_create_bsv.cpp
     schemeshard__operation_create_cdc_stream.cpp
     schemeshard__operation_create_continuous_backup.cpp
@@ -226,6 +229,7 @@ SRCS(
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
     schemeshard__tenant_shred_manager.cpp
@@ -236,6 +240,11 @@ SRCS(
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
+    schemeshard_full_backup.cpp
+    schemeshard_full_backup__progress.cpp
+    schemeshard_full_backup__get.cpp
+    schemeshard_full_backup__list.cpp
+    schemeshard_full_backup__forget.cpp
     schemeshard_backup_incremental__forget.cpp
     schemeshard_backup_incremental__get.cpp
     schemeshard_backup_incremental__list.cpp
@@ -323,7 +332,11 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
+GENERATE_ENUM_SERIALIZATION(schemeshard_impl.h)
+
 GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
+
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweepAlert
 
 PEERDIR(
     contrib/libs/protobuf

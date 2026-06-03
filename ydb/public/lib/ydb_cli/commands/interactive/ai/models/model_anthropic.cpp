@@ -17,7 +17,7 @@ namespace {
 class TModelAnthropic final : public TModelBase {
     using TBlase = TModelBase;
 
-    static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
+    static constexpr ui64 MAX_COMPLETION_TOKENS = 8192;
 
 public:
     explicit TModelAnthropic(const TAnthropicModelSettings& settings)

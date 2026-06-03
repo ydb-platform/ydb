@@ -622,6 +622,10 @@
       {
         "name": "QueryMemoryLimitPercentPerNode",
         "type": "Double?"
+      },
+      {
+        "name": "TotalMemoryLimitPercentPerNode",
+        "type": "Double?"
       }
     ],
     "primary_key": [

@@ -166,15 +166,15 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
             reader->GetOmittedInaccessibleColumns());
     });
 
-    TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
-        .Columnar = (format.GetType() == EFormatType::Arrow)
-    };
-
     PipeReaderToWriterByBatches(
         reader,
         writer,
-        options);
+        TPipeReaderToWriterByBatchesOptions{
+            .StartingOptions = {
+                .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+                .Columnar = (format.GetType() == EFormatType::Arrow),
+            },
+        });
 }
 
 bool TReadTableCommand::HasResponseParameters() const

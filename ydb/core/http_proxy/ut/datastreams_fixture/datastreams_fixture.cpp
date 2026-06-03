@@ -149,7 +149,7 @@ NJson::TJsonValue THttpProxyTestMock::CreateSqsCreateQueueRequest() {
 
 THttpResult THttpProxyTestMock::SendHttpRequestRaw(const TString& handler, const TString& target,
                                 const IOutputStream::TPart& body, const TString& authorizationStr,
-                                const TString& contentType) {
+                                const TString& contentType, const TString& securityToken) {
     TNetworkAddress addr("::", HttpServicePort);
     TSocket sock(addr);
     TSocketOutput so(sock);
@@ -175,6 +175,11 @@ THttpResult THttpProxyTestMock::SendHttpRequestRaw(const TString& handler, const
     };
     if (!authorizationStr.empty()) {
         parts.push_back(IOutputStream::TPart(TStringBuf(authorizationStr)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    if (!securityToken.empty()) {
+        parts.push_back(IOutputStream::TPart(TStringBuf("x-amz-security-token:")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(securityToken)));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
     if (!contentType.empty()) {
@@ -265,9 +270,30 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
 
 THttpResult THttpProxyTestMock::SendHttpRequest(const TString& handler, const TString& target, NJson::TJsonValue value,
                             const TString& authorizationStr,
-                            const TString& contentType) {
+                            const TString& contentType, const TString& securityToken) {
     TString jsonStr = NJson::WriteJson(value);
-    return SendHttpRequestRaw(handler, target, {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType);
+    return SendHttpRequestRaw(handler, target, {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType, securityToken);
+}
+
+NJson::TJsonMap THttpProxyTestMock::CreateQueueWithSecurityToken(NJson::TJsonMap request, const TString& securityToken,
+                                                                 ui32 expectedHttpCode) {
+    auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", request, "", "application/json", securityToken);
+    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, res.Body);
+    NJson::TJsonMap json;
+    UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+    if (expectedHttpCode == 200) {
+        const TString url = GetByPath<TString>(json, "QueueUrl");
+        const TString queue = GetByPath<TString>(request, "QueueName");
+        if (SqsTopicMode) {
+            TStringBuf topic, consumer;
+            TStringBuf{queue}.RSplit('@', topic, consumer);
+            UNIT_ASSERT_C(url.contains(topic), LabeledOutput(url, queue, topic));
+            UNIT_ASSERT_C(url.contains(consumer), LabeledOutput(url, queue, consumer));
+        } else {
+            UNIT_ASSERT_C(url.EndsWith(queue), LabeledOutput(url, queue));
+        }
+    }
+    return json;
 }
 
 THttpResult THttpProxyTestMock::SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
@@ -894,7 +920,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     as->RegisterLocalService(MakeHttpProxyID(), actorId);
 
     GRpcServer = MakeHolder<NYdbGrpc::TGRpcServer>(opts);
-    GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, credentialsProvider, Counters));
+    GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, Counters));
 
     GRpcServer->Start();
 

@@ -45,7 +45,7 @@ static inline bool GetFlagValue(const TMaybe<bool>& flag) {
     return flag ? flag.GetRef() : false;
 }
 
-} // anonymous namespace end
+} // anonymous namespace
 
 TKikimrConfiguration::TKikimrConfiguration() {
     /* KQP */
@@ -65,6 +65,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpEnableSpilling);
     REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages);
     REGISTER_SETTING(*this, _KqpYqlCombinerMemoryLimit).Lower(0ULL).Upper(1_GB);
+    REGISTER_SETTING(*this, _KqpYqlConstraintsTransformerEnabled);
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
     REGISTER_SETTING(*this, KqpForceImmediateEffectsExecution);
@@ -96,6 +97,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptUseSortForPartitionsByKeys);
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
+    REGISTER_SETTING(*this, OptValidateStreamingConstraints);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
@@ -161,6 +163,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }
         });
+    REGISTER_SETTING(*this, UseKqpTasksGraphV2);
 
     /* CBO internal constants for tuning */
     REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
@@ -182,9 +185,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptCBOConstsLeftSideByteSizeFactor);
     REGISTER_SETTING(*this, OptCBOConstsRightSideByteSizeFactor);
     REGISTER_SETTING(*this, OptCBOConstsOutputSideByteSizeFactor);
-
-    REGISTER_SETTING(*this, OptCBOConstsInteractionsMult);
-    REGISTER_SETTING(*this, OptCBOConstsInteractionsPow);
 
     REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSideMult);
     REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSidePow);
@@ -352,4 +352,8 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
 }
 
+bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
+    return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
 }
+
+} // namespace NYql

@@ -619,6 +619,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
+        // Second step of stream lookup join with DQ external sources (not kqp tables)
         TMaybeNode<TExprBase> output = DqRewriteStreamLookupJoin(node, ctx);
         if (output) {
             DumpAppliedRule("RewriteStreamLookupJoin", node.Ptr(), output.Cast().Ptr(), ctx);

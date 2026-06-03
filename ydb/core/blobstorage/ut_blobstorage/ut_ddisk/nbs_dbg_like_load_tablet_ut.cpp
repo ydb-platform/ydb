@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto& wc = *cmd.MutableWorkloadConfig();
             wc.SetTag(tag);
             wc.SetDelayBeforeMeasurementsSeconds(0);
-            wc.SetInFlightWrites(1);
+            wc.SetMaxInFlight(1);
             wc.SetReadWriteSizeKiB(4);
             wc.SetStopOnWritesDoneCount(1000);
             wc.SetDurationSeconds(1);
@@ -194,7 +194,6 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             }
             auto& tcfg = *wc.MutableTabletConfig();
             tcfg.SetMaxInflightLsns(64);
-            tcfg.SetFillRatio(0);
             tcfg.SetPBufferReplyTimeoutMicroseconds(500000); // 500 ms - slack for sim
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -213,6 +212,18 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                 }
             }
             return info;
+        }
+
+        // Returns a copy of the GetSummaryResult proto record.
+        NKikimr::TEvNbsLoadTabletGetSummaryResult TabletGetSummary(TActorId pipe) {
+            Env.Runtime->WrapInActorContext(Edge, [&] {
+                auto ev = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummary>();
+                NTabletPipe::SendData(Edge, pipe, ev.release());
+            });
+            auto resp = Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsLoadTabletGetSummaryResult>(
+                Edge, /*termOnCapture=*/false, Deadline(TDuration::Seconds(30)));
+            UNIT_ASSERT(resp);
+            return resp->Get()->Record;
         }
 
         ENbsLoadTabletStatus TabletDelete(TActorId pipe) {
@@ -313,6 +324,52 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.ClosePipe(pipe);
     }
 
+    // GetSummary returns NumReadyDirectBlockGroups == NumDirectBlockGroups once
+    // all peers have connected. Before any Create the ready count is 0. After
+    // Create + peer-connect simulation both counts equal the allocated DBG count.
+    Y_UNIT_TEST(GetSummaryReadyCounts) {
+        TFixture f;
+        const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1);
+        TActorId pipe = f.OpenTabletPipe(tabletId);
+
+        // Before Create: tablet is uninitialized — GetSummary returns NOT_INITIALIZED.
+        {
+            f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+                auto ev = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummary>();
+                NTabletPipe::SendData(f.Edge, pipe, ev.release());
+            });
+            auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsLoadTabletGetSummaryResult>(
+                f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(30)));
+            UNIT_ASSERT(resp);
+            UNIT_ASSERT_VALUES_EQUAL(resp->Get()->Record.GetStatus(), NBSLT_NOT_INITIALIZED);
+        }
+
+        constexpr ui32 kDbgs = 2;
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, /*numDirectBlockGroups=*/kDbgs), NBSLT_OK);
+
+        // Allow peer-connect handshakes to complete for all kDbgs DBGs.
+        f.Env.Sim(TDuration::Seconds(5));
+
+        auto summary = f.TabletGetSummary(pipe);
+        UNIT_ASSERT_VALUES_EQUAL_C(summary.GetStatus(), NBSLT_OK,
+            "GetSummary failed: " << summary.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL_C(summary.GetNumDirectBlockGroups(), kDbgs,
+            "expected NumDirectBlockGroups=" << kDbgs);
+        UNIT_ASSERT_VALUES_EQUAL_C(summary.GetNumReadyDirectBlockGroups(), kDbgs,
+            "expected NumReadyDirectBlockGroups=" << kDbgs
+                << " (got " << summary.GetNumReadyDirectBlockGroups() << "); "
+                << "some DBG peer-connects may not have completed");
+
+        // RunViaLoadActor with numDirectBlockGroupsToUse=0 must use both ready
+        // DBGs (EffectiveDbgCount == ReadyDbgCount == 2).
+        auto fin = f.RunViaLoadActor(tabletId, /*tag=*/1, /*numDirectBlockGroupsToUse=*/0);
+        UNIT_ASSERT(fin.FinishedReceived);
+        UNIT_ASSERT_C(fin.ErrorReason.empty(), fin.ErrorReason);
+
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+        f.ClosePipe(pipe);
+    }
+
     // Running against a tablet that has no DBGs allocated must fail gracefully:
     // the load actor gets NumDirectBlockGroups=0 from GetSummary and errors out.
     Y_UNIT_TEST(RunBeforeCreate) {
@@ -402,7 +459,6 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetEraseBatchSize(32);
             cfg.SetSyncRequestsBatchSize(1);
             cfg.SetPBufferReplyTimeoutMicroseconds(500000);
-            cfg.SetFillRatio(50);
             cfg.SetNumDirectBlockGroupsToUse(1);
             cfg.SetIoSizeBytes(kBlockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());

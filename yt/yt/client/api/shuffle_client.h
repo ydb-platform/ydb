@@ -2,6 +2,8 @@
 
 #include "client_common.h"
 
+#include <yt/yt/client/table_client/schema.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,6 +17,12 @@ struct TShuffleHandle
     std::string Medium;
     int PartitionCount;
     int ReplicationFactor;
+    bool UsePushBasedShuffle = false;
+    //! The schema is the single source of the column name-to-id mapping shared
+    //! by writers and readers. Currently required for push-based shuffle; for
+    //! pull-based it may be null (schemaless) for backward compatibility, but a
+    //! schema will eventually be required there too.
+    NTableClient::TTableSchemaPtr Schema;
 
     REGISTER_YSON_STRUCT(TShuffleHandle);
 
@@ -34,6 +42,9 @@ struct TStartShuffleOptions
 {
     std::optional<std::string> Medium;
     std::optional<int> ReplicationFactor;
+    bool UsePushBasedShuffle = false;
+    //! Required when UsePushBasedShuffle is set.
+    NTableClient::TTableSchemaPtr Schema;
 };
 
 struct TShuffleReaderOptions

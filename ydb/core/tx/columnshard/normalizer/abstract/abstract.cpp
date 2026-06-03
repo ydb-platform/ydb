@@ -59,7 +59,7 @@ void TNormalizationController::OnNormalizerFinished(NIceDb::TNiceDb& db) const {
     if (auto seqId = GetNormalizer()->GetSequentialId()) {
         NColumnShard::Schema::SaveSpecialValue(db, NColumnShard::Schema::EValueIds::LastNormalizerSequentialId, *seqId);
     }
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_finished")("description", GetNormalizer()->DebugString())(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_finished")("description", GetNormalizer()->DebugString())(
         "id", GetNormalizer()->GetSequentialId());
     NColumnShard::Schema::FinishNormalizer(
         db, GetNormalizer()->GetClassName(), GetNormalizer()->GetUniqueDescription(), GetNormalizer()->GetUniqueId());

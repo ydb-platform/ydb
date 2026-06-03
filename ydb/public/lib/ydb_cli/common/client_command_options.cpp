@@ -298,6 +298,11 @@ TClientCommandOption& TClientCommandOption::SetSupportsProfile(bool supports) {
     return *this;
 }
 
+TClientCommandOption& TClientCommandOption::DisableImplicitSourcesIf(std::function<bool()> condition) {
+    ImplicitSourcesDisabled = std::move(condition);
+    return *this;
+}
+
 TClientCommandOption& TClientCommandOption::LogToConnectionParams(const TString& paramName) {
     ConnectionParamName = paramName;
     return *this;
@@ -721,6 +726,9 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             continue;
         }
         if (clientOption->IsMainAuthOption() && !AuthMethodOpts.empty()) { // Parsed from command line or from profile
+            continue;
+        }
+        if (clientOption->ImplicitSourcesDisabled && clientOption->ImplicitSourcesDisabled()) {
             continue;
         }
 

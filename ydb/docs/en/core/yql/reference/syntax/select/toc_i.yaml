@@ -18,7 +18,9 @@ items:
 - { name: VIEW SECONDARY INDEX, href: secondary_index.md,       when: feature_secondary_index }
 - { name: VIEW VECTOR INDEX,    href: vector_index.md,          when: feature_secondary_index }
 - { name: VIEW FULLTEXT INDEX,  href: fulltext_index.md,        when: feature_secondary_index }
-- { name: WITH,                 href: with.md                                                 }
+- name: WITH
+  href: with.md
+  include: { mode: link, path: with/toc_p.yaml }
 - { name: WITHOUT,              href: without.md                                              }
 - { name: WHERE,                href: where.md                                                }
 - { name: ORDER BY,             href: order_by.md                                             }

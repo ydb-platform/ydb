@@ -607,14 +607,24 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVec
         for (const auto& aggTraits : aggTraitsList) {
             const auto& aggFuncName = aggTraits.AggFunc;
             const auto& stateName = aggTraits.StateFieldName;
-            const bool isOptional = aggTraits.InputItemType->IsOptionalOrNull();
+            const bool inputIsOptional = aggTraits.InputItemType->IsOptionalOrNull();
+            const bool outputIsOptional = aggTraits.OutputItemType->IsOptionalOrNull();
             const TTypeAnnotationNode* typeNode = aggTraits.InputItemType;
             auto it = lambdaArgsMap.find(stateName);
             TExprNode::TPtr finishState = lambdaArgs[it->second];
 
             if (aggFuncName == "avg") {
-                finishState =
-                    isOptional ? BuildAvgAggregationFinishStateForOptionalType(finishState, typeNode) : BuildAvgAggregationFinishState(finishState, typeNode);
+                finishState = inputIsOptional ? BuildAvgAggregationFinishStateForOptionalType(finishState, typeNode)
+                                              : BuildAvgAggregationFinishState(finishState, typeNode);
+            }
+
+            // Input is not optional, but output is optional - wraph with just.
+            if (!inputIsOptional && outputIsOptional && (Aggregate->GetAggregationPhase() != EOpPhase::Intermediate)) {
+                // clang-format off
+                finishState = Build<TCoJust>(Ctx, Pos)
+                    .Input(finishState)
+                .Done().Ptr();
+                // clang-format on
             }
             lambdaResults.push_back(finishState);
         }
@@ -813,7 +823,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr i
                         }
                         const auto& aggFunc = traits[i].AggFunc;
                         auto maybeInputAggFunc = traits[i].InputAggFunc;
-                        // Distributed count -> final::sum() + intermediate::count().
+                        // count -> intermediate::count() + final::sum()
                         if (aggFunc == "count" || (aggregationPhase == EOpPhase::Final && aggFunc == "sum" && maybeInputAggFunc.has_value() && *maybeInputAggFunc == "count")) {
                             parent.List(i)
                                 .Atom(0, fieldName)

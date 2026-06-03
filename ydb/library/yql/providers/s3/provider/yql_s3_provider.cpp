@@ -5,6 +5,11 @@
 
 namespace NYql {
 
+TS3State::TS3State()
+    : Configuration(MakeIntrusive<TS3Configuration>())
+    , GatewayRetryPolicy(GetHTTPDefaultRetryPolicy())
+{}
+
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
     return [gateway, credentialsFactory, actorSystem, configurationInit] (
         const TString& userName,

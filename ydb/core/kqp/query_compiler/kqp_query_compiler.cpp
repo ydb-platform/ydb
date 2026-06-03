@@ -1917,6 +1917,12 @@ private:
                         AFL_ENSURE(settings.Mode().StringValue() != "insert");
 
                         THashSet<TStringBuf> lookupColumnsSet;
+                        for (const auto& columnName : settings.ReturningColumns()) {
+                            if (!columnsSet.contains(columnName)) {
+                                lookupColumnsSet.insert(columnName);
+                            }
+                        }
+
                         for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
                             const auto& indexDescription = tableMeta->Indexes[index];
 
@@ -1929,16 +1935,12 @@ private:
                                 }
                                 if (settings.Mode().StringValue() != "delete") {
                                     for (const auto& [columnName, columnMeta] : implTable->Columns) {
-                                        if (!columnsSet.contains(columnName)) {
-                                            lookupColumnsSet.insert(columnName);
-                                        }
+                                        // We can avoid lookup for columns that are already in columnsSet,
+                                        // but currently lookup them all, because it's consistent with old indexes execution.
+                                        lookupColumnsSet.insert(columnName);
                                     }
                                 }
                             }
-                        }
-
-                        for (const auto& columnName : settings.ReturningColumns()) {
-                            lookupColumnsSet.insert(columnName);
                         }
 
                         if (isStructOfNewAndOldValues) {
@@ -2139,6 +2141,7 @@ private:
         }
 
         if (const auto isIndexImplTable = settings.IsIndexImplTable(); isIndexImplTable.StringValue() == "true") {
+            AFL_ENSURE(!Config->GetEnableIndexStreamWrite());
             settingsProto.SetIsIndexImplTable(true);
         }
     }

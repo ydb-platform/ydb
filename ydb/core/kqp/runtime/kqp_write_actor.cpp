@@ -1871,8 +1871,8 @@ private:
             KeyToIndexes.clear();
             for (const auto& batch : ProcessBatches) {
                 for (const auto& row : GetRows(batch)) {
+                    const auto& key = row.first(KeyColumnTypes.size());
                     ProcessCells.push_back(row);
-                    const auto& key = ProcessCells.back().first(KeyColumnTypes.size());
                     primaryKeysSet.insert(key);
                     KeyToIndexes[key].push_back(index++);
                 }
@@ -1999,6 +1999,11 @@ private:
 
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
+
+                if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                    // In case of delete skip all following equal keys, because row is already erased.
+                    keyToReadCellsIndex.erase(keyIt);
+                }
             } else if (lookupInfo.SkipMissingRows) {
                 AFL_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
                     || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);

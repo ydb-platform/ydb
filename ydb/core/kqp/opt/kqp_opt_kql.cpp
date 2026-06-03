@@ -846,26 +846,7 @@ THashSet<TStringBuf> GetUpdateLookupColumns(const TKikimrTableDescription& table
         }
     }
 
-    const bool needOldData = !lookupColumns.empty()
-        || std::any_of(tableData.Metadata->Indexes.begin(), tableData.Metadata->Indexes.end(),
-            [&](const auto& indexDesc) {
-                if (!indexDesc.ItUsedForWrite()) {
-                    return false;
-                }
-
-                if (indexDesc.Type != TIndexDescription::EType::GlobalSync) {
-                    AFL_ENSURE(indexDesc.Type == TIndexDescription::EType::GlobalAsync);
-                    return false;
-                }
-
-                return std::any_of(
-                    indexDesc.KeyColumns.begin(),
-                    indexDesc.KeyColumns.end(),
-                    [&](const auto& column) {
-                        return updateColumns.contains(column) && !tableData.GetKeyColumnIndex(column);
-                    });
-            });
-
+    TVector<std::pair<const TIndexDescription*, bool>> affectedIndexes;
     for (const auto& indexDesc : tableData.Metadata->Indexes) {
         if (!indexDesc.ItUsedForWrite()) {
             continue;
@@ -890,13 +871,28 @@ THashSet<TStringBuf> GetUpdateLookupColumns(const TKikimrTableDescription& table
             });
 
         const bool needIndexTableUpdate = secondaryIndexKeyUpdated || secondaryIndexDataUpdated;
-        if (!needIndexTableUpdate) {
-            continue;
-        }
 
-        if (needOldData) {
+        if (needIndexTableUpdate) {
+            affectedIndexes.emplace_back(&indexDesc, secondaryIndexKeyUpdated);
+        }
+    }
+
+    const bool needOldData = !lookupColumns.empty()
+        || std::any_of(affectedIndexes.begin(), affectedIndexes.end(),
+            [&](const auto indexDescAndKeyUpdated) {
+                return std::any_of(
+                    indexDescAndKeyUpdated.first->KeyColumns.begin(),
+                    indexDescAndKeyUpdated.first->KeyColumns.end(),
+                    [&](const auto& column) {
+                        return !updateColumns.contains(column) // Need to know index key
+                            || (updateColumns.contains(column) && !tableData.GetKeyColumnIndex(column)); // Need to know old value to delete it
+                    });
+            });
+
+    if (needOldData) {
+        for (const auto& [indexDesc, _] : affectedIndexes) {
             // Need to read old secondary key value in order to delete old row from index table.
-            for (const auto& column : indexDesc.KeyColumns) {
+            for (const auto& column : indexDesc->KeyColumns) {
                 // Primary key columns can't be changed.
                 if (!tableData.GetKeyColumnIndex(column)) {
                     lookupColumns.insert(column);
@@ -904,15 +900,12 @@ THashSet<TStringBuf> GetUpdateLookupColumns(const TKikimrTableDescription& table
             }
 
             // Need to write new row to index table
-            for (const auto& column : indexDesc.DataColumns) {
+            for (const auto& column : indexDesc->DataColumns) {
                 if (!updateColumns.contains(column)) {
                     // Need old values only for missing in update columns
                     lookupColumns.insert(column);
                 }
             }
-        } else {
-            // Update all indexes inplace, don't need lookup old values.
-            AFL_ENSURE(!secondaryIndexKeyUpdated);
         }
     }
 

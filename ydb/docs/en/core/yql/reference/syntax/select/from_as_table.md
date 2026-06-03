@@ -15,7 +15,7 @@ $data = AsList(
 SELECT Key, Value FROM AS_TABLE($data);
 ```
 
-You should explicitly specify column names in both the source and the target when using expressions with modifying queries such as [UPSERT INTO](../upsert_into.md) or [INSERT INTO](../insert_into.md):
+You should either explicitly specify column names in both the source and the target when using expressions with modifying queries such as [UPSERT INTO](../upsert_into.md) or [INSERT INTO](../insert_into.md):
 
 ```yql
 $data = AsList(
@@ -26,7 +26,7 @@ $data = AsList(
 INSERT INTO `my_table` (Key, Value) SELECT Key, Value FROM AS_TABLE($data);
 ```
 
-Alternatively, you can omit them entirely:
+Or you should omit them completely:
 
 ```yql
 $data = AsList(

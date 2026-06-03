@@ -187,7 +187,7 @@ void AssertKafkaBatchCut(const TVector<TReadResult>& cut, NPersQueueCommon::ECod
 Y_UNIT_TEST_SUITE(TBatchCutterTest) {
     Y_UNIT_TEST(CutUncompressedKafkaBatchInDataChunk) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 0);
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult), NPersQueueCommon::RAW);
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10), NPersQueueCommon::RAW);
     }
 
     Y_UNIT_TEST(CutGzipCompressedKafkaBatchInDataChunk) {
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
             CompressGzip(payload),
             NPersQueueCommon::GZIP,
             payload.size());
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult), NPersQueueCommon::GZIP);
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10), NPersQueueCommon::GZIP);
     }
 
     Y_UNIT_TEST(CutZstdCompressedKafkaBatchInDataChunk) {
@@ -205,7 +205,14 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
             CompressZstd(payload),
             NPersQueueCommon::ZSTD,
             payload.size());
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult), NPersQueueCommon::ZSTD);
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10), NPersQueueCommon::ZSTD);
+    }
+
+    Y_UNIT_TEST(CutSkipsRecordsBeforeReadStartOffset) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 0);
+        const auto cut = TKafkaBatchCutter().Cut(readResult, 11);
+        UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cut[0].GetOffset(), 11u);
     }
 
     Y_UNIT_TEST(NonRegularChunkIsNotCut) {
@@ -218,7 +225,7 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
         readResult.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
         readResult.SetData(SerializeDataChunk(std::move(chunk)));
 
-        const auto cut = TKafkaBatchCutter().Cut(readResult);
+        const auto cut = TKafkaBatchCutter().Cut(readResult, 10);
         UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cut[0].GetData(), readResult.GetData());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::KAFKA_BATCH));

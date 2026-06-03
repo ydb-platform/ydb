@@ -87,7 +87,7 @@ TString CompressPayload(TString payload, NPersQueueCommon::ECodec codec) {
 
 } // namespace
 
-TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult) const {
+TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const ui64 readStartOffset) const {
     const NKikimrPQClient::TDataChunk dataChunk = NKikimr::GetDeserializedData(readResult.GetData());
     if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
         return {readResult};
@@ -105,9 +105,14 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult) const
 
     const ui64 baseOffset = readResult.GetOffset();
     for (size_t i = 0; i < batch.Records.size(); ++i) {
+        const auto offset = baseOffset + batch.Records[i].OffsetDelta;
+        if (offset < readStartOffset) {
+            continue;
+        }
+
         const auto& record = batch.Records[i];
         TReadResult item = readResult;
-        item.SetOffset(baseOffset + record.OffsetDelta);
+        item.SetOffset(offset);
         item.SetMessageCount(1);
         item.SetMessageFormat(NKikimrClient::STANDARD);
         item.ClearUncompressedSize();

@@ -52,7 +52,7 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             continue;
         }
 
-        auto cutResults = it->second->Cut(originalResult);
+        auto cutResults = it->second->Cut(originalResult, context.Offset);
         for (auto& cutResult : cutResults) {
             readResult->AddResult()->Swap(&cutResult);
         }

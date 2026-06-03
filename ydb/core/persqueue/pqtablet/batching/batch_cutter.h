@@ -10,7 +10,7 @@ class IBatchCutter {
 public:
     virtual ~IBatchCutter() = default;
 
-    virtual TVector<TReadResult> Cut(const TReadResult& readResult) const = 0;
+    virtual TVector<TReadResult> Cut(const TReadResult& readResult, ui64 readStartOffset) const = 0;
 };
 
 class TKafkaBatchCutter : public IBatchCutter {
@@ -18,7 +18,7 @@ public:
     TKafkaBatchCutter() = default;
     ~TKafkaBatchCutter() = default;
 
-    TVector<TReadResult> Cut(const TReadResult& readResult) const override final;
+    TVector<TReadResult> Cut(const TReadResult& readResult, ui64 readStartOffset) const override final;
 };
 
 } // namespace NKikimr::NPQ::NBatching

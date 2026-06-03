@@ -1556,6 +1556,65 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         UNIT_ASSERT(!state.HasStorageYaml);
     }
 
+    // The dispatcher computes unknown/deprecated fields for the *resolved* config it
+    // receives from the console and exposes them in its mon JSON ("unknown_fields").
+    Y_UNIT_TEST(TestMonJsonReportsResolvedUnknownFields) {
+        const TString yamlWithUnknown = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: cluster1
+  unknown_field_for_test: 42
+)";
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        const TActorId dispatcherId = InitConfigsDispatcher(runtime);
+
+        {
+            auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
+            event->Record.MutableRequest()->set_config(yamlWithUnknown);
+            event->Record.MutableRequest()->set_allow_unknown_fields(true);
+            runtime.SendToConsole(event);
+
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceYamlConfigResponse>(handle);
+        }
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(
+                TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+
+        const TActorId edge = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<THttpRequest>(HTTP_METHOD_GET);
+        request->HttpHeaders.AddHeader("Content-Type", "application/json");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, request.Get(), nullptr, nullptr, "", nullptr);
+        runtime.Send(new IEventHandle(dispatcherId, edge, new NMon::TEvHttpInfo(monReq)));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+        const TString& answer = response->Answer;
+
+        const size_t jsonBegin = answer.find('{');
+        UNIT_ASSERT_UNEQUAL(jsonBegin, TString::npos);
+        const NJson::TJsonValue json = ReadJsonFromString(answer.substr(jsonBegin));
+
+        UNIT_ASSERT_C(json.Has("unknown_fields"), "no unknown_fields in mon json: " << answer);
+        bool found = false;
+        for (const auto& f : json["unknown_fields"].GetArray()) {
+            if (f["name"].GetString() == "unknown_field_for_test") {
+                found = true;
+                UNIT_ASSERT_VALUES_EQUAL(f["deprecated"].GetBoolean(), false);
+            }
+        }
+        UNIT_ASSERT_C(found, "unknown_field_for_test not reported: " << answer);
+    }
+
     Y_UNIT_TEST(TestMonJsonMasksSensitiveFieldsInDebugInfo) {
         NKikimrConfig::TAppConfig config;
 

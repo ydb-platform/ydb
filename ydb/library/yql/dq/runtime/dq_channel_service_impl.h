@@ -54,6 +54,13 @@ struct hash<pair<NActors::TActorId, NActors::TActorId>> {
     }
 };
 
+template<>
+struct hash<pair<ui32, ui32>> {
+    size_t operator()(pair<ui32, ui32> const &p) const {
+        return hash<ui32>()(p.first) ^ hash<ui32>()(p.second);
+    }
+};
+
 }
 
 namespace NYql::NDq {
@@ -525,8 +532,9 @@ struct TEvPrivate {
     };
 
     struct TEvFreeNodeSession : public NActors::TEventLocal<TEvFreeNodeSession, EvFreeNodeSession> {
-        TEvFreeNodeSession(ui32 nodeId) : NodeId(nodeId) {}
+        TEvFreeNodeSession(ui32 nodeId, ui32 salt) : NodeId(nodeId), Salt(salt) {}
         const ui32 NodeId;
+        const ui32 Salt;
     };
 
     struct TEvCleanup : public NActors::TEventLocal<TEvCleanup, EvCleanup> {
@@ -535,9 +543,11 @@ struct TEvPrivate {
 
 class TNodeState {
 public:
-    TNodeState(NActors::TActorSystem* actorSystem, ui32 nodeId, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
+    TNodeState(NActors::TActorSystem* actorSystem, ui32 nodeId, ui32 salt, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
         : ActorSystem(actorSystem)
         , NodeId(nodeId)
+        , Salt(salt)
+        , Ident(TStringBuilder() << nodeId << '.' << salt)
         , Subscribed(false)
         , Limits(limits)
     {
@@ -593,7 +603,9 @@ public:
     mutable std::mutex Mutex;
     mutable std::deque<std::shared_ptr<TOutputItem>> Queue;
     NActors::TActorSystem* ActorSystem;
-    ui32 NodeId;
+    const ui32 NodeId;
+    const ui32 Salt;
+    const TString Ident;
     std::atomic<bool> Subscribed;
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
@@ -645,8 +657,8 @@ public:
 
 class TDebugNodeState : public TNodeState {
 public:
-    TDebugNodeState(NActors::TActorSystem* actorSystem, ui32 nodeId, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
-        : TNodeState(actorSystem, nodeId, counters, limits)
+    TDebugNodeState(NActors::TActorSystem* actorSystem, ui32 nodeId, ui32 salt, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
+        : TNodeState(actorSystem, nodeId, salt, counters, limits)
         , ChannelDataPaused(false)
         , ChannelAckPaused(false)
         , DataLossProbability(0.0), DataLossCount(0)
@@ -715,9 +727,9 @@ public:
         LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters, Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10);
     }
 
-    std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
-    std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
-    void FreeNodeSession(ui32 nodeId, NActors::TActorId sender);
+    std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId, ui32 salt);
+    std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId, ui32 salt);
+    void FreeNodeSession(ui32 nodeId, ui32 salt, NActors::TActorId sender);
 
     // unbinded stubs
     std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
@@ -746,7 +758,7 @@ public:
     ui32 PoolId;
     std::weak_ptr<TDqChannelService> Self;
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
-    mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
+    mutable std::unordered_map<std::pair<ui32, ui32>, std::shared_ptr<TNodeState>> NodeStates;
     mutable std::mutex Mutex;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<bool> CleanupScheduled = false;
@@ -1029,8 +1041,6 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
-            hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
-            hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvServiceLookup, Handle);
             hFunc(TEvPrivate::TEvFreeNodeSession, Handle);
             cFunc(TEvPrivate::TEvCleanup::EventType, HandleCleanup);
@@ -1040,19 +1050,7 @@ public:
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
         std::lock_guard lock(ChannelService->Mutex);
-        auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
-        Send(ev->Forward(state->NodeActorId));
-    }
-
-    void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
-        std::lock_guard lock(ChannelService->Mutex);
-        auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
-        Send(ev->Forward(state->NodeActorId));
-    }
-
-    void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
-        std::lock_guard lock(ChannelService->Mutex);
-        auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
+        auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId(), ev->Get()->Record.GetSalt());
         Send(ev->Forward(state->NodeActorId));
     }
 
@@ -1063,7 +1061,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvFreeNodeSession::TPtr& ev) {
-        ChannelService->FreeNodeSession(ev->Get()->NodeId, ev->Sender);
+        ChannelService->FreeNodeSession(ev->Get()->NodeId, ev->Get()->Salt, ev->Sender);
     }
 
     void HandleCleanup() {

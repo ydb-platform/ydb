@@ -11,7 +11,7 @@
 namespace NKikimr::NKqp {
 namespace {
 
-constexpr size_t SQL_TEXT_MAX_SIZE = 4000;
+constexpr size_t SQL_TEXT_MAX_SIZE = 10240;
 constexpr size_t QUERY_TEXT_LIMIT = 10240;
 constexpr TStringBuf UI_QUERY_EXCLUDE_MARKER = "/*UI-QUERY-EXCLUDE*/";
 
@@ -106,8 +106,11 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         wasTruncated = true;
     }
 
+    const size_t chunkSize = (truncateText && !requestText.empty())
+        ? requestText.size()
+        : SQL_TEXT_MAX_SIZE;
     const size_t total = requestText.empty() ? 1 :
-        (requestText.size() + SQL_TEXT_MAX_SIZE - 1) / SQL_TEXT_MAX_SIZE;
+        (requestText.size() + chunkSize - 1) / chunkSize;
 
     for (size_t i = 0; i < total; ++i) {
         TStringStream ss;
@@ -125,7 +128,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.WriteKey("event").WriteString("completed");
 
         if (!requestText.empty()) {
-            json.WriteKey("data").WriteString(requestText.SubStr(i * SQL_TEXT_MAX_SIZE, SQL_TEXT_MAX_SIZE));
+            json.WriteKey("data").WriteString(requestText.SubStr(i * chunkSize, chunkSize));
         }
 
         if (!issues.Empty()) {
@@ -155,9 +158,13 @@ bool IsLogPriorityEnabled(NActors::NLog::EPriority prio) {
 }
 
 NActors::NLog::EPriority PickCompletedPriority(Ydb::StatusIds::StatusCode status) {
-    return status == Ydb::StatusIds::SUCCESS
-        ? NActors::NLog::PRI_DEBUG
-        : NActors::NLog::PRI_WARN;
+    if (status != Ydb::StatusIds::SUCCESS) {
+        return NActors::NLog::PRI_WARN;
+    }
+
+    return IsLogPriorityEnabled(NActors::NLog::PRI_TRACE)
+        ? NActors::NLog::PRI_TRACE
+        : NActors::NLog::PRI_DEBUG;
 }
 
 } // anonymous namespace

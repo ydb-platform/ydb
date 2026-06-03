@@ -2434,6 +2434,290 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             return true;
         });
     }
+
+    // Overwriting a JSON value with NULL removes all index tokens for that row.
+    Y_UNIT_TEST_TWIN(NullUpdate_JsonToNull, IsJsonDocument) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        CreateTestTable(db, jsonType, /* withIndex */ true);
+
+        {
+            const auto query = std::format(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES
+                    (1, {}('{{\"a\": 1}}'), "data1"),
+                    (2, {}('{{\"b\": 2}}'), "data2");
+            )", jsonType, jsonType);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2a"];
+                [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2b"];
+                [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text) VALUES (1, NULL);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Key 1 tokens must be gone; key 2 is unchanged.
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[2u];""];
+                [[2u];"\2b"];
+                [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Overwriting a NULL value with JSON adds the new tokens to the index.
+    Y_UNIT_TEST_TWIN(NullUpdate_NullToJson, IsJsonDocument) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        CreateTestTable(db, jsonType, /* withIndex */ true);
+
+        {
+            const auto query = std::format(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES
+                    (1, NULL, "null_data"),
+                    (2, {}('{{\"b\": 2}}'), "data2");
+            )", jsonType);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Only key 2 has tokens; key 1 (NULL) has none.
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[2u];""];
+                [[2u];"\2b"];
+                [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = std::format(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text) VALUES (1, {}('{{\"a\": 1}}'));
+            )", jsonType);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Now both keys have tokens.
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2a"];
+                [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2b"];
+                [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Inserting a row with NULL Text produces no entries in the index.
+    Y_UNIT_TEST_TWIN(NullInsert_NoTokens, IsJsonDocument) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        CreateTestTable(db, jsonType, /* withIndex */ true);
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES
+                    (1, NULL, "null_data1"),
+                    (2, NULL, "null_data2");
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Deleting a NULL row leaves the index unchanged (still empty).
+    Y_UNIT_TEST_TWIN(NullDelete_IndexUnchanged, IsJsonDocument) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        CreateTestTable(db, jsonType, /* withIndex */ true);
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES (1, NULL, "null_data");
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = R"(DELETE FROM `/Root/TestTable` WHERE Key = 1;)";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Delete a JSON row then insert NULL for the same key: tokens are removed and none are added.
+    Y_UNIT_TEST_TWIN(NullInsert_AfterJsonDelete, IsJsonDocument) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        CreateTestTable(db, jsonType, /* withIndex */ true);
+
+        {
+            const auto query = std::format(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES
+                    (1, {}('{{\"a\": 1}}'), "data1");
+            )", jsonType);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2a"];
+                [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = R"(DELETE FROM `/Root/TestTable` WHERE Key = 1;)";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // Insert NULL for the same key.
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text) VALUES (1, NULL);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Index must stay empty
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Delete a NULL row then insert JSON for the same key: tokens appear in the index.
+    Y_UNIT_TEST_TWIN(NullDelete_BeforeJsonInsert, IsJsonDocument) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        CreateTestTable(db, jsonType, /* withIndex */ true);
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES (1, NULL, "null_data");
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = R"(DELETE FROM `/Root/TestTable` WHERE Key = 1;)";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = std::format(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES (1, {}('{{\"a\": 1}}'), "data1");
+            )", jsonType);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(
+                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
+                TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2a"];
+                [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 }  // namespace NKikimr::NKqp

@@ -52,7 +52,7 @@ docker run "${docker_args[@]}"
 
 ```bash
 docker run "${docker_args[@]}" \
-  -v $(pwd)/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
+  -v $(pwd)/ydb_config/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
 ```
 
 Для пользователей, не имеющих опыта работы с Docker, важно понимать, как правильно монтировать файл конфигурации в контейнер. Ниже приведен пошаговый пример:

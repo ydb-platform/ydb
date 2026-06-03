@@ -41,10 +41,18 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
     }
     if (tableSchema.GetOptions().HasInsertPromoteOptions()) {
         const auto& options = tableSchema.GetOptions().GetInsertPromoteOptions();
-        InsertPromoteOptions.Enabled = options.GetEnabled();
-        InsertPromoteOptions.MinBlobBytes = options.GetMinBlobBytes();
-        InsertPromoteOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
-        InsertPromoteOptions.CompactionTargetLevel = options.GetCompactionTargetLevel();
+        if (options.HasEnabled()) {
+            InsertPromoteOptions.Enabled = options.GetEnabled();
+        }
+        if (options.HasMinBlobBytes()) {
+            InsertPromoteOptions.MinBlobBytes = options.GetMinBlobBytes();
+        }
+        if (options.HasBuildIndexesEnabled()) {
+            InsertPromoteOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+        }
+        if (options.HasCompactionTargetLevel()) {
+            InsertPromoteOptions.CompactionTargetLevel = options.GetCompactionTargetLevel();
+        }
     }
 }
 
@@ -59,13 +67,20 @@ void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     if (MetadataManagerConstructor.HasObject()) {
         MetadataManagerConstructor.SerializeToProto(*tableSchema.MutableOptions()->MutableMetadataManagerConstructor());
     }
-    if (InsertPromoteOptions.Enabled || InsertPromoteOptions.MinBlobBytes || InsertPromoteOptions.BuildIndexesEnabled ||
-        InsertPromoteOptions.CompactionTargetLevel) {
+    if (InsertPromoteOptions.IsConfigured()) {
         auto& options = *tableSchema.MutableOptions()->MutableInsertPromoteOptions();
-        options.SetEnabled(InsertPromoteOptions.Enabled);
-        options.SetMinBlobBytes(InsertPromoteOptions.MinBlobBytes);
-        options.SetBuildIndexesEnabled(InsertPromoteOptions.BuildIndexesEnabled);
-        options.SetCompactionTargetLevel(InsertPromoteOptions.CompactionTargetLevel);
+        if (InsertPromoteOptions.Enabled) {
+            options.SetEnabled(*InsertPromoteOptions.Enabled);
+        }
+        if (InsertPromoteOptions.MinBlobBytes) {
+            options.SetMinBlobBytes(*InsertPromoteOptions.MinBlobBytes);
+        }
+        if (InsertPromoteOptions.BuildIndexesEnabled) {
+            options.SetBuildIndexesEnabled(*InsertPromoteOptions.BuildIndexesEnabled);
+        }
+        if (InsertPromoteOptions.CompactionTargetLevel) {
+            options.SetCompactionTargetLevel(*InsertPromoteOptions.CompactionTargetLevel);
+        }
     }
 }
 

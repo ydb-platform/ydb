@@ -380,7 +380,9 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
         }
         inplaceChunks = std::move(dataWithSecondaryConclusion.GetResult().GetSecondaryInplaceData());
         TGeneralSerializedSlice sliceWithIndexes(dataWithSecondaryConclusion.GetResult().GetExternalData(), schemaDetails, splitterCounters);
-        blobs = sliceWithIndexes.GroupChunksByBlobs(groups);
+        if (!sliceWithIndexes.GroupBlobs(blobs, groups)) {
+            return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
+        }
     } else if (!slice.GroupBlobs(blobs, groups)) {
         return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
     }

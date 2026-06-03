@@ -1940,33 +1940,33 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
     }
     if (options.HasInsertPromoteOptions()) {
         const auto& insertPromoteOptions = options.GetInsertPromoteOptions();
-        if (insertPromoteOptions.GetEnabled()) {
+        if (insertPromoteOptions.HasEnabled()) {
             paramsStr << del;
             EscapeName("INSERT_PROMOTE_OPTIONS.ENABLED", paramsStr);
             paramsStr << "=";
             EscapeValue(insertPromoteOptions.GetEnabled(), paramsStr);
             del = ", ";
-            if (insertPromoteOptions.GetMinBlobBytes()) {
-                paramsStr << del;
-                EscapeName("INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES", paramsStr);
-                paramsStr << "=";
-                EscapeValue(insertPromoteOptions.GetMinBlobBytes(), paramsStr);
-                del = ", ";
-            }
-            if (insertPromoteOptions.GetBuildIndexesEnabled()) {
-                paramsStr << del;
-                EscapeName("INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED", paramsStr);
-                paramsStr << "=";
-                EscapeValue(insertPromoteOptions.GetBuildIndexesEnabled(), paramsStr);
-                del = ", ";
-            }
-            if (insertPromoteOptions.GetCompactionTargetLevel()) {
-                paramsStr << del;
-                EscapeName("INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL", paramsStr);
-                paramsStr << "=";
-                EscapeValue(insertPromoteOptions.GetCompactionTargetLevel(), paramsStr);
-                del = ", ";
-            }
+        }
+        if (insertPromoteOptions.HasMinBlobBytes()) {
+            paramsStr << del;
+            EscapeName("INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertPromoteOptions.GetMinBlobBytes(), paramsStr);
+            del = ", ";
+        }
+        if (insertPromoteOptions.HasBuildIndexesEnabled()) {
+            paramsStr << del;
+            EscapeName("INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertPromoteOptions.GetBuildIndexesEnabled(), paramsStr);
+            del = ", ";
+        }
+        if (insertPromoteOptions.HasCompactionTargetLevel()) {
+            paramsStr << del;
+            EscapeName("INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertPromoteOptions.GetCompactionTargetLevel(), paramsStr);
+            del = ", ";
         }
     }
     if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {

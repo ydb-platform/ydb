@@ -8,13 +8,9 @@ namespace NKikimr::NEvWrite {
 
 namespace {
 
-// Fallback when AppData is unavailable; matches TColumnShardConfig default.
-constexpr ui64 DefaultBulkUpsertShardWriteChunkLimitBytes = 48ull * 1024 * 1024;
-
 ui64 GetBulkUpsertShardWriteChunkLimit() {
     if (AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
-        return HasAppData() ? AppDataVerified().ColumnShardConfig.GetBulkUpsertShardWriteChunkLimitBytes()
-                            : DefaultBulkUpsertShardWriteChunkLimitBytes;
+        return AppDataVerified().ColumnShardConfig.GetBulkUpsertShardWriteChunkLimitBytes();
     }
     return NColumnShard::TLimits::GetMaxBlobSize() * 0.875;
 }

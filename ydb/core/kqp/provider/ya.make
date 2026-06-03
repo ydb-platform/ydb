@@ -32,7 +32,6 @@ PEERDIR(
     ydb/core/kqp/query_data
     ydb/core/protos
     ydb/core/scheme
-    ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
     ydb/library/aclib
     ydb/library/aclib/protos
     yql/essentials/types/binary_json

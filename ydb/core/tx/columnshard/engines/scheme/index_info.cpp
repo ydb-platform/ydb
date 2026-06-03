@@ -206,17 +206,35 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
-bool TIndexBuildOnInsertPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
+bool TInsertPromoteOptionsPolicy::MeetsMinBlobBytes(const ui64 totalBlobBytes) const {
+    return MinBlobBytes == 0 || totalBlobBytes >= MinBlobBytes;
+}
+
+bool TInsertPromoteOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
+    if (!Enabled || !BuildIndexesEnabled) {
+        return false;
+    }
+    if (mType == NEvWrite::EModificationType::Delete) {
+        return false;
+    }
+    return MeetsMinBlobBytes(totalBlobBytes);
+}
+
+bool TInsertPromoteOptionsPolicy::ShouldPromoteCompactionOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
     if (!Enabled) {
         return false;
     }
     if (mType == NEvWrite::EModificationType::Delete) {
         return false;
     }
-    if (MinBlobBytes > 0 && totalBlobBytes < MinBlobBytes) {
-        return false;
+    return MeetsMinBlobBytes(totalBlobBytes);
+}
+
+ui32 TInsertPromoteOptionsPolicy::ResolveFixedCompactionLevelOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
+    if (!ShouldPromoteCompactionOnInsert(mType, totalBlobBytes) || !CompactionTargetLevel) {
+        return 0;
     }
-    return true;
+    return CompactionTargetLevel;
 }
 
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
@@ -225,10 +243,12 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }
-    if (optionsProto.HasIndexBuildOnInsert()) {
-        const auto& policy = optionsProto.GetIndexBuildOnInsert();
-        IndexBuildOnInsert.Enabled = policy.GetEnabled();
-        IndexBuildOnInsert.MinBlobBytes = policy.GetMinBlobBytes();
+    if (optionsProto.HasInsertPromoteOptions()) {
+        const auto& options = optionsProto.GetInsertPromoteOptions();
+        InsertPromoteOptions.Enabled = options.GetEnabled();
+        InsertPromoteOptions.MinBlobBytes = options.GetMinBlobBytes();
+        InsertPromoteOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+        InsertPromoteOptions.CompactionTargetLevel = options.GetCompactionTargetLevel();
     }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =

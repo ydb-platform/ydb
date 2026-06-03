@@ -89,7 +89,7 @@ public:
         const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop, const ui64 expectedBlobsSize,
         const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName,
         const ui64 concurrency, std::optional<ui64> compactionTaskMemoryLimit, std::optional<ui64> compactionTaskPortionsCountLimit,
-        const ui64 highPriorityContribution = 0, bool compactAtLevel = true);
+        const ui64 highPriorityContribution = 0, bool compactAtLevel = false);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

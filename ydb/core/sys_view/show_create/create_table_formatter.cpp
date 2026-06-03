@@ -1938,20 +1938,35 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeValue(options.GetSchemeNeedActualization(), paramsStr);
         del = ", ";
     }
-    if (options.HasIndexBuildOnInsert()) {
-        const auto& policy = options.GetIndexBuildOnInsert();
-        paramsStr << del;
-        EscapeName("INDEX_BUILD_ON_INSERT.ENABLED", paramsStr);
-        paramsStr << "=";
-        EscapeValue(policy.GetEnabled(), paramsStr);
-        del = ", ";
-
-        if (policy.GetMinBlobBytes()) {
+    if (options.HasInsertPromoteOptions()) {
+        const auto& insertPromoteOptions = options.GetInsertPromoteOptions();
+        if (insertPromoteOptions.GetEnabled()) {
             paramsStr << del;
-            EscapeName("INDEX_BUILD_ON_INSERT.MIN_BLOB_BYTES", paramsStr);
+            EscapeName("INSERT_PROMOTE_OPTIONS.ENABLED", paramsStr);
             paramsStr << "=";
-            EscapeValue(policy.GetMinBlobBytes(), paramsStr);
+            EscapeValue(insertPromoteOptions.GetEnabled(), paramsStr);
             del = ", ";
+            if (insertPromoteOptions.GetMinBlobBytes()) {
+                paramsStr << del;
+                EscapeName("INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES", paramsStr);
+                paramsStr << "=";
+                EscapeValue(insertPromoteOptions.GetMinBlobBytes(), paramsStr);
+                del = ", ";
+            }
+            if (insertPromoteOptions.GetBuildIndexesEnabled()) {
+                paramsStr << del;
+                EscapeName("INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED", paramsStr);
+                paramsStr << "=";
+                EscapeValue(insertPromoteOptions.GetBuildIndexesEnabled(), paramsStr);
+                del = ", ";
+            }
+            if (insertPromoteOptions.GetCompactionTargetLevel()) {
+                paramsStr << del;
+                EscapeName("INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL", paramsStr);
+                paramsStr << "=";
+                EscapeValue(insertPromoteOptions.GetCompactionTargetLevel(), paramsStr);
+                del = ", ";
+            }
         }
     }
     if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {
@@ -2004,6 +2019,9 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
                                 }
                                 if (zeroLevel.HasPortionsCountLimit()) {
                                     jsonLevel["portions_count_limit"] = zeroLevel.GetPortionsCountLimit();
+                                }
+                                if (zeroLevel.HasCompactAtLevel()) {
+                                    jsonLevel["compact_at_level"] = zeroLevel.GetCompactAtLevel();
                                 }
                                 break;
                             }

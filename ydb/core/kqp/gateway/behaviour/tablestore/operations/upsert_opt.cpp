@@ -16,8 +16,10 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
     }
-    IndexBuildOnInsertEnabled = features.Extract<bool>("INDEX_BUILD_ON_INSERT.ENABLED");
-    IndexBuildOnInsertMinBlobBytes = features.Extract<ui64>("INDEX_BUILD_ON_INSERT.MIN_BLOB_BYTES");
+    InsertPromoteOptionsEnabled = features.Extract<bool>("INSERT_PROMOTE_OPTIONS.ENABLED");
+    InsertPromoteOptionsMinBlobBytes = features.Extract<ui64>("INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES");
+    InsertPromoteOptionsBuildIndexesEnabled = features.Extract<bool>("INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED");
+    InsertPromoteOptionsCompactionTargetLevel = features.Extract<ui32>("INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL");
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
         if (!CompactionPlannerConstructor.Initialize(*className)) {
             return TConclusionStatus::Fail("incorrect class name for compaction planner:" + *className);
@@ -68,13 +70,20 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     if (MetadataManagerConstructor.HasObject()) {
         MetadataManagerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableMetadataManagerConstructor());
     }
-    if (IndexBuildOnInsertEnabled || IndexBuildOnInsertMinBlobBytes) {
-        auto& policy = *schemaData.MutableOptions()->MutableIndexBuildOnInsert();
-        if (IndexBuildOnInsertEnabled) {
-            policy.SetEnabled(*IndexBuildOnInsertEnabled);
+    if (InsertPromoteOptionsEnabled || InsertPromoteOptionsMinBlobBytes || InsertPromoteOptionsBuildIndexesEnabled ||
+        InsertPromoteOptionsCompactionTargetLevel) {
+        auto& options = *schemaData.MutableOptions()->MutableInsertPromoteOptions();
+        if (InsertPromoteOptionsEnabled) {
+            options.SetEnabled(*InsertPromoteOptionsEnabled);
         }
-        if (IndexBuildOnInsertMinBlobBytes) {
-            policy.SetMinBlobBytes(*IndexBuildOnInsertMinBlobBytes);
+        if (InsertPromoteOptionsMinBlobBytes) {
+            options.SetMinBlobBytes(*InsertPromoteOptionsMinBlobBytes);
+        }
+        if (InsertPromoteOptionsBuildIndexesEnabled) {
+            options.SetBuildIndexesEnabled(*InsertPromoteOptionsBuildIndexesEnabled);
+        }
+        if (InsertPromoteOptionsCompactionTargetLevel) {
+            options.SetCompactionTargetLevel(*InsertPromoteOptionsCompactionTargetLevel);
         }
     }
 }

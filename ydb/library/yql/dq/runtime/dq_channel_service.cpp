@@ -1391,10 +1391,15 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     if (PeerActorId != ev->Sender || (prevPeerGenMajor && prevPeerGenMajor != record.GetGenMajor())) {
         auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
+        auto reconciliationLog = GetReconciliationLog();
         evAck->Record.SetGenMajor(record.GetGenMajor());
         evAck->Record.SetGenMinor(record.GetGenMinor());
         evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::FAIL);
         evAck->Record.SetSeqNo(ConfirmedSeqNo);
+        evAck->Record.SetMessage(reconciliationLog);
+        LOG_E(LogPrefix << "FAIL, PeerActorId=" << PeerActorId << ", ev->Sender" << ev->Sender
+            << ", PeerGenMajor=" << prevPeerGenMajor << ", record.GetGenMajor()=" << record.GetGenMajor()
+            << ", Log=" << reconciliationLog);
 
         ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
         if (!Subscribed.exchange(true)) {
@@ -1597,7 +1602,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         auto status = record.GetStatus();
 
         if (status == NYql::NDqProto::TEvChannelAckV2::FAIL) {
-            LOG_E(LogPrefix << "FAILED, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo);
+            LOG_E(LogPrefix << "FAILED, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", Msg=" << record.GetMessage());
             StartReconciliation(true, 'F');
             return;
         }

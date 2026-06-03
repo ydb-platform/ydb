@@ -22,6 +22,7 @@
 
 #include <ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.h>
 
+#include <algorithm>
 #include <memory>
 
 using namespace NKikimrConfig;
@@ -183,6 +184,11 @@ public:
         return IsMissingTableMetadata;
     }
 
+    void ResetMetadata(std::shared_ptr<TMetadataInfoHolder> tableMetadata) {
+        TableMetadata = std::move(tableMetadata);
+        IsMissingTableMetadata = false;
+    }
+
     virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
         return NThreading::MakeFuture(Resolve(tables));
     }
@@ -195,6 +201,34 @@ public:
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return {};
     }
+};
+
+struct THostCacheKey {
+    TString Cluster;
+    TString Database;
+    NKikimrKqp::EQueryType QueryType = NKikimrKqp::QUERY_TYPE_SQL_DML;
+    ui32 SqlVersion = 0;
+
+    bool operator==(const THostCacheKey& other) const {
+        return Cluster == other.Cluster
+            && Database == other.Database
+            && QueryType == other.QueryType
+            && SqlVersion == other.SqlVersion;
+    }
+};
+
+template <>
+struct THash<THostCacheKey> {
+    size_t operator()(const THostCacheKey& key) const {
+        return MultiHash(key.Cluster, key.Database, key.QueryType, key.SqlVersion);
+    }
+};
+
+struct THostCacheEntry {
+    std::shared_ptr<TStaticTableMetadataLoader> MetadataLoader;
+    TIntrusivePtr<IKqpGateway> Gateway;
+    TIntrusivePtr<IKqpHost> KqpHost;
+    TGUCSettings::TPtr GucSettings;
 };
 
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
@@ -476,13 +510,78 @@ private:
     }
 
     void ResetForNextRequest() {
-        Gateway.Reset();
-        KqpHost.Reset();
         AsyncCompileResult.Reset();
         Query.reset();
         MetadataLoader.reset();
-        GUCSettings = std::make_shared<TGUCSettings>();
+        Gateway.Reset();
+        KqpHost.Reset();
         Become(&TThis::StateInit);
+    }
+
+    THostCacheEntry CreateHostCacheEntry(
+        std::shared_ptr<TMetadataInfoHolder> tableMetadata,
+        NKikimrKqp::EQueryType queryType,
+        const TString& cluster,
+        const TString& database)
+    {
+        auto metadataLoader = std::make_shared<TStaticTableMetadataLoader>(
+            TlsActivationContext->ActorSystem(), tableMetadata);
+
+        auto c = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto counters = MakeIntrusive<TKqpRequestCounters>();
+        counters->Counters = new TKqpCounters(c);
+        counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
+
+        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = metadataLoader;
+        auto gateway = CreateKikimrIcGateway(
+            cluster, queryType, database, database, std::move(loader),
+            TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
+
+        auto gucSettings = std::make_shared<TGUCSettings>();
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>(
+            {nullptr, HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, {}, nullptr, {}, nullptr, nullptr});
+        auto kqpHost = CreateKqpHost(
+            gateway, cluster, database, Config, ModuleResolverState->ModuleResolver,
+            federatedQuerySetup, nullptr, gucSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
+
+        return {
+            std::move(metadataLoader),
+            std::move(gateway),
+            std::move(kqpHost),
+            std::move(gucSettings),
+        };
+    }
+
+    void TouchHostCacheLru(const THostCacheKey& key) {
+        const auto it = std::find(HostCacheLru.begin(), HostCacheLru.end(), key);
+        if (it != HostCacheLru.end()) {
+            HostCacheLru.erase(it);
+        }
+        HostCacheLru.push_back(key);
+    }
+
+    void EvictHostCacheIfNeeded() {
+        while (HostCache.size() >= MaxHostCacheSize && !HostCacheLru.empty()) {
+            const auto key = HostCacheLru.front();
+            HostCacheLru.pop_front();
+            HostCache.erase(key);
+        }
+    }
+
+    THostCacheEntry& GetOrCreateHostCacheEntry(
+        const THostCacheKey& cacheKey,
+        std::shared_ptr<TMetadataInfoHolder> tableMetadata)
+    {
+        if (auto* entry = HostCache.FindPtr(cacheKey)) {
+            TouchHostCacheLru(cacheKey);
+            entry->MetadataLoader->ResetMetadata(tableMetadata);
+            return *entry;
+        }
+
+        EvictHostCacheIfNeeded();
+        HostCache.emplace(cacheKey, CreateHostCacheEntry(tableMetadata, cacheKey.QueryType, cacheKey.Cluster, cacheKey.Database));
+        HostCacheLru.push_back(cacheKey);
+        return HostCache.at(cacheKey);
     }
 
     void Reply(const Ydb::StatusIds::StatusCode& status, const TIssues& issues, const std::optional<TString>& queryPlan = std::nullopt) {
@@ -546,10 +645,23 @@ private:
 
         QueryId = ReplayDetails["query_id"].GetStringSafe();
 
-        TKqpQuerySettings settings(queryType);
+        ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
+        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
+            syntax = 1;
+        }
+
+        const auto& cluster = ReplayDetails["query_cluster"].GetStringSafe();
         const auto& database = ReplayDetails["query_database"].GetStringSafe();
+        const THostCacheKey cacheKey{cluster, database, queryType, syntax};
+        auto& hostEntry = GetOrCreateHostCacheEntry(cacheKey, TableMetadata);
+        MetadataLoader = hostEntry.MetadataLoader;
+        Gateway = hostEntry.Gateway;
+        KqpHost = hostEntry.KqpHost;
+        GUCSettings = hostEntry.GucSettings;
+
+        TKqpQuerySettings settings(queryType);
         Query = std::make_unique<NKikimr::NKqp::TKqpQueryId>(
-            ReplayDetails["query_cluster"].GetStringSafe(),
+            cluster,
             database,
             database,
             queryText,
@@ -561,31 +673,13 @@ private:
 
         GUCSettings->ImportFromJson(ReplayDetails);
 
-        Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);
+        Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), cluster, KqpSettings.Settings, false);
         if (!Query->Database.empty()) {
-            Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
+            Config->_KqpTablePathPrefix = database;
         }
 
-        ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
-        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
-            syntax = 1;
-        }
-	    Config->SetSqlVersion(syntax);
+        Config->SetSqlVersion(syntax);
         Config->FreezeDefaults();
-
-        MetadataLoader = make_shared<TStaticTableMetadataLoader>(TlsActivationContext->ActorSystem(), TableMetadata);
-        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = MetadataLoader;
-
-        auto c = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        auto counters = MakeIntrusive<TKqpRequestCounters>();
-        counters->Counters = new TKqpCounters(c);
-        counters->TxProxyMon = new NTxProxy::TTxProxyMon(c);
-
-        Gateway = CreateKikimrIcGateway(Query->Cluster, queryType, Query->Database, Query->DatabaseId, std::move(loader),
-            TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({nullptr, HttpGateway, nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, {}, nullptr, {}, nullptr, nullptr});
-        KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
-            federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
         StartCompilation();
         Continue();
@@ -640,6 +734,10 @@ private:
     NJson::TJsonValue ReplayDetails;
     std::shared_ptr<TStaticTableMetadataLoader> MetadataLoader;
     NYql::IHTTPGateway::TPtr HttpGateway;
+
+    static constexpr size_t MaxHostCacheSize = 64;
+    THashMap<THostCacheKey, THostCacheEntry> HostCache;
+    TDeque<THostCacheKey> HostCacheLru;
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,

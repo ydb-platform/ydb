@@ -24,12 +24,6 @@ and adds the `experimental` (alias `exp`) command tree on top of it. The rest
 of the behaviour (authentication options, profiles, output formats, etc.)
 largely matches the official `ydb` client.
 
-The binary is intentionally named `ydb` so that an end user can run it as a
-drop-in replacement for the official client (interactive auto-completion,
-profile lookup, etc.) once it is on `PATH`. The build info reports
-`ydb-experimental` so it can still be distinguished from the official client
-in logs.
-
 ## Building
 
 ```bash

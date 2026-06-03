@@ -50,6 +50,7 @@ jobs:
           YDBDOC_REPO_PATH: ${{ github.workspace }}
 
       - name: Trigger docs rebuild for translation PR
+        if: ${{ !cancelled() }}
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.YDBDOC_PUSH_PAT }}

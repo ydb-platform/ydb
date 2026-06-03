@@ -2441,19 +2441,11 @@ public:
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
-<<<<<<< HEAD
             Y_ENSURE(Self->ShardInfos.contains(x->ShardIdx));
-            TSerializedCellVec bound{x->EndOfRange};
-            if (!buildInfo.IsValidatingUniqueIndex()) {
-                shardRange.To = bound;
-            }
-=======
-            Y_ENSURE(Self->ShardInfos.contains(x.ShardIdx));
             // In case of unique index validation the real range will arrive after index validation for each shard:
             // it will describe the first and the last index keys for further validation.
             TSerializedTableRange shardRange = (buildInfo.IsValidatingUniqueIndex()
-                ? TSerializedTableRange() : TSerializedTableRange(prevBound, x.EndOfRange, true, false));
->>>>>>> a0853bcf58e (Do not move(shardRange) in a loop to fix static analysis warning (#37807))
+                ? TSerializedTableRange() : TSerializedTableRange(prevBound, x->EndOfRange, true, false));
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
                 LOG_D("InitiateShard " << x->ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
@@ -2463,7 +2455,7 @@ public:
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x->ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
-            prevBound = x.EndOfRange;
+            prevBound = x->EndOfRange;
 
             Self->PersistBuildIndexShardStatusInitiate(db, BuildId, x->ShardIdx, it->second);
         }

@@ -14,10 +14,6 @@ struct CompactionTask {
     std::vector<typename TPortion::TConstPtr> Portions;
     ui8 TargetLevel;
     TOptimizationPriority Priority;
-
-    bool operator<(const CompactionTask<TKey, TPortion>& right) const {
-        return this->Priority < right.Priority;
-    }
 };
 
 template <typename TPortion>

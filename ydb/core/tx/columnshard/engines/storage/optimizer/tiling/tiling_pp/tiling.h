@@ -53,7 +53,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         BOARDED,
     };
 
-    EState State = EState::REGULAR;
+    mutable EState State = EState::REGULAR;
     TOptimizationPriority OverloadPriority = TOptimizationPriority::Critical(0);
 
     void InitialAddPortions(const std::vector<typename TPortion::TPtr>& add) {
@@ -127,7 +127,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
 
         if (State == EState::COMPATIBILITY) {
             auto currentPriority = DoGetUsefulMetric();
-            if (currentPriority < OverloadPriority.Dec().Dec()) {
+            if (currentPriority < OverloadPriority.Dec()) {
                 OverloadPriority = OverloadPriority.Dec();
             }
             if (!OverloadPriority.IsCritical()) {
@@ -299,17 +299,23 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
 
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-        const auto accumulatorPriority = Accumulator.DoGetUsefulMetric();
-        const auto lastLevelPriority = LastLevel.DoGetUsefulMetric();
-        const auto [middleLevelsPriority, maxMiddleLevel] = GetMiddleUsefulMetric();
+        auto result = Accumulator.DoGetNextOptimizationTask(isLocked);
+        const auto consider = [&result](std::optional<CompactionTask<TKey, TPortion>>&& candidate) {
+            if (candidate && (!result || result->Priority < candidate->Priority)) {
+                result = std::move(candidate);
+            }
+        };
+        consider(LastLevel.DoGetNextOptimizationTask(isLocked));
+        for (const auto& [_, middleLevel] : MiddleLevels) {
+            consider(middleLevel.DoGetNextOptimizationTask(isLocked));
+        }
 
-        if (lastLevelPriority < accumulatorPriority && middleLevelsPriority < accumulatorPriority) {
-            return Accumulator.GetNextOptimizationTask(isLocked);
+        if (!result && State == EState::REGULAR) {
+            State = EState::BOARDED;
+        } else if (result && State == EState::BOARDED) {
+            State = EState::REGULAR;
         }
-        if (lastLevelPriority < middleLevelsPriority) {
-            return MiddleLevels.at(maxMiddleLevel).GetNextOptimizationTask(isLocked);
-        }
-        return LastLevel.GetNextOptimizationTask(isLocked);
+        return result;
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

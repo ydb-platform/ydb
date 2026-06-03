@@ -25,9 +25,10 @@ struct TTestPortion {
     ui64 RawBytes;
     ui32 RecordsCount;
     NPortion::EProduced Produced;
+    ui32 CompactionLevel;
 
     TTestPortion(const ui64 portionId, const ui64 start, const ui64 finish, const ui64 blobBytes, const ui32 recordsCount = 1,
-        const NPortion::EProduced produced = NPortion::INSERTED)
+        const NPortion::EProduced produced = NPortion::INSERTED, const ui32 compactionLevel = 0)
         : PortionId(portionId)
         , Start(start)
         , Finish(finish)
@@ -35,6 +36,7 @@ struct TTestPortion {
         , RawBytes(blobBytes)
         , RecordsCount(recordsCount)
         , Produced(produced)
+        , CompactionLevel(compactionLevel)
     {
     }
 
@@ -64,6 +66,10 @@ struct TTestPortion {
 
     NPortion::EProduced GetProduced() const {
         return Produced;
+    }
+
+    ui32 GetCompactionLevel() const {
+        return CompactionLevel;
     }
 
     void AddRuntimeFeature(const TPortionInfo::ERuntimeFeature /*feature*/) {};
@@ -113,14 +119,12 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         accumulator.AddPortion(p2);
         accumulator.AddPortion(p3);
 
-        const auto tasks = accumulator.GetOptimizationTasks(NeverLocked());
         const auto nextTask = accumulator.GetNextOptimizationTask(NeverLocked());
         UNIT_ASSERT(nextTask);
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[0]->GetPortionId(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[1]->GetPortionId(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[2]->GetPortionId(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions[0]->GetPortionId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions[1]->GetPortionId(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions[2]->GetPortionId(), 3);
     }
 
     Y_UNIT_TEST(MiddleLevelReturnsMaxIntersectionRange) {
@@ -139,12 +143,12 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         middle.RegisterRoutingWidth(4, 1);
         middle.AddPortion(MakePortion(4, 20, 30, 1000));
 
-        const auto tasks = middle.GetOptimizationTasks(NeverLocked());
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
+        const auto task = middle.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 3);
 
         TVector<ui64> ids;
-        for (const auto& p : tasks[0].Portions) {
+        for (const auto& p : task->Portions) {
             ids.push_back(p->GetPortionId());
         }
         Sort(ids.begin(), ids.end());
@@ -166,13 +170,13 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         lastLevel.AddPortion(MakePortion(2, 20, 30, 100));
         lastLevel.AddPortion(MakePortion(3, 5, 25, 100));
 
-        const auto tasks = lastLevel.GetOptimizationTasks(NeverLocked());
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[0]->GetPortionId(), 3);
+        const auto task = lastLevel.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions[0]->GetPortionId(), 3);
 
         TVector<ui64> ids;
-        for (const auto& p : tasks[0].Portions) {
+        for (const auto& p : task->Portions) {
             ids.push_back(p->GetPortionId());
         }
         Sort(ids.begin(), ids.end());
@@ -182,7 +186,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(ids[2], 3);
     }
 
-    Y_UNIT_TEST(GetNextOptimizationTaskMatchesGetOptimizationTasksFront) {
+    Y_UNIT_TEST(TilingReturnsAccumulatorTask) {
         TTestTiling::TilingSettings settings;
         settings.AccumulatorSettings.Trigger.Bytes = 100;
         settings.AccumulatorSettings.Trigger.Portions = 100;
@@ -195,14 +199,10 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         tiling.AddPortion(MakePortion(2, 2, 3, 60));
         tiling.AddPortion(MakePortion(3, 4, 5, 60));
 
-        const auto tasks = tiling.GetOptimizationTasks(NeverLocked());
         const auto nextTask = tiling.GetNextOptimizationTask(NeverLocked());
-        if (tasks.empty()) {
-            UNIT_ASSERT(!nextTask);
-        } else {
-            UNIT_ASSERT(nextTask);
-            UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions.size(), tasks.front().Portions.size());
-        }
+        UNIT_ASSERT(nextTask);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->TargetLevel, 0);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions.size(), 3);
     }
 
     Y_UNIT_TEST(TilingChoosesAccumulatorMiddleAndLastLevelsIndependently) {
@@ -229,12 +229,12 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         tiling.AddPortion(MakePortion(2, 2, 3, 60));
         tiling.AddPortion(MakePortion(3, 4, 5, 60));
 
-        auto tasks = tiling.GetOptimizationTasks(NeverLocked());
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
+        auto task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 3);
         {
             TVector<ui64> ids;
-            for (const auto& p : tasks[0].Portions) {
+            for (const auto& p : task->Portions) {
                 ids.push_back(p->GetPortionId());
             }
             Sort(ids.begin(), ids.end());
@@ -251,12 +251,12 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         tiling.AddPortion(MakePortion(11, 100, 1100, 1000));
         tiling.AddPortion(MakePortion(12, 200, 1200, 1000));
 
-        tasks = tiling.GetOptimizationTasks(NeverLocked());
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 2);
+        task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 2);
         {
             TVector<ui64> ids;
-            for (const auto& p : tasks[0].Portions) {
+            for (const auto& p : task->Portions) {
                 ids.push_back(p->GetPortionId());
             }
             Sort(ids.begin(), ids.end());
@@ -273,12 +273,12 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         tiling.AddPortion(MakePortion(21, 20, 29, 1000));
         tiling.AddPortion(MakePortion(22, 5, 25, 1000));
 
-        tasks = tiling.GetOptimizationTasks(NeverLocked());
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
+        task = tiling.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(task);
+        UNIT_ASSERT_VALUES_EQUAL(task->Portions.size(), 3);
         {
             TVector<ui64> ids;
-            for (const auto& p : tasks[0].Portions) {
+            for (const auto& p : task->Portions) {
                 ids.push_back(p->GetPortionId());
             }
             Sort(ids.begin(), ids.end());
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT(!tiling.MiddleLevels.at(2).PortionById.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.MiddleLevels.at(2).WidthByPortionId.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 1);
-        UNIT_ASSERT(tiling.LastLevel.HasPortion(MakePortion(100, 0, 309, 1000)));
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(100));
         // Width on LastLevel must equal current measure of the portion (overlaps 4 baselines).
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.at(100), 4);
         // Wide portion has measure=4 → enters Candidates, not Portions.
@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 0);
     }
 
-    Y_UNIT_TEST(TilingGetOptimizationTasksDelegatesToGetNext) {
+    Y_UNIT_TEST(TilingAccumulatorTaskTargetsLevelZero) {
         TTestTiling::TilingSettings settings;
         settings.AccumulatorPortionSizeLimit = 100;
         settings.AccumulatorSettings.Trigger.Bytes = 1;
@@ -462,15 +462,184 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         tiling.AddPortion(MakePortion(2, 2, 3, 50));
         tiling.AddPortion(MakePortion(3, 4, 5, 50));
 
-        const auto tasks = tiling.GetOptimizationTasks(NeverLocked());
         const auto nextTask = tiling.GetNextOptimizationTask(NeverLocked());
-        if (!nextTask) {
-            UNIT_ASSERT(tasks.empty());
-            return;
+        UNIT_ASSERT(nextTask);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->TargetLevel, 0);
+        UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions.size(), 3);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TilingCompactionState) {
+    // Accumulator-only settings where the useful-metric level maps 1:1 to the accumulator portion
+    // count: Normalize(1, 10, count) gives level == count for count in [1, 10], and level 10
+    // (critical) once count >= 10.
+    static TTestTiling::TilingSettings MakeCountPrioritySettings(const bool compatibilityMode) {
+        TTestTiling::TilingSettings settings;
+        settings.EnableCompatibilityMode = compatibilityMode;
+        settings.AccumulatorPortionSizeLimit = 1'000'000;   // small portions land in the accumulator
+        settings.K = 10;
+        settings.AccumulatorSettings.Trigger.Portions = 1;
+        settings.AccumulatorSettings.Overload.Portions = 10;
+        settings.AccumulatorSettings.Trigger.Bytes = 1'000'000'000;
+        settings.AccumulatorSettings.Overload.Bytes = 1'000'000'000;
+        settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
+        settings.AccumulatorSettings.Compaction.Bytes = 1'000'000'000;
+        settings.LastLevelSettings.CandidatePortionsOverload = 1'000'000;
+        settings.MiddleLevelSettings.TriggerHeight = 1'000'000;
+        settings.MiddleLevelSettings.OverloadHeight = 2'000'000;
+        settings.AgingSettings.Enabled = false;
+        return settings;
+    }
+
+    static TVector<TTestPortion::TPtr> MakeAccumulatorPortions(const ui64 count) {
+        TVector<TTestPortion::TPtr> portions;
+        for (ui64 i = 0; i < count; ++i) {
+            portions.push_back(MakePortion(i + 1, i * 10, i * 10 + 1, 10));
         }
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks.front().Portions.size(), nextTask->Portions.size());
-        UNIT_ASSERT_VALUES_EQUAL(tasks.front().TargetLevel, nextTask->TargetLevel);
+        return portions;
+    }
+
+    // 1) Compatibility state entry conditions.
+    Y_UNIT_TEST(CompatibilityEntryRequiresFlagAndOverload) {
+        // Flag on + overloaded from start -> compatibility, overload suppressed.
+        {
+            TCounters counters;
+            TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
+            tiling.ModifyPortions(MakeAccumulatorPortions(10), {});
+            UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
+            UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+            UNIT_ASSERT(!tiling.IsOverloaded());
+        }
+        // Flag off + overloaded from start -> stays regular and reports overloaded.
+        {
+            TCounters counters;
+            TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/false), counters);
+            tiling.ModifyPortions(MakeAccumulatorPortions(10), {});
+            UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
+            UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+            UNIT_ASSERT(tiling.IsOverloaded());
+        }
+        // Flag on + not overloaded from start -> regular, not overloaded.
+        {
+            TCounters counters;
+            TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
+            tiling.ModifyPortions(MakeAccumulatorPortions(2), {});
+            UNIT_ASSERT(!tiling.DoGetUsefulMetric().IsCritical());
+            UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+            UNIT_ASSERT(!tiling.IsOverloaded());
+        }
+    }
+
+    // 2) Compatibility recovery: overload ceiling stays one above the current load (ratcheting
+    //    down only); a spike above the ceiling re-reports overload; once the ceiling drops below
+    //    critical we return to regular.
+    Y_UNIT_TEST(CompatibilityRecoveryRatchetsAndDetectsSpike) {
+        TCounters counters;
+        TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
+
+        auto portions = MakeAccumulatorPortions(10);
+        tiling.ModifyPortions(portions, {});
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+        UNIT_ASSERT(!tiling.IsOverloaded());
+
+        const TInstant now = TInstant::Now();
+
+        // Load drops to level 9: ceiling ratchets to 10, still compatibility, not overloaded.
+        tiling.RemovePortion(portions[9]);
+        tiling.DoActualize(now);
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+        UNIT_ASSERT(!tiling.IsOverloaded());
+
+        // Spike back to level 10 (above the lowered ceiling of 10) -> overloaded again.
+        tiling.AddPortion(portions[9]);
+        UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
+        UNIT_ASSERT(tiling.IsOverloaded());
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+
+        // Recover below critical (level 8): ceiling drops below critical -> back to regular.
+        tiling.RemovePortion(portions[9]);
+        tiling.RemovePortion(portions[8]);
+        tiling.DoActualize(now);
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+        UNIT_ASSERT(!tiling.IsOverloaded());
+    }
+
+    // Settings for the aging/promotion tests: accumulator disabled, routing purely by measure.
+    static TTestTiling::TilingSettings MakeAgingSettings() {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 0;
+        settings.K = 2;
+        settings.MiddleLevelCount = 5;
+        settings.AccumulatorSettings.Trigger.Portions = 1'000'000;
+        settings.AccumulatorSettings.Overload.Portions = 2'000'000;
+        settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
+        settings.AccumulatorSettings.Compaction.Bytes = 1'000'000'000;
+        settings.LastLevelSettings.Compaction.Portions = 1'000'000;
+        settings.LastLevelSettings.Compaction.Bytes = 1'000'000'000;
+        settings.LastLevelSettings.CandidatePortionsOverload = 1'000'000;
+        settings.MiddleLevelSettings.TriggerHeight = 1'000'000;
+        settings.MiddleLevelSettings.OverloadHeight = 2'000'000;
+        settings.AgingSettings.Enabled = true;
+        settings.AgingSettings.PromoteTime = TDuration::Seconds(60);
+        settings.AgingSettings.MaxPortionPromotion = 100;
+        return settings;
+    }
+
+    // 3) Bored mode: with no optimization task the planner goes bored and pushes portions down even
+    //    before their promote timer expires; a returning task switches it back to regular.
+    Y_UNIT_TEST(BoredModePromotesPortionsIgnoringTimer) {
+        TCounters counters;
+        TTestTiling tiling(MakeAgingSettings(), counters);
+
+        // 4 non-overlapping baselines on the last level (no timer).
+        tiling.AddPortion(MakePortion(1, 0, 9, 1000));
+        tiling.AddPortion(MakePortion(2, 100, 109, 1000));
+        tiling.AddPortion(MakePortion(3, 200, 209, 1000));
+        tiling.AddPortion(MakePortion(4, 300, 309, 1000));
+        // Wide portion overlaps all 4 -> measure 4 -> middle level 3 (K=2), with a timer.
+        tiling.AddPortion(MakePortion(100, 0, 309, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
+        const TInstant insertTime = tiling.InsertTimeByPortionId.at(100);
+
+        // Nothing to compact -> bored.
+        UNIT_ASSERT(!tiling.GetNextOptimizationTask(NeverLocked()));
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::BOARDED);
+
+        // Bored actualize promotes the wide portion despite the timer not being expired.
+        tiling.DoActualize(insertTime + TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::BOARDED);
+
+        // A last-level candidate (overlaps exactly one baseline) gives the planner work again.
+        tiling.AddPortion(MakePortion(200, 0, 9, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(200).Level, 1);
+        UNIT_ASSERT(tiling.GetNextOptimizationTask(NeverLocked()));
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+    }
+
+    // 4) Regular mode promotes portions down only after the promote timer expires.
+    Y_UNIT_TEST(RegularModePromotesOnlyAfterPromoteTime) {
+        TCounters counters;
+        TTestTiling tiling(MakeAgingSettings(), counters);
+
+        tiling.AddPortion(MakePortion(1, 0, 9, 1000));
+        tiling.AddPortion(MakePortion(2, 100, 109, 1000));
+        tiling.AddPortion(MakePortion(3, 200, 209, 1000));
+        tiling.AddPortion(MakePortion(4, 300, 309, 1000));
+        tiling.AddPortion(MakePortion(100, 0, 309, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+        const TInstant insertTime = tiling.InsertTimeByPortionId.at(100);
+
+        // Before the promote time elapses: no movement.
+        tiling.DoActualize(insertTime + TDuration::Seconds(30));
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
+
+        // After the promote time: demote one level.
+        tiling.DoActualize(insertTime + TDuration::Seconds(90));
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
     }
 }
 

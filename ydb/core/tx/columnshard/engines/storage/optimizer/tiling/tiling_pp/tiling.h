@@ -126,9 +126,9 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
 
         if (State == EState::COMPATIBILITY) {
-            auto currentPriority = DoGetUsefulMetric();
-            if (currentPriority < OverloadPriority.Dec()) {
-                OverloadPriority = OverloadPriority.Dec();
+            const auto desiredCeiling = DoGetUsefulMetric().Inc();
+            if (desiredCeiling < OverloadPriority) {
+                OverloadPriority = desiredCeiling;
             }
             if (!OverloadPriority.IsCritical()) {
                 State = EState::REGULAR;

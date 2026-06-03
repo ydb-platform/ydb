@@ -153,9 +153,6 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-        if (Portions.size() < Settings.Trigger.Portions) {
-            return std::nullopt;
-        }
         CompactionTask<TKey, TPortion> result;
         result.TargetLevel = 0;
         ui64 currentBlobBytes = 0;

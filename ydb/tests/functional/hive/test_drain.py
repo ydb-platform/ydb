@@ -33,6 +33,7 @@ class TestHive(object):
                     'min_counter_scatter_to_balance': 100,
                     'object_imbalance_to_balance': 100,
                 },
+                shutdown_config={'drain_timeout_seconds': 1000000},
             )
         )
         cls.cluster.start()

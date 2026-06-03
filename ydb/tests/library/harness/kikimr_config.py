@@ -191,6 +191,7 @@ class KikimrConfigGenerator(object):
             explicit_statestorage_config=None,
             protected_mode=False,
             tiny_mode=False,
+            shutdown_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -621,6 +622,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["domains_config"]["explicit_state_storage_config"] = self.explicit_statestorage_config["explicit_state_storage_config"]
             self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
             self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
+
+        if shutdown_config:
+            self.yaml_config["shutdown_config"] = shutdown_config
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section

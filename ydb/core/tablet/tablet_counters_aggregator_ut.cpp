@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
 
             runtime.Send(new IEventHandle(aggregatorId, sender, new TEvTabletCounters::TEvTabletAddCounters(
-                CounterEventsInFlight, TabletId, TabletType, TenantPathId, executorCounters, appCounters)));
+                CounterEventsInFlight, TabletId, 0, TabletType, TenantPathId, executorCounters, appCounters)));
 
             // force recalc
             runtime.Send(new IEventHandle(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime.Send(new IEventHandle(
                 aggregatorId,
                 sender,
-                new TEvTabletCounters::TEvTabletCountersForgetTablet(TabletId, TabletType, TenantPathId)));
+                new TEvTabletCounters::TEvTabletCountersForgetTablet(TabletId, 0, TabletType, TenantPathId)));
 
             // force recalc
             runtime.Send(new IEventHandle(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));

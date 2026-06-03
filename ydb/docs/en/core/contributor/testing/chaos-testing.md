@@ -23,7 +23,7 @@ Tablets are the primary computational units of {{ ydb-short-name }}. Resilience 
 
 - **Coordinator** — distributed transaction coordinator
 - **Hive** — tablet placement manager
-- **BsController** — distributed storage controller
+- **BSController** — distributed storage controller
 - **SchemeShard** — schema manager
 - **DataShard** — data storage tablets
 - **Mediator** — transaction mediator
@@ -31,10 +31,6 @@ Tablets are the primary computational units of {{ ydb-short-name }}. Resilience 
 - Other system tablets
 
 Tablet rebalancing between nodes via Hive is also tested.
-
-### Integration with Stress Testing
-
-Chaos testing is typically run in conjunction with stress testing workloads from the [ydb/tests/stress](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stress) directory. This combination ensures that the cluster is tested under load conditions while experiencing various failure scenarios.
 
 ### Disk Failures
 
@@ -48,8 +44,12 @@ Chaos testing is typically run in conjunction with stress testing workloads from
 
 ### Bridge Mode Cluster Scenarios
 
-- Stopping all nodes in a single bridge pile
-- Network isolation of a bridge pile
+- Stopping all nodes in a single [pile](../../concepts/glossary.md#pile)
+- Network isolation of a [pile](../../concepts/glossary.md#pile)
+
+## Integration with Stress Testing
+
+Chaos testing is typically run in conjunction with stress testing workloads from the [ydb/tests/stress](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stress) directory. This combination ensures that the cluster is tested under load conditions while experiencing various failure scenarios.
 
 ## How Verification Works
 
@@ -64,7 +64,11 @@ Failures are injected automatically on a schedule, and check results are aggrega
 
 {{ ydb-short-name }} uses the **Nemesis** tool for chaos testing — a fault injection application located in the [YDB repository on GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stability/nemesis). It is deployed directly on the nodes of the cluster under test and manages fault injection according to a configured schedule.
 
-> **Important:** Nemesis only works with {{ ydb-short-name }} clusters that were deployed using the [`ydbd_slice`](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/ydbd_slice) utility.
+{% note warning %}
+
+Nemesis only works with {{ ydb-short-name }} clusters that were deployed using the [`ydbd_slice`](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/ydbd_slice) utility.
+
+{% endnote %}
 
 ### Installation
 

@@ -19,6 +19,10 @@ TDLQMoverActor::TDLQMoverActor(TDLQMoverSettings&& settings)
 }
 
 void TDLQMoverActor::Bootstrap() {
+    if (Queue.empty()) {
+        return ReplySuccess();
+    }
+
     Become(&TDLQMoverActor::StateDescribe);
     if (Settings.DestinationTopic.StartsWith("sqs://")) {
         auto tokensStr = Settings.DestinationTopic.substr("sqs://"sv.size());
@@ -152,10 +156,10 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
 
 void TDLQMoverActor::ProcessQueue() {
     LOG_D("ProcessQueue");
-    Become(&TDLQMoverActor::StateRead);
+    Become(&TDLQMoverActor::StateWork);
 
     if (Queue.empty()) {
-       return ReplySuccess();
+       return;
     }
 
     SendToPQTablet(MakeEvPQRead(Settings.ConsumerName, Settings.PartitionId, Queue.front().Offset, 1));
@@ -190,17 +194,16 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     Send(PartitionWriterActorId, std::move(writeRequest));
-    WaitWrite();
+
+    Pending.emplace_back(Queue.front());
+    Queue.pop_front();
+
+    ProcessQueue();
 }
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
     LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Source topic unavailable");
-}
-
-void TDLQMoverActor::WaitWrite() {
-    LOG_D("WaitWrite");
-    Become(&TDLQMoverActor::StateWrite);
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&) {
@@ -216,10 +219,17 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
-    Processed.emplace_back(Queue.front().Offset, Queue.front().SeqNo);
-    Queue.pop_front();
+    if (Pending.empty()) {
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: unexpected result");
+    }
 
-    ProcessQueue();
+    Processed.emplace_back(Pending.front().Offset, Pending.front().SeqNo);
+    Pending.pop_front();
+
+    LOG_D("Queue: " << Queue.size() << " Pending: " << Pending.size() << " Processed: " << Processed.size());
+    if (Queue.empty() && Pending.empty()) {
+        return ReplySuccess();
+    }
 }
 
 void TDLQMoverActor::ReplySuccess() {
@@ -264,28 +274,17 @@ STFUNC(TDLQMoverActor::StateInit) {
     }
 }
 
-STFUNC(TDLQMoverActor::StateRead) {
+STFUNC(TDLQMoverActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
-        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-        hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
-        sFunc(TEvents::TEvPoison, PassAway);
-        default:
-            LOG_E("Unexpected " << EventStr("StateRead", ev));
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateRead", ev));
-    }
-}
-
-STFUNC(TDLQMoverActor::StateWrite) {
-    switch (ev->GetTypeRewrite()) {
         hFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
         hFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWrite", ev));
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWrite", ev));
+            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
     }
 }
 

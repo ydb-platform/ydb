@@ -1,11 +1,13 @@
 #pragma once
 
-#include <yql/essentials/core/yql_statistics.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+
+#include <yql/essentials/core/yql_statistics.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -100,8 +102,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryEffectsTransformer(const TIntrus
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<NYql::IGraphTransformer>&& typeAnnTransformer,
-    NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr& config);
+    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr& config);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpSinkPrecomputeTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 
@@ -110,8 +111,8 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhysicalQueryTransformer(const T
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryBlocksTransformer(TAutoPtr<NYql::IGraphTransformer> queryBlockTransformer);
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
-    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config);
+THolder<NYql::TVisitorTransformerBase> CreateKqpTypeAnnotationTransformer(const TString& cluster,
+    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
 

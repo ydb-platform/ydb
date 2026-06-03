@@ -108,7 +108,16 @@ namespace NKikimr {
 
                 // calculate storage ratio, don't spend much time on it, skip ssts that are actualized
                 for (const auto &x : vec) {
-                    const TInstant time = x.LevelSstPtr.SstPtr->StorageRatio.GetTime();
+                    TInstant time = x.LevelSstPtr.SstPtr->StorageRatio.GetTime();
+                    if (time == TInstant::Zero()) {
+                        const ui64 jitterUs = calcPeriod.MicroSeconds() > 0
+                            ? RandomNumber<ui64>(calcPeriod.MicroSeconds())
+                            : 0;
+                        time = startTime - calcPeriod + TDuration::MicroSeconds(jitterUs);
+                        TSstRatioPtr placeholder = MakeIntrusive<TSstRatio>(time);
+                        x.LevelSstPtr.SstPtr->StorageRatio.Set(placeholder);
+                    }
+
                     if (startTime >= time + calcPeriod) {
                         TSstRatioPtr newRatio = CalculateSstRatio(x.LevelSstPtr.SstPtr, startTime);
                         x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio);

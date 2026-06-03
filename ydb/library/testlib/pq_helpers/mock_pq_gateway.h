@@ -38,7 +38,7 @@ public:
 
     virtual void AddEvent(NYdb::NTopic::TReadSessionEvent::TEvent&& ev) = 0;
 
-    virtual void AddStartSessionEvent() = 0;
+    virtual void AddStartSessionEvent(ui64 endOffset = 0) = 0;
 
     virtual void AddDataReceivedEvent(ui64 offset, const TString& data) = 0;
 

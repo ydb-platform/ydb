@@ -8,7 +8,6 @@ TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::T
     , User(std::move(user))
     , LogPrefix(TStringBuilder() << "ConsumerBatchProcessor " << TabletId << " [" << User << "]: ")
 {
-    BatchCutters.emplace(NKikimrClient::STANDARD, MakeHolder<TNoOpBatchCutter>());
     BatchCutters.emplace(NKikimrClient::KAFKA_BATCH, MakeHolder<TKafkaBatchCutter>());
 }
 

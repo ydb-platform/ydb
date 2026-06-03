@@ -21,14 +21,4 @@ public:
     TVector<TReadResult> Cut(const TReadResult& readResult) const override final;
 };
 
-class TNoOpBatchCutter : public IBatchCutter {
-public:
-    TNoOpBatchCutter() = default;
-    ~TNoOpBatchCutter() = default;
-
-    TVector<TReadResult> Cut(const TReadResult& readResult) const override final {
-        return {readResult};
-    }
-};
-
 } // namespace NKikimr::NPQ::NBatching

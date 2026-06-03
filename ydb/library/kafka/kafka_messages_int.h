@@ -13,7 +13,7 @@
 #include "kafka_records.h"
 #include "kafka_log_impl.h"
 
-namespace NKafka {
+namespace NYdb::NKafkaWire {
 namespace NPrivate {
 
 struct TWriteCollector {
@@ -665,4 +665,4 @@ inline void ReadTag(TKafkaReadable& readable, TKafkaInt16 version, typename Meta
 
 } // NPrivate
 
-} // namespace NKafka
+} // namespace NYdb::NKafkaWire

@@ -3,7 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKafka {
+namespace NYdb::NKafkaWire {
 namespace {
 
 static constexpr size_t BUFFER_SIZE = 1 << 16;
@@ -18,8 +18,8 @@ void CheckUnsignedVarint(const std::vector<T>& values)  {
 
         writable.writeUnsignedVarint(v);
 
-        UNIT_ASSERT_EQUAL_C(sb.GetFrontBuffer().size(), NKafka::NPrivate::SizeOfUnsignedVarint<T>(v),
-            TStringBuilder() << "Size mismatch " << sb.GetFrontBuffer().size() << " != " << NKafka::NPrivate::SizeOfUnsignedVarint<T>(v));
+        UNIT_ASSERT_EQUAL_C(sb.GetFrontBuffer().size(), NYdb::NKafkaWire::NPrivate::SizeOfUnsignedVarint<T>(v),
+            TStringBuilder() << "Size mismatch " << sb.GetFrontBuffer().size() << " != " << NYdb::NKafkaWire::NPrivate::SizeOfUnsignedVarint<T>(v));
 
         T r = readable.readUnsignedVarint<T>();
         UNIT_ASSERT_EQUAL_C(r, v, TStringBuilder() << r << " != " << v);
@@ -36,8 +36,8 @@ void CheckVarint(const std::vector<T>& values) {
 
         writable.writeVarint(v);
 
-        UNIT_ASSERT_EQUAL_C(sb.GetFrontBuffer().size(), NKafka::NPrivate::SizeOfVarint<T>(v),
-            TStringBuilder() << "Size mismatch " << sb.GetFrontBuffer().size() << " != " << NKafka::NPrivate::SizeOfVarint<T>(v));
+        UNIT_ASSERT_EQUAL_C(sb.GetFrontBuffer().size(), NYdb::NKafkaWire::NPrivate::SizeOfVarint<T>(v),
+            TStringBuilder() << "Size mismatch " << sb.GetFrontBuffer().size() << " != " << NYdb::NKafkaWire::NPrivate::SizeOfVarint<T>(v));
 
         T r = readable.readVarint<T>();
 
@@ -471,4 +471,4 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
 }
 
 } // namespace
-} // namespace NKafka
+} // namespace NYdb::NKafkaWire

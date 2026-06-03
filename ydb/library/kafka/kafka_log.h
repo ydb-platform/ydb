@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-namespace NKafka {
+namespace NYdb::NKafkaWire {
 
 static constexpr bool DEBUG_ENABLED = false;
 

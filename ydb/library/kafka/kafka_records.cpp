@@ -1,5 +1,6 @@
 #include "kafka_messages_int.h"
 
+<<<<<<< HEAD
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/stream/mem.h>
@@ -7,6 +8,9 @@
 #include <util/stream/zlib.h>
 
 namespace NKafka {
+=======
+namespace NYdb::NKafkaWire {
+>>>>>>> e62dbfe3ab2 (LOGBROKER-10406 Better)
 
 namespace {
 

@@ -34,7 +34,7 @@ void SetEnableTopicMessagesBatching(TTestContext& tc) {
 }
 
 TString MakeKafkaBatchPayload(const TVector<TString>& values) {
-    NKafka::TKafkaRecordBatch batch;
+    NYdb::NKafkaWire::TKafkaRecordBatch batch;
     batch.BaseOffset = 0;
     batch.Magic = 2;
     batch.LastOffsetDelta = values.size() - 1;
@@ -46,14 +46,14 @@ TString MakeKafkaBatchPayload(const TVector<TString>& values) {
 
     batch.Records.reserve(values.size());
     for (size_t i = 0; i < values.size(); ++i) {
-        NKafka::TKafkaRecord record;
+        NYdb::NKafkaWire::TKafkaRecord record;
         record.TimestampDelta = i;
         record.OffsetDelta = i;
-        record.Value = NKafka::TKafkaRawBytes(values[i].data(), values[i].size());
+        record.Value = NYdb::NKafkaWire::TKafkaRawBytes(values[i].data(), values[i].size());
         batch.Records.push_back(record);
     }
-    batch.BatchLength = batch.Size(2) - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type) - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
-    return NKafka::WriteKafkaRecordBatch(batch);
+    batch.BatchLength = batch.Size(2) - sizeof(NYdb::NKafkaWire::TKafkaRecordBatch::BaseOffsetMeta::Type) - sizeof(NYdb::NKafkaWire::TKafkaRecordBatch::BatchLengthMeta::Type);
+    return NYdb::NKafkaWire::WriteKafkaRecordBatch(batch);
 }
 
 TString CompressGzip(TStringBuf data) {

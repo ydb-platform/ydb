@@ -95,7 +95,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
 
     const auto codec = GetDataChunkCodec(dataChunk);
     const auto kafkaBatchPayload = GetKafkaBatchPayload(readResult, dataChunk, codec);
-    const auto batch = NKafka::ReadKafkaRecordBatch(kafkaBatchPayload);
+    const auto batch = NYdb::NKafkaWire::ReadKafkaRecordBatch(kafkaBatchPayload);
     if (batch.Records.empty()) {
         return {readResult};
     }

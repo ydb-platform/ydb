@@ -1,5 +1,13 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.31.0 {#2-31-0}
+
+Released on April 20, 2026. To update to version **2.31.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the `--stats` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), enabling extended execution statistics collection (e.g., `--stats profile`).
+
 ## Version 2.30.0 {#2-30-0}
 
 Released on April 7, 2026. To update to version **2.30.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -9,7 +17,7 @@ Released on April 7, 2026. To update to version **2.30.0**, select the [Download
 * Added the `{{ ydb-cli }} config completion` command to generate shell completion scripts for bash and zsh.
 * Added the `{{ ydb-cli }} export nfs` and `{{ ydb-cli }} import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
 * Added the `--compact` option to the `{{ ydb-cli }} workload tpcc import` [command](./reference/ydb-cli/workload-tpcc.md).
-* Added the `--tx-mode` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), allowing to set the transaction mode (e.g., `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Added the `--tx-mode` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), which allows setting the transaction mode (e.g., `no-tx`, `serializable-rw`, `snapshot-rw`).
 * Added support for the new [compaction](./concepts/glossary.md#compaction) operation in the `{{ ydb-cli }} operation` [subcommands](./reference/ydb-cli/operation-list.md).
 
 ### Improvements
@@ -93,7 +101,7 @@ Released on September 25, 2025. To update to version **2.26.0**, select the [Dow
 
 * Added the `--no-merge` and `--no-cache` options to the `{{ ydb-cli }} monitoring healthcheck` [command](./reference/ydb-cli/commands/monitoring-healthcheck.md).
 * Added query compilation time statistics to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
-* Added the `--retries` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md), allowing to set the number of retries for every upload data request.
+* Added the `--retries` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md), which allows setting the number of retries for every upload data request.
 * **_(Requires server v25.4+)_** Added the `--replace-sys-acl` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md), which specifies whether to replace the ACL for system objects.
 
 ## Version 2.25.0 {#2-25-0}
@@ -207,7 +215,7 @@ Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads
 
 ### Features
 
-* Added the `--no-discovery` [global option](./reference/ydb-cli/commands/global-options.md), allowing to skip discovery and connect to user-provided endpoint directly.
+* Added the `--no-discovery` [global option](./reference/ydb-cli/commands/global-options.md), which allows skipping discovery and connecting to a user-provided endpoint directly.
 * Added new options for workload commands:
   * Added the `--scale` option to the `{{ ydb-cli }} workload tpch init` and `{{ ydb-cli }} workload tpcds init` [commands](./reference/ydb-cli/workload-tpch.md) to set the percentage of the benchmark's data size and workload to use, relative to full scale.
   * Added the `--retries` option to the `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` [commands](./reference/ydb-cli/workload-click-bench.md) to specify maximum retry count for every request.
@@ -415,7 +423,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 * Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
 * In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, which allows to specify which type of queries to use.
 * Added a column with median benchmark execution time in the statistics table of the [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md) command.
-* **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, return with arbitrarily-sized results and support for [MVCC](concepts/query_execution/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
+* **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, which allows performing [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, returning arbitrarily-sized results, and supporting [MVCC](concepts/query_execution/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
 * **_(Experimental)_** In the `{{ ydb-cli }} table query explain` command, the `--collect-diagnostics` option has been added to collect query diagnostics and save it to a file. The command uses an experimental API, compatibility is not guaranteed.
 
 ### Bug fixes

@@ -61,6 +61,8 @@ class TListOperationsRPC
             return "[ListBackupCollectionRestores]";
         case TOperationId::COMPACTION:
             return "[ListForcedCompactions]";
+        case TOperationId::FULL_BACKUP:
+            return "[ListFullBackups]";
         default:
             return "[Untagged]";
         }
@@ -84,6 +86,8 @@ class TListOperationsRPC
             return new TEvBackup::TEvListBackupCollectionRestoresRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::COMPACTION:
             return new TEvForcedCompaction::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
+        case TOperationId::FULL_BACKUP:
+            return new TEvBackup::TEvListFullBackupsRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
         }
@@ -236,6 +240,24 @@ class TListOperationsRPC
         Reply(response);
     }
 
+    void Handle(TEvBackup::TEvListFullBackupsResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvListFullBackupsResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TResponse response;
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
+            *response.add_operations() = TFullBackupConv::ToOperation(entry);
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -250,6 +272,7 @@ public:
         case TOperationId::INCREMENTAL_BACKUP:
         case TOperationId::RESTORE:
         case TOperationId::COMPACTION:
+        case TOperationId::FULL_BACKUP:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
@@ -272,6 +295,7 @@ public:
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
             hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle);
             hFunc(TEvBackup::TEvListBackupCollectionRestoresResponse, Handle);
+            hFunc(TEvBackup::TEvListFullBackupsResponse, Handle);
         default:
             return StateBase(ev);
         }

@@ -562,6 +562,11 @@ public:
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
+<<<<<<< HEAD
+=======
+        , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
+        , ConstraintsTransformer(CreateKiSinkConstraintsTransformer(sessionCtx))
+>>>>>>> 90f3e487526 (YQ-5302 passed streaming constraints (#39639))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -598,6 +603,11 @@ public:
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
+    }
+
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer;
     }
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
@@ -1902,6 +1912,11 @@ private:
     TAutoPtr<IGraphTransformer> LogicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
+<<<<<<< HEAD
+=======
+    const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
+>>>>>>> 90f3e487526 (YQ-5302 passed streaming constraints (#39639))
 };
 
 } // namespace

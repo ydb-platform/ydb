@@ -37,11 +37,11 @@ private:
 
     TOptimizationPriority(const i64 level, const i64 levelWeight)
         : Level(level)
-        , InternalLevelWeight(levelWeight)
-    {
-    }
+        , InternalLevelWeight(levelWeight) {}
 
 public:
+
+    TOptimizationPriority() = default;
     void Mul(const ui32 kff) {
         InternalLevelWeight *= kff;
     }
@@ -64,6 +64,14 @@ public:
 
     TString DebugString() const {
         return TStringBuilder() << "(" << Level << "," << InternalLevelWeight << ")";
+    }
+
+    TOptimizationPriority Inc() const {
+        return TOptimizationPriority(Level + 1, InternalLevelWeight);
+    }
+
+    TOptimizationPriority Dec() const {
+        return TOptimizationPriority(Level - 1, InternalLevelWeight);
     }
 
     static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {

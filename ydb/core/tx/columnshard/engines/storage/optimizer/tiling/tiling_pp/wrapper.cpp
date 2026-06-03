@@ -229,11 +229,11 @@ protected:
     }
 
     bool DoIsOverloaded() const override {
-        return Core.DoGetUsefulMetric().IsCritical();
+        return Core.IsOverloaded();
     }
 
     void DoActualize(const TInstant currentInstant) override {
-        Core.PromoteExpiredPortions(currentInstant);
+        Core.DoActualize(currentInstant);
     }
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {

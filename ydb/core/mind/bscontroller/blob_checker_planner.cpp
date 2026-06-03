@@ -1,8 +1,6 @@
 #include "blob_checker_planner.h"
 #include "impl.h"
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
-
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/util/fast_lookup_unique_list.h>
  

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <list>
-#include <utility>
+#include <memory>
+#include <optional>
 
 #include <util/datetime/base.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -15,7 +15,7 @@ public:
     TBlobCheckerPlanner(TDuration periodicity, ui32 groupCount);
     ~TBlobCheckerPlanner();
 
-    template <class TInfo>
+    template<class TInfo>
     void EnqueueCheck(const TInfo* groupInfo);
     // returns whether there was planned check for given group
     bool DequeueCheck(TGroupId groupId);

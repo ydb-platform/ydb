@@ -172,8 +172,8 @@ public:
         FillPromise();
     }
 
-    void AddStartSessionEvent() final {
-        AddEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0));
+    void AddStartSessionEvent(ui64 endOffset) final {
+        AddEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(PartitionSession, 0, endOffset));
     }
 
     void AddDataReceivedEvent(ui64 offset, const TString& data) final {

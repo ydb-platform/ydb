@@ -8100,6 +8100,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
     Send(SysPartitionStatsCollector, ev.Release());
 
     tableInfo->SetPartitioning(std::move(newPartitioning));
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 }
 
 void TSchemeShard::MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
@@ -8129,6 +8132,9 @@ void TSchemeShard::MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, 
     }
 
     tableInfo->MovePartitioning(std::move(newPartitioning));
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 }
 
 void TSchemeShard::CopyPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
@@ -8152,6 +8158,9 @@ void TSchemeShard::CopyPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, 
     }
 
     tableInfo->CopyPartitioning(std::move(newPartitioning));
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 }
 
 void TSchemeShard::ApplySplitMerge(
@@ -8178,6 +8187,9 @@ void TSchemeShard::ApplySplitMerge(
     }
 
     tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx, now);
+
+    // report TTableInfo::VerifyConsistency() time
+    TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 
     TVector<std::pair<ui64, ui64>> shardIndices;
     shardIndices.reserve(tableInfo->GetPartitions().size());

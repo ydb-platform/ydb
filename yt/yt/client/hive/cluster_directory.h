@@ -92,6 +92,7 @@ public:
     bool HasTvmId(NAuth::TTvmId tvmId) const;
 
     DEFINE_SIGNAL(void(const std::string&, NYTree::INodePtr), OnClusterUpdated);
+    DEFINE_SIGNAL(void(const std::string&), OnClusterUnregistered);
 
 protected:
     struct TCluster

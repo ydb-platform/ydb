@@ -28,5 +28,5 @@ WITH AS_TABLE($b) AS B
         B.key,
         B.subkey
 ON
-    A.key == B.key AND A.subkey == B.subkey
+    A.key == B.key
 USING $f(TableRow(), TableRow());

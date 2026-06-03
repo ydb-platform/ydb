@@ -3,6 +3,6 @@ RECURSE(
     etcd_proxy
     pgwire
     ydb
-    ydb_int
+    ydb/experimental
     ydbd
 )

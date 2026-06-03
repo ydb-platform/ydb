@@ -30,10 +30,15 @@ meta:
         url: /d/ydb_cluster/overview
       - source: grafana/dashboard/search
         tag:
-          - ydb-cluster
+          - ui-cluster
         folder:
           - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1
     database:
       - source: grafana/dashboard
         title: Database Overview
         url: /d/ydb_database/overview
+      - source: grafana/dashboard/search
+        tag:
+          - ui-database
+        folder:
+          - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1

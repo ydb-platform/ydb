@@ -1503,14 +1503,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 pragma YqlSelect = "force";
                 select distinct min(t1.a) as min_a, max(t1.a) as max_a, t1.b from `/Root/t1` as t1 group by t1.b order by min_a;
             )",
-            /*
             R"(
-                PRAGMA YqlSelect = 'force';
-                select distinct t1.a, t1.b from `/Root/t1` as t1;
+                pragma YqlSelect = "force";
+                select distinct (t1.a + t1.b) as res from `/Root/t1` as t1 order by res;
+            )",
+            R"(
+                pragma YqlSelect = "force";
+                select distinct (t1.b + 1) as res from `/Root/t1` as t1 order by res;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                select distinct t1.b from `/Root/t1` as t1 group by t1.a order by t1.b;
+                select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a, t1.b;
+            )",
+            /*
+            R"(
+                select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
             )",
             */
         };
@@ -1552,7 +1559,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[[4];[2];[4]];[[6];[3];[4]]])",
                                             R"([[[4];[1];[2]];[[6];[2];[2]]])",
                                             R"([[[4];4;[1]];[[6];6;[2]]])",
-                                            R"([[0;4;[2]];[1;3;[1]]])"
+                                            R"([[0;4;[2]];[1;3;[1]]])",
+                                            R"([[[2]];[[4]];[[6]]])",
+                                            R"([[[2]];[[3]]])",
+                                            R"([[0;[2]];[1;[1]];[2;[2]];[3;[1]];[4;[2]]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -2174,9 +2184,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 7, 11, 13, 15, 18, 19, 21, 22, 24, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
-                                                                      50, 52, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82, 83,
-                                                                      84, 85, 88, 90, 91, 92, 96, 99},
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 6, 7, 11, 13, 15, 18, 19, 21, 22, 24, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
+                                                                      50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82, 83,
+                                                                      84, 85, 88, 90, 91, 92, 93, 96, 99},
                            /*rbo never finish*/{5}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});

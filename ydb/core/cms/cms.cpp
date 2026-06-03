@@ -403,6 +403,10 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     }
 
     for (const auto &action : request.GetActions()) {
+        if (capHit) {
+            break;
+        }
+
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -441,7 +445,6 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                           "MaxPermissions cap (%u) reached, deferring remaining actions",
                           maxPermissions);
                 capHit = true;
-                break;
             }
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",

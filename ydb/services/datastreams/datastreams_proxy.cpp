@@ -288,7 +288,7 @@ namespace NKikimr::NDataStreams::V1 {
     void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
-            default: TBase::TBase::StateWork(ev);
+            default: TBase::StateWork(ev);
         }
     }
 

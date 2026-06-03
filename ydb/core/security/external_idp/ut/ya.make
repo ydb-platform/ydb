@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/core/security/external_idp/test_utils
     ydb/core/util/actorsys_test
     ydb/library/actors/http
     ydb/library/services

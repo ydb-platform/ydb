@@ -586,15 +586,29 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
 Y_UNIT_TEST_SUITE(TAlgToKtyTest) {
 
     Y_UNIT_TEST(GetKtyFromAlg) {
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::RS256), EJWKKeyType::RSA);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::RS384), EJWKKeyType::RSA);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::RS512), EJWKKeyType::RSA);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::PS256), EJWKKeyType::RSA);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::PS384), EJWKKeyType::RSA);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::PS512), EJWKKeyType::RSA);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::ES256), EJWKKeyType::EC);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::ES384), EJWKKeyType::EC);
-        UNIT_ASSERT_EQUAL(GetKeyType(EJWKAlg::ES512), EJWKKeyType::EC);
+        {
+            const auto algs =
+                {EJWKAlg::RS256, EJWKAlg::RS384, EJWKAlg::RS512, EJWKAlg::PS256, EJWKAlg::PS384, EJWKAlg::PS512};
+            for (const auto alg : algs) {
+                const auto kty = GetKeyType(alg);
+                UNIT_ASSERT(kty.has_value());
+                UNIT_ASSERT_EQUAL(kty.value(), EJWKKeyType::RSA);
+            }
+        }
+
+        {
+            const auto algs = {EJWKAlg::ES256, EJWKAlg::ES384, EJWKAlg::ES512};
+            for (const auto alg : algs) {
+                const auto kty = GetKeyType(alg);
+                UNIT_ASSERT(kty.has_value());
+                UNIT_ASSERT_EQUAL(kty.value(), EJWKKeyType::EC);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(GetKtyFromUnknownAlg) {
+        const auto unknownAlg = static_cast<EJWKAlg>(255);
+        UNIT_ASSERT(!GetKeyType(unknownAlg).has_value());
     }
 
 }

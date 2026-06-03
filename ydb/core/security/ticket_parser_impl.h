@@ -1218,9 +1218,9 @@ private:
         if (response->Status == TEvExternalIdpProvider::EStatus::SUCCESS) {
             const TString domain {"@" + Config.GetExternalIdpAuthenticationDomain()};
             TVector<NACLib::TSID> groups(response->Groups.cbegin(), response->Groups.cend());
-            std::transform(groups.begin(), groups.end(), groups.begin(), [&domain](NACLib::TSID& group) {
-                return group.append(domain);
-            });
+            for (auto& group : groups) {
+                group.append(domain);
+            }
             record.ExpireTime = response->ExpiresAt;
             SetToken(key, record, new NACLib::TUserToken({
                 .OriginalUserToken = record.Ticket,

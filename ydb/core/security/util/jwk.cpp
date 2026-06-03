@@ -102,7 +102,7 @@ bool IsCompatibleAlgorithm(EJWKKeyType keyType, EJWKAlg algorithm) {
                 || algorithm == EJWKAlg::ES384
                 || algorithm == EJWKAlg::ES512;
         }
-        default: Y_UNREACHABLE();
+        default: return false;
     }
 }
 
@@ -275,7 +275,7 @@ TJWK::TJWK(EJWKKeyType type)
     : Type(type)
 {}
 
-EJWKKeyType GetKeyType(EJWKAlg alg) {
+std::optional<EJWKKeyType> GetKeyType(EJWKAlg alg) {
     switch (alg) {
         case EJWKAlg::RS256:
         case EJWKAlg::RS384:
@@ -288,7 +288,7 @@ EJWKKeyType GetKeyType(EJWKAlg alg) {
         case EJWKAlg::ES384:
         case EJWKAlg::ES512:
             return EJWKKeyType::EC;
-        default: Y_UNREACHABLE();
+        default: return std::nullopt;
     }
 }
 

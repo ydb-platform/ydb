@@ -11,6 +11,7 @@ ENDIF()
 
 PEERDIR(
     ydb/core/security/certificate_check/test_utils
+    ydb/core/security/external_idp/test_utils
     ydb/core/testlib/default
     ydb/core/testlib/audit_helpers
     ydb/library/testlib/service_mocks

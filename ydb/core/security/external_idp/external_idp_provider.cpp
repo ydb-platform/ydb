@@ -214,6 +214,7 @@ private:
     NKikimrProto::TExternalIdpConfig Config;
     NActors::TActorId HttpProxyId;
 
+    TDuration AllowedClockSkew{TDuration::Zero()};
     TRecurringPeriod DiscoveryRefresh;
     TRecurringPeriod JwksRefresh;
 
@@ -453,6 +454,10 @@ void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
         Config.SetIssuer(StripStringRight(Config.GetIssuer(), EqualsStripAdapter('/')));
     }
 
+    if (const auto skewStr = Config.GetAllowedClockSkew(); !skewStr.empty()) {
+        AllowedClockSkew = TDuration::Parse(skewStr);
+    }
+
     DiscoveryRefresh = TRecurringPeriod(Config.GetDiscoveryPeriodicSettings(), now,
         Counters->GetSubgroup("component", "Discovery"));
     JwksRefresh = TRecurringPeriod(Config.GetJwksPeriodicSettings(), now,
@@ -516,7 +521,19 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " algorithm=" << decoded->get_algorithm());
     }
 
-    const auto pem = JwksCache.Get(BuildKey(ToString(GetKeyType(alg)), kid));
+    const auto kty = NSecurity::GetKeyType(alg);
+    if (!kty.has_value()) {
+        return ReplyError(
+            ev->Sender, msg->Key,
+            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
+            TStringBuilder() << "Unsupported JWT algorithm for token in"
+                << " issuer=" << Config.GetIssuer()
+                << " token='" << MaskTicket(msg->Token) << "'"
+                << " kid=" << kid
+                << " algorithm=" << alg);
+    }
+
+    const auto pem = JwksCache.Get(BuildKey(ToString(kty.value()), kid));
     if (!pem.Defined()) {
         return ReplyError(
             ev->Sender, msg->Key,
@@ -525,15 +542,15 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
-                << " kty=" << GetKeyType(alg)
+                << " kty=" << *kty
                 << " algorithm=" << alg,
             true);
     }
 
     auto verifier = jwt::verify();
 
-    if (const auto skewStr = Config.GetAllowedClockSkew(); !skewStr.empty()) {
-        verifier.leeway(TDuration::Parse(skewStr).Seconds());
+    if (AllowedClockSkew != TDuration::Zero()) {
+        verifier.leeway(AllowedClockSkew.Seconds());
     }
 
     if (const auto it = SUPPORTED_ALGORITHMS<decltype(verifier)>.find(alg);

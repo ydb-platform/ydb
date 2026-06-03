@@ -70,7 +70,7 @@ struct TJWKSet {
     std::vector<TJWK> Keys; // `keys`
 };
 
-EJWKKeyType GetKeyType(EJWKAlg alg);
+std::optional<EJWKKeyType> GetKeyType(EJWKAlg alg);
 std::optional<TJWK> ParseJWK(const NJson::TJsonValue& jwk);
 std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet);
 

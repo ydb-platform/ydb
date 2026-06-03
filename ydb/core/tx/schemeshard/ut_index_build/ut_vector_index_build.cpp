@@ -2360,4 +2360,165 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
     }
 
+    Y_UNIT_TEST(PostingTableSplitMultiShard) {
+        // Test that PostingTable is pre-split when source table has multiple shards.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // PostingTable should have more than 1 partition because source table had 3 shards
+        {
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            Cerr << "... posting table has " << parts.size() << " partitions" << Endl;
+            UNIT_ASSERT_C(parts.size() > 1, "PostingTable should be pre-split with multi-shard source, got " << parts.size());
+        }
+
+        // Verify all rows are present
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
+    Y_UNIT_TEST(PostingTableNoSplitSingleShard) {
+        // Test that PostingTable stays with 1 partition when source table has only 1 shard.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // PostingTable should stay with 1 partition for single-shard source
+        {
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            Cerr << "... posting table has " << parts.size() << " partitions" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(parts.size(), 1, "PostingTable should not be split with single-shard source");
+        }
+
+        // Verify all rows are present
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
+    Y_UNIT_TEST(PostingTableSplitOneLevelIndex) {
+        // Test that PostingTable is pre-split even for a 1-level index (Levels=1)
+        // when K>1 and source table has multiple shards.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        ui64 buildIndexTx = ++txId;
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+        });
+        auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
+        kmeansSettings->mutable_vector_settings()->set_clusters(4);
+        kmeansSettings->mutable_vector_settings()->set_levels(1);
+        ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // PostingTable should be split for 1-level index with multi-shard source
+        {
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            Cerr << "... posting table has " << parts.size() << " partitions (1-level index)" << Endl;
+            UNIT_ASSERT_C(parts.size() > 1, "PostingTable should be pre-split for 1-level index with multi-shard source, got " << parts.size());
+        }
+
+        // Verify all rows are present
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
 }

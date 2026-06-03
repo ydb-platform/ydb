@@ -1650,7 +1650,7 @@ void ParallelBackupWholeDatabaseImpl(TBackupTestFixture& f, bool /*isOlap*/) {
 
         // Wait
         for (auto& backupOp : parallelBackups) {
-            f.WaitOpSuccess(backupOp.GetValueSync());
+            f.WaitOpSuccess(backupOp.GetValueSync(), {}, TDuration::Minutes(5));
         }
 
         // Forget

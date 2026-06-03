@@ -101,6 +101,15 @@ struct TTransaction {
         return {};
     }
 
+    TMaybe<ui64> GetStep() const {
+        if (Tx) {
+            return Tx->Step;
+        } else if (ProposeConfig) {
+            return ProposeConfig->Step;
+        }
+        return {};
+    }
+
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
     TActorId SupportivePartitionActor;
@@ -945,6 +954,20 @@ private:
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
     THashMap<TActorId, TSimpleSharedPtr<TTransaction>> WriteInfosToTx;
 
+    // stable-25-4 -> stable-26-1: tablet may replay TEvTxCommit while partition PlanStep/TxId is already ahead.
+    // Persist SerializedTx (and optional config sub-writes) to KV before TEvTxDone so tablet recovery sees partition tx meta.
+    struct TStaleTxMetaEntry {
+        ui64 Step = 0;
+        ui64 TxId = 0;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
+    };
+
+    THashMap<ui64, TStaleTxMetaEntry> StaleTxMetaPending;
+    THashMap<ui64, TStaleTxMetaEntry> StaleTxMetaInFlight;
+
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfoBase> PendingUsersInfo;
@@ -1305,6 +1328,11 @@ private:
     bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
 
     void TryAddCmdWriteForTransaction(const TTransaction& tx);
+
+    void EnqueueStaleTxMetaPersist(std::unique_ptr<TEvPQ::TEvTxCommit> ev, const TActorContext& ctx);
+    void TryAppendStaleTxMetaWrites();
+    void FlushStaleTxMetaDone(const TActorContext& ctx);
+    void AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

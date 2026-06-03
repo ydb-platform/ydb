@@ -718,7 +718,7 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
     return resultExpr;
 }
 
-void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultColName, THashSet<TString>& aggregationUniqueColNames,
+void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColName, THashSet<TString>& aggregationUniqueColNames,
                          TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPreAgg,
                          TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap, TAggregationTraits& distinctAggregationTraitsPreAggregate,
                          TAggregationTraits& aggTraits, TAggregationTraits& distinctAggregationTraitsPostAggregate,
@@ -759,7 +759,7 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultC
                     // Pure aggregation f(a).
                     // Here we want to get just a column name for aggregation.
                     // For example: f(a) -> map(a -> a) -> f(a).
-                    // This is needed to simplify logic for translation from PgSelect to KqpOp.
+                    // This is needed to simplify logic for translation from YqlSelect to KqpOp.
                     exprBody = GetMember(aggInput);
                     Y_ENSURE(exprBody, "Aggregation input is not a member");
                     auto member = TCoMember(exprBody);
@@ -850,20 +850,24 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultC
     } else if (distinctAll) {
         // This case covers distinct all on just columns without aggregation functions.
         auto groupRef = GetCallable(lambda.Body().Ptr(), "YqlGroupRef");
-        TInfoUnit colName;
+        TInfoUnit originalColName;
         if (groupRef) {
-            colName = TInfoUnit(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap));
+            originalColName = TInfoUnit(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap));
+            resultColName = originalColName.GetFullName();
         } else {
             auto body = lambda.Body().Ptr();
-            Y_ENSURE(body->IsCallable("Member"), "Distinct on expression is not supported");
-            auto member = TCoMember(body);
-            colName = TInfoUnit(member.Name().StringValue());
+            if (IsExpression(body)) {
+                originalColName = TInfoUnit(resultColName);
+                expressionsMapPreAgg.push_back({resultColName, lambda.Ptr(), false});
+            } else {
+                auto member = TCoMember(body);
+                originalColName = TInfoUnit(member.Name().StringValue());
+            }
         }
 
-        const auto fullColName = colName.GetFullName();
-        const auto distinctAggTraits = BuildAggregationTraits(fullColName, "distinct", fullColName, ctx, pos);
+        const auto distinctAggTraits = BuildAggregationTraits(originalColName.GetFullName(), "distinct", resultColName, ctx, pos);
         distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
-        distinctAggregationTraitsPostAggregate.KeyColumns.push_back(fullColName);
+        distinctAggregationTraitsPostAggregate.KeyColumns.push_back(originalColName.GetFullName());
     }
 }
 
@@ -880,9 +884,9 @@ void ProcessAggregationsInHaving(TExprNode::TPtr having, THashSet<TString>& aggr
     Y_ENSURE(yqlWhere->IsCallable("YqlWhere"));
     // Using to collect a lambda for having filter.
     TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> havingFilterHolder;
-    const TString resultColName = GenerateUniqueColumnName(uniqueAggColumnId, "having", "col");
+    TString resultColName = GenerateUniqueColumnName(uniqueAggColumnId, "having", "col");
 
-    ProcessAggregations(yqlWhere->ChildPtr(1), resultColName, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap,
+    ProcessAggregations(yqlWhere->ChildPtr(1), std::move(resultColName), aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap,
                         distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate, havingFilterHolder, uniqueAggColumnId,
                         distinctPreAggregate, distinctAll, ctx, pos);
 
@@ -1099,7 +1103,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         if (from) {
             for (auto fromItem : from->Child(1)->Children()) {
                 // From item can be a table read with an alias or a subquery with an alias
-                // In case of a subquery, we have already translated PgSelect of the nested subquery
+                // In case of a subquery, we have already translated YqlSelect of the nested subquery
                 // so we just need to remove TKqpOpRoot and plug in the translated subquery
 
                 auto childExpr = fromItem->ChildPtr(0);
@@ -1189,14 +1193,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     TVector<TExprNode::TPtr> rightSidePredicates;
                     TVector<TExprNode::TPtr> joinFilterPredicates;
                     TVector<TExprNode::TPtr> joinFilters;
-
-                    if (joinKeys.empty() && joinPredicates.empty()) {
-                        // Ansi cross join.
-                        ++ansiCrossJoinCount;
-                        continue;
-                    }
-
-                    Y_ENSURE((joinKeys.size() || joinPredicates.size()) && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
 
                     if (tableInputsCount == 2) {
                         leftInput = aliasToInputMap[leftSideAliases[0]];
@@ -1400,7 +1396,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     newBody = body;
                     groupByKeyName = TInfoUnit(GenerateUniqueColumnName(uniqueAggColumnId, "agg_input", "group_expr"));
                 } else {
-                    Y_ENSURE(body->IsCallable("Member"), "Invalid callable for PgGroup: " + TString(body->Content()));
+                    Y_ENSURE(body->IsCallable("Member"), "Invalid callable for YqlGroup: " + TString(body->Content()));
                     auto member = TCoMember(body);
                     groupByKeyName = TInfoUnit(member.Name().StringValue());
                     Y_ENSURE(!aggregationUniqueColNames.contains(groupByKeyName.GetFullName()), "Not unique key name for group by kyes is not supported.");
@@ -1527,7 +1523,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             auto groupRef = GetCallable(lambda.Body().Ptr(), "YqlGroupRef");
             // Eliminate aggregation or reference to a group by expression from result lambda.
             auto aggColName = columnName;
-            if (aggregation || groupRef) {
+            if (aggregation || groupRef || distinctAll) {
                 if (groupRef) {
                     aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
                 }

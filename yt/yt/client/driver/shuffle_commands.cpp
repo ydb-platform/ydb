@@ -40,6 +40,18 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
             return command->Options.ReplicationFactor;
         })
         .Default();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_push_based_shuffle",
+        [] (TThis* command) -> auto& {
+            return command->Options.UsePushBasedShuffle;
+        })
+        .Default(false);
+    registrar.ParameterWithUniversalAccessor<TTableSchemaPtr>(
+        "schema",
+        [] (TThis* command) -> auto& {
+            return command->Options.Schema;
+        })
+        .Default();
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)

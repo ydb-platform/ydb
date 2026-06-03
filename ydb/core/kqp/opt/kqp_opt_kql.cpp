@@ -1032,7 +1032,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         const auto updatedRows = BuildUpdatedAndOldRows(rowsToUpdate, update.Update(), updateColumns, oldColumns, update.Pos(), ctx);
         return Build<TKqlUpsertRows>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
-            .Input<TKqpWriteConstraint>() // TODO:???
+            .Input<TKqpWriteConstraint>()
                 .Input(updatedRows)
                 .Columns(GetPgNotNullColumns(tableData, update.Pos(), ctx))
             .Build()

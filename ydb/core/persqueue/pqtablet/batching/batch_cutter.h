@@ -1,10 +1,10 @@
 #pragma once
 
-#include "batch_processor.h"
-
 #include <ydb/core/persqueue/events/internal.h>
 
 namespace NKikimr::NPQ::NBatching {
+
+using TReadResult = NKikimrClient::TCmdReadResult::TResult;
 
 class IBatchCutter {
 public:

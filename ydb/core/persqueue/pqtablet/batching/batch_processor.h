@@ -1,15 +1,14 @@
 #pragma once
 
+#include "batch_cutter.h"
+
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <util/generic/hash.h>
-#include <util/string/util.h>
+#include <util/generic/string.h>
 
 namespace NKikimr::NPQ::NBatching {
-
-using TReadResult = NKikimrClient::TCmdReadResult::TResult;
-
 
 struct TReadProcessingContext {
     TReadProcessingContext() = default;
@@ -67,7 +66,7 @@ struct TEvProcessBatchResult : public NActors::TEventLocal<TEvProcessBatchResult
 
 class TBatchProcessor : public TBaseTabletActor<TBatchProcessor> {
 public:
-    TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId);
+    TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -79,13 +78,12 @@ public:
 private:
     STFUNC(StateWork);
 
-    NActors::TActorId GetOrCreateConsumerProcessor(const TString& user);
-
 private:
+    const TString User;
     TString LogPrefix;
-    THashMap<TString, NActors::TActorId> ConsumerProcessors;
+    THashMap<NKikimrClient::EMessageFormat, THolder<IBatchCutter>> BatchCutters;
 };
 
-NActors::IActor* CreateBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId);
+NActors::IActor* CreateBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user);
 
 } // namespace NKikimr::NPQ::NBatching

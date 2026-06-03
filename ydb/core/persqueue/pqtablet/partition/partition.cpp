@@ -11,7 +11,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
-#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -699,10 +698,6 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         Send(DeduplicationQueueActor, new TEvents::TEvPoisonPill());
     }
 
-    if (BatchProcessorActor) {
-        Send(BatchProcessorActor, new TEvents::TEvPoisonPill());
-    }
-
     Die(ctx);
 }
 
@@ -752,8 +747,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitDuration = ctx.Now() - CreationTime;
     InitDone = true;
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
-
-    BatchProcessorActor = RegisterWithSameMailbox(NBatching::CreateBatchProcessor(TabletId, TabletActorId));
 
     CreateCompacter();
     InitializeMLPConsumers();
@@ -1823,9 +1816,6 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TEvPQ::TEvBlobResponse* blobResponse,
                                 const TActorContext& ctx)
 {
-    const ui64 requestedOffset = info.Offset;
-    const ui16 requestedPartNo = info.PartNo;
-
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, GetStartOffset(), GetEndOffset(), Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), TabletActorId, Config.GetMeteringMode(), IsActive(),
@@ -1857,29 +1847,9 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(proxyResponse->Response->ByteSize());
     }
 
-    if (!info.CanReadBatches && BatchProcessorActor && proxyResponse && answer.NeedBatchProcessing) {
-        ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext(
-            info.User,
-            info.Destination,
-            requestedOffset,
-            requestedPartNo,
-            answer.Size,
-            answer.IsInternal,
-            info.ReplyTo,
-            SelfId(),
-            std::move(answer.Event))));
-        return;
-    }
-
     ctx.Send(ReplyTo(info.Destination, info.ReplyTo), answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
-}
-
-void TPartition::Handle(NBatching::TEvProcessBatchResult::TPtr& ev, const TActorContext& ctx) {
-    auto context = std::move(ev->Get()->Context);
-    ctx.Send(ReplyTo(context.Destination, context.ReplyTo), context.Event.Release());
-    OnReadRequestFinished(context.Destination, context.Size, context.User, ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {

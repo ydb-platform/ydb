@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     batch_processor.cpp
     batch_cutter.cpp
-    consumer_batch_processor.cpp
 )
 
 PEERDIR(

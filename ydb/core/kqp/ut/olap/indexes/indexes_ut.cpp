@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBlobStorage)).Execute(settings);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
 

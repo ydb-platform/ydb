@@ -1819,10 +1819,9 @@ void TPartition::OnReadComplete(TReadInfo& info,
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, GetStartOffset(), GetEndOffset(), Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), TabletActorId, Config.GetMeteringMode(), IsActive(),
-        GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User),
-        info.CanReadBatches
+        GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     );
-    auto* proxyResponse = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
+    const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
 
     if (blobResponse && HasError(*blobResponse)) {
         if (info.IsSubscription) {
@@ -1843,8 +1842,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_HEAD_ONLY].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
         }
 
-        AFL_ENSURE(proxyResponse)("description", "Expected TEvProxyResponse for successful read");
-        TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(proxyResponse->Response->ByteSize());
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
     ctx.Send(ReplyTo(info.Destination, info.ReplyTo), answer.Event.Release());

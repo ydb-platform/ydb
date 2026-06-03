@@ -20,7 +20,6 @@ struct TReadAnswer {
     THolder<IEventBase> Event;
     bool IsInternal = false;
     TActorId ReplyTo;
-    bool NeedBatchProcessing = false;
 };
 
 struct TReadInfo {
@@ -53,7 +52,6 @@ struct TReadInfo {
 
     TBlobKeyTokens BlobKeyTokens;
     size_t CompactedBlobsCount = 0;
-    bool CanReadBatches = false;
 
     TReadInfo() = delete;
     TReadInfo(
@@ -71,8 +69,7 @@ struct TReadInfo {
         const bool isExternalRead,
         const TActorId& pipeClient,
         bool isInternal,
-        const TActorId& replyTo,
-        bool canReadBatches = false
+        const TActorId& replyTo
     )
         : User(user)
         , ClientDC(clientDC)
@@ -92,7 +89,6 @@ struct TReadInfo {
         , ReplyTo(replyTo)
         , LastOffset(lastOffset)
         , IsInternal(isInternal)
-        , CanReadBatches(canReadBatches)
     {}
 
     bool ReachedLastOffset() const {
@@ -111,8 +107,7 @@ struct TReadInfo {
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
         const bool isActive,
-        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor,
-        bool canReadBatches
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
     );
 
     TReadAnswer FormAnswer(
@@ -127,14 +122,13 @@ struct TReadInfo {
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
         const bool isActive,
-        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor,
-        bool canReadBatches
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
     ) {
         static TEvPQ::TEvBlobResponse fakeBlobResponse(0, TVector<TRequestedBlob>());
         if (!response) {
             response = &fakeBlobResponse;
         }
-        return FormAnswer(ctx, *response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive, postProcessor, canReadBatches);
+        return FormAnswer(ctx, *response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive, postProcessor);
     }
 
     bool UpdateUsage(const TClientBlob& blob,
@@ -151,9 +145,7 @@ struct TReadInfo {
                                          THolder<TEvPQ::TEvProxyResponse>& answer,
                                          bool& needStop,
                                          ui32& cnt, ui32& size, ui32& lastBlobSize,
-                                         const TActorContext& ctx,
-                                         bool canReadBatches,
-                                         bool& hasBatches);
+                                         const TActorContext& ctx);
 };
 
 struct TOffsetCookie {

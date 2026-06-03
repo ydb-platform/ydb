@@ -339,6 +339,7 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
 
     ProcessTxsAndUserActs(ctx);
 }
+
 template <typename T> // TCmdReadResult
 static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
     auto cc = read->AddResult();
@@ -428,9 +429,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                                 THolder<TEvPQ::TEvProxyResponse>& answer,
                                                 bool& needStop,
                                                 ui32& cnt, ui32& size, ui32& lastBlobSize,
-                                                const TActorContext& ctx,
-                                                bool canReadBatches,
-                                                bool& hasBatches)
+                                                const TActorContext& ctx)
 {
     AFL_ENSURE(begin <= end);
     AFL_ENSURE(end <= blobs.size());
@@ -463,7 +462,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 .Event = std::move(answer),
                 .IsInternal = IsInternal,
                 .ReplyTo = ReplyTo,
-                .NeedBatchProcessing = !canReadBatches && hasBatches
             };
         }
 
@@ -521,7 +519,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                               );
                 }
 
-                hasBatches = hasBatches || (res.MessageFormat != EMessageFormat::STANDARD);
                 AddResultBlob(readResult, res, Offset);
 
                 if (res.IsLastPart()) {
@@ -558,8 +555,7 @@ TReadAnswer TReadInfo::FormAnswer(
     const TActorId& tablet,
     const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
     const bool isActive,
-    const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor,
-    bool canReadBatches
+    const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
 ) {
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
@@ -624,7 +620,6 @@ TReadAnswer TReadInfo::FormAnswer(
     AFL_ENSURE(blobs.size() == Blobs.size());
     response->Check();
     bool needStop = false;
-    bool hasBatches = false;
 
     auto readAnswer = AddBlobsFromBody(blobs,
                                        0, CompactedBlobsCount,
@@ -638,9 +633,7 @@ TReadAnswer TReadInfo::FormAnswer(
                                        answer,
                                        needStop,
                                        cnt, size, lastBlobSize,
-                                       ctx,
-                                       canReadBatches,
-                                       hasBatches);
+                                       ctx);
     if (readAnswer) {
         return std::move(*readAnswer);
     }
@@ -662,8 +655,6 @@ TReadAnswer TReadInfo::FormAnswer(
                     Destination != 0, ctx.Now()
                 );
             }
-
-            hasBatches = hasBatches || (writeBlob.MessageFormat != EMessageFormat::STANDARD);
 
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
@@ -694,9 +685,7 @@ TReadAnswer TReadInfo::FormAnswer(
                                       answer,
                                       needStop,
                                       cnt, size, lastBlobSize,
-                                      ctx,
-                                      canReadBatches,
-                                      hasBatches);
+                                      ctx);
         if (readAnswer) {
             return std::move(*readAnswer);
         }
@@ -722,8 +711,7 @@ TReadAnswer TReadInfo::FormAnswer(
         .Size = answerSize,
         .Event = std::move(answer),
         .IsInternal = IsInternal,
-        .ReplyTo = ReplyTo,
-        .NeedBatchProcessing = !canReadBatches && hasBatches
+        .ReplyTo = ReplyTo
     };
 }
 
@@ -733,7 +721,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
         return;
     TReadAnswer answer = res->FormAnswer(
             ctx, nullptr, GetStartOffset(), res->Offset, Partition, nullptr,
-            res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User), false
+            res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
 
     ctx.Send(ReplyTo(res->Destination, answer.ReplyTo), answer.Event.Release());
@@ -899,7 +887,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     TReadInfo info(
             user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->ReadToBlobEnd, read->Cookie, read->ReadTimestampMs,
-            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal(), read->ReplyTo, read->CanReadBatches
+            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal(), read->ReplyTo
     );
 
     ui64 cookie = NextReadCookie();

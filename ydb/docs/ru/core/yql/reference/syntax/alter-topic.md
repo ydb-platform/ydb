@@ -134,7 +134,7 @@ ALTER TOPIC `my_topic` ADD CONSUMER my_consumer;
 ALTER TOPIC `my_topic` ADD CONSUMER my_consumer2 WITH (important = true);
 ```
 
-Следующая команда добавит к топику shared-читателя:
+Следующая команда добавит к топику разделяемого (общего) читателя:
 
 ```yql
 ALTER TOPIC `my_topic`

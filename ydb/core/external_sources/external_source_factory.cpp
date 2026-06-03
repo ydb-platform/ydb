@@ -156,6 +156,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
             CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         },
         {
+            ToString(NYql::EDatabaseType::MoniumMetrics),
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
+        },
+        {
             ToString(NYql::EDatabaseType::Iceberg),
             BuildIcebergSource(hostnamePatternsRegEx)
         },

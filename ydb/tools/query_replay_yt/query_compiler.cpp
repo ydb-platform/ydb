@@ -235,7 +235,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvContinueProcess, Handle);
-                cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+                hFunc(TEvents::TEvWakeup, HandleTimeout);
                 default:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in CompileState");
             }
@@ -475,9 +475,18 @@ private:
         Reply(status, {issue});
     }
 
+    void ResetForNextRequest() {
+        Gateway.Reset();
+        KqpHost.Reset();
+        AsyncCompileResult.Reset();
+        Query.reset();
+        MetadataLoader.reset();
+        GUCSettings = std::make_shared<TGUCSettings>();
+        Become(&TThis::StateInit);
+    }
+
     void Reply(const Ydb::StatusIds::StatusCode& status, const TIssues& issues, const std::optional<TString>& queryPlan = std::nullopt) {
         std::unique_ptr<TQueryReplayEvents::TEvCompileResponse> ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(true);
-        Y_UNUSED(queryPlan);
         if (status != Ydb::StatusIds::SUCCESS) {
             ev->Success = false;
             if (!MetadataLoader) {
@@ -499,7 +508,7 @@ private:
         }
 
         Send(Owner, ev.release());
-        PassAway();
+        ResetForNextRequest();
     }
 
     void Handle(TQueryReplayEvents::TEvCompileRequest::TPtr& ev) {
@@ -581,7 +590,8 @@ private:
         StartCompilation();
         Continue();
 
-        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+        ++WakeupTag;
+        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup(WakeupTag));
         Become(&TThis::StateCompile);
     }
 
@@ -605,12 +615,16 @@ private:
         Reply(status, kqpResult.Issues(), queryPlan);
     }
 
-    void HandleTimeout() {
+    void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != WakeupTag) {
+            return;
+        }
         return Reply(Ydb::StatusIds::TIMEOUT, "Query compilation timed out.");
     }
 
 private:
     TActorId Owner;
+    ui64 WakeupTag = 0;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TString QueryId;
     std::unique_ptr<TKqpQueryId> Query;

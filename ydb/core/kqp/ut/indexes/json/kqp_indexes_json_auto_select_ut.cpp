@@ -245,6 +245,131 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
         }, /* enableJsonIndexAutoSelect */ false);
     }
+
+    Y_UNIT_TEST(PassingInJE) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Basic PASSING with literal values
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING 1 AS v))");
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING true AS v))");
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING "str"u AS v))");
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING null AS v))");
+
+            // PASSING with filter predicate at root
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == $v)' PASSING 1 AS v))");
+
+            // PASSING with multiple variables
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == $v1 && @.k2 == $v2)' PASSING 1 AS v1, 2 AS v2))");
+
+            // PASSING with range comparison
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ > $v)' PASSING 5 AS v))");
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ >= $lo && @ <= $hi)' PASSING 5 AS lo, 10 AS hi))");
+
+            // PASSING combined with AND
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING 1 AS v) AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2 ? (@ == $v)' PASSING 2 AS v))");
+
+            // PASSING combined with OR
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING 1 AS v) OR JSON_EXISTS(Text, '$.k2'))");
+
+            // Non-autoselectable: TRUE ON ERROR changes semantics
+            ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING 1 AS v TRUE ON ERROR))");
+        }, /* enableJsonIndexAutoSelect */ true);
+    }
+
+    Y_UNIT_TEST(PassingInJV) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Basic PASSING with literal integer variable in jsonpath filter
+            ValidateAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING 5 AS v RETURNING Int64) == 10)");
+            ValidateAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ == $v)' PASSING 10 AS v RETURNING Int64) == 10)");
+
+            // PASSING with boolean variable
+            ValidateAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ == $v)' PASSING true AS v RETURNING Bool))");
+
+            // PASSING with multiple variables
+            ValidateAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ > $lo && @ < $hi)' PASSING 5 AS lo, 20 AS hi RETURNING Int64) == 10)");
+
+            // PASSING combined with AND
+            ValidateAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING 5 AS v RETURNING Int64) == 10 AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_VALUE(Text, '$.k2 ? (@ == $v)' PASSING 2 AS v RETURNING Int64) == 2)");
+
+            // PASSING combined with OR
+            ValidateAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ == $v)' PASSING 10 AS v RETURNING Int64) == 10 OR JSON_EXISTS(Text, '$.k2'))");
+
+            // Non-autoselectable: DEFAULT ON EMPTY/ERROR changes semantics
+            ValidateNoAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING 5 AS v RETURNING Int64 DEFAULT -1 ON EMPTY) == 10)");
+            ValidateNoAutoSelect(db, R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING 5 AS v RETURNING Int64 DEFAULT -1 ON ERROR) == 10)");
+        }, /* enableJsonIndexAutoSelect */ true);
+    }
+
+    Y_UNIT_TEST(PassingInJE_WithParameters) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // SQL parameter as PASSING value - integer
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING $v AS v))");
+
+            // SQL parameter as PASSING value - boolean
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Bool;",
+                R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING $v AS v))");
+
+            // SQL parameter as PASSING value - string
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Utf8;",
+                R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING $v AS v))");
+
+            // Multiple SQL parameters as PASSING values
+            ValidateAutoSelectWithDecl(db, "DECLARE $lo AS Int64; DECLARE $hi AS Int64;",
+                R"(JSON_EXISTS(Text, '$.k1 ? (@ >= $lo && @ <= $hi)' PASSING $lo AS lo, $hi AS hi))");
+
+            // SQL parameter at root filter
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_EXISTS(Text, '$ ? (@.k1 == $v)' PASSING $v AS v))");
+
+            // Combined with AND
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING $v AS v) AND JSON_EXISTS(Text, '$.k2'))");
+
+            // Combined with OR
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING $v AS v) OR JSON_EXISTS(Text, '$.k2'))");
+
+            // Non-autoselectable: TRUE ON ERROR
+            ValidateNoAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_EXISTS(Text, '$.k1 ? (@ == $v)' PASSING $v AS v TRUE ON ERROR))");
+        }, /* enableJsonIndexAutoSelect */ true);
+    }
+
+    Y_UNIT_TEST(PassingInJV_WithParameters) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // SQL parameter as PASSING value - integer
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ == $v)' PASSING $v AS v RETURNING Int64) == 10)");
+
+            // SQL parameter as PASSING value with range comparison
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING $v AS v RETURNING Int64) == 10)");
+
+            // Multiple SQL parameters as PASSING values
+            ValidateAutoSelectWithDecl(db, "DECLARE $lo AS Int64; DECLARE $hi AS Int64;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ > $lo && @ < $hi)' PASSING $lo AS lo, $hi AS hi RETURNING Int64) > 0)");
+
+            // SQL parameter as PASSING value - boolean
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Bool;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ == $v)' PASSING $v AS v RETURNING Bool))");
+
+            // Combined with AND
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING $v AS v RETURNING Int64) > 0 AND JSON_EXISTS(Text, '$.k2'))");
+
+            // Combined with OR
+            ValidateAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ == $v)' PASSING $v AS v RETURNING Int64) == 10 OR JSON_EXISTS(Text, '$.k2'))");
+
+            // Non-autoselectable: DEFAULT ON EMPTY/ERROR
+            ValidateNoAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING $v AS v RETURNING Int64 DEFAULT -1 ON EMPTY) > 0)");
+            ValidateNoAutoSelectWithDecl(db, "DECLARE $v AS Int64;",
+                R"(JSON_VALUE(Text, '$.k1 ? (@ > $v)' PASSING $v AS v RETURNING Int64 DEFAULT -1 ON ERROR) > 0)");
+        }, /* enableJsonIndexAutoSelect */ true);
+    }
 }
 
 }  // namespace NKikimr::NKqp

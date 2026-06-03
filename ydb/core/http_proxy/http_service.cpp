@@ -37,6 +37,7 @@ namespace NKikimr::NHttpProxy {
         NKikimrConfig::TServerlessProxyConfig Config;
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
+        std::shared_ptr<NYdb::ICoreFacility> CoreFacility;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
     };
 
@@ -44,6 +45,7 @@ namespace NKikimr::NHttpProxy {
         : Config(cfg.Config)
     {
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
+        CoreFacility = cfg.CoreFacility;
         Processors = MakeHolder<THttpRequestProcessors>();
         Processors->Initialize();
         if (cfg.UseSDK) {

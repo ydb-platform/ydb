@@ -18,12 +18,14 @@
 
 #define LOG_T(service, stream) LOG_TRACE_S(*TlsActivationContext, service, stream)
 #define LOG_D(service, stream) LOG_DEBUG_S(*TlsActivationContext, service, stream)
+#define LOG_E(service, stream) LOG_ERROR_S(*TlsActivationContext, service, stream)
 
 #define CLOG_T(stream) LOG_T(NKikimrServices::DISCOVERY_CACHE, stream)
 #define CLOG_D(stream) LOG_D(NKikimrServices::DISCOVERY_CACHE, stream)
 
 #define DLOG_T(stream) LOG_T(NKikimrServices::DISCOVERY, stream)
 #define DLOG_D(stream) LOG_D(NKikimrServices::DISCOVERY, stream)
+#define DLOG_E(stream) LOG_E(NKikimrServices::DISCOVERY, stream)
 
 namespace NKikimr {
 
@@ -643,6 +645,23 @@ public:
                 "Database resolve failed with no certain result"));
         }
 
+        { // write wrong requests to monitoring to warn clients
+            const auto isDomain = entry.Path.size() == 1;
+            const auto isSubDomain = entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSubdomain
+                || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain;
+
+            if (!isDomain && !isSubDomain) {
+                const TString path = CanonizePath(Database);
+                GetServiceCounters(AppData()->Counters, "ydb")
+                    ->GetSubgroup("subsystem", "discovery")
+                    ->GetSubgroup("path", path)
+                    ->GetCounter("pathIsNotDatabase", true)->Inc();
+
+                DLOG_E("Path is not database"
+                    << ": database# " << path);
+            }
+        }
+
         auto info = entry.DomainInfo;
         if (NeedResolveResources(info)) {
             DLOG_D("Resolve resources domain"
@@ -751,6 +770,9 @@ public:
             << ": path# " << id);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        if (AppData()->FeatureFlags.GetForbidDiscoveryInnerDbPaths()) {
+            request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
+        }
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;

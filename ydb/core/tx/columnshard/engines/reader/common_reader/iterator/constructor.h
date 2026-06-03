@@ -24,12 +24,15 @@ public:
     NArrow::NAccessor::TAccessorsCollection& GetAccessors() {
         return Accessors;
     }
+
     NIndexes::TIndexesCollection& GetIndexes() const {
         return Indexes;
     }
+
     const std::shared_ptr<IDataSource>& GetSource() const {
         return Source;
     }
+
     ui32 GetRecordsCount() const {
         return Source->GetPortionAccessor().GetPortionInfo().GetRecordsCount();
     }
@@ -47,7 +50,8 @@ public:
         : Accessors(accessors)
         , Indexes(indexes)
         , Source(source)
-        , AppliedFilter(appliedFilter) {
+        , AppliedFilter(appliedFilter)
+    {
     }
 };
 
@@ -66,16 +70,19 @@ public:
 
     IKernelFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(entityId)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
         AFL_VERIFY(StoragesManager);
     }
 
     void Start(TReadActionsCollection& nextRead, TFetchingResultContext& context) {
         DoStart(nextRead, context);
     }
+
     void OnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
         DoOnDataReceived(nextRead, blobs);
     }
+
     void OnDataCollected(TFetchingResultContext& context) {
         DoOnDataCollected(context);
     }
@@ -90,16 +97,16 @@ private:
     NBlobOperations::NRead::TCompositeReadBlobs ProvidedBlobs;
     NColumnShard::TCounterGuard Guard;
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
+
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
             "scan_actor_id", Source->GetContext()->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())(
             "status_code", status.GetStatus())("storage_id", storageId);
         NActors::TActorContext::AsActorContext().Send(Source->GetContext()->GetCommonContext()->GetScanActorId(),
             std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for columns: " << range.ToString()
-                                                         << ", error: " << status.GetErrorMessage()
-                                                         << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())),
-                std::move(Guard)));
+                TConclusionStatus::Fail(
+                    TStringBuilder{} << "Error reading blob range for columns: " << range.ToString() << ", error: " << status.GetErrorMessage()
+                                     << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus())), std::move(Guard)));
         return false;
     }
 
@@ -111,7 +118,8 @@ public:
         , Source(source)
         , DataFetchers(fetchers)
         , Cursor(cursor)
-        , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetchBlobsGuard()) {
+        , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetchBlobsGuard())
+    {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("scf"));
     }
 };
@@ -132,7 +140,8 @@ public:
     TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, const std::shared_ptr<TSource>& sourcePtr,
         const TFetchingScriptCursor& step, const std::shared_ptr<NCommon::TSpecialReadContext>& context, const TString& taskCustomer,
         const TString& externalTaskId)
-        : TBlobsFetcherTask(readActions, std::static_pointer_cast<IDataSource>(sourcePtr), step, context, taskCustomer, externalTaskId) {
+        : TBlobsFetcherTask(readActions, std::static_pointer_cast<IDataSource>(sourcePtr), step, context, taskCustomer, externalTaskId)
+    {
     }
 
     TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions,

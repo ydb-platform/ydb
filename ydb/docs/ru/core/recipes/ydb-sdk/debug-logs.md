@@ -310,51 +310,91 @@
 
 - Java
 
-  В {{ ydb-short-name }} Java SDK для логирования используется библиотека slf4j, которая позволяет использовать различные уровни логирования (`error`, `warn`, `info`, `debug`, `trace`) для одного или нескольких логгеров. В текущей реализации доступны следующие логгеры:
+  {% list tabs %}
 
-  * Логгер `tech.ydb.core.grpc` предоставляет информацию о внутренней реализации grpc протокола
-  * уровень `debug` логирует все операции по протоколу grpc, рекомедуется использовать только для отладки
-  * уровень `info` рекомендуется использовать по умолчанию
-  * Логгер `tech.ydb.table.impl` на уровне `debug` позволяет отслеживать внутреннее состояние драйвера ydb, в частности работу пула сессий.
-  * Логгер `tech.ydb.table.SessionRetryContext` на уровне `debug` будет информировать о количестве ретраев, результатах выполненных запросов, времени выполнения отдельных ретраев и общем времени выполнения всей операции
-  * Логгер `tech.ydb.table.Session` на уровне `debug` предоставляет информацию о тексте запроса, статусе ответа и времени выполнения для различных операций сессии
+  - Native SDK
 
-  Включение и настройка логгеров Java SDK зависит от используемой реализации `slf4j-api`.
-  Здесь приведен пример конфигурации `log4j2` для библиотеки `log4j-slf4j-impl`
+    В {{ ydb-short-name }} Java SDK для логирования используется библиотека slf4j, которая позволяет использовать различные уровни логирования (`error`, `warn`, `info`, `debug`, `trace`) для одного или нескольких логгеров. В текущей реализации доступны следующие логгеры:
 
-  ```xml
-  <Configuration status="WARN">
-    <Appenders>
-      <Console name="Console" target="SYSTEM_OUT">
-        <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
-      </Console>
-    </Appenders>
+    * Логгер `tech.ydb.core.grpc` предоставляет информацию о внутренней реализации grpc протокола
+    * уровень `debug` логирует все операции по протоколу grpc, рекомедуется использовать только для отладки
+    * уровень `info` рекомендуется использовать по умолчанию
+    * Логгер `tech.ydb.table.impl` на уровне `debug` позволяет отслеживать внутреннее состояние драйвера ydb, в частности работу пула сессий.
+    * Логгер `tech.ydb.table.SessionRetryContext` на уровне `debug` будет информировать о количестве ретраев, результатах выполненных запросов, времени выполнения отдельных ретраев и общем времени выполнения всей операции
+    * Логгер `tech.ydb.table.Session` на уровне `debug` предоставляет информацию о тексте запроса, статусе ответа и времени выполнения для различных операций сессии
 
-    <Loggers>
-      <Logger name="io.netty" level="warn" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="io.grpc.netty" level="warn" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="tech.ydb.core.grpc" level="info" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="tech.ydb.table.impl" level="info" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="tech.ydb.table.SessionRetryContext" level="debug" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="tech.ydb.table.Session" level="debug" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
+    Включение и настройка логгеров Java SDK зависит от используемой реализации `slf4j-api`.
+    Здесь приведен пример конфигурации `log4j2` для библиотеки `log4j-slf4j-impl`
 
-      <Root level="debug" >
-        <AppenderRef ref="Console"/>
-      </Root>
-    </Loggers>
-  </Configuration>
+    ```xml
+    <Configuration status="WARN">
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+      </Appenders>
+
+      <Loggers>
+        <Logger name="io.netty" level="warn" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="io.grpc.netty" level="warn" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.core.grpc" level="info" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.table.impl" level="info" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.table.SessionRetryContext" level="debug" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.table.Session" level="debug" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+
+        <Root level="debug" >
+          <AppenderRef ref="Console"/>
+        </Root>
+      </Loggers>
+    </Configuration>
+    ```
+
+  - JDBC
+
+    JDBC-драйвер использует тот же стек логирования через `slf4j`; настройте логгеры `tech.ydb.*` так же, как в нативном SDK.
+
+    Те же дебаг-логи доступны во всех остальных фреймворках вокруг JDBC (Spring Boot, ORM, пулы соединений и т.д.): они ходят в {{ ydb-short-name }} через этот драйвер, достаточно подключить ту же конфигурацию `slf4j` / log4j2 / logback в приложении.
+
+  {% endlist %}
+
+- Python
+
+  Python SDK использует стандартную библиотеку для логирования - `logging`. Для включения определенного режима логирования:
+
+  ```python
+  import logging
+
+  logging.getLogger('ydb').setLevel(logging.DEBUG)
+  ```
+
+- JavaScript
+
+  Для логирования событий внутри sdk используется библиотека [debug](https://www.npmjs.com/package/debug).
+  Для включения логов необходимо задать переменную окружения `DEBUG` со значением фильтра по событиям sdk - `DEBUG=ydbjs:*`.
+
+- Rust
+
+  Внутри крейта `ydb` сообщения идут через стандартную для Rust экосистемы библиотеку [`tracing`](https://docs.rs/tracing) (это имя крейта; сюда же относятся обычные текстовые логи уровня debug/trace, не только «распределённая трассировка»). Чтобы видеть вывод в консоль, до создания клиента подключите подписчика, например [`tracing_subscriber::fmt`](https://docs.rs/tracing-subscriber) с нужным уровнем (`TRACE` для максимальной детализации). Пример: [`basic-logs.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/basic-logs.rs).
+
+  ```rust
+  tracing_subscriber::fmt()
+      .with_max_level(tracing::Level::TRACE)
+      .init();
+
+  let client = ydb::ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .client()?;
   ```
 
 - PHP

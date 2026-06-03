@@ -1,4 +1,5 @@
 #include "snapshot_scheme.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
 
 namespace NKikimr::NOlap {
@@ -6,7 +7,8 @@ namespace NKikimr::NOlap {
 TSnapshotSchema::TSnapshotSchema(TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo, const TSnapshot& snapshot)
     : IndexInfo(std::move(indexInfo))
     , Schema(IndexInfo->ArrowSchemaWithSpecials())
-    , Snapshot(snapshot) {
+    , Snapshot(snapshot)
+{
 }
 
 TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
@@ -49,4 +51,4 @@ ui64 TSnapshotSchema::GetVersion() const {
     return IndexInfo->GetVersion();
 }
 
-}
+}   // namespace NKikimr::NOlap

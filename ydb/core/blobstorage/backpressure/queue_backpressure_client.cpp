@@ -16,6 +16,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     enum {
         EvQueueWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvRequestReadiness,
+        EvPostponedPump,
     };
 
     struct TEvQueueWatchdog : TEventLocal<TEvQueueWatchdog, EvQueueWatchdog> {};
@@ -27,6 +28,8 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
             : Cookie(cookie)
         {}
     };
+
+    struct TEvPostponedPump : TEventLocal<TEvPostponedPump, EvPostponedPump> {};
 
     TBSProxyContextPtr BSProxyCtx;
     TString LogPrefix;
@@ -75,13 +78,22 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     bool ExtraBlockChecksSupport = false;
     bool Checksumming = false;
 
+    bool PostponePump = false;
+    TDuration PostponePumpDelay = TDuration::Zero();
+    TInstant PostponePumpLastInstant;
+
+    NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
+    TControlWrapper PostponePumpMsHDD = 0;
+    TControlWrapper PostponePumpMsSSD = 0;
+    TControlWrapper PostponePumpResetAfterMs = 0;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_QUEUE_ACTOR;
     }
 
     TVDiskBackpressureClientActor(const TIntrusivePtr<TBlobStorageGroupInfo>& info, TVDiskIdShort vdiskId,
-            NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+            NKikimrBlobStorage::EVDiskQueueId queueId, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
             ui32 interconnectChannel, bool /*local*/, TDuration watchdogTimeout,
             TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility,
@@ -113,6 +125,19 @@ public:
         RequestReadiness(nullptr, ctx);
         UpdateRequestTrackingStats(ctx);
         Become(&TThis::StateFuncWrapper);
+
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
+        if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+            TControlBoard::RegisterSharedControl(PostponePumpMsHDD, icb->DSProxyControls.PostponePumpMsHDD);
+            TControlBoard::RegisterSharedControl(PostponePumpMsSSD, icb->DSProxyControls.PostponePumpMsSSD);
+            TControlBoard::RegisterSharedControl(PostponePumpResetAfterMs, icb->DSProxyControls.PostponePumpResetAfterMs);
+        } else {
+            QLOG_CRIT_S("BSQ21", "BSQueue is unable to discover ICB");
+            PostponePumpMsHDD = 0;
+            PostponePumpMsSSD = 0;
+            PostponePumpResetAfterMs = 0;
+        }
     }
 
 private:
@@ -123,6 +148,7 @@ private:
         VDiskOrderNumber = info.GetOrderNumber(VDiskIdShort);
         LogPrefix = Sprintf("[%s TargetVDisk# %s Queue# %s]", SelfId().ToString().data(), VDiskId.ToString().data(), QueueName.data());
         RecentGroup = info.Group;
+        DeviceType = info.GetDeviceType();
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -396,16 +422,45 @@ private:
                     const ui64 expectedMsgId = F(windowExpectedMsgId, MsgId);
                     const ui64 expectedSequenceId = F(windowExpectedMsgId, SequenceId);
 
-                    QLOG_DEBUG_S("BSQ06", "T# " << TypeName<TEv>()
+                    const auto& actualWindowSize = F(window, ActualWindowSize);
+                    const auto& maxWindowSize = F(window, MaxWindowSize);
+
+                    auto now = ctx.Now();
+                    auto timeSinceLastPostpone = now - PostponePumpLastInstant;
+                    PostponePumpLastInstant = now;
+
+                    if (timeSinceLastPostpone > TDuration::MilliSeconds(PostponePumpResetAfterMs)) {
+                        switch (DeviceType) {
+                            case NPDisk::EDeviceType::DEVICE_TYPE_ROT:
+                                PostponePumpDelay = TDuration::MilliSeconds(PostponePumpMsHDD);
+                                break;
+                            case NPDisk::EDeviceType::DEVICE_TYPE_SSD:
+                            case NPDisk::EDeviceType::DEVICE_TYPE_NVME:
+                                PostponePumpDelay = TDuration::MilliSeconds(PostponePumpMsSSD);
+                                break;
+                            default:
+                                PostponePumpDelay = TDuration::Zero();
+                                break;
+                        }
+                    } else {
+                        PostponePumpDelay = Min(PostponePumpDelay * 2, TDuration::Seconds(1));
+                    }
+
+                    QLOG_CRIT_S("BSQ06", "T# " << TypeName<TEv>()
                         << " failed message"
-                        << " msgId# " << msgId << " sequenceId# " << sequenceId
-                        << " expectedMsgId# " << expectedMsgId << " expectedSequenceId# " << expectedSequenceId
+                        << " deviceType# " << NPDisk::DeviceTypeStr(DeviceType, false)
                         << " status# " << NKikimrProto::EReplyStatus_Name(status)
                         << " ws# " << NKikimrBlobStorage::TWindowFeedback_EStatus_Name(ws)
+                        << " msgId# " << msgId << " sequenceId# " << sequenceId
+                        << " expectedMsgId# " << expectedMsgId << " expectedSequenceId# " << expectedSequenceId
+                        << " actualWindowSize# " << actualWindowSize << " maxWindowSize# " << maxWindowSize
                         << " InFlightCost# " << Queue.GetInFlightCost()
                         << " InFlightCount# " << Queue.InFlightCount()
                         << " ItemsWaiting# " << Queue.GetItemsWaiting()
-                        << " BytesWaiting# " << Queue.GetBytesWaiting());
+                        << " BytesWaiting# " << Queue.GetBytesWaiting()
+                        << " timeSinceLastPostpone# " << timeSinceLastPostpone
+                        << " PostponePump# " << PostponePump
+                        << " PostponePumpDelay# " << PostponePumpDelay);
 
                     switch (ws) {
                         case NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId:
@@ -421,7 +476,14 @@ private:
                     }
 
                     Queue.Unwind(msgId, sequenceId, expectedMsgId, expectedSequenceId);
-                    Pump(ctx);
+
+                    if (PostponePumpDelay) {
+                        if (!std::exchange(PostponePump, true)) {
+                            Schedule(PostponePumpDelay, new TEvPostponedPump);
+                        }
+                    } else {
+                        Pump(ctx);
+                    }
                     return;
                 }
 
@@ -507,6 +569,10 @@ private:
         } else {
             RequestReadiness(nullptr, ctx);
         }
+
+        PostponePump = false;
+        PostponePumpDelay = TDuration::Zero();
+        PostponePumpLastInstant = TInstant();
     }
 
     void Drain(const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason) {
@@ -887,6 +953,11 @@ private:
         ChangeGroupInfo(*ev->Get()->NewInfo, ctx);
     }
 
+    void HandlePostponedPump(const TActorContext& ctx) {
+        Pump(ctx);
+        PostponePump = false;
+    }
+
     void StateFuncWrapper(STFUNC_SIG) {
         StateFunc(ev);
         UpdateWatchdogStatus(this->ActorContext());
@@ -926,6 +997,7 @@ private:
     XX(EvQueueWatchdog, EvQueueWatchdog) \
     XX(TEvents::TSystem::Wakeup, Wakeup) \
     XX(TEvBlobStorage::EvVGenerationChange, EvVGenerationChange) \
+    XX(EvPostponePump, EvPostponePump) \
     XX(TEvents::TSystem::Poison, Poison) \
     // END
 
@@ -1005,6 +1077,8 @@ private:
             CFunc(TEvents::TSystem::Wakeup, HandleUpdateRequestTrackingStats)
 
             HFunc(TEvVGenerationChange, HandleGenerationChange)
+
+            CFunc(EvPostponedPump, HandlePostponedPump)
 
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
 

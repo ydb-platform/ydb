@@ -27,7 +27,8 @@ public:
         , IncludeFinish(includeFinish)
         , IncludeStart(includeStart)
         , IntervalIdx(intervalIdx)
-        , IsExclusiveIntervalFlag(isExclusiveInterval) {
+        , IsExclusiveIntervalFlag(isExclusiveInterval)
+    {
     }
 
     void SetIntervalChunkMemory(const ui64 value) {
@@ -76,6 +77,7 @@ private:
     virtual bool DoApply(IDataReader& indexedDataRead) override;
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         Context->GetCommonContext()->AbortWithError("cannot allocate memory for merge task: '" + errorMessage + "'");
     }
@@ -86,7 +88,8 @@ public:
         , IAllocation(TValidator::CheckNotNull(mergingContext)->GetIntervalChunkMemory())
         , Context(readContext)
         , MergingContext(mergingContext)
-        , IntervalIdx(MergingContext->GetIntervalIdx()) {
+        , IntervalIdx(MergingContext->GetIntervalIdx())
+    {
     }
 };
 
@@ -122,7 +125,8 @@ public:
 
     TContinueMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
         std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger)
-        : TBase(mergingContext, readContext) {
+        : TBase(mergingContext, readContext)
+    {
         AFL_VERIFY(merger);
         Merger = std::move(merger);
     }

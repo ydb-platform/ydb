@@ -21,7 +21,8 @@ struct TBasicTxInfo {
 public:
     TBasicTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
         : TxKind(txKind)
-        , TxId(txId) {
+        , TxId(txId)
+    {
         AFL_VERIFY(txKind != NKikimrTxColumnShard::TX_KIND_NONE);
     }
 
@@ -83,7 +84,8 @@ public:
     }
 
     TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
-        : TBasicTxInfo(txKind, txId) {
+        : TBasicTxInfo(txKind, txId)
+    {
     }
 
     TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep,
@@ -92,7 +94,8 @@ public:
         , MinStep(minAllowedPlanStep)
         , Source(source)
         , Cookie(cookie)
-        , SeqNo(seqNo) {
+        , SeqNo(seqNo)
+    {
     }
 };
 
@@ -104,9 +107,11 @@ public:
 
     public:
         TProposeResult() = default;
+
         TProposeResult(NKikimrTxColumnShard::EResultStatus status, const TString& statusMessage)
             : Status(status)
-            , StatusMessage(statusMessage) {
+            , StatusMessage(statusMessage)
+        {
         }
 
         bool IsFail() const {
@@ -126,11 +131,14 @@ private:
 public:
     TTxProposeResult(const TBasicTxInfo& txInfo, TProposeResult&& result)
         : BaseTxInfo(txInfo)
-        , ProposeResult(std::move(result)) {
+        , ProposeResult(std::move(result))
+    {
     }
+
     TTxProposeResult(const TFullTxInfo& txInfo, TProposeResult&& result)
         : FullTxInfo(txInfo)
-        , ProposeResult(std::move(result)) {
+        , ProposeResult(std::move(result))
+    {
     }
 
     ui64 GetTxId() const noexcept {
@@ -164,7 +172,8 @@ public:
 
         TPlanQueueItem(const ui64 step, const ui64 txId)
             : Step(step)
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
 
         inline bool operator<(const TPlanQueueItem& rhs) const {
@@ -211,9 +220,11 @@ public:
         virtual bool DoIsAsync() const = 0;
         virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) = 0;
         virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const = 0;
+
         virtual bool DoCheckTxInfoForReply(const TFullTxInfo& /*originalTxInfo*/) const {
             return true;
         }
+
         virtual bool DoPingTimeout(TColumnShard& /*owner*/, const TMonotonic /*now*/) {
             return false;
         }
@@ -221,11 +232,13 @@ public:
         virtual bool DoIsInProgress() const {
             return false;
         }
+
         virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* /*owner*/) const {
             return nullptr;
         }
 
         void SwitchStateVerified(const EStatus from, const EStatus to);
+
         TTxInfo& MutableTxInfo() {
             return TxInfo;
         }
@@ -302,7 +315,8 @@ public:
         }
 
         ITransactionOperator(const TTxInfo& txInfo)
-            : TxInfo(txInfo) {
+            : TxInfo(txInfo)
+        {
         }
 
         ui64 GetTxId() const {
@@ -371,17 +385,20 @@ public:
             }
             return !GetProposeStartInfoVerified().IsFail();
         }
+
         void StartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
             AFL_VERIFY(!IsFail());
             AFL_VERIFY(IsAsync());
             return DoStartProposeOnComplete(owner, ctx);
         }
+
         void FinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeFinishedOnExecute);
             AFL_VERIFY(IsAsync() || StartedAsync);
             return DoFinishProposeOnExecute(owner, txc);
         }
+
         void FinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
             // It means that we had already processed this event
             if (Status == EStatus::ReplySent) {
@@ -406,12 +423,14 @@ public:
         virtual void RegisterSubscriber(const TActorId&) {
             AFL_VERIFY(false)("message", "Not implemented");
         };
+
         void OnTabletInit(TColumnShard& owner) {
             AFL_VERIFY(!StartedAsync);
             StartedAsync = true;
             DoOnTabletInit(owner);
         }
     };
+
     TTxProgressCounters& GetCounters() {
         return Counters;
     }
@@ -425,6 +444,7 @@ private:
     TTxProgressCounters Counters;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
+
 private:
     bool AbortTx(const TPlanQueueItem planQueueItem);
 
@@ -447,9 +467,11 @@ public:
         }
         return it->second;
     }
+
     ITransactionOperator::TPtr GetTxOperatorVerified(const ui64 txId) const {
         return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
     }
+
     template <class TExpectedTransactionOperator>
     std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId, const bool optionalExists = false) const {
         auto result = GetTxOperatorOptional(txId);
@@ -489,6 +511,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         NColumnShard::Schema::UpdateTxInfoBody(db, txId, data);
     }
+
     bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);
 
@@ -496,7 +519,7 @@ public:
     std::optional<TTxInfo> PopFirstPlannedTx();
     void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void ProgressOnComplete(const TPlanQueueItem& tx);
-    THashSet<ui64> GetTxs() const; //TODO #8650 GetTxsByPathId
+    THashSet<ui64> GetTxs() const;   //TODO #8650 GetTxsByPathId
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

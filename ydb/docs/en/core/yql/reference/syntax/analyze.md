@@ -1,6 +1,6 @@
 # ANALYZE
 
-`ANALYZE` forces the collection of statistics for [{{ ydb-short-name }} cost-based optimizer](../../../concepts/optimizer.md).
+`ANALYZE` forces the collection of statistics for [{{ ydb-short-name }} cost-based optimizer](../../../concepts/query_execution/optimizer.md).
 
 ## Syntax
 
@@ -13,4 +13,4 @@ This command forces the synchronous collection of table statistics and column st
 * `path_to_table` — the path to the table for which statistics should be collected.
 * `column_name` — collect column statistics only for the specified columns of the table.
 
-The current set of statistics is described in [{#T}](../../../concepts/optimizer.md#statistics).
+The current set of statistics is described in [{#T}](../../../concepts/query_execution/optimizer.md#statistics).

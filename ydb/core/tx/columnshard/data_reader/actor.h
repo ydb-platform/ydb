@@ -1,8 +1,9 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NOlap::NDataReader {
 
@@ -43,7 +44,6 @@ public:
         , TabletId(tabletId)
         , TabletActorId(tabletActorId)
     {
-
     }
 
     virtual ~IRestoreTask() = default;
@@ -65,12 +65,14 @@ private:
 
     EStage Stage = EStage::Initialization;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
+
     void SwitchStage(const std::optional<EStage> from, const EStage to) {
         if (from) {
             AFL_VERIFY(Stage == *from)("from", (ui32)*from)("real", (ui32)Stage)("to", (ui32)to);
         }
         Stage = to;
     }
+
     std::optional<TMonotonic> LastAck;
     bool AbortedFlag = false;
     bool CheckActivity();
@@ -110,4 +112,4 @@ public:
     void Bootstrap(const TActorContext& ctx);
 };
 
-}   // namespace NKikimr::NOlap::NExport
+}   // namespace NKikimr::NOlap::NDataReader

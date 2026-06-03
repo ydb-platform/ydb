@@ -4,14 +4,15 @@
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/library/formats/arrow/simple_builder/array.h>
-#include <ydb/library/formats/arrow/simple_builder/batch.h>
-#include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
-#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -34,6 +35,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
             const ui32 /*columnId*/) const override {
             return {};
         }
+
         virtual std::optional<NKikimr::NArrow::NSplitter::TBatchSerializationStat> GetBatchSerializationStats(
             const std::shared_ptr<arrow::RecordBatch>& /*rb*/) const override {
             return {};
@@ -117,11 +119,11 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     for (auto&& c : b.GetChunks()) {
                         bSize += c->GetData().size();
                         AFL_VERIFY(c->GetEntityId());
-//                        auto& v = entityChunks[c->GetEntityId()];
-//                        if (v.size()) {
-//                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
-//                                                                              "c", c->GetChunkIdxVerified());
-//                        }
+                        //                        auto& v = entityChunks[c->GetEntityId()];
+                        //                        if (v.size()) {
+                        //                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
+                        //                                                                              "c", c->GetChunkIdxVerified());
+                        //                        }
                         AFL_VERIFY(entityChunks[c->GetEntityId()].emplace(c->GetChunkIdxVerified(), c).second);
                     }
                     portionSize += bSize;
@@ -130,7 +132,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                                                                                                  "min", settings.GetMinBlobSize());
                 }
                 AFL_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1)("size", portionSize)(
-                                                                                   "limit", settings.GetMaxPortionSize());
+                                                                               "limit", settings.GetMaxPortionSize());
 
                 THashMap<ui32, std::set<ui32>> entitiesByRecordsCount;
                 ui32 pagesRestore = 0;
@@ -166,12 +168,12 @@ Y_UNIT_TEST_SUITE(Splitter) {
             }
             AFL_VERIFY(portionShift = batch->num_rows());
             AFL_VERIFY(pagesSum == generalSlices.size())("sum", pagesSum)("general_slices", generalSlices.size());
-            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount))(
-                                                  "expected", *ExpectedInternalSplitsCount)("real", internalSplitsCount);
+            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount))("expected", *ExpectedInternalSplitsCount)(
+                                                "real", internalSplitsCount);
             AFL_VERIFY(blobsCount == ExpectBlobsCount.value_or(blobsCount))("blobs_count", blobsCount)("expected", *ExpectBlobsCount);
             AFL_VERIFY(pagesSum == ExpectSlicesCount.value_or(pagesSum))("sum", pagesSum)("expected", *ExpectSlicesCount);
             AFL_VERIFY(portionsCount == ExpectPortionsCount.value_or(portionsCount))("portions_count", portionsCount)(
-                                            "expected", *ExpectPortionsCount);
+                                          "expected", *ExpectPortionsCount);
             AFL_VERIFY(chunksCount == ExpectChunksCount.value_or(chunksCount))("chunks_count", chunksCount)("expected", *ExpectChunksCount);
         }
     };

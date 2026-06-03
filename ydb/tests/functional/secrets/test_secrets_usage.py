@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
+
 import boto3
 import logging
 import os
 import time
 
-from .conftest import (
-    run_with_assert,
-    create_user,
-    provide_grants,
+from ydb.tests.functional.secrets.lib.secrets_plugin import (
     create_secrets,
-    write_message_to_topic,
+    create_user,
     DATABASE,
+    provide_grants,
+    run_with_assert,
     USE_SECRET_GRANTS,
+    write_message_to_topic,
 )
 
 logger = logging.getLogger(__name__)

@@ -1,9 +1,11 @@
 #pragma once
-#include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 #include <ydb/core/tx/columnshard/subscriber/abstract/events/event.h>
+#include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 
 #include <ydb/library/actors/core/log.h>
+
 #include <util/generic/hash.h>
+
 #include <vector>
 
 namespace NKikimr::NColumnShard::NSubscriber {
@@ -13,11 +15,11 @@ private:
     class TSharedPtrHashContainer {
     private:
         std::shared_ptr<ISubscriber> Object;
+
     public:
         TSharedPtrHashContainer(const std::shared_ptr<ISubscriber>& obj)
             : Object(obj)
         {
-
         }
 
         TSharedPtrHashContainer() {
@@ -36,13 +38,14 @@ private:
             return Object == object.Object;
         }
     };
+
     TColumnShard& Owner;
     THashMap<EEventType, THashSet<TSharedPtrHashContainer>> Subscribers;
+
 public:
     TManager(TColumnShard& owner)
         : Owner(owner)
     {
-
     }
 
     void RegisterSubscriber(const std::shared_ptr<ISubscriber>& s) {
@@ -54,7 +57,8 @@ public:
     void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev) {
         auto it = Subscribers.find(ev->GetType());
         if (it == Subscribers.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "on_event_subscriber_skipped")("event", ev->GetType())("details", ev->DebugString());
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "on_event_subscriber_skipped")("event", ev->GetType())(
+                "details", ev->DebugString());
             return;
         } else {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "on_event_subscriber")("event", ev->GetType())("details", ev->DebugString());
@@ -78,4 +82,4 @@ public:
         }
     }
 };
-}
+}   // namespace NKikimr::NColumnShard::NSubscriber

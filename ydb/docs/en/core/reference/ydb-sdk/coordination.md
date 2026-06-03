@@ -41,6 +41,72 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
      - A smaller value also increases the likelihood of false positives, where a living leader might terminate itself as a precaution, uncertain if this period has concluded on a potential new leader.
      - This value must be strictly greater than `SelfCheckPeriod`.
 
+- Java
+
+  ```java
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  ```
+
+  Create a node by calling `createNode` with the full path to the node in the database. You can take the database path prefix from `client.getDatabase()`.
+
+  When needed, configure the node via [NodeConfig](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java) using the `NodeConfig.create().with…` chain. Available parameters: `SelfCheckPeriod` and `SessionGracePeriod`, read and attach consistency modes (`readConsistencyMode`, `attachConsistencyMode`), and rate limiter counters mode (`rateLimiterCountersMode`). Defaults match the C++ description above. Pass the resulting `NodeConfig` to `CoordinationNodeSettings`.
+
+  ```java
+  import java.time.Duration;
+
+  import tech.ydb.coordination.CoordinationClient;
+  import tech.ydb.coordination.description.NodeConfig;
+  import tech.ydb.coordination.settings.CoordinationNodeSettings;
+
+  String nodePath = client.getDatabase() + "/path/to/mynode";
+
+  NodeConfig config = NodeConfig.create()
+      .withDurationsConfig(Duration.ofSeconds(1), Duration.ofSeconds(10))
+      .withReadConsistencyMode(NodeConfig.ConsistencyMode.RELAXED)
+      .withAttachConsistencyMode(NodeConfig.ConsistencyMode.STRICT);
+
+  CoordinationNodeSettings settings = CoordinationNodeSettings.newBuilder()
+      .withNodeConfig(config)
+      .build();
+
+  client.createNode(nodePath, settings).join().expectSuccess("create node failed");
+  ```
+
+  You can also use `alterNode` (change configuration), `dropNode` (delete the node), and `describeNode` (read the current configuration).
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    client.create_node("/path/to/mynode")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    await client.create_node("/path/to/mynode")
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
+
 {% endlist %}
 
 ## Working with sessions {#session}
@@ -81,6 +147,61 @@ To start working with coordination nodes, a client must establish a session with
    - `OnStopped` - called when the session stops attempting to restore the connection with the service, which can be useful for establishing a new connection.
    - `Timeout` - the maximum timeout during which the session can be restored after losing connection with the service.
 
+- Java
+
+  A session (see [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) is created with `createSession`; call `connect()` to establish the bidirectional gRPC stream with the node (asynchronous, returns `CompletableFuture<Status>`). Retry behavior and connect timeout are configured in [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
+
+  ```java
+  import tech.ydb.coordination.CoordinationSession;
+  import tech.ydb.coordination.settings.CoordinationSessionSettings;
+
+  CoordinationSession session = client.createSession(
+      "/path/to/mynode",
+      CoordinationSessionSettings.newBuilder().build()
+  );
+
+  session.connect().join().expectSuccess("connect failed");
+  ```
+
+  Typical flow: after a successful `connect()`, run semaphore operations for your scenario (locking, leadership, and so on), then close the session. Using try-with-resources is convenient so that `close()` stops the stream to the node when you are done.
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # work with the session
+        pass
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # work with the session
+        pass
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
+
 {% endlist %}
 
 ### Session control {#session-control}
@@ -96,6 +217,20 @@ It's important for the client application to monitor the session state, as it ca
 - C++
 
   In the C++ SDK, an active session continuously maintains and automatically re-establishes the connection with the {{ ydb-short-name }} cluster in the background.
+
+- Python
+
+  In the Python SDK, the session automatically restores the connection to the {{ ydb-short-name }} cluster after failures. Use a context manager (`with` or `async with`) to ensure the session is closed when leaving the block. When working with semaphores through a context manager (`with session.semaphore(name)` or `async with session.semaphore(name)`), the semaphore is released automatically when leaving the block, and the session is closed when the context exits.
+
+- Java
+
+  Call `close()` when your scenario is finished; this explicitly releases the connection to the node. Until the session is closed, the SDK retries the connection on network failures according to `CoordinationSessionSettings`. Hold a semaphore only while solving your business task and release it with `SemaphoreLease.release()` when the resource is no longer needed.
+
+- JavaScript
+
+  In the JavaScript SDK, you can use `session.signal` to monitor session lifetime: it is aborted when the session is closed or expires. The SDK handles transport-level errors and reconnects to the service, attempting to restore the session when possible. This means the client only needs to watch the session signal and avoid any operations once the session is closed or expired.
+
+  For long-running applications, the JavaScript SDK provides a recommended pattern to automatically obtain a new session when the previous one is lost: `for await (session of client.openSession()) { session.signal }`
 
 {% endlist %}
 
@@ -140,6 +275,56 @@ When creating a semaphore, you can specify its limit. The limit determines the m
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Python
+
+  In the Python SDK, a semaphore is created implicitly on the first `acquire()` call in `session.semaphore(name, limit)`. The limit is set when the semaphore object is created.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        # semaphore is created on first acquire() with limit 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        # semaphore is created on first acquire() with limit 10
+        semaphore = session.semaphore("my-semaphore", 10)
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.create({
+    limit: 10,
+    data: new Uint8Array(),
+  });
+  ```
+
+- Java
+
+  Create a semaphore explicitly with `createSemaphore` on a connected session. You can pass custom binary data stored with the semaphore (`byte[] data`); the overload without `data` is equivalent to passing `null`. If a semaphore with that name already exists, the operation completes with an “already exists” status.
+
+  ```java
+  session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
+      .join()
+      .expectSuccess("create semaphore failed");
+  ```
 
 {% endlist %}
 
@@ -192,6 +377,79 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
     - `Shared()` - alias for setting `Count = 1`, acquiring semaphore in shared mode.
     - `Exclusive()` - alias for setting `Count = max`, acquiring semaphore in exclusive mode. (For semaphores created with limit `Max<ui64>()`.)
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        with semaphore:
+            # semaphore acquired for 1 unit (default)
+            pass
+        # or manually:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # work with the resource
+        semaphore.release()
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        async with semaphore:
+            # semaphore acquired for 1 unit (default)
+            pass
+        # or manually:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # work with the resource
+        await semaphore.release()
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
+- Java
+
+  Acquisition is done via `acquireSemaphore` with the semaphore name, token `count`, optional operation data, and queue wait timeout as [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). The method returns `CompletableFuture<Result<SemaphoreLease>>` (see [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) and [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). If no semaphore exists with the given name, the operation fails with an exception (see the method javadoc).
+
+  ```java
+  import java.time.Duration;
+
+  import tech.ydb.coordination.SemaphoreLease;
+  import tech.ydb.core.Result;
+
+  Result<SemaphoreLease> result = session
+      .acquireSemaphore("my-semaphore", 5, Duration.ofSeconds(30))
+      .join();
+
+  result.getStatus().expectSuccess("cannot acquire semaphore");
+  SemaphoreLease lease = result.getValue();
+  ```
+
+  For **ephemeral** semaphores, use `acquireEphemeralSemaphore` (the `exclusive` flag sets the acquisition mode); such semaphores are created on first acquire and removed after the last release.
+
+  The API documentation states that a session can hold **only one** semaphore at a time; repeated calls for the same name **replace** the previous operation (for example, to reduce `count` or change the timeout).
+
 {% endlist %}
 
 The taken value of an acquired semaphore can be decreased (but not increased) by calling the `AcquireSemaphore` method again with a smaller value.
@@ -222,6 +480,52 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.update(b"updated-data")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.update(b"updated-data")
+    ```
+
+  {% endlist %}
+
+- Java
+
+  ```java
+  session.updateSemaphore("my-semaphore", "updated-data".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+      .join()
+      .expectSuccess("update semaphore failed");
+  ```
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.update({
+    limit: 5,
+    data: new Uint8Array(),
+  });
+  ```
 
 {% endlist %}
 
@@ -278,6 +582,64 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
     - `Count` - value requested in `AcquireSemaphore`.
     - `Data` - data specified in `AcquireSemaphore`.
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = semaphore.describe()
+        # description contains: name, data, count, limit, owners, waiters, ephemeral
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        description = await semaphore.describe()
+        # description contains: name, data, count, limit, owners, waiters, ephemeral
+    ```
+
+  {% endlist %}
+
+- Java
+
+  The `describeSemaphore` method takes a semaphore name and a [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): data only, with owners list, with waiters list, or both.
+
+  ```java
+  import tech.ydb.coordination.description.SemaphoreDescription;
+  import tech.ydb.coordination.settings.DescribeSemaphoreMode;
+
+  SemaphoreDescription description = session
+      .describeSemaphore("my-semaphore", DescribeSemaphoreMode.WITH_OWNERS_AND_WAITERS)
+      .join()
+      .getValue();
+  ```
+
+  Owner and waiter list entries (`getOwnersList`, `getWaitersList`) expose session id, timeout, requested `count`, operation data, and `orderId` (see the nested `SemaphoreDescription.Session` type in the sources).
+
+  To subscribe to changes, use `watchSemaphore` with the same describe mode and [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (data, owners, or both). [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) holds a `SemaphoreDescription` snapshot and `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (see [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), fields `isDataChanged`, `isOwnersChanged`). The future completes on the next event; call `watchSemaphore` again to continue watching (see [tests](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.describe({
+    owners: true,
+    waiters: true,
+  });
+  ```
+
 {% endlist %}
 
 ### Releasing a semaphore {#release-semaphore}
@@ -302,6 +664,56 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
         .ExtractValueSync()
         .ExtractResult();
     ```
+
+- Python
+
+  In the Python SDK, a semaphore is released with the `release()` method on the semaphore object. When using a context manager (`with` or `async with`), release happens automatically when leaving the block.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        semaphore.acquire(count=5)
+        # work with the resource
+        semaphore.release()
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+
+    client = driver.coordination_client
+    async with client.session("/path/to/mynode") as session:
+        semaphore = session.semaphore("my-semaphore", 10)
+        await semaphore.acquire(count=5)
+        # work with the resource
+        await semaphore.release()
+    ```
+
+  {% endlist %}
+
+- Java
+
+  Release via [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (asynchronous, `CompletableFuture<Status>`).
+
+  ```java
+  lease.release().join().expectSuccess("release failed");
+  ```
+
+- JavaScript
+
+  To release a semaphore acquired within a session, call `release()` on the `Lease` object. If you use `await using`, the lease is released automatically when leaving the scope.
+
+  ```javascript
+  await lease.release();
+  ```
 
 {% endlist %}
 

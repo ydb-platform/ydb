@@ -51,11 +51,7 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
 }
 
 void TOneLayerPortions::TryAddPortionToTask(
-    const TPortionInfo::TConstPtr& portion,
-    TCompactionTaskData& task,
-    ui64& compactedData,
-    const TMayUsePortion& mayUsePortion
-) const {
+    const TPortionInfo::TConstPtr& portion, TCompactionTaskData& task, ui64& compactedData, const TMayUsePortion& mayUsePortion) const {
     if (!mayUsePortion(portion)) {
         return;
     }

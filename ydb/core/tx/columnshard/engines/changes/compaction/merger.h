@@ -2,11 +2,12 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/library/formats/arrow/splitter/stats.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/library/formats/arrow/splitter/stats.h>
 
 namespace NKikimr::NOlap::NCompaction {
 class TMerger {
@@ -27,7 +28,8 @@ public:
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext)
         : Context(context)
-        , SaverContext(saverContext) {
+        , SaverContext(saverContext)
+    {
     }
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext,
@@ -35,7 +37,8 @@ public:
         : Batches(std::move(batches))
         , Filters(std::move(filters))
         , Context(context)
-        , SaverContext(saverContext) {
+        , SaverContext(saverContext)
+    {
         AFL_VERIFY(Batches.size() == Filters.size());
     }
 

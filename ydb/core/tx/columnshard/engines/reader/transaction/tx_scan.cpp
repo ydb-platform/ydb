@@ -70,13 +70,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
-        read.SetLock(
-            request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
+        read.SetLock(request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
             request.HasLockNodeId() ? std::make_optional(request.GetLockNodeId()) : std::nullopt,
             request.HasLockMode() ? std::make_optional(request.GetLockMode()) : std::nullopt,
-            request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr,
-            false
-        );
+            request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr, false);
 
         {
             auto accConclusion =
@@ -112,8 +109,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
             const TString scanType = [&]() {
                 return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
             }();
-            auto constructor =
-                NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
+            auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
             if (!constructor) {
                 return std::unique_ptr<IScannerConstructor>();
             }

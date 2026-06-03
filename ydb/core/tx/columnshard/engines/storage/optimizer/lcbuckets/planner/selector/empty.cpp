@@ -1,5 +1,3 @@
 #include "empty.h"
 
-namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
-
-}
+namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {}

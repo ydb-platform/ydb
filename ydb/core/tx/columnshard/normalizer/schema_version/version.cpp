@@ -25,7 +25,8 @@ private:
             : Version(version)
             , Step(step)
             , TxId(txId)
-            , Id(id) {
+            , Id(id)
+        {
         }
 
         bool operator<(const TKey& item) const {
@@ -56,7 +57,8 @@ private:
         TTableKey(TInternalPathId pathId, ui64 step, ui64 txId)
             : PathId(pathId)
             , Step(step)
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
     };
 
@@ -66,14 +68,16 @@ private:
 public:
     TNormalizerResult(std::vector<TKey>&& versions, std::vector<TTableKey>&& tableVersions)
         : VersionsToRemove(versions)
-        , TableVersionsToRemove(tableVersions) {
+        , TableVersionsToRemove(tableVersions)
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto& key : VersionsToRemove) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version in TSchemaVersionNormalizer")("version", key.GetVersion());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version in TSchemaVersionNormalizer")(
+                "version", key.GetVersion());
             db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.Step, key.TxId).Delete();
         }
         for (auto& key : TableVersionsToRemove) {

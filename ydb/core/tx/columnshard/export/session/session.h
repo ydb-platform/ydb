@@ -21,10 +21,10 @@ class IStoragesManager;
 
 namespace NKikimr::NOlap::NExport {
 class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardExportProto::TExportSessionLogic,
-    NKikimrColumnShardExportProto::TCursor, NKikimrColumnShardExportProto::TExportSessionState> {
+                    NKikimrColumnShardExportProto::TCursor, NKikimrColumnShardExportProto::TExportSessionState> {
 public:
     static TString GetClassNameStatic();
-    enum class EStatus : ui64 {
+    enum class EStatus: ui64 {
         Draft = 0 /*"draft"*/,
         Confirmed = 1 /*"confirmed"*/,
         Started = 2 /*"started"*/,
@@ -38,16 +38,13 @@ private:
     mutable EStatus Status = EStatus::Draft;
     TCursor Cursor;
 
-    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext& context) const override;
+    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext &context) const override;
 
-    virtual TConclusionStatus
-    DoDeserializeProgressFromProto(const TProtoProgress &proto) override;
+    virtual TConclusionStatus DoDeserializeProgressFromProto(const TProtoProgress &proto) override;
     virtual TProtoProgress DoSerializeProgressToProto() const override;
-    virtual TConclusionStatus
-    DoDeserializeStateFromProto(const TProtoState &proto) override;
+    virtual TConclusionStatus DoDeserializeStateFromProto(const TProtoState &proto) override;
     virtual TProtoState DoSerializeStateToProto() const override;
-    virtual TConclusionStatus
-    DoDeserializeFromProto(const TProtoLogic &proto) override;
+    virtual TConclusionStatus DoDeserializeFromProto(const TProtoLogic &proto) override;
     virtual TProtoLogic DoSerializeToProto() const override;
     static const inline TFactory::TRegistrator<TSession> Registrator = TFactory::TRegistrator<TSession>(GetClassNameStatic());
 
@@ -76,7 +73,7 @@ public:
 
     void Confirm();
 
-    void Abort(const TString& errorMessage);
+    void Abort(const TString &errorMessage);
 
     bool IsStarted() const;
 

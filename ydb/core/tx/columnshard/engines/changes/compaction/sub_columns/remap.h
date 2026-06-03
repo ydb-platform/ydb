@@ -22,7 +22,8 @@ private:
     public:
         TRemapInfo(const ui32 keyIndex, const bool isColumnKey)
             : CommonKeyIndex(keyIndex)
-            , IsColumnKey(isColumnKey) {
+            , IsColumnKey(isColumnKey)
+        {
         }
     };
 
@@ -36,7 +37,8 @@ private:
         TSourceAddress(const ui32 sourceIndex, const ui32 sourceKeyIndex, const bool isColumnKey)
             : SourceIndex(sourceIndex)
             , SourceKeyIndex(sourceKeyIndex)
-            , IsColumnKey(isColumnKey) {
+            , IsColumnKey(isColumnKey)
+        {
         }
 
         ui32 GetSourceIndex() const {

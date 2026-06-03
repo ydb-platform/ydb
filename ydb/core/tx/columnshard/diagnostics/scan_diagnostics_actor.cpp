@@ -3,11 +3,10 @@
 #include <ydb/core/mon/mon.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
-
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
 
 namespace NKikimr::NColumnShard::NDiagnostics {
-    
+
 namespace {
 
 void ReplaceAll(TString& str, const TString& from, const TString& to) {
@@ -21,12 +20,13 @@ void ReplaceAll(TString& str, const TString& from, const TString& to) {
     }
 }
 
-}
+}   // namespace
 
 void TScanDiagnosticsActor::Bootstrap() {
     TMon* mon = AppData()->Mon;
     if (mon) {
-        mon->Register(new NMonitoring::TResourceMonPage("columnshard/viz-global.js", "viz-global.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        mon->Register(
+            new NMonitoring::TResourceMonPage("columnshard/viz-global.js", "viz-global.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
     }
     Become(&TThis::StateMain);
 }
@@ -73,19 +73,14 @@ TString TScanDiagnosticsActor::RenderScanDiagnosticsInfo(const TScanDiagnosticsI
         </script>
         <div id="{tag}_graph_{id}"></div>
         <hr>
-    )", 
-    "tag"_a = tag,
-    "id"_a = id,
-    "request_message"_a = info.RequestMessage,
-    "pk_ranges_filter"_a = info.PKRangesFilter,
-    "ssa_program"_a = info.SSAProgram,
-    "dot_graph"_a = info.DotGraph,
-    "scan_iterator"_a = info.ScanIterator);
+    )", "tag"_a = tag, "id"_a = id, "request_message"_a = info.RequestMessage, "pk_ranges_filter"_a = info.PKRangesFilter,
+        "ssa_program"_a = info.SSAProgram, "dot_graph"_a = info.DotGraph, "scan_iterator"_a = info.ScanIterator);
 }
 
 void TScanDiagnosticsActor::Handle(const NColumnShard::TEvPrivate::TEvReportScanDiagnostics::TPtr& ev) {
     auto& event = *ev->Get();
-    auto info = std::make_shared<TScanDiagnosticsInfo>(event.RequestId, std::move(event.RequestMessage), std::move(event.DotGraph), std::move(event.SSAProgram), std::move(event.PKRangesFilter));
+    auto info = std::make_shared<TScanDiagnosticsInfo>(event.RequestId, std::move(event.RequestMessage), std::move(event.DotGraph),
+        std::move(event.SSAProgram), std::move(event.PKRangesFilter));
     if (event.IsPublicScan) {
         AddScanDiagnostics(info, LastPublicScans);
     } else {
@@ -106,7 +101,8 @@ void TScanDiagnosticsActor::Handle(const NColumnShard::TEvPrivate::TEvReportScan
     it->second->ScanIterator = std::move(event.ScanIteratorDiagnostics);
 }
 
-void TScanDiagnosticsActor::AddScanDiagnostics(const std::shared_ptr<TScanDiagnosticsInfo>& info, std::deque<std::shared_ptr<TScanDiagnosticsInfo>>& lastScans) {
+void TScanDiagnosticsActor::AddScanDiagnostics(
+    const std::shared_ptr<TScanDiagnosticsInfo>& info, std::deque<std::shared_ptr<TScanDiagnosticsInfo>>& lastScans) {
     lastScans.emplace_back(info);
     RequestToInfo[info->RequestId] = lastScans.back();
     if (lastScans.size() > MaxScans) {
@@ -116,5 +112,4 @@ void TScanDiagnosticsActor::AddScanDiagnostics(const std::shared_ptr<TScanDiagno
     }
 }
 
-}
-
+}   // namespace NKikimr::NColumnShard::NDiagnostics

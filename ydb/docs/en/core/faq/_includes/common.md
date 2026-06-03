@@ -53,7 +53,7 @@ For more information about limits, see [Database limits](../../concepts/limits-y
 
 Secondary indexes in {{ ydb-short-name }} are global and can be non-unique.
 
-For more information, see [Secondary indexes](../../concepts/secondary_indexes.md).
+For more information, see [Secondary indexes](../../concepts/query_execution/secondary_indexes.md).
 
 ## How are paginated results printed? {#paging}
 

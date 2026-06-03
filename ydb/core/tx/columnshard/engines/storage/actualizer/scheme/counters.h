@@ -1,9 +1,10 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
-#include <ydb/library/formats/arrow/replace_key.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
+
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -35,9 +36,10 @@ public:
         , EmptyTargetSchema(TBase::GetDeriviative("EmptyTargetSchema/Count"))
         , RefreshEmpty(TBase::GetDeriviative("RefreshEmpty/Count"))
         , SkipPortionToRemove(TBase::GetDeriviative("SkipPortionToRemove/Count"))
-        , RefreshValue(TBase::GetDeriviative("RefreshValue/Count")) 
+        , RefreshValue(TBase::GetDeriviative("RefreshValue/Count"))
         , AddPortion(TBase::GetDeriviative("AddPortion/Count"))
-        , RemovePortion(TBase::GetDeriviative("RemovePortion/Count")) {
+        , RemovePortion(TBase::GetDeriviative("RemovePortion/Count"))
+    {
         QueueSizeExternalWrite = TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/ExternalWrite");
         QueueSizeInternalWrite = TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/InternalWrite");
     }
@@ -49,33 +51,43 @@ public:
     static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildQueueSizeInternalWrite() {
         return Singleton<TSchemeGlobalCounters>()->QueueSizeInternalWrite->GetClient();
     }
+
     static void OnAddPortion() {
         Singleton<TSchemeGlobalCounters>()->AddPortion->Add(1);
     }
+
     static void OnRemovePortion() {
         Singleton<TSchemeGlobalCounters>()->RemovePortion->Add(1);
     }
+
     static void OnSkipPortionNotActualizable() {
         Singleton<TSchemeGlobalCounters>()->SkipPortionNotActualizable->Add(1);
     }
+
     static void OnEmptyTargetSchema() {
         Singleton<TSchemeGlobalCounters>()->EmptyTargetSchema->Add(1);
     }
+
     static void OnRefreshEmpty() {
         Singleton<TSchemeGlobalCounters>()->RefreshEmpty->Add(1);
     }
+
     static void OnSkipPortionToRemove() {
         Singleton<TSchemeGlobalCounters>()->SkipPortionToRemove->Add(1);
     }
+
     static void OnRefreshValue() {
         Singleton<TSchemeGlobalCounters>()->RefreshValue->Add(1);
     }
+
     static void OnExtract() {
         Singleton<TSchemeGlobalCounters>()->Extracts->Add(1);
     }
+
     static void OnSkipNotOptimized() {
         Singleton<TSchemeGlobalCounters>()->SkipNotOptimized->Add(1);
     }
+
     static void OnSkipNotReadyWrite() {
         Singleton<TSchemeGlobalCounters>()->SkipNotReadyWrite->Add(1);
     }
@@ -89,9 +101,8 @@ public:
     TSchemeCounters()
         : QueueSizeInternalWrite(TSchemeGlobalCounters::BuildQueueSizeInternalWrite())
         , QueueSizeExternalWrite(TSchemeGlobalCounters::BuildQueueSizeExternalWrite())
-{
+    {
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

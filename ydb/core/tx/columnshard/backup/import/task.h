@@ -1,16 +1,15 @@
 #pragma once
-#include <ydb/core/tx/columnshard/backup/import/protos/task.pb.h>
-
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/core/tx/columnshard/backup/import/protos/task.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/control.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/task.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
 
-#include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
+#include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap::NImport {
 
@@ -43,8 +42,9 @@ public:
 
     TImportTask() = default;
 
-    TImportTask(const TInternalPathId &internalPathId, const TVector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TRestoreTask& restoreTask, const std::optional<ui64> schemaVersion, const std::optional<ui64> txId = {});
+    TImportTask(const TInternalPathId& internalPathId, const TVector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TRestoreTask& restoreTask,
+        const std::optional<ui64> schemaVersion, const std::optional<ui64> txId = {});
 
     TString DebugString() const;
 };
-}
+}   // namespace NKikimr::NOlap::NImport

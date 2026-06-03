@@ -663,6 +663,11 @@ public:
             }
         }
 
+        if (State_->Configuration->MaxPartitionReadSkew.Get() && !wrSettings.EnableStreamingPartitionBalancing) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming partition balancing is disabled. Please contact your system administrator to enable it"));
+            return {};
+        }
+
         if (!streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
             return nullptr;

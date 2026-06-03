@@ -32,16 +32,16 @@
 
   Добавьте зависимости в Maven-проект, как описано в пункте ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) файла `readme.md` в репозитории исходного кода.
 
-- PHP
-
-  {% include [install/cmd_php.md](install/cmd_php.md) %}
-
-- Node.JS
+- JavaScript
 
   {% include [install/cmd_nodejs.md](install/cmd_nodejs.md) %}
 
 - Rust
 
   {% include [install/cmd_rust.md](install/cmd_rust.md) %}
+
+- PHP
+
+  {% include [install/cmd_php.md](install/cmd_php.md) %}
 
 {% endlist %}

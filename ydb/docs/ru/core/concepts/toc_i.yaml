@@ -20,7 +20,7 @@ items:
   href: query_execution/index.md
   include:
     path: query_execution/toc_p.yaml
-    mode: link  
+    mode: link
 - name: Транзакции
   href: transactions.md
 - name: Change Data Capture (CDC)
@@ -28,6 +28,8 @@ items:
   when: feature_changefeed
 - name: Time to Live (TTL) и вытеснение данных во внешнее хранилище
   href: ttl.md
+- name: Скан запросы
+  href: scan_query.md
 - name: Ограничения базы данных
   href: limits-ydb.md
 - name: Асинхронная репликация
@@ -36,3 +38,5 @@ items:
   href: bridge.md
 - name: Трансфер данных
   href: transfer.md
+- name: Потоковые запросы
+  href: streaming-query.md

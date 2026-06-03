@@ -56,7 +56,8 @@ public:
         : OriginalArray(originalArray)
         , Loader(loader)
         , Remapper(remapper)
-        , SourceIdx(sourceIdx) {
+        , SourceIdx(sourceIdx)
+    {
         InitArraysImpl(0);
     }
 

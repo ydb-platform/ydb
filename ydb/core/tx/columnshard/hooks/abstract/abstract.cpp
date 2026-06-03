@@ -25,11 +25,12 @@ ui64 ICSController::GetGuaranteeIndexationStartBytesLimit() const {
 }
 
 bool ICSController::CheckPortionForEvict(const NOlap::TPortionInfo& portion) const {
-    return portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized) && portion.GetPortionType() == NOlap::EPortionType::Compacted;
+    return portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized) &&
+           portion.GetPortionType() == NOlap::EPortionType::Compacted;
 }
 
 bool ICSController::CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 /*currentSubsetsCount*/) {
     return memoryAfterAdd > GetConfig().GetMemoryLimitMergeOnCompactionRawData();
 }
 
-}
+}   // namespace NKikimr::NYDBTest

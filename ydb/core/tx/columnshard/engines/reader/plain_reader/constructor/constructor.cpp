@@ -9,7 +9,8 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
     const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
-    const ISnapshotSchema::TPtr schema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
+    const ISnapshotSchema::TPtr schema =
+        read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
     NCommon::TIndexColumnResolver columnResolver(schema->GetIndexInfo());
     return TBase::ParseProgram(context, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }

@@ -39,7 +39,8 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
     , Sources(sources)
     , IntervalIdx(intervalIdx)
     , IntervalGroupGuard(Context->GetProcessScopeGuard()->BuildGroupGuard())
-    , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard()) {
+    , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard())
+{
     AFL_VERIFY(Sources.size());
     for (auto&& [_, i] : Sources) {
         if (!i->IsDataReady()) {

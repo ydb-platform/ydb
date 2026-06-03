@@ -1,4 +1,5 @@
 #include "write.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -41,7 +42,7 @@ bool IBlobsWritingAction::IsReady() const {
 }
 
 IBlobsWritingAction::~IBlobsWritingAction() {
-//    AFL_VERIFY(!NActors::TlsActivationContext || BlobsWaiting.empty() || Aborted);
+    //    AFL_VERIFY(!NActors::TlsActivationContext || BlobsWaiting.empty() || Aborted);
 }
 
 void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
@@ -53,4 +54,4 @@ void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifi
     return DoSendWriteBlobRequest(data, blobId);
 }
 
-}
+}   // namespace NKikimr::NOlap

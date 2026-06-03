@@ -16,7 +16,8 @@ public:
         : TBase("CSOverloadManager", countersGroup)
         , OverloadSubscribesCount(TBase::GetDeriviative("Overload/Shard/Subscribes/Count"))
         , OverloadUnsubscribesCount(TBase::GetDeriviative("Overload/Shard/Unsubscribes/Count"))
-        , OverloadReadyCount(TBase::GetDeriviative("Overload/Shard/Ready/Count")) {
+        , OverloadReadyCount(TBase::GetDeriviative("Overload/Shard/Ready/Count"))
+    {
     }
 
     void OnOverloadSubscribe() const {
@@ -32,4 +33,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

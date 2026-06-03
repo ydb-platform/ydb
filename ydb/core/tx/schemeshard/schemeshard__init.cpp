@@ -4,6 +4,7 @@
 #include "schemeshard_index_build_info.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -851,7 +852,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -866,7 +867,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::FSSettings>("")
         );
     }
 
@@ -4040,6 +4042,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool enableChecksums = std::get<8>(rec);
                 bool enablePermissions = std::get<9>(rec);
                 TString changefeedUnderlyingTopics = std::get<10>(rec);
+                TString fsSerializedSettings = std::get<11>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -4058,6 +4061,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 } else if (s3SerializedSettings) {
                     auto settings = tableInfo->BackupSettings.MutableS3Settings();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
+                } else if (fsSerializedSettings) {
+                    auto settings = tableInfo->BackupSettings.MutableFSSettings();
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
                 } else {
                     Y_ABORT("Unknown settings");
                 }
@@ -4429,6 +4435,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const PQGroupReserve reserve(config, activePartitionDelta);
 
                 inclusiveDomainInfo->IncPQPartitionsInside(partitionDelta);
+                inclusiveDomainInfo->IncPQGroupsInside();
                 inclusiveDomainInfo->IncPQReservedStorage(reserve.Storage);
 
                 Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionDelta);
@@ -5720,7 +5727,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info->TotalShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::TotalShardCount>();
                 info->DoneShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::DoneShardCount>();
 
-                Self->AddForcedCompaction(info);
+                if (compactionsRowset.HaveValue<Schema::ForcedCompactions::SerializedData>()) {
+                    NKikimrForcedCompaction::TForcedCompactionData data;
+                    if (data.ParseFromString(compactionsRowset.GetValue<Schema::ForcedCompactions::SerializedData>())) {
+                        for (const auto& tablePathId : data.GetTablesToCompact()) {
+                            info->TablesToCompact.insert(TPathId::FromProto(tablePathId));
+                        }
+                    }
+                } else {
+                    info->TablesToCompact.insert(info->TablePathId); // Backward compatibility
+                }
+
+                // don't add compactions with empty tables to compact
+                if (!info->TablesToCompact.empty()) {
+                    Self->AddForcedCompaction(info);
+                } else {
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "empty tables to compact "
+                        << " for compaction: " << info->Id
+                        << ", at schemeshard: " << Self->TabletID());
+                }
 
                 if (!compactionsRowset.Next()) {
                     return false;
@@ -5741,12 +5767,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
                 if (auto* info = Self->ForcedCompactions.FindPtr(compactionId)) {
-                    Self->AddForcedCompactionShard(shardIdx, *info);
+                    if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx); shardInfo && (*info)->TablesToCompact.contains(shardInfo->PathId)) {
+                        Self->AddForcedCompactionShard(shardIdx, shardInfo->PathId, *info);
+                    } else {
+                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "unknown shardIdx " << shardIdx
+                            << " for compaction: " << compactionId
+                            << ", at schemeshard: " << Self->TabletID());
+                        Self->ForgetForcedCompactionShard(shardIdx, *info);
+                    }
                 } else {
                     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "unknown forced compaction id " << compactionId
                             << " for shardIdx: " << shardIdx
                             << ", at schemeshard: " << Self->TabletID());
+                    Self->ForgetForcedCompactionShard(shardIdx, nullptr);
                 }
 
                 if (!shardsRowset.Next()) {
@@ -5821,6 +5856,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ProcessForcedCompactionQueues();
+        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
+            // for cleanup and to progress cancelling forced compactions after restart
+            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
+        }
     }
 };
 

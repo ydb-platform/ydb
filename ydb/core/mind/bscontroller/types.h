@@ -447,7 +447,7 @@ namespace NKikimr {
                     if (baseIt == Base.end()) {
                         break;
                     }
-                    if (overlay && baseIt->first == key) {
+                    if (baseIt->first == key) {
                         baseIt->second->OnRollback();
                     }
                 }

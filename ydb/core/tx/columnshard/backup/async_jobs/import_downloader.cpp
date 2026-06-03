@@ -6,33 +6,38 @@
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/datashard/import_common.h>
 #include <ydb/core/tx/datashard/import_s3.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
 
 namespace NKikimr::NColumnShard::NBackup {
 
-TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
+TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,
+    const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
     const auto settingsKind = restoreTask.GetSettingsCase();
     switch (settingsKind) {
-    case NKikimrSchemeOp::TRestoreTask::kS3Settings:
-    #ifndef KIKIMR_DISABLE_S3_OPS
-        return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, txId, restoreTask, tableInfo));
-    #else
-        return TConclusionStatus::Fail("Import from S3 are disabled");
-    #endif
-    default:
-        return TConclusionStatus::Fail(TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
+        case NKikimrSchemeOp::TRestoreTask::kS3Settings:
+#ifndef KIKIMR_DISABLE_S3_OPS
+            return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, txId, restoreTask, tableInfo));
+#else
+            return TConclusionStatus::Fail("Import from S3 are disabled");
+#endif
+        default:
+            return TConclusionStatus::Fail(TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
     }
 }
 
 class TImportDownloader: public TActorBootstrapped<TImportDownloader> {
 public:
-    TImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo, const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema)
+    TImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask,
+        const NKikimr::NDataShard::TTableInfo& tableInfo, const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema)
         : SubscriberActorId(subscriberActorId)
         , TxId(txId)
         , RestoreTask(restoreTask)
         , TableInfo(tableInfo)
-        , YdbSchema(ydbSchema) {
+        , YdbSchema(ydbSchema)
+    {
     }
 
     void Bootstrap() {
@@ -44,14 +49,10 @@ public:
         Become(&TThis::StateMain);
     }
 
-    STRICT_STFUNC(
-        StateMain,
-        hFunc(NKikimr::TEvDataShard::TEvGetS3DownloadInfo, Handle)
-        hFunc(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo, Handle)
-        hFunc(NKikimr::TEvDataShard::TEvS3UploadRowsRequest, Handle)
-        hFunc(NKikimr::TEvDataShard::TEvAsyncJobComplete, Handle)
-        hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle)
-    )
+    STRICT_STFUNC(StateMain,
+        hFunc(NKikimr::TEvDataShard::TEvGetS3DownloadInfo, Handle) hFunc(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo, Handle)
+            hFunc(NKikimr::TEvDataShard::TEvS3UploadRowsRequest, Handle) hFunc(NKikimr::TEvDataShard::TEvAsyncJobComplete, Handle)
+                hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle))
 
     void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {
         auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();
@@ -116,9 +117,10 @@ private:
     TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
 };
 
-
-std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo, const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
+std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,
+    const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo,
+    const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
     return std::make_unique<TImportDownloader>(subscriberActorId, txId, restoreTask, tableInfo, ydbSchema);
 }
 
-}
+}   // namespace NKikimr::NColumnShard::NBackup

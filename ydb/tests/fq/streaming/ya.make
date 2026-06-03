@@ -14,7 +14,6 @@ IF (OS_LINUX)
 ENDIF()
 
 PY_SRCS(
-    common.py
     conftest.py
 )
 
@@ -36,6 +35,7 @@ PEERDIR(
     library/recipes/common
     ydb/tests/olap/common
     ydb/tests/tools/datastreams_helpers
+    ydb/tests/fq/streaming_common
 )
 
 DEPENDS(

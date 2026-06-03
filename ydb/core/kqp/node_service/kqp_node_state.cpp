@@ -152,7 +152,7 @@ void TNodeState::MarkRequestAsCancelled(ui64 txId) {
     }
 }
 
-void TNodeState::DumpInfo(TStringStream& str) const {
+void TNodeState::DumpInfo(TStringStream& str, const TCgiParameters& cgiParams) const {
     HTML(str) {
         str << Endl << "Transactions:" << Endl;
         TABLE_SORTABLE_CLASS("table table-condensed") {
@@ -178,7 +178,7 @@ void TNodeState::DumpInfo(TStringStream& str) const {
                             TABLER() {
                                 TABLED() {str << txId;}
                                 TABLED() {
-                                    HREF(TStringBuilder() << "/node/" << requester.NodeId() << "/actors/kqp_node?ex=" << requester)  {
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", cgiParams, {{"ex", ToString(requester)}, {"ca", ""}, {"sf", ""}})) {
                                         str << requester;
                                     }
                                 }
@@ -216,14 +216,14 @@ void TNodeState::DumpInfo(TStringStream& str) const {
                                 TABLER() {
                                     TABLED() {str << txId;}
                                     TABLED() {
-                                        HREF(TStringBuilder() << "/node/" << requester.NodeId() << "/actors/kqp_node?ex=" << requester)  {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", cgiParams, {{"ex", ToString(requester)}, {"ca", ""}, {"sf", ""}})) {
                                             str << requester;
                                         }
                                     }
                                     TABLED() {str << taskId;}
                                     TABLED() {
                                         if (actorId) {
-                                            HREF(TStringBuilder() << "/node/" << actorId->NodeId() << "/actors/kqp_node?ca=" << *actorId)  {
+                                            HREF(NActors::NMon::BuildActorsLink("kqp_node", cgiParams, {{"ca", ToString(*actorId)}, {"ex", ""}, {"sf", ""}})) {
                                                 str << *actorId;
                                             }
                                         } else {
@@ -240,13 +240,13 @@ void TNodeState::DumpInfo(TStringStream& str) const {
     }
 }
 
-bool TNodeState::ValidateComputeActorId(const TString& computeActorId, TActorId& id) const {
+bool TNodeState::ValidateComputeActorId(const TString& caId, TActorId& computeActorId) const {
     for (const auto& bucket : Buckets) {
         TReadGuard guard(bucket.Mutex);
         for (const auto& [_, request] : bucket.Requests) {
             for (auto& [_, actorId] : request.Tasks) {
-                if (actorId && ToString(*actorId) == computeActorId) {
-                    id = *actorId;
+                if (actorId && ToString(*actorId) == caId) {
+                    computeActorId = *actorId;
                     return true;
                 }
             }
@@ -255,12 +255,12 @@ bool TNodeState::ValidateComputeActorId(const TString& computeActorId, TActorId&
     return false;
 }
 
-bool TNodeState::ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId, TActorId& id) const {
+bool TNodeState::ValidateKqpExecuterId(const TString& exId, TActorId& kqpExecuterId) const {
     for (const auto& bucket : Buckets) {
         TReadGuard guard(bucket.Mutex);
         for (const auto& [_, request] : bucket.Requests) {
-            if (ToString(request.ExecuterId) == kqpExecuterId && request.ExecuterId.NodeId() == nodeId) {
-                id = request.ExecuterId;
+            if (ToString(request.ExecuterId) == exId) {
+                kqpExecuterId = request.ExecuterId;
                 return true;
             }
         }

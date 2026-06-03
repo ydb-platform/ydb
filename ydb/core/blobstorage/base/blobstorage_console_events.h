@@ -77,28 +77,41 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerReplaceConfigRequest, EvControllerReplaceConfigRequest> {
         TEvControllerReplaceConfigRequest() = default;
 
-        TEvControllerReplaceConfigRequest(std::optional<TString> clusterYaml, std::optional<TString> storageYaml,
-                std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode, bool allowUnknownFields,
-                bool bypassMetadataChecks, bool enableConfigV2, bool disableConfigV2, TString peerName, TString userToken) {
-            if (clusterYaml) {
-                Record.SetClusterYaml(*clusterYaml);
+        struct TArgs {
+            std::optional<TString> ClusterYaml;
+            std::optional<TString> StorageYaml;
+            std::optional<bool> SwitchDedicatedStorageSection;
+            bool DedicatedConfigMode;
+            bool AllowUnknownFields;
+            bool BypassMetadataChecks;
+            bool DryRun;
+            bool EnableConfigV2;
+            bool DisableConfigV2;
+            TString PeerName;
+            TString UserToken;
+        };
+
+        TEvControllerReplaceConfigRequest(const TArgs& args) {
+            if (args.ClusterYaml) {
+                Record.SetClusterYaml(*args.ClusterYaml);
             }
-            if (storageYaml) {
-                Record.SetStorageYaml(*storageYaml);
+            if (args.StorageYaml) {
+                Record.SetStorageYaml(*args.StorageYaml);
             }
-            if (switchDedicatedStorageSection) {
-                Record.SetSwitchDedicatedStorageSection(*switchDedicatedStorageSection);
+            if (args.SwitchDedicatedStorageSection) {
+                Record.SetSwitchDedicatedStorageSection(*args.SwitchDedicatedStorageSection);
             }
-            Record.SetDedicatedConfigMode(dedicatedConfigMode);
-            Record.SetAllowUnknownFields(allowUnknownFields);
-            Record.SetBypassMetadataChecks(bypassMetadataChecks);
-            if (enableConfigV2) {
+            Record.SetDedicatedConfigMode(args.DedicatedConfigMode);
+            Record.SetAllowUnknownFields(args.AllowUnknownFields);
+            Record.SetBypassMetadataChecks(args.BypassMetadataChecks);
+            if (args.EnableConfigV2) {
                 Record.SetSwitchEnableConfigV2(true);
-            } else if (disableConfigV2) {
+            } else if (args.DisableConfigV2) {
                 Record.SetSwitchEnableConfigV2(false);
             }
-            Record.SetPeerName(peerName);
-            Record.SetUserToken(userToken);
+            Record.SetPeerName(args.PeerName);
+            Record.SetUserToken(args.UserToken);
+            Record.SetDryRun(args.DryRun);
         }
 
         TString ToString() const override {

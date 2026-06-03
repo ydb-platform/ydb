@@ -15,6 +15,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override {
         return 0;
     }
+
     virtual ui64 DoGetDeprecatedPortionId() const override {
         return TabletId;
     }
@@ -33,17 +34,21 @@ private:
     virtual void DoClear() override {
         Constructors.Clear();
     }
+
     virtual void DoAbort() override {
         Constructors.Clear();
     }
+
     virtual bool DoIsFinished() const override {
         return Constructors.IsEmpty();
     }
+
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override final {
         auto constructor = Constructors.PopFront();
         return constructor.Construct(context);
     }
+
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
         while (Constructors.GetSize()) {
             bool usage = false;
@@ -56,6 +61,7 @@ private:
             break;
         }
     }
+
     virtual TString DoDebugString() const override {
         return Default<TString>();
     }
@@ -67,7 +73,8 @@ protected:
 public:
     TConstructor(const ERequestSorting sorting, const ui64 tabletId)
         : Constructors(sorting)
-        , TabletId(tabletId) {
+        , TabletId(tabletId)
+    {
     }
 };
 

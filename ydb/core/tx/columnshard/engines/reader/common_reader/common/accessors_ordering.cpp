@@ -14,7 +14,8 @@ private:
 
 public:
     TApplySourceResult(TDataAccessorsResult&& result)
-        : Accessors(std::move(result)) {
+        : Accessors(std::move(result))
+    {
     }
 
     virtual bool DoApply(IDataReader& indexedDataRead) override {
@@ -30,6 +31,7 @@ private:
     const NActors::TActorId ScanActorId;
     NColumnShard::TCounterGuard Guard;
     const std::shared_ptr<const TAtomicCounter> AbortFlag;
+
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return AbortFlag;
     }
@@ -43,7 +45,8 @@ public:
     TLocalPortionAccessorFetchingSubscriber(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : ScanActorId(context->GetCommonContext()->GetScanActorId())
         , Guard(context->GetCommonContext()->GetCounters().GetAccessorsForConstructionGuard())
-        , AbortFlag(context->GetCommonContext()->GetAbortionFlag()) {
+        , AbortFlag(context->GetCommonContext()->GetAbortionFlag())
+    {
     }
 };
 

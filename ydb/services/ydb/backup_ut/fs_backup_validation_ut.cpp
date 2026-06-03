@@ -16,18 +16,6 @@
 
 using namespace NYdb;
 
-#ifdef _linux_
-#include <sys/vfs.h>
-#include <sys/statfs.h>
-#include <linux/magic.h>
-
-extern "C" int statfs(const char* path, struct statfs* buf) {
-    (void)path;
-    buf->f_type = NFS_SUPER_MAGIC;
-    return 0;
-}
-#endif
-
 class TFsBackupParamsValidationTestFixture : public NUnitTest::TBaseFixture {
 public:
     static constexpr TDuration DEFAULT_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(
@@ -387,7 +375,20 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
-            "Empty item is not allowed",
+            "Empty import item was specified",
+            res.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(NoItemsWithoutSchemaMapping) {
+        NImport::TImportFromFsSettings settings = MakeImportSettings(TString(TempDir().Path()));
+
+        auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
+        UNIT_ASSERT_C(!res.Status().IsSuccess(),
+            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
+            res.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
+            "No items to import",
             res.Status().GetIssues().ToString());
     }
 }

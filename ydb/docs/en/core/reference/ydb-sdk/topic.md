@@ -135,6 +135,66 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   }.Build();
   ```
 
+- Python
+
+  To work with topics, create a {{ ydb-short-name }} driver instance. The topic client is available via the `topic_client` attribute and is used for management operations on topics and for creating writers and readers.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+    )
+    driver = ydb.Driver(driver_config)
+    driver.wait(timeout=5)
+    # driver.topic_client — client for working with topics
+    writer = driver.topic_client.writer(topic_path)
+    reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+    )
+    async with ydb.aio.Driver(driver_config) as driver:
+        await driver.wait(timeout=5)
+        # driver.topic_client — client for working with topics
+        writer = driver.topic_client.writer(topic_path)
+        reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+    ```
+
+  {% endlist %}
+
+  For more on [connecting to the database](../../concepts/connect.md) and [authentication](../../security/authentication.md).
+
+- JavaScript
+
+  ```javascript
+  const t = topic(driver);
+
+  await using reader = t.createReader({
+    topic: "/Root/demo-topic",
+    consumer: "demo-consumer",
+  });
+
+  await using writer = t.createWriter({
+    topic: "/Root/demo-topic",
+    producer: "demo-producer",
+  });
+  ```
+  
 {% endlist %}
 
 ## Managing topics {#manage}
@@ -223,6 +283,22 @@ The topic path is mandatory. Other parameters are optional.
   });
   ```
 
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.createTopic(
+    create(CreateTopicRequestSchema, {
+      path: "/path-to-my-topic",
+      partitioningSettings: {
+        minActivePartitions: 1n,
+        maxActivePartitions: 100n,
+      },
+      consumers: [{ name: "my-consumer" }],
+    }),
+  );
+  ```
+
 {% endlist %}
 
 ### Updating a topic {#alter-topic}
@@ -291,6 +367,18 @@ When you update a topic, you must specify the topic path and the parameters to b
                   .build());
   ```
 
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.alterTopic(
+    create(AlterTopicRequestSchema, {
+      path: "/path-to-my-topic",
+      addConsumers: [{ name: "my-consumer-2" }],
+    }),
+  );
+  ```
+
 {% endlist %}
 
 ### Getting topic information {#describe-topic}
@@ -345,6 +433,17 @@ When you update a topic, you must specify the topic path and the parameters to b
   TopicDescription description = topicDescriptionResult.getValue();
   ```
 
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.describeTopic(
+    create(DescribeTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
+  ```
+
 {% endlist %}
 
 ### Deleting a topic {#drop-topic}
@@ -381,6 +480,17 @@ To delete a topic, just specify the path to it.
 
   ```c#
   await topicClient.DropTopic(topicName);
+  ```
+
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.dropTopic(
+    create(DropTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
   ```
 
 {% endlist %}
@@ -429,72 +539,77 @@ Only connections with matching [producer and message group](../../concepts/topic
    writer = driver.topic_client.writer(topic_path)
    ```
 
-- Java (sync)
+- Java
 
-  Writer settings initialization:
+  {% list tabs %}
 
-  ```java
-  String producerAndGroupID = "group-id";
-  WriterSettings settings = WriterSettings.newBuilder()
-        .setTopicPath(topicPath)
-        .setProducerId(producerAndGroupID)
-        .setMessageGroupId(producerAndGroupID)
-        .build();
-  ```
+  - Synchronous API
 
-  Sync writer creation:
-
-  ```java
-  SyncWriter writer = topicClient.createSyncWriter(settings);
-  ```
-
-  Writer should be initialized after it is created. There are two methods to do that:
-
-  - `init()`: non-blocking, launches initialization in background and doesn't wait for it to finish.
+    Writer settings initialization:
 
     ```java
-    writer.init();
+    String producerAndGroupID = "group-id";
+    WriterSettings settings = WriterSettings.newBuilder()
+          .setTopicPath(topicPath)
+          .setProducerId(producerAndGroupID)
+          .setMessageGroupId(producerAndGroupID)
+          .build();
     ```
 
-  - `initAndWait()`: blocking, launches initialization and waits for it to finish.
-    If an error occurs during this process, exception will be thrown.
+    Sync writer creation:
 
     ```java
-    try {
-        writer.initAndWait();
-        logger.info("Init finished succsessfully");
-    } catch (Exception exception) {
-        logger.error("Exception while initializing writer: ", exception);
-        return;
-    }
+    SyncWriter writer = topicClient.createSyncWriter(settings);
     ```
 
-- Java (async)
+    After the writer is created, initialize it. There are two methods:
 
-  Writer settings initialization:
+    - `init()`: non-blocking; starts initialization in the background and does not wait for completion.
 
-  ```java
-  String producerAndGroupID = "group-id";
-  WriterSettings settings = WriterSettings.newBuilder()
-        .setTopicPath(topicPath)
-        .setProducerId(producerAndGroupID)
-        .setMessageGroupId(producerAndGroupID)
-        .build();
-  ```
+      ```java
+      writer.init();
+      ```
 
-  Async writer creation and initialization:
+    - `initAndWait()`: blocking; starts initialization and waits for completion. If initialization fails, an exception is thrown.
 
-  ```java
-  AsyncWriter writer = topicClient.createAsyncWriter(settings);
+      ```java
+      try {
+          writer.initAndWait();
+          logger.info("Init finished successfully");
+      } catch (Exception exception) {
+          logger.error("Exception while initializing writer: ", exception);
+          return;
+      }
+      ```
 
-  // Init in background
-  writer.init()
-          .thenRun(() -> logger.info("Init finished successfully"))
-          .exceptionally(ex -> {
-              logger.error("Init failed with ex: ", ex);
-              return null;
-          });
-  ```
+  - Asynchronous API
+
+    Writer settings initialization:
+
+    ```java
+    String producerAndGroupID = "group-id";
+    WriterSettings settings = WriterSettings.newBuilder()
+          .setTopicPath(topicPath)
+          .setProducerId(producerAndGroupID)
+          .setMessageGroupId(producerAndGroupID)
+          .build();
+    ```
+
+    Async writer creation and initialization:
+
+    ```java
+    AsyncWriter writer = topicClient.createAsyncWriter(settings);
+
+    // Init in background
+    writer.init()
+            .thenRun(() -> logger.info("Init finished successfully"))
+            .exceptionally(ex -> {
+                logger.error("Init failed with ex: ", ex);
+                return null;
+            });
+    ```
+
+  {% endlist %}
 
 - C#
 
@@ -503,6 +618,15 @@ Only connections with matching [producer and message group](../../concepts/topic
   {
       ProducerId = "ProducerId_Example"
   }.Build();
+  ```
+
+- JavaScript
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+  });
   ```
 
 {% endlist %}
@@ -596,52 +720,57 @@ Only connections with matching [producer and message group](../../concepts/topic
      ])
    ```
 
-- Java (sync)
+- Java
 
-  Method `send` blocks until a message is put into writers sending queue.
-  Putting a message into this queue means that the writer will do its best to deliver it.
-  For example, if a writing session will be accidentally closed, the writer will reconnect and try to resend this message on a new session.
-  But putting a message into message queue has no guarantees that this message will be written.
-  For example, there could be errors that will lead to writer shutdown before messages from the queue are sent.
-  If you have to be sure for each message that it is written, use async writer and check status returned by `send` method.
+  {% list tabs %}
 
-  ```java
-  writer.send(Message.of("11".getBytes()));
+  - Synchronous API
 
-  long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
-  try {
-      writer.send(
-              Message.newBuilder()
-                      .setData("22".getBytes())
-                      .setCreateTimestamp(Instant.now().minusSeconds(5))
-                      .build(),
-              timeoutSeconds,
-              TimeUnit.SECONDS
-      );
-  } catch (TimeoutException exception) {
-      logger.error("Send queue is full. Couldn't put message into sending queue within {} seconds", timeoutSeconds);
-  } catch (InterruptedException | ExecutionException exception) {
-      logger.error("Couldn't put the message into sending queue due to exception: ", exception);
-  }
-  ```
+    The `send` method blocks until a message is placed in the writer's send queue.
+    Putting a message in this queue means the writer will do its best to deliver it.
+    For example, if the write session is dropped, the writer reconnects and tries to resend the message on a new session.
+    However, enqueueing does not guarantee the message will eventually be written.
+    Errors can shut down the writer before queued messages are sent.
+    If you need a per-message guarantee that data was written, use the async writer and inspect the status returned by `send`.
 
-- Java (async)
+    ```java
+    writer.send(Message.of("11".getBytes()));
 
-  Method `send` puts a message into writer's sending queue.
-  Method returns `CompletableFuture<WriteAck>` which allows checking if the message was really written.
-  In case if the queue is full, `QueueOverflowException` exception will be thrown.
-  It is a way to signal a user that writing speed should be slowed down.
-  In this case a message write should be skipped or retried with exponential backoff.
-  Client buffer size can be also increased (`setMaxSendBufferMemorySize`) to be able to store more messages in memory before this exception is thrown.
+    long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
+    try {
+        writer.send(
+                Message.newBuilder()
+                        .setData("22".getBytes())
+                        .setCreateTimestamp(Instant.now().minusSeconds(5))
+                        .build(),
+                timeoutSeconds,
+                TimeUnit.SECONDS
+        );
+    } catch (TimeoutException exception) {
+        logger.error("Send queue is full. Couldn't put message into sending queue within {} seconds", timeoutSeconds);
+    } catch (InterruptedException | ExecutionException exception) {
+        logger.error("Couldn't put the message into sending queue due to exception: ", exception);
+    }
+    ```
 
-  ```java
-  try {
-      // Non-blocking. Throws QueueOverflowException if send queue is full
-      writer.send(Message.of("33".getBytes()));
-  } catch (QueueOverflowException exception) {
-      // Send queue is full. Need to retry with backoff or skip
-  }
-  ```
+  - Asynchronous API
+
+    The `send` method is non-blocking for the async client. It enqueues a message for sending.
+    It returns `CompletableFuture<WriteAck>` so you can verify the message was actually written.
+    If the queue overflows, `QueueOverflowException` is thrown.
+    That signals the producer should slow down: skip messages or retry with exponential backoff.
+    You can also increase the client buffer size (`setMaxSendBufferMemorySize`) to hold more messages before overflow.
+
+    ```java
+    try {
+        // Non-blocking. Throws QueueOverflowException if send queue is full
+        writer.send(Message.of("33".getBytes()));
+    } catch (QueueOverflowException exception) {
+        // Send queue is full. Need to retry with backoff or skip
+    }
+    ```
+
+  {% endlist %}
 
 - C#
 
@@ -649,6 +778,19 @@ Only connections with matching [producer and message group](../../concepts/topic
 
   ```c#
   var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
+  ```
+
+- JavaScript
+
+  ```javascript
+  // Write a message to the internal buffer.
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // To send immediately, call flush.
+  await writer.flush();
+
+  // Or close the writer.
+  await writer.close();
   ```
 
 {% endlist %}
@@ -713,7 +855,8 @@ Only connections with matching [producer and message group](../../concepts/topic
 
   There are two ways to get a message write acknowledgement from the server:
 
-  * `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
+  - `flush()` - waits until all the messages previously written to the internal buffer are acknowledged.
+  - `write_with_ack(...)` - sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
 
   ```python
   # Put multiple messages to the internal buffer and then wait
@@ -733,49 +876,37 @@ Only connections with matching [producer and message group](../../concepts/topic
   writer.write_with_ack("message")
   ```
 
-- Java (sync)
+- Java
 
-  Blocking method `flush()` waits until all the messages previously written to the internal buffer are acknowledged:
-
-  ```java
-  for (byte[] message : messages) {
-      writer.send(Message.of(message));
-  }
-  writer.flush();
-  ```
-
-- Java (async)
-
-  `send` method returns `CompletableFuture<WriteAck>`.
-  Its successful completion means that the fact that this message is written is confirmed by server.
-  `WriteAck` struct contains seqNo, offset and write status:
+  The `send` method returns `CompletableFuture<WriteAck>`. Successful completion means the server acknowledged the write.
+  The `WriteAck` structure contains seqNo, offset, and write status:
 
   ```java
   writer.send(Message.of(message))
-          .whenComplete((result, ex) -> {
-              if (ex != null) {
-                  logger.error("Exception on writing message message: ", ex);
-              } else {
-                  switch (result.getState()) {
-                      case WRITTEN:
-                          WriteAck.Details details = result.getDetails();
-                          StringBuilder str = new StringBuilder("Message was written successfully");
-                          if (details != null) {
-                              str.append(", offset: ").append(details.getOffset());
-                          }
-                          logger.debug(str.toString());
-                          break;
-                      case ALREADY_WRITTEN:
-                          logger.warn("Message has already been written");
-                          break;
-                      default:
-                          break;
-                  }
-              }
-          });
+        .whenComplete((result, ex) -> {
+            if (ex != null) {
+                logger.error("Exception on writing message message: ", ex);
+            } else {
+                switch (result.getState()) {
+                    case WRITTEN:
+                        WriteAck.Details details = result.getDetails();
+                        StringBuilder str = new StringBuilder("Message was written successfully");
+                        if (details != null) {
+                            str.append(", offset: ").append(details.getOffset());
+                        }
+                        logger.debug(str.toString());
+                        break;
+                    case ALREADY_WRITTEN:
+                        logger.warn("Message has already been written");
+                        break;
+                    default:
+                        break;
+                }
+            }
+        });
   ```
 
-- С#
+- C#
 
   Asynchronous writing of a message to a topic. If the internal buffer overflows, it waits for the buffer to be released before resending.
 
@@ -790,6 +921,28 @@ Only connections with matching [producer and message group](../../concepts/topic
   writeCts.CancelAfter(TimeSpan.FromSeconds(3));
 
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
+  ```
+
+- JavaScript
+
+  All messages are written to an internal buffer. There are three mechanisms they reach the server: two automatic and one manual. The manual path is calling `writer.flush`, which returns the last seqNo persisted on the server. Automatic flushes happen when:
+  - The internal buffer exceeds `maxBufferBytes` (default 256 MiB).
+  - The periodic flush interval `flushIntervalMs` ticks (default 10 ms).
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+    // Callback that is called when writer receives an acknowledgment for a message.
+    onAck: (seqNo, status) => {
+      console.log("ACK", seqNo, status);
+    },
+  })
+
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // Get the latest seqNo confirmed by the server.
+  await writer.flush();
   ```
 
 {% endlist %}
@@ -855,15 +1008,35 @@ For more details on using data compression for topics, see [here](../../concepts
           .build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using writer = t.createWriter({
+    codec: Codec.RAW,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.GZIP,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.LZOP,
+  });
+
+  await using writer = t.createWriter({
+    codec: 10000, // CUSTOM (allowed range: 10000–19999)
+  });
+  ```
+
 {% endlist %}
 
-### Writing messages in no-deduplication mode
+### Writing messages in no-deduplication mode {#nodedup}
 
 {% list tabs group=lang %}
 
 - C++
 
-If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below deminstrates such a session setup:
+If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below demonstrates such a session setup:
 
 ```cpp
 auto settings = NYdb::NTopic::TWriteSessionSettings()
@@ -874,11 +1047,19 @@ auto session = topicClient.CreateWriteSession(settings);
 
 If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
+- Go
+
+  In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
+
+- Java
+
+  This functionality is not currently supported.
+
 {% endlist %}
 
 ### Using message metadata feature {#messagemeta}
 
-You can provide some metadata for any particular message when writing. This metadata can be a list of up to 100 key-value pairs per message.
+You can provide some metadata for any particular message when writing. This metadata can be a list of up to 1000 key-value pairs per message.
 All the metadata provided when writing a message is sent to a consumer with the message during reading.
 
 {% list tabs group=lang %}
@@ -966,6 +1147,42 @@ All the metadata provided when writing a message is sent to a consumer with the 
       new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello Example YDB Topics!")
           { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
   );
+  ```
+
+- Go
+
+  Set metadata in the `Metadata` field of `topicwriter.Message`:
+
+  ```go
+  err := writer.Write(ctx, topicwriter.Message{
+    Data: strings.NewReader("message-data"),
+    Metadata: map[string][]byte{
+      "meta-key":    []byte("meta-value"),
+      "another-key": []byte("value"),
+    },
+  })
+  ```
+
+  When reading, metadata is available on the message:
+
+  ```go
+  msg, err := reader.ReadMessage(ctx)
+  if err != nil {
+    return err
+  }
+  for k, v := range msg.Metadata {
+    fmt.Printf("%s: %s\n", k, string(v))
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  writer.write(Buffer.from("Hello, world!", "utf-8"), {
+    metadataItems: {
+      "meta-key": new TextEncoder().encode("meta-value"),
+    },
+  });
   ```
 
 {% endlist %}
@@ -1062,130 +1279,138 @@ All the metadata provided when writing a message is sent to a consumer with the 
       await session_pool.retry_tx_async(callee)
   ```
 
-- Java (sync)
+- Java
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
+  {% list tabs %}
 
-  Transaction can be set in the `SendSettings` argument of the `send` method while sending a message.
-  Such a message will be written on the transaction commit.
+  - Synchronous API
 
-  ```java
-  // creating a session in the table service
-  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
-  if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get a session from the pool: {}", sessionResult);
-      return; // retry or shutdown
-  }
-  Session session = sessionResult.getValue();
-  // creating a transaction in the table service
-  // this transaction is not yet active and has no id
-  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+    [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
 
-  // get message text within the transaction
-  Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
-          .join();
-  if (!dataQueryResult.isSuccess()) {
-      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
-      return; // retry or shutdown
-  }
-  // now the transaction is active and has an id
+    You can pass a transaction in `SendSettings` for the `send` method.
+    The message is then written together with that transaction’s commit.
 
-  ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
-  byte[] message;
-  if (rsReader.next()) {
-      message = rsReader.getColumn(0).getBytes();
-  } else {
-      return; // retry or shutdown
-  }
+    ```java
+    // creating a session in the table service
+    Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+    if (!sessionResult.isSuccess()) {
+        logger.error("Couldn't get a session from the pool: {}", sessionResult);
+        return; // retry or shutdown
+    }
+    Session session = sessionResult.getValue();
+    // creating a transaction in the table service
+    // this transaction is not yet active and has no id
+    TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
 
-  writer.send(
-          Message.of(message),
-          SendSettings.newBuilder()
-                  .setTransaction(transaction)
-                  .build()
-  );
+    // get message text within the transaction
+    Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+            .join();
+    if (!dataQueryResult.isSuccess()) {
+        logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
+        return; // retry or shutdown
+    }
+    // now the transaction is active and has an id
 
-  // flush to wait until all messages reach server
-  writer.flush();
+    ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+    byte[] message;
+    if (rsReader.next()) {
+        message = rsReader.getColumn(0).getBytes();
+    } else {
+        return; // retry or shutdown
+    }
 
-  Status commitStatus = transaction.commit().join();
-  analyzeCommitStatus(commitStatus);
-  ```
+    writer.send(
+            Message.of(message),
+            SendSettings.newBuilder()
+                    .setTransaction(transaction)
+                    .build()
+    );
+
+    // flush to wait until all messages reach server before commit
+    writer.flush();
+
+    Status commitStatus = transaction.commit().join();
+    analyzeCommitStatus(commitStatus);
+    ```
+
+  - Asynchronous API
+
+    [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
+
+    You can pass a transaction in `SendSettings` for the `send` method.
+    The message is then written together with that transaction’s commit.
+
+    ```java
+    // creating a session in the table service
+    Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+    if (!sessionResult.isSuccess()) {
+        logger.error("Couldn't get a session from the pool: {}", sessionResult);
+        return; // retry or shutdown
+    }
+    Session session = sessionResult.getValue();
+    // creating a transaction in the table service
+    // this transaction is not yet active and has no id
+    TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+    // get message text within the transaction
+    Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+            .join();
+    if (!dataQueryResult.isSuccess()) {
+        logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
+        return; // retry or shutdown
+    }
+    // now the transaction is active and has an id
+
+    ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+    byte[] message;
+    if (rsReader.next()) {
+        message = rsReader.getColumn(0).getBytes();
+    } else {
+        return; // retry or shutdown
+    }
+
+    try {
+        writer.send(Message.newBuilder()
+                                .setData(message)
+                                .build(),
+                        SendSettings.newBuilder()
+                                .setTransaction(transaction)
+                                .build())
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        logger.error("Exception while sending a message: ", ex);
+                    } else {
+                        switch (result.getState()) {
+                            case WRITTEN:
+                                WriteAck.Details details = result.getDetails();
+                                logger.info("Message was written successfully, offset: " + details.getOffset());
+                                break;
+                            case ALREADY_WRITTEN:
+                                logger.info("Message has already been written");
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                })
+                // Waiting for the message to reach the server before committing the transaction
+                .join();
+
+        Status commitStatus = transaction.commit().join();
+        analyzeCommitStatus(commitStatus);
+    } catch (QueueOverflowException exception) {
+        logger.error("Queue overflow exception while sending a message{}: ", index, exception);
+        // Send queue is full. Need to retry with backoff or skip
+    }
+    ```
+
+  {% endlist %}
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-- Java (async)
+- JavaScript
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
-
-  Transaction can be set in the `SendSettings` argument of the `send` method while sending a message.
-  Such a message will be written on the transaction commit.
-
-  ```java
-  // creating a session in the table service
-  Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
-  if (!sessionResult.isSuccess()) {
-      logger.error("Couldn't get a session from the pool: {}", sessionResult);
-      return; // retry or shutdown
-  }
-  Session session = sessionResult.getValue();
-  // creating a transaction in the table service
-  // this transaction is not yet active and has no id
-  TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-
-  // get message text within the transaction
-  Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
-          .join();
-  if (!dataQueryResult.isSuccess()) {
-      logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
-      return; // retry or shutdown
-  }
-  // now the transaction is active and has an id
-
-  ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
-  byte[] message;
-  if (rsReader.next()) {
-      message = rsReader.getColumn(0).getBytes();
-  } else {
-      return; // retry or shutdown
-  }
-
-  try {
-      writer.send(Message.newBuilder()
-                              .setData(message)
-                              .build(),
-                      SendSettings.newBuilder()
-                              .setTransaction(transaction)
-                              .build())
-              .whenComplete((result, ex) -> {
-                  if (ex != null) {
-                      logger.error("Exception while sending a message: ", ex);
-                  } else {
-                      switch (result.getState()) {
-                          case WRITTEN:
-                              WriteAck.Details details = result.getDetails();
-                              logger.info("Message was written successfully, offset: " + details.getOffset());
-                              break;
-                          case ALREADY_WRITTEN:
-                              logger.info("Message has already been written");
-                              break;
-                          default:
-                              break;
-                      }
-                  }
-              })
-              // Waiting for the message to reach the server before committing the transaction
-              .join();
-
-      Status commitStatus = transaction.commit().join();
-      analyzeCommitStatus(commitStatus);
-  } catch (QueueOverflowException exception) {
-      logger.error("Queue overflow exception while sending a message{}: ", index, exception);
-      // Send queue is full. Need to retry with backoff or skip
-  }
-  ```
-
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -1235,108 +1460,112 @@ Topic can have several Consumers and for each of them server stores its own read
   reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
   ```
 
-- Java (sync)
+- Java
 
-  Reader settings initialization:
+  {% list tabs %}
 
-  ```java
-  ReaderSettings settings = ReaderSettings.newBuilder()
-          .setConsumerName(consumerName)
-          .addTopic(TopicReadSettings.newBuilder()
-                  .setPath(topicPath)
-                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
-                  .setMaxLag(Duration.ofMinutes(30)) // Optional
-                  .build())
-          .build();
-  ```
+  - Synchronous API
 
-  Sync reader creation:
-
-  ```java
-  SyncReader reader = topicClient.createSyncReader(settings);
-  ```
-
-  After a reader is created, it has to be initialized. Sync reader has two methods for this:
-
-  - `init()`: non-blocking, launches initialization in background and does not wait for it to finish.
+    Reader settings initialization:
 
     ```java
-    reader.init();
+    ReaderSettings settings = ReaderSettings.newBuilder()
+            .setConsumerName(consumerName)
+            .addTopic(TopicReadSettings.newBuilder()
+                    .setPath(topicPath)
+                    .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                    .setMaxLag(Duration.ofMinutes(30)) // Optional
+                    .build())
+            .build();
     ```
 
-  - `initAndWait()`: blocking, launches initialization and waits for it to finish.
-    If an error occurs during this process, exception will be thrown.
+    Sync reader creation:
 
     ```java
-    try {
-        reader.initAndWait();
-        logger.info("Init finished succsessfully");
-    } catch (Exception exception) {
-        logger.error("Exception while initializing reader: ", exception);
-        return;
+    SyncReader reader = topicClient.createSyncReader(settings);
+    ```
+
+    After a reader is created, initialize it. The sync reader supports two methods:
+
+    - `init()`: non-blocking; starts initialization in the background and does not wait for completion.
+
+      ```java
+      reader.init();
+      ```
+
+    - `initAndWait()`: blocking; waits for initialization. On failure, an exception is thrown.
+
+      ```java
+      try {
+          reader.initAndWait();
+          logger.info("Init finished successfully");
+      } catch (Exception exception) {
+          logger.error("Exception while initializing reader: ", exception);
+          return;
+      }
+      ```
+
+  - Asynchronous API
+
+    Reader settings initialization:
+
+    ```java
+    ReaderSettings settings = ReaderSettings.newBuilder()
+            .setConsumerName(consumerName)
+            .addTopic(TopicReadSettings.newBuilder()
+                    .setPath(topicPath)
+                    .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                    .setMaxLag(Duration.ofMinutes(30)) // Optional
+                    .build())
+            .build();
+    ```
+
+    For the async reader, provide `ReadEventHandlersSettings` with a `ReadEventHandler` implementation
+    that defines how events are handled while reading.
+
+    ```java
+    ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
+        .setEventHandler(new Handler())
+        .build();
+    ```
+
+    Optionally, specify an executor for message handling in `ReadEventHandlersSettings`.
+    You can subclass `AbstractReadEventHandler` and override `onMessages`. Example:
+
+    ```java
+    private class Handler extends AbstractReadEventHandler {
+        @Override
+        public void onMessages(DataReceivedEvent event) {
+            for (Message message : event.getMessages()) {
+                StringBuilder str = new StringBuilder();
+                logger.info("Message received. SeqNo={}, offset={}", message.getSeqNo(), message.getOffset());
+
+                process(message);
+
+                message.commit().thenRun(() -> {
+                    logger.info("Message committed");
+                });
+            }
+        }
     }
     ```
 
-- Java (async)
+    Async reader creation and initialization:
 
-  Reader settings initialization:
+    ```java
+    AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
+    // Init in background
+    reader.init()
+            .thenRun(() -> logger.info("Init finished successfully"))
+            .exceptionally(ex -> {
+                logger.error("Init failed with ex: ", ex);
+                return null;
+            });
+    ```
 
-  ```java
-  ReaderSettings settings = ReaderSettings.newBuilder()
-          .setConsumerName(consumerName)
-          .addTopic(TopicReadSettings.newBuilder()
-                  .setPath(topicPath)
-                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
-                  .setMaxLag(Duration.ofMinutes(30)) // Optional
-                  .build())
-          .build();
-  ```
+  {% endlist %}
 
-  For async reader, `ReadEventHandlersSettings` also have to be provided with an implementation of `ReadEventHandler`.
-  It describes how events should be handled during reading.
-
-  ```java
-  ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
-      .setEventHandler(new Handler())
-      .build();
-  ```
-
-  Optionally, an executor for message handling can be also provided in `ReadEventHandlersSettings`.
-  To implement a Handler, default abstract class `AbstractReadEventHandler` can be used.
-  It is enough to override the `onMessages` method that describes message handling. Implementation example:
-
-  ```java
-  private class Handler extends AbstractReadEventHandler {
-      @Override
-      public void onMessages(DataReceivedEvent event) {
-          for (Message message : event.getMessages()) {
-              StringBuilder str = new StringBuilder();
-              logger.info("Message received. SeqNo={}, offset={}", message.getSeqNo(), message.getOffset());
-
-              process(message);
-
-              message.commit().thenRun(() -> {
-                  logger.info("Message committed");
-              });
-          }
-      }
-  }
-  ```
-
-  Async reader creation and initialization:
-
-  ```java
-  AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
-  // Init in background
-  reader.init()
-          .thenRun(() -> logger.info("Init finished successfully"))
-          .exceptionally(ex -> {
-              logger.error("Init failed with ex: ", ex);
-              return null;
-          });
-  ```
-
-- С#
+- C#
 
   ```c#
   await using var reader = new ReaderBuilder<string>(driver)
@@ -1344,6 +1573,15 @@ Topic can have several Consumers and for each of them server stores its own read
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
   }.Build();
+  ```
+
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+  });
   ```
 
 {% endlist %}
@@ -1419,6 +1657,53 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
   }.Build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      partitionIds: [1n, 2n, 3n],
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      maxLag: "1s", // number, import('ms').StringValue, protobuf Duration
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      readFrom: new Date(), // number, Date, protobuf Timestamp
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: [
+      {
+        path: topicPath,
+        partitionIds: [1n, 2n, 3n],
+      },
+      {
+        path: topicPath2,
+        maxLag: "1s",
+      },
+      {
+        path: topicPath3,
+        readFrom: new Date(),
+      },
+      // ...
+    ],
+    consumer: consumerName,
+  });
+  ```
+
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -1457,6 +1742,10 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 
@@ -1486,26 +1775,46 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Python
 
-   ```python
-   while True:
-       message = reader.receive_message()
-       process(message)
-   ```
+  {% list tabs %}
 
-- Java (sync)
+  - Native SDK
 
-  To read messages one-by-one without commit just do not call the `commit` method on messages:
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+    ```
 
-  ```java
-  while(true) {
-      Message message = reader.receive();
-      process(message);
-  }
-  ```
+  - Native SDK (Asyncio)
 
-- Java (async)
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+    ```
 
-  Reading messages one-by-one is not supported in async Reader.
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Synchronous API
+
+    To read messages one-by-one without commit, do not call `commit` on messages:
+
+    ```java
+    while(true) {
+        Message message = reader.receive();
+        process(message);
+    }
+    ```
+
+  - Asynchronous API
+
+    The async client does not support reading messages one-by-one.
+
+  {% endlist %}
 
 - C#
 
@@ -1521,6 +1830,15 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   }
   catch (OperationCanceledException)
   {
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for await (let msg of batch) {
+    }
   }
   ```
 
@@ -1566,30 +1884,57 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Python
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-   ```
+  {% list tabs %}
 
-- Java (sync)
+  - Native SDK
 
-  Reading messages in batches is not supported in sync Reader.
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+    ```
 
-- Java (async)
+  - Native SDK (Asyncio)
 
-  To read messages without commit just do not call the `commit` method:
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+    ```
 
-  ```java
-  private class Handler extends AbstractReadEventHandler {
-      @Override
-      public void onMessages(DataReceivedEvent event) {
-          for (Message message : event.getMessages()) {
-              process(message);
-          }
-      }
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
   }
   ```
+
+- Java
+
+  {% list tabs %}
+
+  - Synchronous API
+
+    Batch reading is not supported in the sync reader.
+
+  - Asynchronous API
+
+    To read without commit, do not call `commit`:
+
+    ```java
+    private class Handler extends AbstractReadEventHandler {
+        @Override
+        public void onMessages(DataReceivedEvent event) {
+            for (Message message : event.getMessages()) {
+                process(message);
+            }
+        }
+    }
+    ```
+
+  {% endlist %}
 
 - C#
 
@@ -1648,14 +1993,29 @@ If a commit fails with an error, the application should log it and continue; it 
 
 - Python
 
-   ```python
-   while True:
-       message = reader.receive_message()
-       process(message)
-       reader.commit(message)
-   ```
-
    The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -1703,6 +2063,16 @@ If a commit fails with an error, the application should log it and continue; it 
   }
   ```
 
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for (let msg of batch) {
+      await reader.commit(msg);
+    }
+  }
+  ```
+
 {% endlist %}
 
 #### Reading message batches with commits
@@ -1747,43 +2117,64 @@ If a commit fails with an error, the application should log it and continue; it 
 
 - Python
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-     reader.commit(batch)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
    The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
-- Java (sync)
+- Java
 
-  Not relevant due to sync reader only reading messages one by one.
+  {% list tabs %}
 
-- Java (async)
+  - Synchronous API
 
-  In `onMessage` handler whole message batch in `DataReceivedEvent` can be committed:
+    Not applicable: the sync reader does not support batch reads.
 
-  ```java
-  @Override
-  public void onMessages(DataReceivedEvent event) {
-      for (Message message : event.getMessages()) {
-          process(message);
-      }
-      event.commit()
-             .whenComplete((result, ex) -> {
-                 if (ex != null) {
-                     // Read session was probably closed, there is nothing we can do here.
-                     // Do not retry this commit on the same event.
-                     logger.error("exception while committing message batch: ", ex);
-                 } else {
-                     logger.info("message batch committed successfully");
-                 }
-             });
-  }
-  ```
+  - Asynchronous API
 
-- С#
+    In `onMessages`, commit the whole batch in `DataReceivedEvent`:
+
+    ```java
+    @Override
+    public void onMessages(DataReceivedEvent event) {
+        for (Message message : event.getMessages()) {
+            process(message);
+        }
+        event.commit()
+               .whenComplete((result, ex) -> {
+                   if (ex != null) {
+                       // Read session was probably closed, there is nothing we can do here.
+                       // Do not retry this commit on the same event.
+                       logger.error("exception while committing message batch: ", ex);
+                   } else {
+                       logger.info("message batch committed successfully");
+                   }
+               });
+    }
+    ```
+
+  {% endlist %}
+
+- C#
 
   ```c#
   try
@@ -1809,6 +2200,14 @@ If a commit fails with an error, the application should log it and continue; it 
   }
   catch (OperationCanceledException)
   {
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    await reader.commit(batch);
   }
   ```
 
@@ -1905,6 +2304,21 @@ Instead of committing messages, the client application may track reading progres
 
   The `setReadFrom` setting is used for reading only messages with write timestamps no less than the given one.
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+    onPartitionSessionStart: (evt) => {
+      return {
+        readOffset: 0n,
+        commitOffset: 0n,
+      };
+    },
+  });
+  ```
+
 {% endlist %}
 
 ### Reading without a Consumer {#no-consumer}
@@ -1941,9 +2355,9 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - Python
 
   To read without a `Consumer`, create a reader using the `reader` method with specifying these arguments:
-  * `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
-  * `consumer` - should be `None`;
-  * `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
+  - `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
+  - `consumer` - should be `None`;
+  - `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
 
   Example:
 
@@ -1963,6 +2377,10 @@ Reading progress is usually saved on a server for each Consumer. However, such p
       event_handler=CustomEventHandler(),
   )
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2058,100 +2476,111 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+  {% list tabs %}
 
-  ```python
-  with driver.topic_client.reader(topic, consumer) as reader:
-      with ydb.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+  - Native SDK
 
-              def callee(tx: ydb.QueryTxContext):
-                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+    [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-              session_pool.retry_tx_sync(callee)
-  ```
+    ```python
+    with driver.topic_client.reader(topic, consumer) as reader:
+        with ydb.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-- Python (asyncio)
+                def callee(tx: ydb.QueryTxContext):
+                    batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
 
-  To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
+                session_pool.retry_tx_sync(callee)
+    ```
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+  - Native SDK (Asyncio)
 
-  ```python
-  async with driver.topic_client.reader(topic, consumer) as reader:
-      async with ydb.aio.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+    [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
-              async def callee(tx: ydb.aio.QueryTxContext):
-                  batch = await reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+    ```python
+    async with driver.topic_client.reader(topic, consumer) as reader:
+        async with ydb.aio.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-              await session_pool.retry_tx_async(callee)
-  ```
+                async def callee(tx: ydb.aio.QueryTxContext):
+                    batch = await reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
 
-- Java (sync)
+                await session_pool.retry_tx_async(callee)
+    ```
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
+  {% endlist %}
 
-  A transaction can be set in `ReceiveSettings` for the `receive` method:
+- Java
 
-  ```java
-  Message message = reader.receive(ReceiveSettings.newBuilder()
-          .setTransaction(transaction)
-          .build());
-  ```
+  {% list tabs %}
 
-  A message received this way will be automatically committed with the provided transaction and shouldn't be committed directly.
-  The `receive` method sends the `sendUpdateOffsetsInTransaction` request on the server to link the message offset with this transaction and blocks until a response is received.
+  - Synchronous API
+
+    [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
+
+    You can pass a transaction in `ReceiveSettings` for `receive`:
+
+    ```java
+    Message message = reader.receive(ReceiveSettings.newBuilder()
+            .setTransaction(transaction)
+            .build());
+    ```
+
+    The message is then committed together with that transaction; do not commit it separately.
+    `receive` links message offsets to the transaction on the server via `sendUpdateOffsetsInTransaction` and returns after the response arrives.
+
+  - Asynchronous API
+
+    [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
+
+    In `onMessages`, you can attach one or more messages to a transaction by calling `reader.updateOffsetsInTransaction`.
+    Wait for that call to finish before committing the transaction.
+    The method takes a partition offset list; you can build it manually or use `getPartitionOffsets()` on `Message` or `DataReceivedEvent`.
+
+    ```java
+    @Override
+    public void onMessages(DataReceivedEvent event) {
+        for (Message message : event.getMessages()) {
+            // creating a session in the table service
+            Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+            if (!sessionResult.isSuccess()) {
+                logger.error("Couldn't get a session from the pool: {}", sessionResult);
+                return; // retry or shutdown
+            }
+            Session session = sessionResult.getValue();
+            // creating a transaction in the table service
+            // this transaction is not yet active and has no id
+            TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+            // do something else in the transaction
+            transaction.executeDataQuery("SELECT 1").join();
+            // now the transaction is active and has an id
+            // analyzeQueryResultIfNeeded();
+
+            Status updateStatus = reader.updateOffsetsInTransaction(transaction,
+                            message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
+                    // Do not commit a transaction without waiting for updateOffsetsInTransaction result to avoid a race condition
+                    .join();
+            if (!updateStatus.isSuccess()) {
+                logger.error("Couldn't update offsets in a transaction: {}", updateStatus);
+                return; // retry or shutdown
+            }
+
+            Status commitStatus = transaction.commit().join();
+            analyzeCommitStatus(commitStatus);
+        }
+    }
+    ```
+
+  {% endlist %}
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-- Java (async)
+- JavaScript
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
-
-  In the `onMessages` callback, one or more messages can be linked with a transaction.
-  To do that request `reader.updateOffsetsInTransaction` should be called. And transaction should not be committed until a response is received.
-  This method needs a partition offsets list as a parameter.
-  Such a list can be constructed manually or using the helper method `getPartitionOffsets()` that `Message` and `DataReceivedEvent` both provide.
-
-  ```java
-  @Override
-  public void onMessages(DataReceivedEvent event) {
-      for (Message message : event.getMessages()) {
-          // creating a session in the table service
-          Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
-          if (!sessionResult.isSuccess()) {
-              logger.error("Couldn't get a session from the pool: {}", sessionResult);
-              return; // retry or shutdown
-          }
-          Session session = sessionResult.getValue();
-          // creating a transaction in the table service
-          // this transaction is not yet active and has no id
-          TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-
-          // do something else in the transaction
-          transaction.executeDataQuery("SELECT 1").join();
-          // now the transaction is active and has an id
-          // analyzeQueryResultIfNeeded();
-
-          Status updateStatus = reader.updateOffsetsInTransaction(transaction,
-                          message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
-                  // Do not commit a transaction without waiting for updateOffsetsInTransaction result to avoid a race condition
-                  .join();
-          if (!updateStatus.isSuccess()) {
-              logger.error("Couldn't update offsets in a transaction: {}", updateStatus);
-              return; // retry or shutdown
-          }
-
-          Status commitStatus = transaction.commit().join();
-          analyzeCommitStatus(commitStatus);
-      }
-  }
-  ```
-
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2204,35 +2633,61 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
    No special processing is required.
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-     reader.commit(batch)
-   ```
+  {% list tabs %}
 
-- Java (sync)
+  - Native SDK
 
-  Not relevant due to not being possible to change the way of handling such events.
-  Client will automatically respond to server that it is ready to stop.
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
 
-- Java (async)
+  - Native SDK (Asyncio)
 
-  `onStopPartitionSession(StopPartitionSessionEvent event)` handler should be overridden to handle this event:
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
 
-  ```java
-  @Override
-  public void onStopPartitionSession(StopPartitionSessionEvent event) {
-      logger.info("Partition session {} stopped. Committed offset: {}", event.getPartitionSessionId(),
-              event.getCommittedOffset());
-      // This event means that no more messages will be received by server
-      // Received messages still can be read from ReaderBuffer
-      // Messages still can be committed, until confirm() method is called
+  {% endlist %}
 
-      // Confirm that session can be closed
-      event.confirm();
-  }
-  ```
+- Java
+
+  {% list tabs %}
+
+  - Synchronous API
+
+    Not applicable: the sync reader does not let you customize handling for this event.
+    The client automatically acknowledges stop to the server.
+
+  - Asynchronous API
+
+    Override `onStopPartitionSession(StopPartitionSessionEvent event)` on your `ReadEventHandler` (see [Connecting for reads](#start-reader)).
+    You must call `event.confirm()` so the server can continue shutdown.
+
+    ```java
+    @Override
+    public void onStopPartitionSession(StopPartitionSessionEvent event) {
+        logger.info("Partition session {} stopped. Committed offset: {}", event.getPartitionSessionId(),
+                event.getCommittedOffset());
+        // This event means that no more messages will be received by server
+        // Received messages still can be read from ReaderBuffer
+        // Messages still can be committed, until confirm() method is called
+
+        // Confirm that session can be closed
+        event.confirm();
+    }
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2280,31 +2735,62 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
    In this example, processing of messages within the batch will stop if the partition is reassigned during operation. This kind of optimization requires that you run extra code on the client side. In simple cases when processing of reassigned partitions is not a problem, you may skip this optimization.
 
-   ```python
-   def process_batch(batch):
-       for message in batch.messages:
-           if not batch.alive:
-               return False
-           process(message)
-       return True
+  {% list tabs %}
 
-   batch = reader.receive_batch()
-   if process_batch(batch):
-       reader.commit(batch)
-   ```
+  - Native SDK
 
-- Java (sync)
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
 
-  Not relevant due to not being possible to change the way of handling such events.
+    batch = reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
 
-- Java (async)
+  - Native SDK (Asyncio)
 
-  ```java
-  @Override
-  public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
-      logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
-  }
-  ```
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = await reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Synchronous API
+
+    Not applicable: the sync reader does not let you customize handling for this event.
+
+  - Asynchronous API
+
+    ```java
+    @Override
+    public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
+        logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
+    }
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2413,33 +2899,56 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   Autoscaling of a topic can be enabled during its creation using the `auto_partitioning_settings` argument of `create_topic`:
 
-  ```python
-      driver.topic_client.create_topic(
-          topic,
-          consumers=[consumer],
-          min_active_partitions=10,
-          max_active_partitions=100,
-          auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
-              strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              up_utilization_percent=80,
-              down_utilization_percent=20,
-              stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
-  ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  {% endlist %}
 
   Changes to an existing topic can be made using the `alter_auto_partitioning_settings` argument of `alter_topic`:
 
   ```python
-      driver.topic_client.alter_topic(
-          topic_path,
-          alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
-              set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              set_up_utilization_percent=80,
-              set_down_utilization_percent=20,
-              set_stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
+  driver.topic_client.alter_topic(
+      topic_path,
+      alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
+          set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+          set_up_utilization_percent=80,
+          set_down_utilization_percent=20,
+          set_stabilization_window=datetime.timedelta(seconds=300),
+      ),
+  )
   ```
 
   The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode can be set in the `auto_partitioning_support` argument when creating the reader. Full support mode is used by default.
@@ -2462,6 +2971,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 ### Commit outside the reader {#commit-outside-the-reader}
@@ -2470,17 +2983,23 @@ Most often, committing is conveniently done within the reader that has read the 
 
 {% list tabs group=lang %}
 
-- Python
+- Go
 
-  Commit outside the reader is done using the `topic_client.commit_offset` method:
+  Committing outside the reader is done with `db.Topic().CommitOffset`:
 
-  ```python
-  driver.topic_client.commit_offset(
-      topic_path,
-      consumer_name,
-      partition_id,
-      offset,
+  ```go
+  // Basic usage — commit an offset without an active read session
+  err := db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
   )
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}

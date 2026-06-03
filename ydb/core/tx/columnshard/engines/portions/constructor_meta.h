@@ -57,6 +57,7 @@ public:
     }
 
     void SetTierName(const TString& tierName);
+
     void ResetTierName(const TString& tierName) {
         TierName.reset();
         SetTierName(tierName);

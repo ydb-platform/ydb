@@ -43,6 +43,7 @@ PEERDIR(
     ydb/library/ycloud/impl
     ydb/library/naming_conventions
     ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/topic/codecs

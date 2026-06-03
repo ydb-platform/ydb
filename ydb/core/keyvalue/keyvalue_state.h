@@ -21,6 +21,7 @@
 #include <ydb/core/keyvalue/protos/events.pb.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <bitset>
+#include <memory>
 
 namespace NActors {
     struct TActorContext;
@@ -28,6 +29,9 @@ namespace NActors {
 
 namespace NKikimr {
 namespace NKeyValue {
+
+struct TKeyValueStateLifetimeToken {
+};
 
 class TKeyValueState {
 public:
@@ -298,6 +302,8 @@ protected:
     TControlWrapper UsePayload_Base;
     TMemorizableControlWrapper UsePayload;
 
+    std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
+
 public:
     TKeyValueState();
     void Clear();
@@ -529,6 +535,8 @@ public:
         return false;
     }
 
+    void RegisterReadRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
+        const TTabletStorageInfo *info, ui32 tabletGeneration);
     void RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
         const TTabletStorageInfo *info, ui32 tabletGeneration);
 
@@ -741,6 +749,15 @@ public:
 
     ui64 GetTrashTotalBytes() const {
         return TotalTrashSize;
+    }
+
+    ui32 GetRefCount(const TLogoBlobID& id) const {
+        const auto it = RefCounts.find(id);
+        return it != RefCounts.end() ? it->second : 0;
+    }
+
+    std::weak_ptr<TKeyValueStateLifetimeToken> GetLifetimeToken() const {
+        return LifetimeToken;
     }
 
     ui32 GetTrashCount() const {

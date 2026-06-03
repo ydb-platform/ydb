@@ -73,8 +73,8 @@ public:
         {
         }
 
-        const size_t MaxSizeBytes;
-        const size_t MaxCompiledSizeBytes;
+        size_t MaxSizeBytes;
+        size_t MaxCompiledSizeBytes;
         const std::optional<size_t> PatternAccessTimesBeforeTryToCompile;
 
         bool operator==(const TConfig& rhs) {
@@ -109,6 +109,13 @@ public:
     size_t GetSize() const;
 
     void CleanCache();
+
+    // Adjusts the size limits in-place, preserving cached entries.
+    // PatternAccessTimesBeforeTryToCompile must match the existing configuration;
+    // a different value requires recreating the cache.
+    void UpdateConfiguration(const TConfig& configuration);
+
+    void UpdatePatternCurrentUsageInfo();
 
     TConfig GetConfiguration() const {
         std::lock_guard lock(Mutex_);
@@ -150,7 +157,7 @@ private:
     std::unique_ptr<TLRUPatternCacheImpl> Cache_;                                    // protected by Mutex
     THashMap<TString, TPatternCacheEntryPtr> PatternsToCompile_;                     // protected by Mutex
 
-    const TConfig Configuration_;
+    TConfig Configuration_;
 
     NMonitoring::TDynamicCounters::TCounterPtr Hits_;
     NMonitoring::TDynamicCounters::TCounterPtr HitsCompiled_;

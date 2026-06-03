@@ -88,13 +88,15 @@ private:
     public:
         TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId& owner)
             : Tenant(tenant)
-            , Owner(owner) {
+            , Owner(owner)
+        {
             AFL_VERIFY(!!Owner);
         }
 
         explicit operator size_t() const {
             return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
         }
+
         bool operator==(const TColumnOwnerId& other) const {
             return Tenant == other.Tenant && Owner == other.Owner;
         }

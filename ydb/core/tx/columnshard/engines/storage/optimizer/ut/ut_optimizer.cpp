@@ -1,26 +1,28 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
+#include <ydb/core/formats/arrow/serializer/batch_only.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/intervals/optimizer.h>
-#include <ydb/core/formats/arrow/serializer/batch_only.h>
+#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
+
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(StorageOptimizer) {
-
     using namespace NKikimr::NArrow;
 
     class TPortionsMaker {
     private:
         ui64 PortionId = 0;
-    public:
 
+    public:
         static TReplaceKey MakeKey(const i64 value) {
-            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int64Type>>>(
-                "pk", NConstruction::TIntSeqFiller<arrow::Int64Type>(value));
-            return TReplaceKey({column->BuildArray(1)}, 0);
+            NConstruction::IArrayBuilder::TPtr column =
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int64Type>>>(
+                    "pk", NConstruction::TIntSeqFiller<arrow::Int64Type>(value));
+            return TReplaceKey({ column->BuildArray(1) }, 0);
         }
 
         std::shared_ptr<NKikimr::NOlap::TPortionInfo> Make(const i64 pkStart, const i64 pkFinish, const i64 size) {
@@ -86,5 +88,4 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         Y_ABORT_UNLESS(tasks.front()->SwitchedPortions[0].GetPortionId() == 1);
         Y_ABORT_UNLESS(tasks.front()->SwitchedPortions[1].GetPortionId() == 2);
     }
-
 };

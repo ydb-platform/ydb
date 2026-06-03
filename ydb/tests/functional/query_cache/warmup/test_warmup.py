@@ -275,6 +275,7 @@ def _make_warmup_config(nodes=3, max_nodes_to_request=None):
         warmup_config["max_nodes_to_request"] = max_nodes_to_request
     config.yaml_config["table_service_config"] = {
         "compile_query_cache_size": 200 if nodes > 3 else 100,
+        "enable_compile_cache_warmup": True,
         "compile_cache_warmup_config": warmup_config,
     }
     return config

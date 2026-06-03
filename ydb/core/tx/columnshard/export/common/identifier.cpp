@@ -48,4 +48,4 @@ TString TIdentifier::ToString() const {
     return TStringBuilder() << "path_id=" << PathId << ";";
 }
 
-}
+}   // namespace NKikimr::NOlap::NExport

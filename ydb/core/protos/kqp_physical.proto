@@ -380,6 +380,13 @@ message TKqpPhyCnDqSourceStreamLookup {
     bool IsMultiGet = 15;
     bool IsMultiMatches = 16;
     optional uint64 FullscanLimit = 17;
+
+    enum EShuffleMode {
+        OFF = 0;
+        MAP = 1;
+        HASH = 2;
+    }
+    EShuffleMode ShuffleMode = 18;
 }
 
 message TKqpPhyConnection {

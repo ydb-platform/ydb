@@ -1,5 +1,6 @@
 #include "dq_type_ann.h"
 
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -568,6 +569,12 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                    }
                    continue;
                 }
+                if (name.IsAtom("ShuffleMode")) {
+                    if (!EnsureConvertibleTo<EShuffleMode>(value, name.Content(), ctx)) {
+                        return nullptr;
+                    }
+                    continue;
+                }
             }
             ctx.AddError(TIssue(ctx.GetPosition(joinAlgoOption.Pos()), TStringBuilder() << "DqJoin: Unsupported DQ join option: " << name.Content()));
             return nullptr;
@@ -804,7 +811,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 11, 14, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 11, 15, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
@@ -881,6 +888,12 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         !input->Child(TDqCnStreamLookup::idx_FullscanLimit)->IsCallable("Void") &&
         (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_FullscanLimit), ctx) ||
          !EnsureConvertibleTo<ui64>(cnStreamLookup.FullscanLimit().Ref(), "FullscanLimit", ctx))) {
+        return TStatus::Error;
+    }
+    if (input->ChildrenSize() > TDqCnStreamLookup::idx_ShuffleMode &&
+        !input->Child(TDqCnStreamLookup::idx_ShuffleMode)->IsCallable("Void") &&
+        (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_ShuffleMode), ctx) ||
+         !EnsureConvertibleTo<EShuffleMode>(cnStreamLookup.ShuffleMode().Ref(), "ShuffleMode", ctx))) {
         return TStatus::Error;
     }
     bool isMultiget = input->ChildrenSize() > TDqCnStreamLookup::idx_IsMultiget

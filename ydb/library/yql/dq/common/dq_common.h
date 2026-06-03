@@ -106,6 +106,12 @@ enum class EHashShuffleFuncType {
     ColumnShardHashV1 = 1     /* "ColumnShardHashV1" */,
 };
 
+enum class EShuffleMode {
+    Off = 0,
+    Map = 1,
+    Hash = 2,
+};
+
 class TSpillingSettings {
 public:
     TSpillingSettings() = default;

@@ -233,7 +233,8 @@
             {"Index": 10, "Name": "MaxCachedRows", "Type": "TCoAtom"},
             {"Index": 11, "Name": "IsMultiget", "Type": "TCoAtom", "Optional": true},
             {"Index": 12, "Name": "IsMultiMatches", "Type": "TCoAtom", "Optional": true},
-            {"Index": 13, "Name": "FullscanLimit", "Type": "TExprBase", "Optional": true}
+            {"Index": 13, "Name": "FullscanLimit", "Type": "TExprBase", "Optional": true},
+            {"Index": 14, "Name": "ShuffleMode", "Type": "TCoAtom", "Optional": true}
         ]
     },
     {

@@ -281,7 +281,7 @@ public:
             // copy table info
             context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
             context.SS->PersistTable(db, dstPath.Base()->PathId);
-            context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
+            context.SS->PersistAllTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
             {
                 TVector<TTableShardInfo> newParts;
                 newParts.reserve(tableInfo->GetPartitions().size());
@@ -517,6 +517,12 @@ public:
                     lag = now - shard->LastCondErase;
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
                 }
+            }
+
+            if (tableInfo->PartitionsInShardIdxFormat) {
+                context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+            } else {
+                context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
             }
         }
 

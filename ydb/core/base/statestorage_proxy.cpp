@@ -622,7 +622,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const ui32 node = ev->Get()->NodeId;
         YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig node",
             {"ringGroup", RingGroupIndex},
-            {"disconnected", node});
+            {"disconnectedNode", node});
         MergeSigNodeError(node);
 
         if (RepliesMerged + RepliesAfterReply == Replicas) {

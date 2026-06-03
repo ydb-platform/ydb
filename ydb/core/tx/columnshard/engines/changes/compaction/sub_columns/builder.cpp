@@ -56,6 +56,7 @@ void TMergedBuilder::Initialize() {
             case NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray:
             case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
             case NArrow::NAccessor::IChunkedArray::EType::Dictionary:
+            case NArrow::NAccessor::IChunkedArray::EType::CompactKVArray:
                 AFL_VERIFY(false);
         }
     }

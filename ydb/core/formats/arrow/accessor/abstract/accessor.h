@@ -53,7 +53,8 @@ public:
         SparsedArray = 5,
         SubColumnsArray = 6,
         SubColumnsPartialArray = 7,
-        Dictionary = 8
+        Dictionary = 8,
+        CompactKVArray = 9
     };
 
     using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
@@ -495,6 +496,7 @@ public:
             case EType::SubColumnsPartialArray:
             case EType::Array:
             case EType::Dictionary:
+            case EType::CompactKVArray:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);

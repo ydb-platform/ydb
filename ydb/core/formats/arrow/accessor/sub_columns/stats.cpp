@@ -103,6 +103,7 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex)
         case IChunkedArray::EType::SubColumnsPartialArray:
         case IChunkedArray::EType::ChunkedArray:
         case IChunkedArray::EType::Dictionary:
+        case IChunkedArray::EType::CompactKVArray:
             AFL_VERIFY(false)("type", GetAccessorType(columnIndex));
             return TConstructorContainer();
     }

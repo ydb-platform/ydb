@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/dictionary
     ydb/core/formats/arrow/accessor/sparsed
     ydb/core/formats/arrow/accessor/sub_columns
+    ydb/core/formats/arrow/accessor/compact_kv
 )
 
 END()

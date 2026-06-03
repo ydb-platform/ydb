@@ -41,11 +41,17 @@ message TRequestedConstructor {
         optional TSettings Settings = 1;
     }
 
+    message TCompactKV {
+        optional bool ParseNested = 1 [default = false];
+        optional int32 ZstdLevel = 2 [default = -1];
+    }
+
     oneof Implementation {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
         TSubColumns SubColumns = 12;
         TDictionary Dictionary = 13;
+        TCompactKV CompactKV = 14;
     }
 }
 
@@ -71,11 +77,18 @@ message TConstructor {
         }
         optional TSettings Settings = 1;
     }
+
+    message TCompactKV {
+        optional bool ParseNested = 1 [default = false];
+        optional int32 ZstdLevel = 2 [default = -1];
+    }
+
     oneof Implementation {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
         TSubColumns SubColumns = 12;
         TDictionary Dictionary = 13;
+        TCompactKV CompactKV = 14;
     }
 }
 
@@ -90,3 +103,17 @@ message TSubColumnsAccessor {
     optional uint32 OtherRecordsCount = 5;
 }
 
+message TCompactKVAccessor {
+    optional uint32 KeysSize = 1;
+    optional uint32 ValuesSize = 2;
+    optional uint64 RowsSize = 3;
+    // Null bitmap over all records (1 bit per record, LSB-first). Absent when there are no nulls.
+    optional uint32 NullBitmapSize = 4;
+    // Number of non-null records encoded in the rows section.
+    optional uint32 NotNullCount = 5;
+    // Uncompressed sizes of each section (needed for decompression).
+    // When absent or zero, the section is stored uncompressed.
+    optional uint32 KeysRawSize = 7;
+    optional uint32 ValuesRawSize = 8;
+    optional uint64 RowsRawSize = 9;
+}

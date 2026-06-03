@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/changes/compaction/sparsed
     ydb/core/tx/columnshard/engines/changes/compaction/dictionary
     ydb/core/tx/columnshard/engines/changes/compaction/sub_columns
+    ydb/core/tx/columnshard/engines/changes/compaction/compact_kv
 )
 
 END()

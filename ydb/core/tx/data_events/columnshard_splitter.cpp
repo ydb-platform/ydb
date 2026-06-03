@@ -1,6 +1,7 @@
 #include "columnshard_splitter.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 
 namespace NKikimr::NEvWrite {

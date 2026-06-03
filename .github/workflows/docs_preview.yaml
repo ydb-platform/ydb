@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - Build documentation
+      - Rebuild documentation
     types:
       - completed
 

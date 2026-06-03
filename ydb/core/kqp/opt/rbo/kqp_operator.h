@@ -117,6 +117,7 @@ public:
      * TODO: Add caching with the ability to invalidate
      */
     virtual TVector<TInfoUnit> GetOutputIUs() = 0;
+    virtual TVector<TInfoUnit> GetInputIUs() = 0;
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) {
         Y_UNUSED(props);
@@ -205,6 +206,11 @@ public:
     TIntrusivePtr<IOperator>& GetInput() {
         return Children[0];
     }
+
+    virtual TVector<TInfoUnit> GetInputIUs() override {
+        return GetInput()->GetOutputIUs();
+    }
+
     void SetInput(TIntrusivePtr<IOperator> newInput) {
         Children[0] = newInput;
     }
@@ -250,6 +256,9 @@ public:
     virtual TVector<TInfoUnit> GetOutputIUs() override {
         return {};
     }
+    virtual TVector<TInfoUnit> GetInputIUs() override {
+        return {};
+    }
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "EmptySource"; }
 
@@ -265,6 +274,8 @@ public:
             const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetInputIUs() override { return {}; }
+
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "TableFullScan"; }
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
@@ -471,6 +482,7 @@ public:
             const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetInputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
@@ -492,6 +504,7 @@ class TOpUnionAll: public IBinaryOperator {
 public:
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetInputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "UnionAll"; }
@@ -582,6 +595,9 @@ public:
 
     virtual TVector<TInfoUnit> GetOutputIUs() override {
         return TreeRoot->GetOutputIUs();
+    }
+    virtual TVector<TInfoUnit> GetInputIUs() override {
+        return TreeRoot->GetInputIUs();
     }
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;

@@ -11,7 +11,7 @@
 - Системные объекты: [системные представления](../../dev/system-views.md) (`.sys`), [пулы ресурсов](../../concepts/glossary.md#resource-pool).
 - Редактор [YQL](../../concepts/glossary.md#yql) с подсветкой синтаксиса, автодополнением таблиц и колонок.
 - Выполнение запросов и визуализация результатов: таблица, JSON, диаграмма.
-- Визуализация [плана выполнения запроса](../../dev/query-plans-optimization.md) (`EXPLAIN`).
+- Визуализация [плана выполнения запроса](../../dev/query-execution-optimization/query-plans-optimization.md) (`EXPLAIN`).
 - Мониторинг активных сессий через [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
 - Дашборд кластера на базе [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md): загрузка CPU, использование памяти, сетевой трафик (обновление каждые 10 секунд).
 - Управление [правами доступа (ACL)](../../security/authorization.md#right): просмотр разрешений на объекты базы данных.
@@ -182,7 +182,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 ### EXPLAIN и план выполнения {#explain}
 
-Выберите **Explain YQL Query** в контекстном меню редактора или в командной палитре (`Ctrl+Shift+P`), чтобы получить [план выполнения запроса](../../dev/query-plans-optimization.md). Плагин отображает дерево операций плана в текстовом виде.
+Выберите **Explain YQL Query** в контекстном меню редактора или в командной палитре (`Ctrl+Shift+P`), чтобы получить [план выполнения запроса](../../dev/query-execution-optimization/query-plans-optimization.md). Плагин отображает дерево операций плана в текстовом виде.
 
 ### Менеджер сессий {#session-manager}
 

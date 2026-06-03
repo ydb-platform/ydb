@@ -63,7 +63,7 @@ debug ping | Проверка доступности {{ ydb-short-name }}
 [import file json](../export-import/import-file.md) | Импорт данных из JSON-файла
 [import file parquet](../export-import/import-file.md) | Импорт данных из Parquet-файла
 [import file tsv](../export-import/import-file.md) | Импорт данных из TSV-файла
-[import s3](../export-import/import-s3.md) | Импорт данных из хранилища S3
+[import s3](../export-import/import-s3/import-s3.md) | Импорт данных из хранилища S3
 [init](../profile/create.md) | Инициализация CLI, создание [профиля](../profile/index.md)
 [monitoring healthcheck](../commands/monitoring-healthcheck.md) | Проверка состояния базы
 [operation cancel](../operation-cancel.md) | Прерывание исполнения фоновой операции

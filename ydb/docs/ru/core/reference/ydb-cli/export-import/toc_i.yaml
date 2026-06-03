@@ -10,7 +10,9 @@ items:
 - name: Выгрузка в S3
   href: export-s3.md
 - name: Загрузка из S3
-  href: import-s3.md
+  href: import-s3/import-s3.md
+- name: Загрузка из NFS
+  href: import-nfs/import-nfs.md
 - name: Импорт данных из файла в существующую таблицу
   href: import-file.md
 - name: Коллекции резервных копий

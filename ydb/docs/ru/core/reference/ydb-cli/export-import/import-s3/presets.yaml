@@ -1,0 +1,7 @@
+default:
+  import_page_title: Загрузка из S3-совместимого хранилища
+  import_storage_cmd: s3
+  import_storage_name: S3
+  import_item_source_desc: префикс ключа в S3 с загружаемой директорией или таблицей
+  import_operation_kind: s3
+  import_operation_list: import/s3

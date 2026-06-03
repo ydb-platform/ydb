@@ -11,6 +11,6 @@
 - [Загрузка отдельных схемных объектов из файловой системы с помощью `tools restore`](../tools-restore.md#schema-objects)
 - [Соединение и аутентификация при работе с S3-совместимым объектным хранилищем](../auth-s3.md)
 - [Выгрузка в S3-совместимое объектное хранилище `export s3`](../export-s3.md)
-- [Загрузка из S3-совместимого объектного хранилища `import s3`](../import-s3.md)
+- [Загрузка из S3-совместимого объектного хранилища `import s3`](../import-s3/import-s3.md)
 
 {% include [_includes/options_overlay.md](options_overlay.md) %}

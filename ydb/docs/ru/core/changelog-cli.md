@@ -38,7 +38,7 @@
     * Интерактивный выбор цветовой темы из набора предустановленных вариантов с возможностью клонирования и настройки собственной темы.
 * Добавлен прогресс-бар загрузки в [команду](./reference/ydb-cli/commands/service.md) `{{ ydb-cli }} update`.
 * Добавлена опция `--include-index-data` в [команду](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3`, позволяющая экспортировать данные индексов.
-* Добавлена опция `--index-population-mode` в [команду](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая выбрать режим наполнения индекса (например, `build` или `import`).
+* Добавлена опция `--index-population-mode` в [команду](./reference/ydb-cli/export-import/import-s3/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая выбрать режим наполнения индекса (например, `build` или `import`).
 * Добавлены поля `Created by`, `Create time` и `End time` для операций "build index" и "execute script" в [подкомандах](./reference/ydb-cli/operation-list.md) `{{ ydb-cli }} operation`.
 * Добавлена поддержка единого формата временных интервалов во всех командах {{ ydb-short-name }} CLI. Опции, принимающие временные интервалы, теперь поддерживают явное указание единиц времени (например, `5s`, `2m`, `1h`) с сохранением обратной совместимости с числовыми значениями без суффикса, которые интерпретируются в исходных единицах по умолчанию.
 * В описании семейств столбцов [команды](./reference/ydb-cli/commands/scheme-describe.md) `{{ ydb-cli }} scheme describe` устаревшее поле "Keep in memory" заменено на "Cache mode".
@@ -81,7 +81,7 @@
 
 ### Функциональность
 
-* Добавлена опция `--exclude` в [команду](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая исключать схемные объекты из импорта по шаблону имени.
+* Добавлена опция `--exclude` в [команду](./reference/ydb-cli/export-import/import-s3/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая исключать схемные объекты из импорта по шаблону имени.
 * Добавлена поддержка объектов типа [трансфер](./concepts/transfer.md) при выполнении [команды](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команды](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`.
 * Добавлена новая опция `--retention-period` в подкоманды `{{ ydb-cli }} topic`. Использование устаревшей опции `--retention-period-hours` не рекомендуется.
 * В [команде](./reference/ydb-cli/topic-consumer-add.md) `{{ ydb-cli }} topic consumer add` появилась новая опция `--availability-period`, которая переопределяет гарантию удержания для читателя.
@@ -289,7 +289,7 @@
 
 {% endif %}
 
-* **_(Требуется сервер v25.1+)_** Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
+* **_(Требуется сервер v25.1+)_** Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} debug ping` добавлены новые опции: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin storage fetch` добавлены новые опции: `--dedicated-storage-section` и `--dedicated-cluster-section`.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin storage replace` добавлены новые опции: `--filename`, `--dedicated-cluster-yaml`, `--dedicated-storage-yaml`, `--enable-dedicated-storage-section` и `--disable-dedicated-storage-section`.
@@ -422,7 +422,7 @@
 
 * Добавлены команды управления конфигурациями кластера [ydb admin config](reference/ydb-cli/configs.md) и [ydb admin volatile-config](reference/ydb-cli/configs.md).
 * Добавлена поддержка загрузки PostgreSQL-совместимых типов командой [ydb import file csv|tsv|json](reference/ydb-cli/export-import/import-file.md). Только для строковых таблиц.
-* Добавлена поддержка загрузки директории из S3-совместимого хранилища в команде [ydb import s3](reference/ydb-cli/export-import/import-s3.md). Пока доступна только под Linux и Mac OS.
+* Добавлена поддержка загрузки директории из S3-совместимого хранилища в команде [ydb import s3](reference/ydb-cli/export-import/import-s3/import-s3.md). Пока доступна только под Linux и Mac OS.
 * Добавлена поддержка вывода результата выполнения команд [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) в формате [Apache Parquet](https://parquet.apache.org/docs/).
 * В командах [ydb workload](reference/ydb-cli/commands/workload/index.md) добавлена опция `--executer`, задающая используемый тип запросов.
 * Добавлена колонка медианного времени выполнения бенчмарка в таблице статистики в команде [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md).

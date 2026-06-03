@@ -34,7 +34,7 @@
 
 Для выполнения резервного копирования в S3-совместимое хранилище (например, [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html))  применяется команда `{{ ydb-cli }} export s3`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/export-s3.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
-Для выполнения восстановления из резервной копии, созданной в S3-совместимом хранилище, применяется команда `{{ ydb-cli }} import s3`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/import-s3.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения восстановления из резервной копии, созданной в S3-совместимом хранилище, применяется команда `{{ ydb-cli }} import s3`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/import-s3/import-s3.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
 {% note info %}
 

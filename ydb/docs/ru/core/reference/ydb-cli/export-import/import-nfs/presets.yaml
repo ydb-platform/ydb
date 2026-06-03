@@ -1,0 +1,7 @@
+default:
+  import_page_title: Загрузка из NFS
+  import_storage_cmd: nfs
+  import_storage_name: NFS
+  import_item_source_desc: путь в NFS (относительно `--fs-path`) с загружаемой директорией или таблицей
+  import_operation_kind: fs
+  import_operation_list: import/nfs

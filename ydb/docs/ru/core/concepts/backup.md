@@ -33,7 +33,7 @@
 
 ### Экспорт в S3-совместимое хранилище {#s3}
 
-Команды [`{{ ydb-cli }} export s3`](../reference/ydb-cli/export-import/export-s3.md) и [`{{ ydb-cli }} import s3`](../reference/ydb-cli/export-import/import-s3.md) позволяют выгружать и загружать данные во внешнее S3-совместимое хранилище.
+Команды [`{{ ydb-cli }} export s3`](../reference/ydb-cli/export-import/export-s3.md) и [`{{ ydb-cli }} import s3`](../reference/ydb-cli/export-import/import-s3/import-s3.md) позволяют выгружать и загружать данные во внешнее S3-совместимое хранилище.
 
 Подходит для:
 

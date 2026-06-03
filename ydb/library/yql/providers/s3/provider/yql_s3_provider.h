@@ -12,6 +12,7 @@
 #include <util/generic/vector.h>
 
 #include <list>
+#include <memory>
 #include <unordered_map>
 
 namespace NKikimr::NMiniKQL {

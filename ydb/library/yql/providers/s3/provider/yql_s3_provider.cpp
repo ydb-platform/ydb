@@ -1,5 +1,7 @@
 #include "yql_s3_provider.h"
 
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
@@ -10,7 +12,7 @@ TS3State::TS3State()
     , GatewayRetryPolicy(GetHTTPDefaultRetryPolicy())
 {}
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, std::shared_ptr<ISecuredServiceAccountCredentialsFactory> credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
     return [gateway, credentialsFactory, actorSystem, configurationInit] (
         const TString& userName,
         const TString& sessionId,

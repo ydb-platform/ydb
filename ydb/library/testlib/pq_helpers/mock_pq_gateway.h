@@ -6,7 +6,10 @@
 
 #include <util/system/types.h>
 
+#include <functional>
+#include <memory>
 #include <optional>
+#include <vector>
 
 namespace NActors {
 

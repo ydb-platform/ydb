@@ -34,6 +34,10 @@ ENDIF()
 
 END()
 
+RECURSE(
+    experimental
+)
+
 IF (OS_LINUX AND USE_SSE4 != "no")
     RECURSE_FOR_TESTS(
         ut

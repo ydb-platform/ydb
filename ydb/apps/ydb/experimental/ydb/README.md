@@ -1,9 +1,9 @@
-# YDB CLI — Experimental Build (`ydb_int`)
+# Experimental YDB CLI
 
-`ydb_int` is an internal build of the YDB command-line client that hosts
+This is an experimental build of the YDB command-line client that hosts
 **experimental** commands. It is intended for YDB developers and early adopters
 who need to validate functionality that is not yet ready to be exposed in the
-official client ([`ydb/apps/ydb`](../ydb)).
+official client ([`ydb/apps/ydb`](../..)).
 
 The binary is **not** distributed as an official release artifact, has no
 versioning guarantees, and its commands and flags may change or be removed at
@@ -11,26 +11,32 @@ any time without prior notice.
 
 ## Relationship with the official `ydb` client
 
-| Aspect                      | `ydb/apps/ydb`                  | `ydb/apps/ydb_int`                |
+| Aspect                      | `ydb/apps/ydb`                  | `ydb/apps/ydb/experimental/ydb`   |
 |-----------------------------|---------------------------------|-----------------------------------|
 | Audience                    | End users                       | YDB developers, contributors      |
 | Distribution                | Official releases, packages     | Built locally from source         |
 | Stability of commands       | Backwards-compatible guarantees | No guarantees                     |
 | Experimental commands       | Hidden / unavailable            | Available under `experimental`    |
 
-`ydb_int` is built on top of the same client infrastructure as the official
-`ydb` client ([`ydb/public/lib/ydb_cli`](../../public/lib/ydb_cli)) and adds
-the `experimental` (alias `exp`) command tree on top of it. The rest of the
-behaviour (authentication options, profiles, output formats, etc.) largely
-matches the official `ydb` client.
+The experimental client is built on top of the same client infrastructure as
+the official `ydb` client ([`ydb/public/lib/ydb_cli`](../../../../public/lib/ydb_cli))
+and adds the `experimental` (alias `exp`) command tree on top of it. The rest
+of the behaviour (authentication options, profiles, output formats, etc.)
+largely matches the official `ydb` client.
+
+The binary is intentionally named `ydb` so that an end user can run it as a
+drop-in replacement for the official client (interactive auto-completion,
+profile lookup, etc.) once it is on `PATH`. The build info reports
+`ydb-experimental` so it can still be distinguished from the official client
+in logs.
 
 ## Building
 
 ```bash
-./ya make --build relwithdebinfo ydb/apps/ydb_int
+./ya make --build relwithdebinfo ydb/apps/ydb/experimental/ydb
 ```
 
-The resulting binary is placed at `ydb/apps/ydb_int/ydb_int`.
+The resulting binary is placed at `ydb/apps/ydb/experimental/ydb/ydb`.
 
 ## Running
 
@@ -38,13 +44,13 @@ The invocation mirrors the official `ydb` client; the only difference is the
 extra `experimental` command tree:
 
 ```bash
-./ydb/apps/ydb_int/ydb_int experimental --help
+./ydb/apps/ydb/experimental/ydb/ydb experimental --help
 ```
 
 ### Interactive transactions (draft)
 
-In interactive mode (run `ydb_int` with no subcommand), `ydb_int` supports
-multi-statement transactions over a Query service session.
+In interactive mode (invoke the binary without a subcommand), the experimental
+client supports multi-statement transactions over a Query service session.
 
 Syntax (case-insensitive, trailing semicolon allowed):
 
@@ -80,7 +86,7 @@ with an open transaction prints a warning and rolls it back implicitly.
 
 This feature is **not** available in the official `ydb` client; it is
 controlled by the `EnableInteractiveTransactions` client setting that is set
-only by `ydb_int`.
+only by the experimental client.
 
 ## Adding a new experimental command
 
@@ -177,15 +183,15 @@ a library that is not already pulled in transitively, add it to `PEERDIR`.
 ### 5. Build and verify
 
 ```bash
-./ya make --build relwithdebinfo ydb/apps/ydb_int
-./ydb/apps/ydb_int/ydb_int experimental my-feature --help
+./ya make --build relwithdebinfo ydb/apps/ydb/experimental/ydb
+./ydb/apps/ydb/experimental/ydb/ydb experimental my-feature --help
 ```
 
 ## Requirements and conventions
 
-The following rules apply to every command added to `ydb_int`. They exist to
-keep the experimental binary usable for the developers around you and to ease
-the eventual promotion of a command to the official client.
+The following rules apply to every command added to the experimental client.
+They exist to keep the experimental binary usable for the developers around
+you and to ease the eventual promotion of a command to the official client.
 
 * **Naming.** Use short, kebab-case names for commands and long options (e.g.
   `my-feature`, `--input-file`). Provide a meaningful one-letter short option
@@ -203,9 +209,9 @@ the eventual promotion of a command to the official client.
 
 ## Promoting a command to the official client
 
-`ydb_int` is the proving ground for new functionality, not its permanent home.
-Once a command has stabilised, its options have been agreed upon, and it
-provides value to end users, move the corresponding sources to
-[`ydb/public/lib/ydb_cli/commands`](../../public/lib/ydb_cli/commands), register
-it in [`ydb/apps/ydb`](../ydb), and remove the experimental version from
-`ydb_int`.
+The experimental client is the proving ground for new functionality, not its
+permanent home. Once a command has stabilised, its options have been agreed
+upon, and it provides value to end users, move the corresponding sources to
+[`ydb/public/lib/ydb_cli/commands`](../../../../public/lib/ydb_cli/commands),
+register it in [`ydb/apps/ydb`](../..), and remove the experimental version
+from this build.

@@ -1,11 +1,11 @@
-PROGRAM(ydb_int)
+PROGRAM(ydb)
 
 SRCS(
     main.cpp
 )
 
 PEERDIR(
-    ydb/apps/ydb_int/commands
+    ydb/apps/ydb/experimental/ydb/commands
 )
 
 END()

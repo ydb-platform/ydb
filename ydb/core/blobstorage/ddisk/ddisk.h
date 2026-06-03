@@ -345,7 +345,7 @@ struct TPersistentBufferFormat {
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
     };
@@ -403,7 +403,7 @@ struct TPersistentBufferFormat {
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
     };
@@ -483,7 +483,7 @@ struct TPersistentBufferFormat {
             }
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
     };

@@ -315,6 +315,7 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
     , NodeId(runConfig.NodeId)
     , ScopeId(runConfig.ScopeId)
     , TinyMode(runConfig.TinyMode)
+    , ServicesMask(runConfig.ServicesMask)
 {}
 
 // TBasicServicesInitializer
@@ -2003,9 +2004,18 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             }
         }
 
+
+        TDuration publishWarmupTimeout = TDuration::Zero();
+        if (ServicesMask.EnableKqp && Config.GetTableServiceConfig().GetEnableCompileCacheWarmup()
+                && !appData->TenantName.empty()) {
+            publishWarmupTimeout = NKqp::ImportWarmupConfigFromProto(
+                Config.GetTableServiceConfig().GetCompileCacheWarmupConfig()).HardDeadline;
+        }
+
         setup->LocalServices.emplace_back(
            NGRpcService::CreateGrpcPublisherServiceActorId(),
-           TActorSetupCmd(CreateGrpcPublisherServiceActor(std::move(endpoints)), TMailboxType::ReadAsFilled, appData->UserPoolId)
+           TActorSetupCmd(CreateGrpcPublisherServiceActor(std::move(endpoints), publishWarmupTimeout),
+               TMailboxType::ReadAsFilled, appData->UserPoolId)
         );
     }
 }
@@ -2409,6 +2419,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             TVector<NActors::TActorId> notifyActorIds = {
                 NKqp::MakeKqpRmServiceID(NodeId),
                 MakeGRpcServersManagerId(NodeId),
+                NGRpcService::CreateGrpcPublisherServiceActorId(),
             };
             auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, std::move(notifyActorIds));
             setup->LocalServices.push_back(std::make_pair(

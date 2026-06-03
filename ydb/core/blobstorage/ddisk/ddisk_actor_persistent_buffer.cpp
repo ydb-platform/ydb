@@ -165,6 +165,30 @@ namespace NKikimr::NDDisk {
         TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors)
     {
         TRope fullData(std::move(payloadWithHeader));
+
+        // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
+        // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
+        // it via HasSignatureCorrection (JoinData restores the original byte on disk read-back). This mutates
+        // payload bytes that, on the interconnect fast path, share their backend with the payload-only rope
+        // that becomes the in-memory cache entry (pr.Data). ContiguousDataMut() routes to TRcBuf::GetDataMut(),
+        // which copies-on-write once when the backend is shared, forking fullData into a private buffer so the
+        // cached copy keeps the original bytes. This pass MUST run before the header pointer is captured below:
+        // the COW relocates fullData's backend, so a pointer taken earlier would dangle at the orphaned buffer
+        // and every subsequent header write (Locations, Header.Checksum) would miss the buffer that is actually
+        // written to disk. Do NOT switch to UnsafeContiguousDataMut(): it would mutate the shared backend in
+        // place and silently corrupt the in-memory cache. The copy is rare (only when a data sector starts with
+        // the signature byte) and fires at most once per write (fullData is private afterwards).
+        for (ui32 i = 1; i < sectors.size(); ++i) {
+            auto it = fullData.Begin() + SectorSize * i;
+            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                sectors[i].HasSignatureCorrection = true;
+                *it.ContiguousDataMut() = 0;
+            }
+        }
+
+        // Phase 2: fullData's backend is now final (private if Phase 1 copied it), so this header pointer stays
+        // valid for every write below. The header sector occupies reserved headroom that is not part of any
+        // payload view, so writing it through UnsafeContiguousDataMut() never needs (or triggers) a copy.
         auto* header = reinterpret_cast<TPersistentBufferLsnRecordHeader*>(fullData.Begin().UnsafeContiguousDataMut());
 
         memset(header, 0, SectorSize);
@@ -190,20 +214,8 @@ namespace NKikimr::NDDisk {
 
         for (ui32 i = 1; i < sectors.size(); ++i) {
             auto& loc = header->Locations[i - 1];
-            loc = sectors[i];
+            loc = sectors[i]; // carries HasSignatureCorrection set in Phase 1
             auto it = fullData.Begin() + SectorSize * i;
-            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                loc.HasSignatureCorrection = true;
-                // Intentional copy-on-write: ContiguousDataMut() routes to TRcBuf::GetDataMut(). On the
-                // interconnect fast path fullData shares its backend with the payload-only rope that later
-                // becomes the in-memory cache entry (pr.Data). The COW forks the on-disk buffer so we can
-                // zero this byte here while the cached copy keeps the original byte (restored via
-                // HasSignatureCorrection). Do NOT switch this to UnsafeContiguousDataMut(): it would mutate
-                // the shared backend in place and silently corrupt the in-memory cache. The copy is rare
-                // (only when a data sector starts with the header signature byte) and fires at most once
-                // per write (fullData is private afterwards).
-                *it.ContiguousDataMut() = 0;
-            }
             loc.Checksum = CalculateChecksum(it);
             sectors[i].Checksum = loc.Checksum;
         }
@@ -694,9 +706,10 @@ namespace NKikimr::NDDisk {
             .Attribute("lsn", static_cast<i64>(lsn));
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
 
-        TRcBuf payloadWithHeader = instr.PayloadId
-            ? ev->Get()->GetPayloadWithHeader(*instr.PayloadId)
-            : TRcBuf::UninitializedAligned(MinSectorSize, DataAlignment);
+        // CheckQuery (in Handle(TEvWritePersistentBuffer)) rejects requests with a missing PayloadId or a zero
+        // selector.Size, so a payload is always present here; slicing relies on this (sectorsCnt > 1).
+        Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer reached slicing without a payload");
+        TRcBuf payloadWithHeader = ev->Get()->GetPayloadWithHeader(*instr.PayloadId);
 
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, std::move(payloadWithHeader), sectors);

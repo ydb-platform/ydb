@@ -18,16 +18,33 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      - name: Check PR has docs changes
+        id: docs-changes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const hasDocs = files.some((f) => f.filename.startsWith('ydb/docs/'));
+            core.setOutput('has_docs', hasDocs ? 'true' : 'false');
+
       - name: Checkout
+        if: steps.docs-changes.outputs.has_docs == 'true'
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Get commit SHA
         id: sha
+        if: steps.docs-changes.outputs.has_docs == 'true'
         run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build
+        if: steps.docs-changes.outputs.has_docs == 'true'
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "pr-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"

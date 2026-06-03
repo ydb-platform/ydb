@@ -33,7 +33,8 @@ public:
     }
 
     TReadProxy(const TActorId& sender, const ui64 tabletId, const TActorId& tablet, ui64 tabletGeneration,
-               const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
+               const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
+               const TActorId& batchProcessorActor)
         : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
         , Sender(sender)
         , TabletGeneration(tabletGeneration)
@@ -42,6 +43,7 @@ public:
         , DirectReadKey(directReadKey)
         , InitialReadOffset(request.GetPartitionRequest().GetCmdRead().GetOffset())
         , CanReadBatches(request.GetPartitionRequest().GetCmdRead().GetCanReadBatches())
+        , BatchProcessorActor(batchProcessorActor)
     {
         AFL_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
         AFL_ENSURE(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
@@ -53,12 +55,6 @@ public:
 
     void Bootstrap(const TActorContext&)
     {
-        if (!CanReadBatches) {
-            BatchProcessorActor = RegisterWithSameMailbox(NBatching::CreateBatchProcessor(
-                TabletId,
-                TabletActorId,
-                Request.GetPartitionRequest().GetCmdRead().GetClientId()));
-        }
         Become(&TThis::StateFunc);
     }
 
@@ -68,9 +64,6 @@ public:
 
 private:
     void DieWithCleanup(const TActorContext& ctx) {
-        if (BatchProcessorActor) {
-            ctx.Send(BatchProcessorActor, new TEvents::TEvPoisonPill());
-        }
         Die(ctx);
     }
 
@@ -112,7 +105,7 @@ private:
         AFL_ENSURE(responseRecord.HasPartitionResponse() && responseRecord.GetPartitionResponse().HasCmdReadResult());
         const auto& cmdReadResult = responseRecord.GetPartitionResponse().GetCmdReadResult();
 
-        if (!CanReadBatches && BatchProcessorActor && HasBatchMessages(cmdReadResult)) {
+        if (!CanReadBatches && HasBatchMessages(cmdReadResult)) {
             PendingDirectRead = isDirectRead;
             PendingPartitionResponse.CopyFrom(partitionResponse);
 
@@ -375,13 +368,13 @@ private:
 
     const TActorId Sender;
     const ui32 TabletGeneration;
-    TActorId BatchProcessorActor;
     NKikimrClient::TPersQueueRequest Request;
     THolder<TEvPersQueue::TEvResponse> Response;
     std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
     TDirectReadKey DirectReadKey;
     const ui64 InitialReadOffset;
     const bool CanReadBatches;
+    const TActorId BatchProcessorActor;
     bool InitialRequest = true;
     TMaybe<ui64> LastSkipOffset;
     bool PendingDirectRead = false;
@@ -390,9 +383,10 @@ private:
 
 
 IActor* CreateReadProxy(const TActorId& sender, ui64 tabletId, const TActorId& tablet, ui32 tabletGeneration,
-                         const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
+                         const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
+                         const TActorId& batchProcessorActor)
 {
-    return new TReadProxy(sender, tabletId, tablet, tabletGeneration, directReadKey, request);
+    return new TReadProxy(sender, tabletId, tablet, tabletGeneration, directReadKey, request, batchProcessorActor);
 }
 
 }

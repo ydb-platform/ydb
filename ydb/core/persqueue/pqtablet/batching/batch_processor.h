@@ -1,7 +1,5 @@
 #pragma once
 
-#include "batch_cutter.h"
-
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/internal.h>
 
@@ -66,7 +64,7 @@ struct TEvProcessBatchResult : public NActors::TEventLocal<TEvProcessBatchResult
 
 class TBatchProcessor : public TBaseTabletActor<TBatchProcessor> {
 public:
-    TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user);
+    TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -78,12 +76,13 @@ public:
 private:
     STFUNC(StateWork);
 
+    NActors::TActorId GetOrCreateConsumerProcessor(const TString& user);
+
 private:
-    const TString User;
     TString LogPrefix;
-    THashMap<NKikimrClient::EMessageFormat, THolder<IBatchCutter>> BatchCutters;
+    THashMap<TString, NActors::TActorId> ConsumerProcessors;
 };
 
-NActors::IActor* CreateBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user);
+NActors::IActor* CreateBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId);
 
 } // namespace NKikimr::NPQ::NBatching

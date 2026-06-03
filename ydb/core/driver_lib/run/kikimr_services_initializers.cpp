@@ -1119,21 +1119,6 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
     }
 
-<<<<<<< HEAD
-=======
-#if defined(YDB_EMBEDDED_NBS_ENABLED)
-    if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetNbsConfig().GetEnabled()) {
-        const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
-        if (storageConfig.HasGlobalDDiskConfig()) {
-            nodeWardenConfig->DDiskConfig = storageConfig.GetGlobalDDiskConfig();
-        }
-        if (storageConfig.HasGlobalPBufferConfig()) {
-            nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
-        }
-    }
-#endif
-
->>>>>>> 254f7366b85 (Disable build NBS2 by ya.make flag (#42307))
     nodeWardenConfig->StartupConfigYaml = Config.GetStartupConfigYaml();
     nodeWardenConfig->StartupStorageYaml = Config.HasStartupStorageYaml()
         ? std::make_optional(Config.GetStartupStorageYaml())

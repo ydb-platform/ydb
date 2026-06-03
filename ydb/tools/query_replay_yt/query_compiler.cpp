@@ -582,7 +582,9 @@ private:
         GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);
-        Config->_KqpTablePathPrefix = database;
+        if (!database.empty()) {
+            Config->_KqpTablePathPrefix = database;
+        }
 
         ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
         if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {

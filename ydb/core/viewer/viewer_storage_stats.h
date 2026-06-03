@@ -611,6 +611,17 @@ public:
         }
     }
 
+    void HandleHiveError(TTabletId hiveId, const TString& error) {
+        auto it = HiveInfoResponse.find(hiveId);
+        if (it != HiveInfoResponse.end()) {
+            if (it->second.Error(error)) {
+                RequestDone();
+            }
+        } else {
+            AddEvent("Unknown Hive request error");
+        }
+    }
+
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         static const TString error = "Undelivered";
         AddProblem("data-incomplete");
@@ -624,6 +635,11 @@ public:
                 } else {
                     AddEvent("Unknown TEvUndelivered VDisk request");
                 }
+                break;
+            }
+            case TEvHive::EvRequestHiveInfo: {
+                TTabletId hiveId = ev->Cookie;
+                HandleHiveError(hiveId, error);
                 break;
             }
             case TEvWhiteboard::EvTabletStateRequest:

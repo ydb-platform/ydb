@@ -1,5 +1,4 @@
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
-ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
@@ -12,6 +11,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/cost KqpCost.CTAS+isOlap
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -20,6 +20,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
+ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk

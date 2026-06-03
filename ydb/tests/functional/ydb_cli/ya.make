@@ -19,7 +19,7 @@ TEST_SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(YDB_CLI_INT_BINARY="ydb/apps/ydb/experimental/ydb/ydb")
+ENV(YDB_CLI_EXPERIMENTAL_BINARY="ydb/apps/ydb/experimental/ydb/ydb")
 ENV(YDB_CLI_WITH_ENABLED_AI_BINARY="ydb/tests/functional/ydb_cli/ai_interactive/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 

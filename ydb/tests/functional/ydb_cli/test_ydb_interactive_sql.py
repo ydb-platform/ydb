@@ -929,7 +929,7 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
 class TestInteractiveTransactions(BaseSqlInteractiveTest):
     """Verify interactive transaction control via Query service session (experimental ydb client only)."""
 
-    CLI_BINARY_ENV = "YDB_CLI_INT_BINARY"
+    CLI_BINARY_ENV = "YDB_CLI_EXPERIMENTAL_BINARY"
 
     @classmethod
     def run_interactive_session(cls, queries: List[str], tmp_path: Path, extra_args: List[str] = None, endpoint: Optional[str] = None) -> BaseInteractiveTest.ExecutionResult:
@@ -1398,7 +1398,7 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
     TAB, observe the result.
     """
 
-    CLI_BINARY_ENV = "YDB_CLI_INT_BINARY"
+    CLI_BINARY_ENV = "YDB_CLI_EXPERIMENTAL_BINARY"
     COMPLETION_TIMEOUT = 10
 
     @classmethod

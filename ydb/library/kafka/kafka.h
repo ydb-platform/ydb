@@ -8,6 +8,10 @@
 #include <yql/essentials/public/decimal/yql_wide_int.h>
 
 #include <util/generic/buffer.h>
+#include <yql/essentials/public/decimal/yql_wide_int.h>
+
+#include <util/generic/array_ref.h>
+#include <util/generic/deque.h>
 #include <util/generic/strbuf.h>
 #include <util/system/types.h>
 

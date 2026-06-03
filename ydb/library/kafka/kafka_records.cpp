@@ -286,4 +286,27 @@ i32 TKafkaRecordBatchV0::Size(TKafkaVersion _version) const {
     return _collector.Size;
 }
 
+TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+
+    TKafkaRecordBatch batch;
+    batch.Read(readable, version);
+    if (readable.left() != 0) {
+        ythrow yexception() << "unexpected extra bytes after Kafka record batch: " << readable.left();
+    }
+    return batch;
+}
+
+TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
+    TWritableBuf buffer(batch.Size(version));
+    TKafkaWritable writable(buffer);
+    batch.Write(writable, version);
+
+    TString result;
+    for (auto it = buffer.GetBuffersDeque().rbegin(); it != buffer.GetBuffersDeque().rend(); ++it) {
+        result.append(it->Data(), it->Size());
+    }
+    return result;
+}
 } // namespace NKafka

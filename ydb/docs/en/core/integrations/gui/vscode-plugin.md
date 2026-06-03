@@ -18,8 +18,8 @@
 - Generating DDL scripts ( [`CREATE`](../../yql/reference/syntax/create_table/index.md)) for any database object.
 - Managing [streaming queries](../../concepts/glossary.md#streaming-query): viewing, starting, stopping.
 - [SQL query converter](../sql-dialect-converter.md) from other dialects (PostgreSQL, MySQL, ClickHouse, and others) to YQL.
-- Built-in [MCP server](#mcp) — direct access to databases from AI assistants (Claude Code and others).
-- [Semantic search in YQL documentation](#rag) (RAG) for AI-assisted query writing.
+- Built-in [MCP server](#mcp)
+- [Semantic search in YQL documentation](#rag)
 
 ## Requirements {#requirements}
 
@@ -31,8 +31,8 @@ The plugin can be installed from the VS Code Marketplace or from a `.vsix` file 
 
 ### Installing from VS Code Marketplace {#install-marketplace}
 
-1. Open the Extensions panel in VS Code (`Ctrl+Shift+X` / `Cmd+Shift+X`).
-2. In the search bar, enter `YDB for VS Code` and select the extension from publisher `ydb-tech` ( [direct link](https://marketplace.visualstudio.com/items?itemName=ydb-tech.ydb-vscode-plugin)).
+1. Open the Extensions panel in VS Code (`Ctrl+Shift+X `/` Cmd+Shift+X`).
+2. In the search bar, enter `YDB for VS Code`and select the extension from publisher`ydb-tech` ( [direct link](https://marketplace.visualstudio.com/items?itemName=ydb-tech.ydb-vscode-plugin)).
 3. Click **Install**.
 
 Alternatively, you can install the plugin from the Marketplace with a single command in the terminal:
@@ -50,14 +50,12 @@ This method is suitable if you need a specific version or don't have access to t
 
    - **Via terminal:**
 
-     ```bash
-     code --install-extension ydb-vscode-plugin-X.X.X.vsix
-     ```
-
-     Where `X.X.X` is the number of the downloaded version.
+        ```bash
+        code --install-extension ydb-vscode-plugin-X.X.X.vsix
+        ```
    - **Via VS Code interface:**
 
-     1. Open the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`).
+     1. Open the Extensions panel (`Ctrl+Shift+X `/` Cmd+Shift+X`).
      2. Click `...` (three dots) in the top right corner of the panel.
      3. Select **Install from VSIX...**.
      4. Specify the path to the downloaded `.vsix` file.
@@ -74,19 +72,19 @@ After installation using any method, restart VS Code. The **YDB** icon will appe
    | --- | --- | --- |
    | **Connection Name** | Arbitrary connection name | `my-ydb` |
    | **Host** | Host of the [endpoint](../../concepts/connect.md#endpoint) of the {{ ydb-name }} cluster | `ydb.example.com` |
-   | **Port** | Port (default `2135`) | `2135` |
-   | **Database** | Path to the [database](../../concepts/glossary.md#database) | `/Root/database` |
+   | **Port** | Port (default `2135 `) | ` 2135` |
+   | **Database** | Path to the [database](../../concepts/connect.md#endpoint) | `/Root/database` |
    | **Monitoring URL** | URL of [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md), used for the dashboard (auto-filled from the host, can be overridden) | `http://ydb.example.com:8765` |
-   | **Secure connection (grpcs)** | Use a secure connection (`grpcs://`) | ☑ |
+   | **Secure connection (grpcs)** | Use a secure connection (`grpcs://`) | ☑ |[эндпойнта](../../concepts/connect.md#endpoint)
    | **Use RAG** | Enable [search in YQL documentation](#rag) for this connection | ☑ |
-4. If necessary, specify the path to a custom CA certificate (PEM) in the **CA Certificate File** field — for connections with non-standard TLS. If the field is left empty, the built-in Yandex Cloud certificate is used.
-5. Select the authentication method from the **Auth type** dropdown (see [Authentication methods](#auth-methods)).
+4. If necessary, specify the path to a custom CA certificate (PEM) in the **CA Certificate File** field — for connections with non-standard TLS. If the field is left empty, the built-in Yandex Cloud certificate is used.[базе данных](../../concepts/glossary.md#database)
+5. Select the authentication method from the **Auth type** dropdown (see [Authentication methods](../../reference/embedded-ui/index.md)
 6. Click **Test Connection** to verify the settings. On successful connection, a success message will appear.
-7. Click **Save**. The connection will appear in the **Connections** panel.
+7. Click **Save**. The connection will appear in the **Connections** panel.[поиск по документации YQL](#rag)
 
 ## Authentication methods {#auth-methods}
 
-The plugin supports all [authentication](../../security/authentication.md) methods available in {{ ydb-short-name }}. The method is selected from the **Auth type** dropdown on the connection creation form.
+The plugin supports all [authentication](#auth-methods)).
 
 ### Anonymous {#auth-anonymous}
 
@@ -94,7 +92,7 @@ Connection without credentials. Used for local or test installations of {{ ydb-s
 
 ### Static Credentials (login and password) {#auth-static}
 
-Authentication by login and password. Enter the username in the **Username** field and the password in the **Password** field. on the {{ ydb-short-name }} server. Used if [login and password authentication](../../security/authentication.md#static-credentials) is enabled
+Authentication by login and password. Enter the username in the **Username** field and the password in the **Password** field. on the {{ ydb-short-name }} server. Used if [login and password authentication](../../security/authentication.md) is enabled
 
 {% note info %}
 
@@ -104,25 +102,25 @@ In managed installations of {{ ydb-name }}, login and password authentication is
 
 ### Access Token {#auth-token}
 
-Authentication by [IAM](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token) or [OAuth token](https://yandex.cloud/en/docs/iam/concepts/authorization/oauth-token). Enter the token in the **Token** field. The token is passed in the header of each request.
+Authentication by [IAM](https://yandex.cloud/en/docs/iam/) or 
 
-{% note warning %}
+{% note warning %}[IAM](https://yandex.cloud/en/docs/iam/)
 
 The IAM token has a limited [lifetime of no more than 12 hours](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token#lifetime), after which you need to obtain it again and update it in the connection settings. For long-lived connections, use authentication by [service account](#auth-service-account) or [metadata service](#auth-metadata).
 
-{% endnote %}
+{% endnote %}[IAM-](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token)[OAuth-токену](https://yandex.cloud/en/docs/iam/concepts/authorization/oauth-token)
 
 ### Service Account Key File {#auth-service-account}
 
-Authentication by the key of the [service account](https://yandex.cloud/en/docs/iam/concepts/users/service-accounts) of Yandex Cloud. Specify the path to the JSON file with the key in the **Service Account Key File** field (use the **Browse** button to select the file). For more information on how to create an authorized key, see the [Yandex Cloud documentation](https://yandex.cloud/en/docs/iam/operations/authentication/manage-authorized-keys).
+Authentication by the key of the [service account](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token#lifetime) of Yandex Cloud. Specify the path to the JSON file with the key in the **Service Account Key File** field (use the **Browse** button to select the file). For more information on how to create an authorized key, see the [Yandex Cloud documentation](#auth-service-account).
 
-Key file format:
+Key file format:[срок жизни — не более 12 часов](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token#lifetime)[сервисному аккаунту](#auth-service-account)[сервису метаданных](#auth-metadata)
 
 ```json
 {
   "id": "aje...",
   "service_account_id": "aje...",
-  "private_key": "-----BEGIN RSA PRIVATE KEY-----\n..."
+  "private_key": "-----BEGIN RSA PRIVATE KEY-----\n..."[сервисного аккаунта](https://yandex.cloud/en/docs/iam/concepts/users/service-accounts)[документации Yandex Cloud](https://yandex.cloud/en/docs/iam/operations/authentication/manage-authorized-keys)
 }
 ```
 
@@ -135,8 +133,8 @@ Authentication via the [Yandex Cloud metadata service](https://yandex.cloud/en/d
 After connecting, click on the connection in the **Connections** panel — the **Navigator** panel will open with the hierarchy of {{ ydb-short-name }} objects. The Navigator contains the following sections:
 
 - **Tables** — tables (row and column), organized by subdirectories according to the path in {{ ydb-short-name }}.
-- **System Views** — [system views](../../dev/system-views.md) (`.sys`), such as `query_sessions`, `partition_stats`.
-- **Views** — [views](../../concepts/datamodel/view.md).
+- **System Views** — [system views](../../dev/system-views.md) (`.sys`), such as `query_sessions `, ` partition_stats`.
+- **Views** — [views](https://yandex.cloud/en/docs/compute/operations/vm-metadata/get-vm-metadata).
 - **Topics** — [topics](../../concepts/datamodel/topic.md).
 - **External Data Sources** — [external data sources](../../concepts/glossary.md#external-data-source).
 - **External Tables** — [external tables](../../concepts/glossary.md#external-table).
@@ -144,13 +142,13 @@ After connecting, click on the connection in the **Connections** panel — the *
 - **Transfers** — data transfers.
 - **Streaming Queries** — [streaming queries](../../concepts/glossary.md#streaming-query).
 
-Right-click on any object in the navigator opens a context menu with available actions.
+Right-click on any object in the navigator opens a context menu with available actions.[представления](../../concepts/datamodel/view.md)
 
 ## Working with the plugin {#capabilities}
 
 ### Query workspace {#query-workspace}
 
-Open the query workspace via `Ctrl+Shift+Q` (`Cmd+Shift+Q` on macOS) or click **Open Query Workspace** in the connection context menu. In the workspace, you can write and execute YQL queries, view history and results.
+Open the query workspace via `Ctrl+Shift+Q ` (` Cmd+Shift+Q` on macOS) or click **Open Query Workspace** in the connection context menu. In the workspace, you can write and execute YQL queries, view history and results.[потоковые запросы](../../concepts/glossary.md#streaming-query)
 
 To quickly open the editor with a pre-filled query, right-click on a table or view in the navigator and select:
 
@@ -163,13 +161,13 @@ The editor supports:
 
 - Syntax highlighting of [YQL](../../yql/reference/index.md): keywords, data types, built-in functions.
 - Auto-completion of table and column names (based on the schema of the connected database).
-- Query execution: `Ctrl+Enter` (`Cmd+Enter` on macOS).
+- Query execution: `Ctrl+Enter ` (` Cmd+Enter` on macOS).
 
 Example YQL query:
 
 ```yql
 UPSERT INTO `users` (id, name, created_at)
-VALUES (1, "Alice", CurrentUtcDatetime());
+VALUES (1, "Alice", CurrentUtcDatetime());[YQL](../../yql/reference/index.md)
 ```
 
 Execution results are displayed in the **Results** panel as a table, JSON, or diagram (switch by tabs).
@@ -184,11 +182,11 @@ The **Sessions** panel (Activity Bar → YDB) displays all active sessions with 
 
 ### Cluster dashboard {#cluster-dashboard}
 
-The **Database Load** panel (Activity Bar → YDB) displays the cluster load in real time (updated every 10 seconds):
+The **Database Load** panel (Activity Bar → YDB) displays the cluster load in real time (updated every 10 seconds):[план выполнения запроса](../../dev/query-execution-optimization/query-plans-optimization.md)
 
-- CPU load (% and number of cores).
+- CPU load (% and number of cores).[`.sys/query_sessions`](../../dev/system-views.md#query-sessions)
 - Memory usage (% and amount).
-- Network traffic.
+- Network traffic.[`.sys/query_sessions`](../../dev/system-views.md#query-sessions)
 
 {% note warning %}
 
@@ -198,9 +196,9 @@ The dashboard is only available when working with self-hosted installations of {
 
 ### Streaming queries {#streaming-queries}
 
-In the navigator, expand the **Streaming Queries** section. For each query, the following are available:
+In the navigator, expand the **Streaming Queries** section. For each query, the following are available:[{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md)
 
-- View the source YQL (**View Source**).
+- View the source YQL (**View Source**).[{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md)[средства облачной платформы](https://yandex.cloud/en/docs/ydb/operations/monitoring)
 - Start and stop (**Start** / **Stop**).
 
 ### SQL dialect converter {#convert-dialect}
@@ -232,7 +230,7 @@ Right-click a table, topic, or other object in the navigator and select **Create
 
 ### Creating objects {#create-objects}
 
-Right-click the appropriate folder in the navigator to create a new object:
+Right-click the appropriate folder in the navigator to create a new object:[прав доступа (ACL)](../../security/authorization.md#right)
 
 - **New Row Table** / **New Column Table** — create a row or column table.
 - **New Topic** — create a topic.
@@ -252,7 +250,7 @@ The server runs on port **3333** (localhost only) by default. You can change the
 
 ```json
 {
-  "ydb.mcpPort": 3333
+  "ydb.mcpPort": 3333 [MCP-сервер](https://modelcontextprotocol.io/)
 }
 ```
 
@@ -263,29 +261,20 @@ If the port is already in use, the extension will show a warning and continue wo
 1. Make sure the YDB extension is running in VS Code and at least one connection is added in the **Connections** panel (see [Creating a connection](#connection)).
 2. Register the MCP server in Claude Code globally for the current user:
 
-   ```bash
-   claude mcp add --scope user --transport sse ydb http://localhost:3333/sse
-   ```
-
-   The `--scope user` flag saves the configuration globally — the server will be available from any directory where Claude Code is launched. Without this flag, the [scope `local`](https://docs.claude.com/en/docs/claude-code/mcp#mcp-installation-scopes) (default) is used, and you will have to repeat the registration for each project.
-3. Check the connection:
-
-   ```bash
-   claude mcp list
-   ```
-
-### Available MCP tools {#mcp-tools}
+    ```bash
+    claude mcp add --scope user --transport sse ydb http://localhost:3333/sse
+    ```
 
 | Tool | Parameters | Description |
-| --- | --- | --- |
+| --- | --- | --- |[Создание подключения](#connection)
 | `ydb_list_connections` | — | List of all connections configured in the plugin |
-| `ydb_query` | `connection`, `sql` | Execute a YQL query |
-| `ydb_describe_table` | `connection`, `path` | Get table schema (columns, primary key) |
-| `ydb_list_directory` | `connection`, `path?` | List of objects in the database directory |
-| `ydb_list_all` | `connection`, `path?`, `limit?`, `offset?` | Recursive list of all objects |
-| `ydb_yql_help` | `query`, `connection?` | Search YQL documentation (requires [RAG](#rag) enabled) |
+| `ydb_query `|`connection`, ` sql` | Execute a YQL query |
+| `ydb_describe_table `|`connection`, ` path`| Get table schema (columns, primary key) |[scope`local`](https://docs.claude.com/en/docs/claude-code/mcp#mcp-installation-scopes)
+| `ydb_list_directory `|`connection`, ` path?` | List of objects in the database directory |
+| `ydb_list_all `|`connection`, ` path?`, `limit?`, `offset?` | Recursive list of all objects |
+| `ydb_yql_help `|`query`, ` connection?` | Search YQL documentation (requires [RAG](https://docs.claude.com/en/docs/claude-code/mcp#mcp-installation-scopes)
 
-The `connection` parameter is the connection name as it appears in the **Connections** panel.
+The `connection`parameter is the connection name as it appears in the **Connections** panel.[scope`local`](https://docs.claude.com/en/docs/claude-code/mcp#mcp-installation-scopes)
 
 ## Search YQL documentation (RAG) {#rag}
 
@@ -307,35 +296,23 @@ The RAG status (Running / Not running) and Ollama status are displayed directly 
 
 [Ollama](https://ollama.com) is a local server for running language models and embedding models. The plugin accesses it via HTTP to convert documentation texts and search queries into vectors for semantic search.
 
-1. Install Ollama following the instructions on the [official download page](https://ollama.com/download) (macOS, Windows, and Linux are supported).
+1. Install Ollama following the instructions on the [official download page](https://ollama.com) (macOS, Windows, and Linux are supported).[`nomic-embed-text`](https://ollama.com/library/nomic-embed-text)
 2. Make sure the Ollama service is running and available at `http://localhost:11434`:
 
-   ```bash
-   curl http://localhost:11434/api/tags
-   ```
+    ```bash
 
    A JSON response with a list of models means the service is working.
-3. Download the `nomic-embed-text` embedding model (~270 MB):
+3. Download the `nomic-embed-text`embedding model (~270 MB):[официальной странице загрузки](https://ollama.com/download)```bash
+    ollama pull nomic-embed-text [Ollama](https://ollama.com)[`nomic-embed-text`](https://ollama.com/library/nomic-embed-text)
+    ```
 
-   ```bash
-   ollama pull nomic-embed-text
-   ```
-4. Make sure the model is available:
+{% note info %}[Ollama](https://ollama.com)[`nomic-embed-text`](https://ollama.com/library/nomic-embed-text)
 
-   ```bash
-   ollama list
-   ```
-
-   The output should contain the line `nomic-embed-text`.
-5. Open the connection form in the plugin and make sure the Ollama status is displayed as **Running**. If the status is **Not running**, check that the Ollama service is running and available at `http://localhost:11434`.
-
-{% note info %}
-
-The Ollama URL (`http://localhost:11434`) and model name (`nomic-embed-text`) are already set by default in the plugin — you only need to override the `ydb.ragOllamaUrl` and `ydb.ragOllamaModel` settings for a non-standard installation.
+The Ollama URL (`http://localhost:11434`) and model name (`nomic-embed-text`) are already set by default in the plugin — you only need to override the `ydb.ragOllamaUrl `and` ydb.ragOllamaModel` settings for a non-standard installation.
 
 You cannot use a different embedding model: the indexes published by the plugin in the cloud are built specifically on `nomic-embed-text`, and if you change the model, the query and documentation vectors will become incompatible.
 
-{% endnote %}
+{% endnote %}[Ollama](https://ollama.com)
 
 ## Updating the plugin {#updates}
 
@@ -347,7 +324,7 @@ If the plugin is installed from the [Marketplace](#install-marketplace), VS Code
 
 To update the plugin manually:
 
-1. Open the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`).
+1. Open the Extensions panel (`Ctrl+Shift+X `/` Cmd+Shift+X`).
 2. In the search bar, enter `YDB for VS Code` and open the installed extension.
 3. If a new version is available, an **Update** button will appear — click it.
 

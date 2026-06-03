@@ -13,7 +13,7 @@ Before deploying the system, be sure to perform the preparatory steps. See the d
 ## Prepare configuration files {#config}
 
 Prepare the {{ ydb-short-name }} configuration file:
-Also, if you need to enable Kafka API support for topics, add the kafka_proxy_config section to the configuration file (see [Kafka API configuration](../../../reference/configuration/kafka_proxy_config)).
+Also, if you need to enable Kafka API support for topics, add the kafka_proxy_config section to the configuration file (see [Kafka API configuration](../../../../reference/configuration/kafka_proxy_config.md)).
 
 ```yaml
 metadata:
@@ -98,12 +98,6 @@ config:
           - short_name: "O"
             values: ["YDB"]
 ```
-
-To speed up and simplify the initial deployment of {{ ydb-short-name }}, the configuration file already contains most of the settings for setting up the cluster. You just need to replace the default FQDN hosts in the `hosts` section and the disk paths with the actual ones in the `hosts_configs` section.
-
-* Section `hosts`:
-
-  ```yaml
   ...
   hosts:
   - host: ydb-node-zone-a.local
@@ -113,9 +107,6 @@ To speed up and simplify the initial deployment of {{ ydb-short-name }}, the con
       data_center: 'zone-a'
       rack: '1'
   ...
-  ```
-* Section `hosts_configs`:
-
   ```yaml
   ...
   host_configs:
@@ -138,34 +129,30 @@ For more information on creating the configuration file, see the [{#T}](../../..
 
 ## Copy TLS keys and certificates to each server {#tls-copy-cert}
 
-The prepared TLS keys and certificates must be copied to a secure directory on each cluster node {{ ydb-short-name }}. Below is an example of commands for creating a secure directory and copying the key and certificate files.
+The prepared TLS keys and certificates must be copied to a secure directory on each cluster node {{ ydb-short-name }}.
 
-```bash
+Details on preparation are in the [{#T}](deployment-preparation.md#tls-certificates) section. If certificates were generated using the `tls_cert_gen`script, take `ca.crt` from the`CA/certs/YYYY-MM-DD_hh-mi-ss`directory (substitute the timestamp from the script output or choose the appropriate directory in`CA/certs/`), and take `node.crt `, `node.key`, and ` web.pem`from the subdirectory named after this server's FQDN in`ydb-ca-nodes.txt`. Transfer these four files to the corresponding cluster server (for example, via `scp`) into a single local directory.
+
+On each server, in the directory where `ca.crt `, `node.crt `, ` node.key`, and ` web.pem` for this node are already located, run the commands below.
+
+Below is an example of creating a secure directory and copying:
+
+  ```yaml
 sudo mkdir -p /opt/ydb/certs
 sudo cp -v ca.crt /opt/ydb/certs/
 sudo cp -v node.crt /opt/ydb/certs/
 sudo cp -v node.key /opt/ydb/certs/
-sudo cp -v web.pem /opt/ydb/certs/
+sudo cp -v web.pem /opt/ydb/certs/[{#T}](deployment-preparation.md#tls-certificates)
 sudo chown -R ydb:ydb /opt/ydb/certs
 sudo chmod 700 /opt/ydb/certs
-```
+  ```
 
 ## Prepare the configuration on the cluster static nodes
 
-Create an empty `opt/ydb/cfg` directory on each machine for the cluster to work with the configuration. If you run multiple cluster nodes on the same machine, create separate directories for each node.
-
-```bash
+Create an empty `opt/ydb/cfg`directory on each machine for the cluster to work with the configuration. If you run multiple cluster nodes on the same machine, create separate directories for each node.```bash
 sudo mkdir -p /opt/ydb/cfg
 sudo chown -R ydb:ydb /opt/ydb/cfg
-```
-
-After running a special command on each machine, initialize this directory with the configuration file.
-
 ```bash
-sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-config /tmp/config.yaml
-```
-
-The original `/tmp/config.yaml` file is no longer used after this command is executed; you can delete it.
 
 ## Start static nodes {#start-storage}
 
@@ -173,20 +160,21 @@ The original `/tmp/config.yaml` file is no longer used after this command is exe
 
 * Manually
 
-  Start the {{ ydb-short-name }} storage service on each static cluster node:
+  Start the {{ ydb-short-name }} storage service on each static cluster node. Execute the commands below sequentially. Do not paste all lines together with `sudo su - ydb`— otherwise, subsequent commands may not run as the`ydb` user.
+  
+  After step 1, wait for the `ydb@...$` prompt.
+  
+  At step 4, wait for `ydbd` output in the same terminal.
 
-  ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --kafka-port 9092 --mon-cert /opt/ydb/certs/web.pem --node static
-  ```
+  1. Switch to the `ydb`user:```bash
+     sudo su - ydb
+     ```bash
+     cd /opt/ydb
+     ```
+
 * Using systemd
 
-  On each server that will host a static cluster node, create a systemd configuration file `/etc/systemd/system/ydbd-storage.service` according to the sample below. You can also [download the sample from the repository](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-storage.service).
-
-  ```ini
+  On each server that will host a static cluster node, create a systemd configuration file `/etc/systemd/system/ydbd-storage.service`according to the sample below. You can also [download the sample from the repository](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-storage.service).```bash
   [Unit]
   Description=YDB storage node
   After=network-online.target rc-local.service
@@ -203,7 +191,7 @@ The original `/tmp/config.yaml` file is no longer used after this command is exe
   StandardError=syslog
   SyslogIdentifier=ydbd
   SyslogFacility=daemon
-  SyslogLevel=err
+  SyslogLevel=err 
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
       --yaml-config  /opt/ydb/cfg/config.yaml \
@@ -215,21 +203,18 @@ The original `/tmp/config.yaml` file is no longer used after this command is exe
 
   [Install]
   WantedBy=multi-user.target
-  ```
-
-  Start the service on each static node {{ ydb-short-name }}:
-
-  ```bash
-  sudo systemctl start ydbd-storage
-  ```
+     ```bash
 
 {% endlist %}
 
+
+
 After starting the static nodes, verify their operation via the {{ ydb-short-name }} embedded web interface (Embedded UI):
 
-1. Open the address `https://<node.ydb.tech>:8765` in a browser, where `<node.ydb.tech>` is the FQDN of the server running any static node.
-2. Go to the **Nodes** tab.
-3. Make sure all 3 static nodes are displayed in the list.
+1. Open the address `https://<static-node.ydb.tech>:8765`in a browser, where`<static-node.ydb.tech>` is the FQDN of the server running any static node;
+2. If the browser asks for a login and password, log in with the `root`account and an empty password — at this deployment stage, the password for`root` has not been set yet;
+3. Go to the **Nodes** tab;
+4. Make sure all 3 static nodes are displayed in the list.
 
 ![Manual installation, running static nodes](../../_assets/manual_installation_1.png)
 
@@ -237,7 +222,7 @@ After starting the static nodes, verify their operation via the {{ ydb-short-nam
 
 The cluster initialization operation configures the set of static nodes listed in the cluster configuration file for {{ ydb-short-name }} data storage.
 
-To initialize the cluster, you need the certificate authority file `ca.crt`, whose path must be specified when running the relevant commands. Before running the commands, copy the `ca.crt` file to the server where the commands will be executed.
+To initialize the cluster, you need the `ca.crt `, `node.crt`, and ` node.key`files. Their paths are specified in the commands below (for bootstrap — all three, for obtaining a token —`ca.crt`). Before running them, make sure these files are on the server where you run the commands (see [copying TLS](#tls-copy-cert)).
 
 On one of the storage servers in the cluster, run the commands:
 
@@ -252,13 +237,9 @@ export LD_LIBRARY_PATH=/opt/ydb/lib
     admin cluster bootstrap --uuid <string>
 echo $?
 ```
-
-After initializing the cluster, you must first obtain an authentication token to execute further administrative commands.
-
-```bash
 /opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file ca.crt \
---user root --no-password auth get-token --force > token-file
-```
+--user root --no-password auth get-token --force > auth_token
+```bash
 
 If the cluster initialization is successful, the exit code of the cluster initialization command displayed on the screen should be zero.
 
@@ -272,12 +253,14 @@ When creating a database, the initial number of storage groups used is set, whic
 
 On one of the storage servers in the cluster, run the commands:
 
-```bash
+```
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydbd --ca-file /opt/ydb/certs/ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
     admin database /Root/testdb create ssd:8
 echo $?
-```
+     ```bash
+
+If the database is created successfully, the exit code of the command displayed on the screen should be zero.
 
 If the database is created successfully, the exit code of the command displayed on the screen should be zero.
 
@@ -289,13 +272,17 @@ The command example above uses the following parameters:
 
 ## Start dynamic nodes {#start-dynnode}
 
+Start the first dynamic node on one of the cluster servers where the `/opt/ydb/certs`and`/opt/ydb/cfg` directories are already prepared and a static node is running. Co-locating a static and dynamic node on the same server is allowed (see [{#T}](deployment-preparation.md#requirements)).
+
+For the topologies in the example (`mirror-3-dc-3nodes`— three servers,`mirror-3-dc-9nodes` — nine), run additional dynamic nodes on the same servers as the static ones — one on each of the remaining hosts, for fault tolerance and scaling.
+
 {% list tabs group=manual-systemd %}
 
 * Manually
 
   Start the dynamic node {{ ydb-short-name }} for database `/Root/testdb`:
 
-  ```bash
+     ```bash
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
@@ -310,14 +297,10 @@ The command example above uses the following parameters:
       --node-broker grpcs://<ydb-static-node1>:2135 \
       --node-broker grpcs://<ydb-static-node2>:2135 \
       --node-broker grpcs://<ydb-static-node3>:2135
-  ```
-
-  In the example command above, `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` are the FQDNs of any three servers on which static cluster nodes are running.
+     ```
 * Using systemd
 
-  Create a systemd configuration file `/etc/systemd/system/ydbd-testdb.service` using the sample below. You can also [download the sample file from the repository](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service).
-
-  ```ini
+  Create a systemd configuration file `/etc/systemd/system/ydbd-testdb.service`using the sample below. You can also [download the sample file from the repository](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service).```bash
   [Unit]
   Description=YDB testdb dynamic node
   After=network-online.target rc-local.service
@@ -329,7 +312,7 @@ The command example above uses the following parameters:
   Restart=always
   RestartSec=1
   User=ydb
-  PermissionsStartOnly=true
+  PermissionsStartOnly=true [{#T}](deployment-preparation.md#requirements)
   StandardOutput=syslog
   StandardError=syslog
   SyslogIdentifier=ydbd
@@ -346,7 +329,7 @@ The command example above uses the following parameters:
       --grpc-cert /opt/ydb/certs/node.crt \
       --grpc-key /opt/ydb/certs/node.key \
       --node-broker grpcs://<ydb-static-node1>:2135 \
-      --node-broker grpcs://<ydb-static-node2>:2135 \
+      --node-broker grpcs://<ydb-static-node2>:2135 \[{#T}](deployment-preparation.md#requirements)
       --node-broker grpcs://<ydb-static-node3>:2135
   LimitNOFILE=65536
   LimitCORE=0
@@ -354,15 +337,11 @@ The command example above uses the following parameters:
 
   [Install]
   WantedBy=multi-user.target
-  ```
-
-  In the example command above, `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` are the FQDNs of any three servers on which static cluster nodes are running.
+     ```bash
 
   Start the dynamic node {{ ydb-short-name }} for database `/Root/testdb`:
 
-  ```bash
-  sudo systemctl start ydbd-testdb
-  ```
+     ```
 
 {% endlist %}
 
@@ -370,59 +349,43 @@ Run additional dynamic nodes on other servers to scale and ensure fault toleranc
 
 ## Setting up accounts {#security-setup}
 
-1. Set a password for the `root` account using the token obtained earlier:
-
-   ```bash
+1. Set a password for the `root`account using the token obtained earlier:```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
        yql -s 'ALTER USER root PASSWORD "passw0rd"'
-   ```
-
-   Instead of the `passw0rd` value, substitute the required password. Save the password to a separate file. Subsequent commands as user `root` will be executed using the password passed via the `--password-file <path_to_user_password>` flag. You can also save the password in the connection profile, as described in the [{{ ydb-short-name }} CLI documentation](../../../../reference/ydb-cli/profile/index.md).
-2. Create additional accounts:
-
-   ```bash
+     ```
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
        yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
-   ```
-3. Set account permissions by including them in the built-in groups:
-
-   ```bash
+     ```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
-       yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
-   ```
-
-In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node serving the `/Root/testdb` database is running. When connecting via SSH to a dynamic node {{ ydb-short-name }}, it is convenient to use the `grpcs://$(hostname -f):2136` construct to obtain the FQDN.
+       yql -s 'ALTER GROUP `ADMINS`ADD USER user1'```In the command examples listed above,`<node.ydb.tech>`is the FQDN of the server where any dynamic node serving the`/Root/testdb`database is running. When connecting via SSH to a dynamic node {{ ydb-short-name }}, it is convenient to use the`grpcs://$(hostname -f):2136` construct to obtain the FQDN.
 
 When executing commands to create user accounts and assign groups, the {{ ydb-short-name }} CLI client will prompt for the password of user `root`. To avoid entering the password multiple times, you can create a connection profile as described in the [{{ ydb-short-name }} CLI documentation](../../../../reference/ydb-cli/profile/index.md).
 
 ## Test the created database {#try-first-db}
 
-1. Install the {{ ydb-short-name }} CLI as described in the [documentation](../../../../reference/ydb-cli/install.md).
-2. Create a test row-oriented (`test_row_table`) or column-oriented table (`test_column_table`):
+1. Install {{ ydb-short-name }} CLI as described in the [documentation](../../../../reference/ydb-cli/install.md).
+
+In the commands below, `<node.ydb.tech>`is the same FQDN of the dynamic node for the`/Root/testdb` database as in the [{#T}](#security-setup) section.
+
+2. Create a test row table (`test_row_table`) or column table (`test_column_table`):[проверка `web.pem`](#tls-copy-cert)
 
 {% list tabs %}
 
-- Creating a row table
+- Creating a row table [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service)
 
-  ```bash
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
-      yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
-  ```
-
-- Creating a columnar table
-
-  ```bash
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
-      yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64 NOT NULL, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
-  ```
+    ```bash
+    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'CREATE TABLE `testdir/test_row_table`(id Uint64, title Utf8, PRIMARY KEY (id));'```- Creating a columnar table```bash
+    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+        yql -s 'CREATE TABLE `testdir/test_column_table`(id Uint64 NOT NULL, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'```
 
 {% endlist %}
 
-Where `<node.ydb.tech>` is the FQDN of the server on which the dynamic node serving the database `/Root/testdb` is running.
+Where `<node.ydb.tech>`is the FQDN of the server on which the dynamic node serving the database`/Root/testdb` is running.
 
 ## Checking access to the built-in web interface
 
-To check access to the built-in web interface {{ ydb-short-name }}, just open a page with the address `https://<node.ydb.tech>:8765` in a web browser, where `<node.ydb.tech>` - FQDN of the server on which any static node {{ ydb-short-name }} is running.
+To check access to the built-in web interface {{ ydb-short-name }}, just open a page with the address `https://<node.ydb.tech>:8765`in a web browser, where`<node.ydb.tech>` - FQDN of the server on which any static node {{ ydb-short-name }} is running.
 
 The web browser must be configured to trust the certificate authority that issued the certificates for the {{ ydb-short-name }} cluster; otherwise, a warning about using an untrusted certificate will be displayed.
 
@@ -430,7 +393,7 @@ If authentication is enabled in the cluster, a login and password prompt should 
 
 {% note info %}
 
-Typically, to provide access to the built-in web interface {{ ydb-short-name }}, a fault-tolerant HTTP load balancer based on software `haproxy`, `nginx`, or analogues is configured. Details of configuring the HTTP load balancer are beyond the scope of the standard installation instructions for {{ ydb-short-name }}.
+Typically, to provide access to the built-in web interface {{ ydb-short-name }}, a fault-tolerant HTTP load balancer based on software `haproxy `, ` nginx`, or analogues is configured. Details of configuring the HTTP load balancer are beyond the scope of the standard installation instructions for {{ ydb-short-name }}.
 
 {% endnote %}
 
@@ -452,20 +415,18 @@ Unsecured mode of {{ ydb-short-name }} is intended for test tasks, primarily rel
 Installing {{ ydb-short-name }} for operation in unsecured mode is performed in the order described above, with the following exceptions:
 
 1. When preparing for installation, you do not need to generate TLS certificates and keys, and you do not need to copy certificates and keys to cluster nodes.
-2. The sections `security_config`, `interconnect_config`, and `grpc_config` are excluded from the configuration files of cluster nodes.
-3. A simplified version of the commands for starting static and dynamic cluster nodes is used: options with certificate and key file names are omitted, and the `grpc` protocol is used instead of `grpcs` when specifying connection endpoints.
-4. The unnecessary step of obtaining an authentication token before initializing the cluster and creating a database is skipped in unsecured mode.
-5. The cluster initialization command is executed in the following form:
+2. The `security_config `, `interconnect_config`, and ` grpc_config` sections are removed from cluster node configuration files.
+3. Use simplified commands for starting static and dynamic cluster nodes: omit options with certificate and key file names, and use the `grpc`protocol instead of`grpcs` when specifying connection endpoints.
+4. Skip the authentication token step before cluster initialization and database creation, as it is not needed in insecure mode.
+5. Run the cluster initialization command in the following form:
 
-   ```bash
-   export LD_LIBRARY_PATH=/opt/ydb/lib
-   ydb admin cluster bootstrap --uuid <string>
-   echo $?
-   ```
-6. The database creation command is executed in the following form:
+  ```ini
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    ydb admin cluster bootstrap --uuid <string>
+    echo $?
+  ```
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1 
+  ```bash
 
-   ```bash
-   export LD_LIBRARY_PATH=/opt/ydb/lib
-   /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
-   ```
-7. When accessing the database from the {{ ydb-short-name }} CLI and applications, the grpc protocol is used instead of grpcs, and authentication is not used.
+  ```

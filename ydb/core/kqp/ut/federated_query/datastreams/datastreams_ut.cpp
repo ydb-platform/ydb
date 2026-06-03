@@ -1453,6 +1453,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         {
             NYdb::TDriver driver(
                 NYdb::TDriverConfig()
+                    .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
                     .SetEndpoint(location)
                     .SetDatabase(databasePath)
             );

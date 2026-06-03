@@ -8,7 +8,14 @@
 
 Тестовая конфигурация использует встроенные SID: `database@builtin` в `database_allowed_sids`, `viewer@builtin` в `viewer_allowed_sids`, `monitoring@builtin` в `monitoring_allowed_sids`, `root@builtin` в `administration_allowed_sids`.
 
-Доступ наследуется сверху вниз: `administration_allowed_sids` включает права monitoring, viewer и database; `monitoring_allowed_sids` включает права viewer и database; `viewer_allowed_sids` включает права database.
+Доступ наследуется сверху вниз: каждый следующий уровень включает права всех уровней ниже.
+
+```text
+administration_allowed_sids
+  -> monitoring_allowed_sids
+     -> viewer_allowed_sids
+        -> database_allowed_sids
+```
 
 ## Аудит логгирование
 
@@ -17,7 +24,7 @@
 - `POST`, `PUT`, `DELETE` логируются всегда.
 - `OPTIONS` не логируется.
 - Остальные методы логируются, если URL не попал в denylist.
-- Текущий denylist: `/`, `/internal`, `/ver`, `/counters` рекурсивно, `/viewer` рекурсивно, `/vdisk` рекурсивно, `/pdisk` рекурсивно, `/monitoring` рекурсивно, `/healthcheck` рекурсивно, `/operation` рекурсивно, `/query` рекурсивно, `/scheme` рекурсивно, `/storage` рекурсивно, `/static` рекурсивно, `/jquery.tablesorter.js`, `/jquery.tablesorter.css`, `/lwtrace/mon/static` рекурсивно.
+- Текущий denylist: `/`, `/internal`, `/ver`, `/counters*`, `/viewer*`, `/vdisk*`, `/pdisk*`, `/monitoring*`, `/healthcheck*`, `/operation*`, `/query*`, `/scheme*`, `/storage*`, `/static*`, `/jquery.tablesorter.js`, `/jquery.tablesorter.css`, `/lwtrace/mon/static*`.
 
 ## Как скрипт распределяет endpoints по уровням прав
 

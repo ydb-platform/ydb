@@ -392,7 +392,7 @@ def _audit_cell(audited: bool) -> str:
 
 def _format_denylist(denylist: list[tuple[str, bool]]) -> str:
     entries = [
-        f'`{path}`{" рекурсивно" if recursive else ""}'
+        f'`{path}{"*" if recursive else ""}`'
         for path, recursive in denylist
     ]
     return ', '.join(entries)
@@ -413,9 +413,14 @@ def _render_markdown(rows: list[Row], canon_path: Path, denylist: list[tuple[str
         '`viewer@builtin` в `viewer_allowed_sids`, `monitoring@builtin` в `monitoring_allowed_sids`, '
         '`root@builtin` в `administration_allowed_sids`.',
         '',
-        'Доступ наследуется сверху вниз: `administration_allowed_sids` включает права monitoring, viewer '
-        'и database; `monitoring_allowed_sids` включает права viewer и database; `viewer_allowed_sids` '
-        'включает права database.',
+        'Доступ наследуется сверху вниз: каждый следующий уровень включает права всех уровней ниже.',
+        '',
+        '```text',
+        'administration_allowed_sids',
+        '  -> monitoring_allowed_sids',
+        '     -> viewer_allowed_sids',
+        '        -> database_allowed_sids',
+        '```',
         '',
         '## Аудит логгирование',
         '',

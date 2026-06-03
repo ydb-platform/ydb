@@ -4,6 +4,23 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+
+template <class T>
+TConclusionStatus ExtractInsertPromoteOption(
+    NYql::TObjectSettingsImpl::TFeaturesExtractor& features, const TString& featureId, std::optional<T>& target) {
+    if (auto rawValue = features.Extract(featureId)) {
+        T parsed;
+        if (!TryFromString(*rawValue, parsed)) {
+            return TConclusionStatus::Fail("Incorrect value for " + featureId + ": cannot parse as expected type");
+        }
+        target = parsed;
+    }
+    return TConclusionStatus::Success();
+}
+
+}   // namespace
+
 TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) {
     auto value = features.Extract<bool>("SCHEME_NEED_ACTUALIZATION", false);
     if (!value) {
@@ -16,10 +33,18 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
     }
-    InsertPromoteOptionsEnabled = features.Extract<bool>("INSERT_PROMOTE_OPTIONS.ENABLED");
-    InsertPromoteOptionsMinBlobBytes = features.Extract<ui64>("INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES");
-    InsertPromoteOptionsBuildIndexesEnabled = features.Extract<bool>("INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED");
-    InsertPromoteOptionsCompactionTargetLevel = features.Extract<ui32>("INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL");
+    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.ENABLED", InsertPromoteOptionsEnabled); status.IsFail()) {
+        return status;
+    }
+    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES", InsertPromoteOptionsMinBlobBytes); status.IsFail()) {
+        return status;
+    }
+    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED", InsertPromoteOptionsBuildIndexesEnabled); status.IsFail()) {
+        return status;
+    }
+    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL", InsertPromoteOptionsCompactionTargetLevel); status.IsFail()) {
+        return status;
+    }
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
         if (!CompactionPlannerConstructor.Initialize(*className)) {
             return TConclusionStatus::Fail("incorrect class name for compaction planner:" + *className);

@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/services/services.pb.h>
@@ -37,6 +38,7 @@ struct TEvPrivate {
         EvHardDeadline,
         EvSoftDeadline,
         EvTruncatedCountResult,
+        EvCheckTopology,
     };
 
     struct TQueryToCompile {
@@ -51,6 +53,7 @@ struct TEvPrivate {
     struct TEvFetchCacheResult : public NActors::TEventLocal<TEvFetchCacheResult, EvFetchCacheResult> {
         bool Success;
         TString Error;
+        TString Warnings;
         std::deque<TQueryToCompile> Queries;
 
         TEvFetchCacheResult(bool success, TString error = {})
@@ -62,6 +65,7 @@ struct TEvPrivate {
     struct TEvDelayedComplete : public NActors::TEventLocal<TEvDelayedComplete, EvDelayedComplete> {};
     struct TEvHardDeadline : public NActors::TEventLocal<TEvHardDeadline, EvHardDeadline> {};
     struct TEvSoftDeadline : public NActors::TEventLocal<TEvSoftDeadline, EvSoftDeadline> {};
+    struct TEvCheckTopology : public NActors::TEventLocal<TEvCheckTopology, EvCheckTopology> {};
 
     struct TEvTruncatedCountResult : public NActors::TEventLocal<TEvTruncatedCountResult, EvTruncatedCountResult> {
         bool Success;
@@ -88,7 +92,9 @@ public:
         , MaxCompilationDurationMs(maxCompilationDurationMs)
         , NodeIds(nodeIds)
         , MaxNodesToRequest(maxNodesToQuery)
-    {}
+    {
+        ForwardStreamIssuesOnSuccess = true;
+    }
 
     void OnRunQuery() override {
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
@@ -150,6 +156,8 @@ public:
         if (status != Ydb::StatusIds::SUCCESS) {
             Result->Success = false;
             Result->Error = issues.ToString();
+        } else if (!issues.Empty()) {
+            Result->Warnings = issues.ToOneLineString();
         }
         Send(Owner, Result.release());
     }
@@ -265,23 +273,9 @@ void FillYdbParametersFromMetadata(
 } // anonymous namespace
 
 
-/*
-    Compile warmup actor runs before the node is registered and ready to serve queries.
-    The main goal is to compile popular queries before node starts to avoid execution time drops
-    during the first moments of node work.
-
-    Timer logic:
-    1. HardDeadline (from Bootstrap): absolute maximum time for actor lifetime across all states.
-       Triggered in any state to forcefully terminate warmup (success=false).
-    2. SoftDeadline has two roles:
-       - (from Bootstrap): timeout for waiting TEvStartWarmup from KqpProxy.
-         If peer nodes are not discovered within this time, warmup completes early (success=false).
-       - (from HandleStartWarmup): timeout for fetching and compiling queries.
-         When reached, stops submitting new compilations but waits for in-flight ones to finish.
-         HardDeadline acts as a safety net if in-flight compilations hang.
-
-    Both SoftDeadline and HardDeadline are configured in WarmupConfig.
-*/
+// Triggers: RM kqpexch+ board sync (single-node fast-skip) or KqpProxy TEvStartWarmup
+// (multi-node — fetch SQL federated via TEvListProxyNodesRequest).
+// SoftDeadline: fallback cluster-wide fetch. HardDeadline: lifetime cap.
 class TKqpCompileCacheWarmupActor : public NActors::TActorBootstrapped<TKqpCompileCacheWarmupActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -309,7 +303,7 @@ public:
               << (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")
               << ", maxConcurrent: " << MaxConcurrentCompilations
               << (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")
-              << ", waiting for TEvStartWarmup from KqpProxy");
+              << ", self-orchestrating topology discovery");
 
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
@@ -322,7 +316,8 @@ public:
             return;
         }
 
-        Become(&TThis::StateWaitingStart);
+        Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
+        Become(&TThis::StateWaitingTopology);
     }
 
     void ScheduleComplete() {
@@ -345,14 +340,15 @@ private:
         }
     }
 
-    STFUNC(StateWaitingStart) {
+    STFUNC(StateWaitingTopology) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStartWarmup, HandleStartWarmup);
+            cFunc(TEvPrivate::EvCheckTopology, HandleCheckTopology);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
-            cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadlineInWaitingStart);
+            cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadlineInTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateWaitingStart: unexpected event " << ev->GetTypeRewrite());
+            LOG_W("StateWaitingTopology: unexpected event " << ev->GetTypeRewrite());
             break;
         }
     }
@@ -404,21 +400,48 @@ private:
     void HandleStartWarmup(TEvStartWarmup::TPtr& ev) {
         const auto discoveredNodes = ev->Get()->DiscoveredNodesCount;
         NodeIds = ev->Get()->NodeIds;
-        if (discoveredNodes <= 1) {
-            LOG_I("Received TEvStartWarmup with single node, skipping warmup");
-            Complete(true, "Skipped: single node");
-            return;
-        }
 
-        LOG_I("Received TEvStartWarmup, discovered nodes: " << discoveredNodes
+        LOG_I("Received TEvStartWarmup, discoveredNodes: " << discoveredNodes
               << ", nodeIds count: " << NodeIds.size()
               << ", maxNodesToQuery: " << Config.MaxNodesToRequest
               << ", scheduling soft deadline: " << Config.SoftDeadline);
-        // Cancel bootstrap soft deadline (discovery wait) and schedule compilation soft deadline
+        RescheduleSoftDeadlineForFetch();
+        StartFetch();
+    }
+
+    void HandleCheckTopology() {
+        auto rm = TryGetKqpResourceManager(SelfId().NodeId());
+        if (!rm || !rm->GetInitialBoardSyncDone()) {
+            Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
+            return;
+        }
+
+        // Single-node fast-skip only; multi-node must wait for kqpproxy+ board
+        // (otherwise federated .sys/compile_cache_queries collapses to [self]-only).
+        auto boardNodeIds = rm->GetInitialBoardNodeIds();
+        const ui32 selfNodeId = SelfId().NodeId();
+        ui32 peerCount = 0;
+        for (auto nodeId : boardNodeIds) {
+            if (nodeId != selfNodeId) {
+                ++peerCount;
+            }
+        }
+
+        if (peerCount == 0) {
+            LOG_I("No peers in initial kqpexch+ board sync (boardSize=" << boardNodeIds.size()
+                  << "), skipping warmup");
+            Complete(true, "Skipped: no peers in initial kqpexch+ board sync");
+            return;
+        }
+
+        LOG_I("Initial board sync delivered " << peerCount << " peer(s), waiting for "
+              "TEvStartWarmup from KqpProxy");
+    }
+
+    void RescheduleSoftDeadlineForFetch() {
         SoftDeadlineCookieHolder.Detach();
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
         Schedule(Config.SoftDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
-        StartFetch();
     }
 
     void StartFetch() {
@@ -444,9 +467,13 @@ private:
         auto* result = ev->Get();
 
         if (!result->Success) {
-            LOG_W("Fetch failed, skipping warmup: " << result->Error);
+            LOG_W("Fetch failed (no compile cache nodes responded), skipping warmup: " << result->Error);
             Complete(false, "Fetch failed: " + result->Error);
             return;
+        }
+
+        if (!result->Warnings.empty()) {
+            LOG_W("Fetch completed with warnings: " << result->Warnings);
         }
 
         QueriesToCompile = std::move(result->Queries);
@@ -655,9 +682,11 @@ private:
         }
     }
 
-    void HandleSoftDeadlineInWaitingStart() {
-        LOG_I("Soft deadline reached while waiting for warmup start signal - no peer nodes discovered, skipping warmup");
-        Complete(false, "Warmup incomplete: no peer nodes discovered within soft deadline");
+    void HandleSoftDeadlineInTopology() {
+        LOG_I("Soft deadline reached while waiting for topology, fetching without node filter");
+        NodeIds.clear();
+        RescheduleSoftDeadlineForFetch();
+        StartFetch();
     }
 
     void HandlePoison() {
@@ -679,6 +708,8 @@ private:
 
         PassAway();
     }
+
+    static constexpr TDuration TopologyCheckInterval = TDuration::MilliSeconds(500);
 
     const TKqpWarmupConfig Config;
 

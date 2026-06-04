@@ -215,6 +215,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlWithIAM
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestListQueues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthDeleteQueue

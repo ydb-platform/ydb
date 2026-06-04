@@ -845,7 +845,8 @@ private:
 
         std::vector<TString> tokens;
         if (settings.Tokens) {
-            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson ||
+                indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact);
 
             for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
                 auto pair = token.Cast<TExprList>();

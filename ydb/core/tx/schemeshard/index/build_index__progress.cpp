@@ -1936,7 +1936,6 @@ private:
                     (parent - buildInfo.KMeans.ParentBegin) * buildInfo.KMeans.K;
 
         for (const auto& idx : it->second.Shards) {
-            buildInfo.BusyShards.insert(idx);
             parentState.ShardSet.push_back(idx);
             parentState.ToUploadShards.push_back(idx);
         }
@@ -1945,9 +1944,6 @@ private:
     void FinishParent(TTransactionContext& txc, TIndexBuildInfo& buildInfo,
                       NTableIndex::NKMeans::TClusterId parent,
                       TIndexBuildInfo::TParentIndexBuildState& parentState) {
-        for (const auto& idx : parentState.ShardSet) {
-            buildInfo.BusyShards.erase(idx);
-        }
         ClearParentDoneShards(txc, buildInfo, parentState);
         buildInfo.ParentIndexBuildState.erase(parent);
     }
@@ -1964,8 +1960,6 @@ private:
     }
 
     void TryStartPendingParents(TIndexBuildInfo& buildInfo) {
-        TDeque<NTableIndex::NKMeans::TClusterId> deferred;
-
         while (buildInfo.ParentIndexBuildState.size() < buildInfo.MaxParallelParents &&
                !buildInfo.PendingMultiShardParents.empty()) {
             auto parent = buildInfo.PendingMultiShardParents.front();
@@ -1979,25 +1973,9 @@ private:
             if (it == buildInfo.Cluster2Shards.end()) {
                 continue;
             }
-            bool conflict = false;
-            for (const auto& idx : it->second.Shards) {
-                if (buildInfo.BusyShards.contains(idx)) {
-                    conflict = true;
-                    break;
-                }
-            }
-            if (conflict) {
-                deferred.push_back(parent);
-                continue;
-            }
 
             StartParent(buildInfo, parent);
             SendRequestsToParentShards(buildInfo, parent, buildInfo.ParentIndexBuildState.at(parent));
-        }
-
-        while (!deferred.empty()) {
-            buildInfo.PendingMultiShardParents.push_front(deferred.back());
-            deferred.pop_back();
         }
     }
 

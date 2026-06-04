@@ -392,7 +392,6 @@ public:
 
     TMap<NTableIndex::NKMeans::TClusterId, TParentIndexBuildState> ParentIndexBuildState;
     TDeque<NTableIndex::NKMeans::TClusterId> PendingMultiShardParents;
-    THashSet<TShardIdx> BusyShards;
     THashMap<TShardIdx, NTableIndex::NKMeans::TClusterId> ShardParentMap;
     TSet<NTableIndex::NKMeans::TClusterId> CompletedParents;
     std::optional<NTableIndex::NKMeans::TClusterId> CurrentResponseParent;

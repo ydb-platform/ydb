@@ -15,6 +15,7 @@ NRetroTracing::TRetroSpan* DeserializeInterconnectRetroSpan(ui32 type, ui32 size
         }
 
         SPAN_TYPE(TPacketSpan, Packet);
+        SPAN_TYPE(TDelayedEventSpan, DelayedEvent);
 
 #undef SPAN_TYPE
         default:

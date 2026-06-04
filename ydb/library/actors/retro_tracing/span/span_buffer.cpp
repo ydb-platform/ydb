@@ -77,10 +77,6 @@ void WriteSpan(const TRetroSpan* span) {
     SpanBuffer->WriteSpan(span);
 }
 
-void CopyThreadLocalBufferContent(TBufferData* destination) {
-    SpanBuffer->CopyData(destination);
-}
-
 void DropThreadLocalBuffer() {
     SpanBuffer.reset();
 }

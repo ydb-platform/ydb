@@ -17,10 +17,6 @@ protected:
     using TStatusCode = NWilson::NTraceProto::Status::StatusCode;
     using EStatusCode = NWilson::NTraceProto::Status;
 
-private:
-
-    static TRetroSpan* Deserialize(const void* data);
-
 public:
     TRetroSpan(ui32 type, ui32 size);
     virtual ~TRetroSpan();

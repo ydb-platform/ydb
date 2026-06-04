@@ -6,7 +6,8 @@ namespace NRetroTracing {
 
 struct TSpanTypeNamespace {
     enum E : ui32 {
-        INTERCONNECT = 0,
+        UNINITIALIZED = 0,
+        INTERCONNECT = 1,
         USERSPACE = 4096,
         END = (1 << 15),
     };

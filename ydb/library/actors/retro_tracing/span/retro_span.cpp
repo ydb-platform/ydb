@@ -78,12 +78,12 @@ void TRetroSpan::End() {
 }
 
 void TRetroSpan::EndError() {
-    StatusCode = EStatusCode::STATUS_CODE_OK;
+    StatusCode = EStatusCode::STATUS_CODE_ERROR;
     End();
 }
 
 void TRetroSpan::EndOk() {
-    StatusCode = EStatusCode::STATUS_CODE_ERROR;
+    StatusCode = EStatusCode::STATUS_CODE_OK;
     End();
 }
 

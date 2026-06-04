@@ -1802,7 +1802,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
         }
     }
 
@@ -1832,7 +1832,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
         }
     }
 
@@ -1863,7 +1863,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
         }
     }
 
@@ -1900,7 +1900,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
         }
     }
 
@@ -1937,7 +1937,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
         }
     }
 }

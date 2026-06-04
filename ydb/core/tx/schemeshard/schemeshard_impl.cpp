@@ -3452,6 +3452,15 @@ void TSchemeShard::PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const 
     }
 }
 
+void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ExternalTables.find(pathId);
+    Y_ABORT_UNLESS(it != ExternalTables.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistExternalTable(db, pathId, info);
+}
+
 void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTableInfo) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -3501,6 +3510,15 @@ void TSchemeShard::PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathI
     }
 
     db.Table<Schema::ExternalTable>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ExternalDataSources.find(pathId);
+    Y_ABORT_UNLESS(it != ExternalDataSources.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistExternalDataSource(db, pathId, info);
 }
 
 void TSchemeShard::PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSourceInfo) {
@@ -3605,6 +3623,15 @@ void TSchemeShard::PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId) {
     }
 
     db.Table<Schema::SysView>().Key(pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ResourcePools.find(pathId);
+    Y_ABORT_UNLESS(it != ResourcePools.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistResourcePool(db, pathId, info);
 }
 
 void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool) {

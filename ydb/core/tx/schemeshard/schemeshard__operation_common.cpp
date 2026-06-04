@@ -1243,6 +1243,15 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
 
 }  // namespace NForceDrop
 
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
+    if (parentPath.Base()->HasActiveChanges()) {
+        const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                                    ? parentPath.Base()->CreateTxId
+                                    : parentPath.Base()->LastTxId;
+        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
+    }
+}
+
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete) {
     auto parent = path.Parent();
     if (parent.Base()->IsDirectory() || parent.Base()->IsDomainRoot()) {

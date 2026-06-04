@@ -16,6 +16,12 @@ struct TSchedulableRead : TSchedulableTask {
     // Must be called right after TryConsumeQuota fails (refill already done).
     TDuration EstimateQuotaDelay(TDuration expectedQuota) const;
 
+    // Non-consuming availability check: refills the bucket and reports whether any
+    // quota is left, without reserving it or touching fair-share usage. Lets a
+    // caller skip opening a (no-op) read transaction while clearly throttled.
+    // After it returns false, EstimateQuotaDelay() may be called (refill is done).
+    bool HasAvailableQuota();
+
 private:
     // Milliseconds precision - because THPTimer::STime to TDuration has the same precision
     ui64 MaxQuotaMs;

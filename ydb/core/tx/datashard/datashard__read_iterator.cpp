@@ -1744,6 +1744,10 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     size_t ExecuteCount = 0;
     bool ResultSent = false;
 
+    // Set when the read quota was exhausted in Execute(): instead of replying
+    // with an error, the iterator is kept and a delayed continue is scheduled.
+    TMaybe<TDuration> ThrottleDelay;
+
     std::unique_ptr<TEvDataShard::TEvReadResult> Result;
 
     std::unique_ptr<IBlockBuilder> BlockBuilder;
@@ -2083,13 +2087,13 @@ public:
 
         const auto& schedulableRead = state.SchedulableRead;
         if (schedulableRead && !schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
-            SetStatusError(
-                Result->Record,
-                Ydb::StatusIds::OVERLOADED,
-                TStringBuilder() << "Read quota for resource pool exceeded" // TODO: add pool id
-                    << " (shard# " << Self->TabletID()
-                    << " node# " << ctx.SelfID.NodeId() << ")");
-            Result->Record.SetThrottleDelayMs(schedulableRead->EstimateQuotaDelay(MaxTimePerIteration).MilliSeconds());
+            // Read quota for the resource pool is exhausted. Instead of replying
+            // OVERLOADED (which makes the read actor cancel and recreate the
+            // iterator from scratch, re-running the whole pipeline and promoting
+            // MVCC edges to the redo log on every retry), keep the iterator alive
+            // and resume it via the cheaper TTxReadContinue path after a delay.
+            // The reschedule itself is done in Complete().
+            ThrottleDelay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
             return EExecutionStatus::DelayComplete;
         }
 
@@ -2483,6 +2487,17 @@ public:
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Complete read# " << state.ReadId
             << " after executionsCount# " << ExecuteCount);
+
+        if (ThrottleDelay) {
+            // Read quota was exhausted in Execute(): keep the iterator and resume
+            // it via TTxReadContinue after the delay. No result is sent here.
+            // ReadContinuePending prevents ReadAck from scheduling a duplicate.
+            state.ReadContinuePending = true;
+            ctx.Schedule(*ThrottleDelay, new TEvDataShard::TEvReadContinue(LocalReadId));
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
+                << " throttled, rescheduling continue after " << *ThrottleDelay);
+            return;
+        }
 
         SendResult(ctx);
 
@@ -3828,7 +3843,20 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
         return;
     }
 
-    Executor()->Execute(new TTxReadContinue(this, localReadId, it->second->Request->ReadSpan.GetTraceId()), ctx);
+    auto& state = *it->second;
+
+    // If the resource-pool read quota is exhausted, avoid opening a no-op read
+    // transaction (which still pays tablet executor / redo-confirm overhead) and
+    // just reschedule the continue after the estimated delay. ReadContinuePending
+    // stays true so ReadAck won't schedule a duplicate continue.
+    if (state.SchedulableRead && !state.SchedulableRead->HasAvailableQuota()) {
+        ctx.Schedule(
+            state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
+            new TEvDataShard::TEvReadContinue(localReadId));
+        return;
+    }
+
+    Executor()->Execute(new TTxReadContinue(this, localReadId, state.Request->ReadSpan.GetTraceId()), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx) {

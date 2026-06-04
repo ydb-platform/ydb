@@ -25,7 +25,7 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
     AvailableQuotaMs = MaxQuotaMs;
     LastRefill = TMonotonic::Now();
 
-    LOG_T("TSchedulableRead MaxQuotaMs: " << MaxQuotaMs);
+    LOG_T("TSchedulableRead MaxQuotaMs: " << MaxQuotaMs << " " << uintptr_t(this));
 
     YQL_ENSURE(MaxQuotaMs <= 1000);
 }
@@ -34,7 +34,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     // TODO: support update of the pool's read quota on AddOrUpdatePool().
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
-    LOG_T("TSchedulableRead ExpectedQuotaMs: " << expectedQuotaMs);
+    LOG_T("TSchedulableRead ExpectedQuotaMs: " << expectedQuotaMs << " " << uintptr_t(this));
 
     // Refill quota
     if (const auto now = TMonotonic::Now(); Y_LIKELY(now >= LastRefill)) {
@@ -43,7 +43,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
         LastRefill = now;
     }
 
-    LOG_T("TSchedulableRead AvailableQuotaMs: " << AvailableQuotaMs);
+    LOG_T("TSchedulableRead AvailableQuotaMs: " << AvailableQuotaMs << " " << uintptr_t(this));
 
     if (AvailableQuotaMs <= 0 || !TryIncreaseUsage()) {
         return false;
@@ -52,7 +52,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     AvailableQuotaMs -= expectedQuotaMs;
     ReservedQuotaMs = expectedQuotaMs;
 
-    LOG_T("TSchedulableRead ReservedQuotaMs: " << ReservedQuotaMs);
+    LOG_T("TSchedulableRead ReservedQuotaMs: " << ReservedQuotaMs << " " << uintptr_t(this));
 
     return true;
 }
@@ -66,10 +66,22 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + ReservedQuotaMs - ms);
     ReservedQuotaMs = 0;
 
-    LOG_T("TSchedulableRead ReturnedQuotaMs: " << ms);
-    LOG_T("TSchedulableRead AvailableQuotaMs: " << AvailableQuotaMs);
+    LOG_T("TSchedulableRead ReturnedQuotaMs: " << ms << " " << uintptr_t(this));
+    LOG_T("TSchedulableRead AvailableQuotaMs: " << AvailableQuotaMs << " " << uintptr_t(this));
 
     DecreaseUsage(TDuration::MilliSeconds(ms), READ_DEFAULT);
+}
+
+bool TSchedulableRead::HasAvailableQuota() {
+    // Refill quota (same accounting as TryConsumeQuota), but do not reserve and do
+    // not call TryIncreaseUsage(): this is a pure availability peek.
+    if (const auto now = TMonotonic::Now(); Y_LIKELY(now >= LastRefill)) {
+        auto elapsedMs = (now - LastRefill).MilliSeconds();
+        AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + (elapsedMs * QuotaPerSecond));
+        LastRefill = now;
+    }
+
+    return AvailableQuotaMs > 0;
 }
 
 TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {

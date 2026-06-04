@@ -301,10 +301,12 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
         aggTraitsMap.emplace(itemName, itemType->GetItemType());
     }
 
-    for (const auto& keyColumn : aggregate->KeyColumns) {
-        const auto it = aggTraitsMap.find(keyColumn.GetFullName());
-        Y_ENSURE(it != aggTraitsMap.end());
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+    if (!aggregate->IsDistinctAll()) {
+        for (const auto& keyColumn : aggregate->KeyColumns) {
+            const auto it = aggTraitsMap.find(keyColumn.GetFullName());
+            Y_ENSURE(it != aggTraitsMap.end());
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+        }
     }
 
     // In case type annotation is running for final aggregation.
@@ -327,7 +329,8 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
         Y_ENSURE(SupportedAggregationFunctions.contains(aggFunction), TStringBuilder() << "Unsupported aggregation function: " << aggFunction;);
         const auto resultColName = traits.ResultColName.GetFullName();
         const auto it = aggTraitsMap.find(originalColName);
-        Y_ENSURE(it != aggTraitsMap.end());
+        Y_ENSURE(it != aggTraitsMap.end(), "Cannot find aggregation input " << originalColName
+            << " for " << aggregate->ToString(ctx.ExprCtx) << " in input type " << *inputType);
         auto aggFieldType = it->second;
 
         if (aggFunction == "count") {

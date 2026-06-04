@@ -286,7 +286,6 @@ public:
                 "TCopyTable TPropose::HandleReply: source path is dropped at plan step"
                 << ", srcPathId: " << srcPathId
                 << ", StepDropped: " << srcPath->StepDropped);
-            srcPath->LastTxId = InvalidTxId;
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
 

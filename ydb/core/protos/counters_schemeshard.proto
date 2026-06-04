@@ -754,4 +754,6 @@ enum ETxTypes {
     TXTYPE_LIST_FULL_BACKUP = 121 [(TxTypeOpts) = {Name: "TxListFullBackup"}];
     TXTYPE_FORGET_FULL_BACKUP = 122 [(TxTypeOpts) = {Name: "TxForgetFullBackup"}];
     TXTYPE_PROGRESS_FULL_BACKUP = 123 [(TxTypeOpts) = {Name: "TxProgressFullBackup"}];
+
+    TXTYPE_CREATE_SET_COLUMN_CONSTRAINT = 124             [(TxTypeOpts) = {Name: "TxCreateSetColumnConstraint"}];
 }

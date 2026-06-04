@@ -226,6 +226,7 @@ void TSchemeShard::TryEnqueueOneShard(
         --ForcedCompactionTotalInQueues;
         compaction.ShardsInFlight.insert(shardIdx);
         EnqueueForcedCompaction(shardIdx);
+        shards = ForcedCompactionShardsByTable.FindPtr(tablePathId);
     }
     if (!shards || shards->Empty()) {
         if (tablesWithoutCandidates) {

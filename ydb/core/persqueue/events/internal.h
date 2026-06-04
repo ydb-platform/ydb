@@ -277,6 +277,7 @@ struct TEvPQ {
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
+            std::optional<ui64> MaxSeqNo; // for batch msgs
             ui16 PartNo;
             ui16 TotalParts;
             ui32 TotalSize;
@@ -300,6 +301,9 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
+            ui32 MessageCount = 1;
+            NPQ::EMessageFormat MessageFormat = NPQ::EMessageFormat::STANDARD;
+            std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)

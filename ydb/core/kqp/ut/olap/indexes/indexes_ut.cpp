@@ -2253,6 +2253,204 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT(expectedIndexNames.empty());
     }
 
+    Y_UNIT_TEST(BloomFilterEqualOnDifferentTypesAndNulls) {
+        const bool UseQueryService = true;
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/bloomEqualTypesTable`
+            (
+                id Int32 NOT NULL,
+                str_col Utf8,
+                int_col Int32,
+                bool_col Bool,
+                ts_col Timestamp,
+                message Utf8,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1)
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_str_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "str_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_int_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "int_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_bool_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "bool_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ts_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "ts_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_message_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
+        )");
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/bloomEqualTypesTable`
+                    (id, str_col, int_col, bool_col, ts_col, message)
+                VALUES
+                    (1, "alpha", 10, true, Timestamp("2024-01-01T00:00:00Z"), "alpha"),
+                    (2, NULL, 20, false, NULL, "BETA"),
+                    (3, "beta", NULL, NULL, Timestamp("2024-01-02T00:00:00Z"), "beta"),
+                    (4, "alpha", 30, true, Timestamp("2024-01-03T00:00:00Z"), "delta");
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        auto checkCount = [&](const TString& query, TStringBuf expectedYson) {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(TString(expectedYson), StreamResultToYson(it));
+        };
+
+        auto checkSkipOnAbsentEqual = [&](const TString& query, TStringBuf columnName) {
+            const intptr_t skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+            const intptr_t approveBefore = csController->GetIndexesApprovedOnSelect().Val();
+            checkCount(query, "[[0u;]]");
+            UNIT_ASSERT_C(
+                csController->GetIndexesSkippingOnSelect().Val() > skipBefore,
+                TStringBuilder() << "Expected bloom index to skip at least one portion for absent value on " << columnName);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                csController->GetIndexesApprovedOnSelect().Val(),
+                approveBefore,
+                TStringBuilder() << "Bloom index must not approve portions for absent value on " << columnName);
+        };
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col = "alpha"
+        )", "[[2u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE int_col = 20
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE bool_col = true
+        )", "[[2u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE bool_col = false
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable`
+            WHERE ts_col = Timestamp("2024-01-02T00:00:00Z")
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE message = "beta"
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE message = "BETA"
+        )", "[[1u;]]");
+
+        checkSkipOnAbsentEqual(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col = "missing"
+        )", "str_col");
+
+        checkSkipOnAbsentEqual(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE int_col = 99999
+        )", "int_col");
+
+        checkSkipOnAbsentEqual(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE message = "missing"
+        )", "message");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col IS NULL
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE int_col IS NULL
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE bool_col IS NULL
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE ts_col IS NULL
+        )", "[[1u;]]");
+
+        const intptr_t approveBeforeNullOnly = csController->GetIndexesApprovedOnSelect().Val();
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/bloomEqualTypesTable` (id, str_col)
+                SELECT CAST(item AS Int32) AS id, CAST(NULL AS Utf8?) AS str_col
+                FROM AS_TABLE(ListMap(ListFromRange(100, 110), ($x) -> { RETURN AsStruct($x AS item); }));
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col = "missing_in_null_portion"
+        )", "[[0u;]]");
+
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), approveBeforeNullOnly);
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col IS NULL
+        )", "[[11u;]]");
+    }
+
     Y_UNIT_TEST(TestIndicesNotWorkingOnNotSupportedDataTypes) {
         const bool UseQueryService = true;
         auto settings = TKikimrSettings()

@@ -1097,6 +1097,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1179,6 +1189,16 @@
                         "os": "DARWIN"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
@@ -1243,6 +1263,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {
@@ -1837,6 +1868,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1919,6 +1960,16 @@
                         "os": "DARWIN"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
@@ -1983,6 +2034,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {

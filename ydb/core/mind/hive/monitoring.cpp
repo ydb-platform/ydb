@@ -968,6 +968,19 @@ public:
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
         }
+        if (params.contains("resetAllowedMetrics")) {
+            ChangeRequest = true;
+            if (Event->GetMethod() != HTTP_METHOD_POST) {
+                Status = "error";
+                return true;
+            }
+            auto& jsonReset = jsonOperation["AllowedMetricsReset"];
+            for (const auto& [type, _] : Self->TabletTypeAllowedMetrics) {
+                jsonReset.AppendValue(GetTabletTypeShortName(type));
+                db.Table<Schema::TabletTypeMetrics>().Key(type).Delete();
+            }
+            Self->TabletTypeAllowedMetrics.clear();
+        }
         if (params.contains("allowedMetrics")) {
             auto& jsonAllowedMetrics = jsonOperation["AllowedMetricsUpdate"];
             TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";");
@@ -1265,7 +1278,12 @@ public:
         ShowConfig(out, "DataCenterChangeReactionPeriod");
 
         out << "<div class='row' style='margin-top:40px'>";
-        out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
+        bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();
+        out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'";
+        if (!allowedMetricsLocalOverridden) {
+            out << " style='font-weight:normal'";
+        }
+        out << ">AllowedMetrics:</label></div>";
         out << "<div class='col-sm-3' style='padding-top:5px'><table>";
         out << "<tr><th style='padding:2px 10px'>Tablet</th><th style='padding:2px 10px'>Cnt</th><th style='padding:2px 10px'>CPU</th><th style='padding:2px 10px'>Mem</th><th style='padding:2px 10px'>Net</th></tr>";
         for (TTabletTypes::EType tabletType : {
@@ -1274,6 +1292,7 @@ public:
              TTabletTypes::Mediator,
              TTabletTypes::SchemeShard,
              TTabletTypes::Hive,
+             TTabletTypes::Kesus,
              TTabletTypes::KeyValue,
              TTabletTypes::PersQueue,
              TTabletTypes::PersQueueReadBalancer,
@@ -1305,7 +1324,8 @@ public:
             out << "</tr>";
         }
         out << "</table></div>";
-        out << "<div class='col-sm-2' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='applyTab(this);' disabled='true'>Apply</button></div>";
+        out << "<div class='col-sm-1' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='applyTab(this);' disabled='true'>Apply</button></div>";
+        out << "<div class='col-sm-1' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='resetTab(this);' " << (allowedMetricsLocalOverridden ? "" : "disabled='true'") << ">Reset</button></div>";
         out << "</div>";
 
         out << "</div>";
@@ -1374,7 +1394,20 @@ public:
                    $.ajax({
                        type: 'POST',
                        url: document.URL + '&' + name + '=' + val,
-                       success: function() { $(button).prop('disabled', true).removeClass('btn-danger'); },
+                       success: function() {
+                         $(button).prop('disabled', true).removeClass('btn-danger');
+                         $(button).parent().next().children('button').prop('disabled', false);
+                         $(button).parent().parent().find('label').removeAttr('style');
+                       },
+                       error: function() { $(button).addClass('btn-danger'); }
+                   });
+               }
+
+               function resetTab(button) {
+                   $.ajax({
+                       type: 'POST',
+                       url: document.URL + '&resetAllowedMetrics=1',
+                       success: function() { document.location.reload(); },
                        error: function() { $(button).addClass('btn-danger'); }
                    });
                }

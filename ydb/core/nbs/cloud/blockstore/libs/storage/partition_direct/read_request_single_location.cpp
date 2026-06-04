@@ -90,13 +90,13 @@ void TReadSingleLocationRequestExecutor::Run()
     };
 
     auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
-                                  VChunkConfig.VChunkIndex,
+                                  VChunkConfig.GetVChunkIndex(),
                                   *host,
                                   hint.VChunkRange,
                                   Request->Sglist,
                                   TraceId)
                             : DirectBlockGroup->ReadBlocksFromPBuffer(
-                                  VChunkConfig.VChunkIndex,
+                                  VChunkConfig.GetVChunkIndex(),
                                   *host,
                                   hint.Lsn,
                                   hint.VChunkRange,

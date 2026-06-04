@@ -701,6 +701,8 @@ public:
             future = DoSort(execCtx);
         } else if (auto op = opBase.Maybe<TYtReduce>()) {
             future = DoReduce(op.Cast(), execCtx, ctx);
+        } else if (auto op = opBase.Maybe<TYtFill>()) {
+            future = DoFill(op.Cast(), execCtx, ctx);
         } else {
             // We don't support this operation
             return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), nodePos);
@@ -2859,6 +2861,88 @@ private:
                 << " from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end())
                 << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
             return GetRunningOperationFuture(mapOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
+                [this, sessionId, fmrOutputTables](const auto& f) {
+                    auto result = f.GetValue();
+                    if (result.Errors.empty()) {
+                        for (const auto& output : fmrOutputTables) {
+                            SetTableSortingSpec(output.FmrTableId, output.SortColumns, output.SortOrder, sessionId);
+                        }
+                    }
+                    return result;
+                });
+        });
+    }
+
+    TFuture<TFmrOperationResult> DoFill(
+        TYtFill fill,
+        const TExecContextSimple<TRunOptions>::TPtr& execCtx,
+        TExprContext& ctx
+    ) {
+        TString sessionId = execCtx->GetSessionId();
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+
+        auto fmrOutputTables = GetOutputTables(execCtx);
+
+        auto fillJob = std::make_shared<TFmrUserJob>();
+
+        // Fill has no input tables — skip SetMapJobParams (which calls GetInputSpec and crashes
+        // on empty InputTables_). Only set the output spec and common job flags.
+        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+        fillJob->SetOutSpec(execCtx->GetOutSpec(true, nativeTypeCompat));
+        fillJob->SetUseSkiff(false, TMkqlIOSpecs::ESystemField(0));
+        fillJob->SetOptLLVM(execCtx->Options_.OptLLVM());
+        fillJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+        fillJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
+        fillJob->SetLangVer(execCtx->Options_.LangVer());
+        fillJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+
+        TString fillLambda;
+        {
+            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
+                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+            TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
+            fillLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, fill.Content(), ctx, false);
+        }
+        fillJob->SetLambdaCode(fillLambda);
+        fillJob->SetFmrJobType(EFmrJobType::Map);
+        fillJob->SetSettings(TFmrUserJobSettings());
+
+        std::vector<TFileInfo> filesToUpload;
+        std::vector<TYtResourceInfo> ytResources;
+        std::vector<TFmrResourceOperationInfo> fmrResources;
+
+        PrepareUserFilesForUpload(execCtx, fillJob, fillLambda, filesToUpload, ytResources, fmrResources);
+        auto uploadResourcesFuture = GetUploadResourcesFuture(sessionId, execCtx->Options_.Config(), std::move(filesToUpload), std::move(ytResources), execCtx->Options_.PublicId());
+
+        return uploadResourcesFuture.Apply([=, this] (const auto& uploadF) mutable {
+            auto uploadResult = uploadF.GetValue();
+            TStringStream jobStateStream;
+            fillJob->Save(jobStateStream);
+
+            TFillOperationParams fillOperationParams{.Output = fmrOutputTables, .SerializedFillJobState = jobStateStream.Str()};
+            TStartOperationRequest fillOperationRequest{
+                .OperationType = EOperationType::Fill,
+                .OperationParams = fillOperationParams,
+                .SessionId = sessionId,
+                .IdempotencyKey = GenerateId(),
+                .NumRetries = 1,
+                .ClusterConnections = {},
+                .FmrOperationSpec = execCtx->Options_.Config()->FmrOperationSpec.Get(execCtx->Cluster_),
+                .Files = std::move(uploadResult.Files),
+                .YtResources = std::move(uploadResult.YtResources),
+                .FmrResources = fmrResources,
+                .FmrJob = uploadResult.FmrJob
+            };
+
+            std::vector<TString> outputPaths;
+            std::transform(execCtx->OutTables_.begin(), execCtx->OutTables_.end(), std::back_inserter(outputPaths), [execCtx](const auto& table) {
+                return execCtx->Cluster_ + "." + table.Path;
+            });
+
+            YQL_CLOG(INFO, FastMapReduce) << "Starting Fill to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
+            return GetRunningOperationFuture(fillOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId()).Apply(
                 [this, sessionId, fmrOutputTables](const auto& f) {
                     auto result = f.GetValue();
                     if (result.Errors.empty()) {

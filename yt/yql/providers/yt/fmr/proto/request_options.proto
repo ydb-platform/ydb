@@ -30,6 +30,7 @@ enum EOperationType {
     OPERATION_TYPE_SORTED_MERGE = 6;
     OPERATION_TYPE_SORT = 7;
     OPERATION_TYPE_PULL = 9;
+    OPERATION_TYPE_FILL = 10;
 }
 
 enum ETaskType {
@@ -42,6 +43,7 @@ enum ETaskType {
     TASK_TYPE_SORTED_MERGE = 6;
     TASK_TYPE_LOCAL_SORT = 7;
     TASK_TYPE_PULL = 9;
+    TASK_TYPE_FILL = 10;
 }
 
 enum EFmrComponent {
@@ -262,6 +264,16 @@ message TMapTaskParams {
     EFmrJobType MapJobType = 4;
 }
 
+message TFillOperationParams {
+    repeated TFmrTableRef Output = 1;
+    bytes SerializedFillJobState = 2;
+}
+
+message TFillTaskParams {
+    repeated TFmrTableOutputRef Output = 1;
+    bytes SerializedFillJobState = 2;
+}
+
 message TReduceOperationSpec {
     TSortingColumns ReduceBy = 1;
     TSortingColumns SortBy = 2;
@@ -311,6 +323,7 @@ message TOperationParams {
         TSortOperationParams SortOperationParams = 7;
         TReduceOperationParams ReduceOperationParams = 8;
         TPullOperationParams PullOperationParams = 9;
+        TFillOperationParams FillOperationParams = 10;
     }
 }
 
@@ -325,6 +338,7 @@ message TTaskParams {
         TLocalSortTaskParams LocalSortTaskParams = 7;
         TReduceTaskParams ReduceTaskParams = 8;
         TPullTaskParams PullTaskParams = 9;
+        TFillTaskParams FillTaskParams = 10;
     }
 }
 
@@ -384,6 +398,9 @@ message TTaskMergeResult {
 message TTaskMapResult {
 }
 
+message TTaskFillResult {
+}
+
 message TTaskSortedUploadResult {
     bytes FragmentResult = 1;
     uint64 FragmentOrder = 2;
@@ -401,6 +418,7 @@ message TTaskResult {
         TTaskMapResult TaskMapResult = 4;
         TTaskSortedUploadResult TaskSortedUploadResult = 5;
         TTaskPullResult TaskPullResult = 6;
+        TTaskFillResult TaskFillResult = 7;
     }
 }
 

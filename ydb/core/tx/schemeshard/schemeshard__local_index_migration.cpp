@@ -48,6 +48,7 @@ public:
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
             cFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
             IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -216,6 +217,16 @@ private:
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         Done(TTxId(ev->Get()->Record.GetTxId()), ctx);
+    }
+
+    void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx) {
+        for (ui64 txId : ev->Get()->TxIds) {
+            SchemeShard->ReturnTxIdToCache(TTxId(txId));
+        }
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "LocalIndexMigrator: replenished TxId cache with " << ev->Get()->TxIds.size()
+            << " TxId(s), PendingItems=" << PendingItems.size());
+        ProcessItems(ctx);
     }
 
 private:

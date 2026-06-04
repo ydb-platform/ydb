@@ -28,7 +28,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TVChunk: public std::enable_shared_from_this<TVChunk>
+class TVChunk
+    : public IWriteClient
+    , public std::enable_shared_from_this<TVChunk>
 {
 public:
     TVChunk(
@@ -40,7 +42,7 @@ public:
         ui64 vChunkSize,
         NMonitoring::TDynamicCounterPtr counters);
 
-    ~TVChunk();
+    ~TVChunk() override;
 
     void Start();
     NThreading::TFuture<void> Stop();
@@ -89,13 +91,14 @@ private:
         std::shared_ptr<NWilson::TSpan> span);
 
     void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
+
+    // IWriteClient implementation
     void OnWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
-        const TWriteRequestResponse& response);
-    void OnWriteBlocksNotifyBelated(
-        TBlockRange64 range,
-        THostMask completedWrites,
-        ui64 lsn);
+        const TWriteRequestResponse& response) override;
+    void OnBelatedWriteBlocksResponse(
+        std::shared_ptr<TWriteRequestBundle> bundle,
+        THostMask completedWrites) override;
 
     void DoFlush(bool force);
     void OnFlushResponse(const TFlushRequestExecutor::TResponse& response);

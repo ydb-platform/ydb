@@ -9,22 +9,53 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TWriteRequestBundle::TWriteRequestBundle(
     NActors::TActorSystem* const actorSystem,
+    IWriteClientWeakPtr writeClient,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     const NWilson::TTraceId& traceId,
     TCallContextPtr callContext,
     TBlockRange64 vchunkRange,
     ui64 lsn)
-    : Request(std::move(request))
-    , Span(NWilson::TSpan(
+    : WriteClient(std::move(writeClient))
+    , Request(std::move(request))
+    , Span(
           NKikimr::TWilsonNbs::NbsBasic,
           traceId.Clone(),
           "TVChunk.Write",
           NWilson::EFlags::AUTO_END,
-          actorSystem))
+          actorSystem)
     , CallContext(std::move(callContext))
+    , Promise(&Span, NKikimr::TWilsonNbs::NbsBasic)
     , VChunkRange(vchunkRange)
     , Lsn(lsn)
 {}
+
+void TWriteRequestBundle::Reply(
+    NProto::TError error,
+    THostMask requestedWrites,
+    THostMask completedWrites)
+{
+    Request->Sglist.Close();
+
+    if (auto client = WriteClient.lock()) {
+        client->OnWriteBlocksResponse(
+            shared_from_this(),
+            TWriteRequestResponse{
+                .Error = std::move(error),
+                .Lsn = Lsn,
+                .RequestedWrites = requestedWrites,
+                .CompletedWrites = completedWrites});
+    } else {
+        Promise.SetValue(
+            TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+    }
+}
+
+void TWriteRequestBundle::NotifyBelated(THostMask hosts)
+{
+    if (auto client = WriteClient.lock()) {
+        client->OnBelatedWriteBlocksResponse(shared_from_this(), hosts);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

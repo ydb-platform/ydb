@@ -23,25 +23,33 @@ struct TWriteRequestResponse
     THostMask CompletedWrites;
 };
 
-struct TWriteRequestBundle: TDisableCopyMove
+struct TWriteRequestBundle
+    : TDisableCopyMove
+    , public std::enable_shared_from_this<TWriteRequestBundle>
 {
+    IWriteClientWeakPtr WriteClient;
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
     NWilson::TSpan Span;
     TCallContextPtr CallContext;
-    TTracedPromise2<TWriteBlocksLocalResponse> Promise =
-        TTracedPromise2<TWriteBlocksLocalResponse>(
-            &Span,
-            NKikimr::TWilsonNbs::NbsBasic);
+    TTracedPromise2<TWriteBlocksLocalResponse> Promise;
     TBlockRange64 VChunkRange;
     ui64 Lsn = 0;
 
     TWriteRequestBundle(
         NActors::TActorSystem* const actorSystem,
+        IWriteClientWeakPtr writeClient,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         const NWilson::TTraceId& traceId,
         TCallContextPtr callContext,
         TBlockRange64 vchunkRange,
         ui64 lsn);
+
+    void Reply(
+        NProto::TError error,
+        THostMask requestedWrites,
+        THostMask completedWrites);
+
+    void NotifyBelated(THostMask hosts);
 };
 
 struct IWriteClient
@@ -51,6 +59,10 @@ struct IWriteClient
     virtual void OnWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
         const TWriteRequestResponse& response) = 0;
+
+    virtual void OnBelatedWriteBlocksResponse(
+        std::shared_ptr<TWriteRequestBundle> bundle,
+        THostMask hosts) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

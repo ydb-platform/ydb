@@ -173,6 +173,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
 
     auto bundle = std::make_shared<TWriteRequestBundle>(
         ActorSystem,
+        weak_from_this(),
         std::move(request),
         traceId,
         std::move(callContext),
@@ -429,39 +430,8 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
         LogTitle,
         VChunkConfig,
         DirectBlockGroup,
-        bundle->VChunkRange,
-        std::move(bundle->CallContext),
-        std::move(bundle->Request),
-        bundle->Lsn,
-        bundle->Span.GetTraceId());
+        std::move(bundle));
 
-    writeExecutor->SetReplyCallback(
-        [weakSelf = weak_from_this(),
-         bundle]   //
-        (TWriteRequestResponse response) mutable
-        {
-            if (auto self = weakSelf.lock()) {
-                self->OnWriteBlocksResponse(std::move(bundle), response);
-            } else {
-                bundle->Promise.SetValue(
-                    TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
-            }
-        });
-
-    writeExecutor->SetNotifyBelatedCallback(
-        [weakSelf = weak_from_this(),
-         vchunkRange = bundle->VChunkRange]   //
-        (THostMask completedWrites, ui64 lsn) mutable
-        {
-            if (auto self = weakSelf.lock()) {
-                self->OnWriteBlocksNotifyBelated(
-                    vchunkRange,
-                    completedWrites,
-                    lsn);
-            }
-        });
-
-    bundle->Span.Event("Run");
     ++InflightWritesCount;
     writeExecutor->Run();
 }
@@ -508,20 +478,23 @@ void TVChunk::OnWriteBlocksResponse(
     ScheduleCleaningUp();
 }
 
-void TVChunk::OnWriteBlocksNotifyBelated(
-    TBlockRange64 range,
-    THostMask completedWrites,
-    ui64 lsn)
+void TVChunk::OnBelatedWriteBlocksResponse(
+    std::shared_ptr<TWriteRequestBundle> bundle,
+    THostMask completedWrites)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteBlocksNotify. Range %s",
-        range.Print().c_str());
+        "%s OnWriteBlocksNotify. Range %s",
+        LogTitle.GetWithTime().c_str(),
+        bundle->VChunkRange.Print().c_str());
 
-    BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, lsn, range);
+    BlocksDirtyMap.UpdateBelatedEraseQueue(
+        completedWrites,
+        bundle->Lsn,
+        bundle->VChunkRange);
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
 }

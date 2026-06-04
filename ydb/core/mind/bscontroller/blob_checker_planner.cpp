@@ -138,7 +138,7 @@ public:
     void SetPeriodicity(TDuration newPeriodicity) {
         Periodicity = newPeriodicity;
         // reset accumulated time wasted
-        TimeWasted = 0;
+        TimeWasted = TDuration::Zero();
     }
 
     TMonotonic GetNextAllowedCheckTimestamp(TMonotonic now) {

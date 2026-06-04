@@ -2446,6 +2446,88 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             "Second erase reply must report failure when the shared disk write failed");
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 5: EraseCookie mismatch crash (VERIFY failed at line 504).
+    //
+    // Scenario:
+    //   1. Write record lsn=10.
+    //   2. Send TEvErasePersistentBuffer(lsn=10) → BarrierErasePersistentBuffer.
+    //      This creates inflight_barrier with Erases[C_barrier] = [(lsn=10, gen=1)].
+    //      It does NOT register in PersistentBufferEraseInflightsByRecord.
+    //      Hold the PDisk write so the I/O is still in flight.
+    //   3. Send TEvBatchErasePersistentBuffer(lsn=10) → ErasePersistentBuffer.
+    //      This registers PersistentBufferEraseInflightsByRecord[{tabletId,gen,lsn=10}]
+    //      = {EraseCookie=C_batch, OperationsCookie=[op_batch]}.
+    //      It issues its own PDisk write.
+    //   4. Complete the barrier PDisk write (step 2).
+    //      Handle(TEvWritePersistentBufferPart) fires for inflight_barrier with
+    //      partCookie=C_barrier. It iterates Erases[C_barrier] = [(lsn=10, gen=1)],
+    //      finds PersistentBufferEraseInflightsByRecord[{tabletId,gen,lsn=10}] with
+    //      EraseCookie=C_batch ≠ C_barrier → Y_ABORT_UNLESS fires → CRASH.
+    //
+    // After the fix the assertion is replaced with a safe check (skip if cookie
+    // doesn't match), so the test must complete without crashing.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(PersistentBufferEraseCookieMismatchNoCrash) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(34, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 74, 1);
+
+        const ui64 lsn = 10;
+        const TString payload = MakeData('E', BlockSize);
+        const NDDisk::TBlockSelector selector{9, 0, BlockSize};
+
+        // Step 1: write lsn=10 and complete it.
+        {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(payload));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+            auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            ctx.SendPDiskResponse(disk, *pbWriteRaw,
+                new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::OK);
+        }
+
+        // Step 2: send TEvErasePersistentBuffer(lsn=10) → BarrierErasePersistentBuffer.
+        // Hold the PDisk write so the barrier I/O stays in flight.
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn));
+        auto barrierWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+
+        // Step 3: send TEvBatchErasePersistentBuffer(lsn=10) → ErasePersistentBuffer.
+        // This registers a new EraseCookie in PersistentBufferEraseInflightsByRecord
+        // for the same record, and issues its own PDisk write.
+        {
+            auto batchErase = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
+            batchErase->AddErase(lsn, creds.Generation);
+            SendToDDisk(ctx, disk.PBServiceId, batchErase.release());
+        }
+        auto batchWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+
+        // Step 4: complete the barrier PDisk write.
+        // Before the fix this triggers Y_ABORT_UNLESS(it->second.EraseCookie == partCookie)
+        // at ddisk_actor_persistent_buffer.cpp:504 because the EraseCookie in
+        // PersistentBufferEraseInflightsByRecord was overwritten by the batch erase in step 3.
+        ctx.SendPDiskResponse(disk, *barrierWriteRaw,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto barrierEraseResult = WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx);
+        AssertStatus(barrierEraseResult, TReplyStatus::OK);
+
+        // Complete the batch erase PDisk write and collect its result.
+        ctx.SendPDiskResponse(disk, *batchWriteRaw,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto batchEraseResult = WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx);
+        AssertStatus(batchEraseResult, TReplyStatus::OK);
+
+        // After both erases complete the record must be gone.
+        auto listResult = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(creds));
+        AssertStatus(listResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(listResult->Get()->Record.RecordsSize(), 0,
+            "Record must be erased after both barrier and batch erase complete");
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 } // NKikimr

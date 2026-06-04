@@ -535,9 +535,17 @@ namespace NKikimr::NDDisk {
             for (auto& e : itErase->second) {
                 auto it = PersistentBufferEraseInflightsByRecord.find(TPersistentBufferRecordId{inflight.TabletId, std::get<1>(e), std::get<0>(e)});
                 if (it == PersistentBufferEraseInflightsByRecord.end()) {
-                    break;
+                    continue;
                 }
-                Y_ABORT_UNLESS(it->second.EraseCookie == partCookie);
+                // The EraseCookie may differ from partCookie when a concurrent erase
+                // (e.g. BarrierErasePersistentBuffer or FastErasePersistentBuffer) and
+                // ErasePersistentBuffer both target the same record.  The barrier/fast-erase
+                // paths do not register in PersistentBufferEraseInflightsByRecord, so the
+                // entry may already belong to a different in-flight operation.  In that case
+                // this completion is not responsible for notifying the shared waiters — skip.
+                if (it->second.EraseCookie != partCookie) {
+                    continue;
+                }
                 for (auto opCookie2 : it->second.OperationsCookie) {
                     if (opCookie2 != opCookie) {
                         auto itInflight2 = PersistentBufferDiskOperationInflight.find(opCookie2);

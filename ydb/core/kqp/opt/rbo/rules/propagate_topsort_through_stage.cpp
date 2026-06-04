@@ -43,7 +43,7 @@ bool CanPropagateSortOverMap(const TIntrusivePtr<TOpSort>& sort, const TIntrusiv
     }
 
     const auto& mapElements = CastOperator<TOpMap>(input)->GetMapElements();
-    return std::all_of(mapElements.begin(), mapElements.end(), [](const TMapElement& mapElement) { return mapElement.IsRename(); });
+    return std::all_of(mapElements.begin(), mapElements.end(), [](const TMapElement& mapElement) { return mapElement.IsColumnAccess(); });
 }
 
 bool CanPushSortToStage(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input) {
@@ -119,8 +119,8 @@ TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSo
 void MaybeUpdateSortElements(TVector<TSortElement>& sortElements, const TVector<TMapElement>& mapElements) {
     THashMap<TString, TInfoUnit> map;
     for (const auto& mapElement : mapElements) {
-        Y_ENSURE(mapElement.IsRename());
-        map[mapElement.GetElementName().GetFullName()] = mapElement.GetRename();
+        Y_ENSURE(mapElement.IsColumnAccess());
+        map[mapElement.GetElementName().GetFullName()] = mapElement.GetColumnAccess();
     }
 
     for (auto& sortElement : sortElements) {

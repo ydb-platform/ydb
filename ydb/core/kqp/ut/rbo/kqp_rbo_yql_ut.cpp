@@ -718,7 +718,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(limitOp, plan);
 
         const auto mapName = GetStringField(*mapOp, "Name");
-        UNIT_ASSERT_C(mapName.Contains("next_id:") && mapName.Contains("id + 1"), plan);
+        UNIT_ASSERT_C((mapName.Contains("next_id:") || mapName.Contains("next_id :=")) && mapName.Contains("id + 1"), plan);
         const auto predicate = GetStringField(*filterOp, "Predicate");
         UNIT_ASSERT_C(predicate.Contains("b > 10"), plan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*limitOp, "Limit"), "3", plan);

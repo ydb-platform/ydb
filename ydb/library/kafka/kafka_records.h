@@ -4,14 +4,6 @@
 
 namespace NKafka {
 
-enum ECompressionType {
-    NONE = 0,
-    GZIP = 1,
-    SNAPPY = 2,
-    LZ4 = 3,
-    ZSTD = 4
-};
-
 enum ETimestampType {
     CREATE_TIME = 0,
     LOG_APPEND_TIME = 1
@@ -409,11 +401,11 @@ public:
 
     bool operator==(const TKafkaRecordBatch& other) const = default;
 
-    ECompressionType CompressionType();
-    ETimestampType TimestampType();
-    bool Transactional();
-    bool ControlBatch();
-    bool HasDeleteHorizonMs();
+    ECompressionType CompressionType() const;
+    ETimestampType TimestampType() const;
+    bool Transactional() const;
+    bool ControlBatch() const;
+    bool HasDeleteHorizonMs() const;
 };
 
 

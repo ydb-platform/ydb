@@ -15,6 +15,10 @@ GENERATE_ENUM_SERIALIZATION(kafka.h)
 PEERDIR(
     ydb/core/protos
     ydb/core/raw_socket
+    library/cpp/streams/zstd
+    ydb/library/actors/core
+    ydb/library/services
+    yql/essentials/public/decimal
 )
 
 END()

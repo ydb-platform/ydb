@@ -1,6 +1,88 @@
 #include "kafka_messages_int.h"
 
+#include <library/cpp/streams/zstd/zstd.h>
+
+#include <util/stream/mem.h>
+#include <util/stream/str.h>
+#include <util/stream/zlib.h>
+
 namespace NKafka {
+
+namespace {
+
+ECompressionType GetCompressionType(TKafkaRecordBatch::AttributesMeta::Type attributes) {
+    return static_cast<ECompressionType>(attributes & 0x07);
+}
+
+void EnsureSupportedCompressionType(ECompressionType compressionType) {
+    switch (compressionType) {
+        case ECompressionType::NONE:
+        case ECompressionType::GZIP:
+        case ECompressionType::ZSTD:
+            return;
+        default:
+            ythrow yexception() << "unsupported Kafka record batch compression type: " << static_cast<int>(compressionType);
+    }
+}
+
+} // namespace
+
+TString NPrivate::TypeStrategy<
+    TKafkaRecordBatch::RecordsMeta,
+    TKafkaRecordBatch::RecordsMeta::Type,
+    NPrivate::TKafkaArrayDesc
+>::Compress(TStringBuf data, ECompressionType compressionType) {
+    EnsureSupportedCompressionType(compressionType);
+    if (compressionType == ECompressionType::NONE) {
+        return TString(data);
+    }
+
+    TString result;
+    TStringOutput output(result);
+    switch (compressionType) {
+        case ECompressionType::GZIP: {
+            TZLibCompress gzip(&output, ZLib::GZip);
+            gzip.Write(data.data(), data.size());
+            gzip.Finish();
+            output.Finish();
+            return result;
+        }
+        case ECompressionType::ZSTD: {
+            TZstdCompress zstd(&output);
+            zstd.Write(data.data(), data.size());
+            zstd.Finish();
+            output.Finish();
+            return result;
+        }
+        default:
+            ythrow yexception() << "unsupported Kafka record batch compression type: " << static_cast<int>(compressionType);
+    }
+}
+
+TString NPrivate::TypeStrategy<
+    TKafkaRecordBatch::RecordsMeta,
+    TKafkaRecordBatch::RecordsMeta::Type,
+    NPrivate::TKafkaArrayDesc
+>::Decompress(TStringBuf data, ECompressionType compressionType) {
+    EnsureSupportedCompressionType(compressionType);
+    if (compressionType == ECompressionType::NONE) {
+        return TString(data);
+    }
+
+    TMemoryInput input(data.data(), data.size());
+    switch (compressionType) {
+        case ECompressionType::GZIP: {
+            TZLibDecompress gzip(&input, ZLib::GZip);
+            return gzip.ReadAll();
+        }
+        case ECompressionType::ZSTD: {
+            TZstdDecompress zstd(&input);
+            return zstd.ReadAll();
+        }
+        default:
+            ythrow yexception() << "unsupported Kafka record batch compression type: " << static_cast<int>(compressionType);
+    }
+}
 
 //
 // TKafkaHeader
@@ -110,23 +192,23 @@ TKafkaRecordBatch::TKafkaRecordBatch()
     , BaseSequence(BaseSequenceMeta::Default) {
     }
 
-ECompressionType TKafkaRecordBatch::CompressionType() {
-    return static_cast<ECompressionType>(Attributes & 0x07);
+ECompressionType TKafkaRecordBatch::CompressionType() const {
+    return GetCompressionType(Attributes);
 }
 
-ETimestampType TKafkaRecordBatch::TimestampType() {
+ETimestampType TKafkaRecordBatch::TimestampType() const {
     return (Attributes & 0x08) ? ETimestampType::LOG_APPEND_TIME : ETimestampType::CREATE_TIME;
 }
 
-bool TKafkaRecordBatch::Transactional() {
+bool TKafkaRecordBatch::Transactional() const {
     return Attributes & 0x10;
 }
 
-bool TKafkaRecordBatch::ControlBatch() {
+bool TKafkaRecordBatch::ControlBatch() const {
     return Attributes & 0x20;
 }
 
-bool TKafkaRecordBatch::HasDeleteHorizonMs() {
+bool TKafkaRecordBatch::HasDeleteHorizonMs() const {
     return Attributes & 0x40;
 }
 
@@ -144,9 +226,7 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
 
     NPrivate::Read<CrcMeta>(_readable, _version, Crc);
     NPrivate::Read<AttributesMeta>(_readable, _version, Attributes);
-    if (ECompressionType::NONE != CompressionType()) {
-        ythrow yexception() << "Supported only CompressionType::NONE";
-    }
+    EnsureSupportedCompressionType(CompressionType());
 
     NPrivate::Read<LastOffsetDeltaMeta>(_readable, _version, LastOffsetDelta);
     NPrivate::Read<BaseTimestampMeta>(_readable, _version, BaseTimestamp);
@@ -154,6 +234,7 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
     NPrivate::Read<ProducerIdMeta>(_readable, _version, ProducerId);
     NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
     NPrivate::Read<BaseSequenceMeta>(_readable, _version, BaseSequence);
+    _readable.SetRecordBatchCompressionType(CompressionType());
     NPrivate::Read<RecordsMeta>(_readable, _version, Records);
 }
 
@@ -161,6 +242,7 @@ void TKafkaRecordBatch::Write(TKafkaWritable& _writable, TKafkaVersion _version)
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't write version " << _version << " of TKafkaRecordBatch";
     }
+    EnsureSupportedCompressionType(CompressionType());
     NPrivate::TWriteCollector _collector;
     NPrivate::Write<BaseOffsetMeta>(_collector, _writable, _version, BaseOffset);
     NPrivate::Write<BatchLengthMeta>(_collector, _writable, _version, BatchLength);
@@ -174,10 +256,12 @@ void TKafkaRecordBatch::Write(TKafkaWritable& _writable, TKafkaVersion _version)
     NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, ProducerId);
     NPrivate::Write<ProducerEpochMeta>(_collector, _writable, _version, ProducerEpoch);
     NPrivate::Write<BaseSequenceMeta>(_collector, _writable, _version, BaseSequence);
+    _writable.SetRecordBatchCompressionType(GetCompressionType(Attributes));
     NPrivate::Write<RecordsMeta>(_collector, _writable, _version, Records);
 }
 
 i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
+    EnsureSupportedCompressionType(CompressionType());
     NPrivate::TSizeCollector _collector;
     NPrivate::Size<BaseOffsetMeta>(_collector, _version, BaseOffset);
     NPrivate::Size<BatchLengthMeta>(_collector, _version, BatchLength);
@@ -191,6 +275,7 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
     NPrivate::Size<ProducerIdMeta>(_collector, _version, ProducerId);
     NPrivate::Size<ProducerEpochMeta>(_collector, _version, ProducerEpoch);
     NPrivate::Size<BaseSequenceMeta>(_collector, _version, BaseSequence);
+    _collector.SetRecordBatchCompressionType(GetCompressionType(Attributes));
     NPrivate::Size<RecordsMeta>(_collector, _version, Records);
 
     return _collector.Size;

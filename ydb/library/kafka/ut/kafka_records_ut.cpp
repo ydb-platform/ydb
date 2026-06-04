@@ -61,6 +61,65 @@ void CheckVarintWrongBytes(std::vector<ui8> bytes) {
     }
 }
 
+TKafkaRecord MakeRecord(i64 timestampDelta, i64 offsetDelta, TStringBuf key, TStringBuf value) {
+    TKafkaRecord record;
+    record.TimestampDelta = timestampDelta;
+    record.OffsetDelta = offsetDelta;
+    record.Key = TKafkaRawBytes(key.data(), key.size());
+    record.Value = TKafkaRawBytes(value.data(), value.size());
+    record.Length = record.Size(2) - NKafka::NPrivate::SizeOfVarint<TKafkaRecord::LengthMeta::Type>(0);
+    return record;
+}
+
+TKafkaRecordBatch MakeRecordBatch(ECompressionType compressionType) {
+    TKafkaRecordBatch batch;
+    batch.BaseOffset = 42;
+    batch.Magic = 2;
+    batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
+    batch.LastOffsetDelta = 1;
+    batch.BaseTimestamp = 1000;
+    batch.MaxTimestamp = 1010;
+    batch.Records.push_back(MakeRecord(7, 0, "key-0", "value-0"));
+    batch.Records.push_back(MakeRecord(10, 1, "key-1", "value-1"));
+    batch.BatchLength = batch.Size(2) - sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type) - sizeof(TKafkaRecordBatch::BatchLengthMeta::Type);
+    return batch;
+}
+
+void AssertRecordBatchRoundTrip(ECompressionType compressionType) {
+    const TKafkaRecordBatch batch = MakeRecordBatch(compressionType);
+
+    const TString serialized = WriteKafkaRecordBatch(batch);
+    const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(serialized);
+
+    UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, batch.BaseOffset);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Magic, batch.Magic);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(parsed.CompressionType()), static_cast<int>(compressionType));
+    UNIT_ASSERT_VALUES_EQUAL(parsed.BatchLength, batch.BatchLength);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), batch.Records.size());
+    for (size_t i = 0; i < batch.Records.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[i].TimestampDelta, batch.Records[i].TimestampDelta);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[i].OffsetDelta, batch.Records[i].OffsetDelta);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TString(parsed.Records[i].Key->data(), parsed.Records[i].Key->size()),
+            TString(batch.Records[i].Key->data(), batch.Records[i].Key->size()));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TString(parsed.Records[i].Value->data(), parsed.Records[i].Value->size()),
+            TString(batch.Records[i].Value->data(), batch.Records[i].Value->size()));
+    }
+}
+
+void AssertUnsupportedCompressionType(ECompressionType compressionType) {
+    TKafkaRecordBatch batch = MakeRecordBatch(ECompressionType::NONE);
+    batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
+
+    try {
+        Y_UNUSED(batch.Size(2));
+        UNIT_FAIL("Must be exception");
+    } catch (const yexception& e) {
+        UNIT_ASSERT_STRING_CONTAINS(e.what(), "unsupported Kafka record batch compression type");
+    }
+}
+
 Y_UNIT_TEST_SUITE(KafkaRecords) {
     Y_UNIT_TEST(UnsignedVarint32) {
         CheckUnsignedVarint<ui32>({0, 1, 127, 128, 32191, Max<i32>(), Max<ui32>()});
@@ -100,31 +159,20 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
     }
 
     Y_UNIT_TEST(RecordBatchRoundTrip) {
-        TKafkaRecord record;
-        record.Length = 10;
-        record.TimestampDelta = 7;
-        record.OffsetDelta = 0;
-        record.Key = TKafkaRawBytes("key", 3);
-        record.Value = TKafkaRawBytes("value", 5);
+        AssertRecordBatchRoundTrip(ECompressionType::NONE);
+    }
 
-        TKafkaRecordBatch batch;
-        batch.BaseOffset = 42;
-        batch.BatchLength = batch.Size(2) - sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type) - sizeof(TKafkaRecordBatch::BatchLengthMeta::Type);
-        batch.Magic = 2;
-        batch.LastOffsetDelta = 0;
-        batch.BaseTimestamp = 1000;
-        batch.MaxTimestamp = 1007;
-        batch.Records.push_back(record);
+    Y_UNIT_TEST(RecordBatchGzipRoundTrip) {
+        AssertRecordBatchRoundTrip(ECompressionType::GZIP);
+    }
 
-        const TString serialized = WriteKafkaRecordBatch(batch);
-        const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(serialized);
+    Y_UNIT_TEST(RecordBatchZstdRoundTrip) {
+        AssertRecordBatchRoundTrip(ECompressionType::ZSTD);
+    }
 
-        UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, batch.BaseOffset);
-        UNIT_ASSERT_VALUES_EQUAL(parsed.Magic, batch.Magic);
-        UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[0].TimestampDelta, record.TimestampDelta);
-        UNIT_ASSERT_VALUES_EQUAL(TString(parsed.Records[0].Key->data(), parsed.Records[0].Key->size()), "key");
-        UNIT_ASSERT_VALUES_EQUAL(TString(parsed.Records[0].Value->data(), parsed.Records[0].Value->size()), "value");
+    Y_UNIT_TEST(RecordBatchUnsupportedCompressionType) {
+        AssertUnsupportedCompressionType(ECompressionType::SNAPPY);
+        AssertUnsupportedCompressionType(ECompressionType::LZ4);
     }
 }
 

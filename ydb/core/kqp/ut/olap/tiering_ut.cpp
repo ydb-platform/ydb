@@ -681,27 +681,24 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& csController = tieringHelper.GetCsController();
         auto& testHelper = tieringHelper.GetTestHelper();
         TString createTableQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(
-            CREATE TABLE `/Root/ColumnWithTTLAndMaxIndex` (
-                id Int32 NOT NULL,
-                ts Timestamp NOT NULL,
-                PRIMARY KEY(id)
-            ) PARTITION BY HASH (`id`)
-            WITH ( STORE = COLUMN );
-            ALTER OBJECT `/Root/ColumnWithTTLAndMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
-            )" 
-            :
-            R"(
-            CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+        CREATE TABLE `/Root/ColumnWithTTLAndMaxIndex` (
             id Int32 NOT NULL,
             ts Timestamp NOT NULL,
             PRIMARY KEY(id)
-            ) PARTITION BY HASH (`id`) 
-            WITH ( STORE = COLUMN );
-            ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{"column_name": "ts", "inherit_portion_storage": false}`);
-            )";
+        ) PARTITION BY HASH (`id`)
+        WITH ( STORE = COLUMN );
+        ALTER OBJECT `/Root/ColumnWithTTLAndMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
+        )" 
+            : R"(
+        CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+            id Int32 NOT NULL,
+            ts Timestamp NOT NULL,
+            PRIMARY KEY(id)
+        ) PARTITION BY HASH (`id`) 
+        WITH ( STORE = COLUMN );
+        ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{"column_name": "ts", "inherit_portion_storage": false}`);
+        )";
             
-
-
         auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(createTableQuery).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::Dev::EStatus::SUCCESS, createStatus.GetIssues().ToString());
 
@@ -718,8 +715,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             SELECT CAST(item AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
             UPSERT INTO `/Root/ColumnWithTTLAndMaxIndex` (`id`, `ts`)
             SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
-
-            -- UPSERT INTO `/Root/ColumnWithTTLAndMaxIndex` (id, ts) VALUES  (1,$prev_year), (2,$prev_year), (3,$prev_year), (4,$prev_year);
             )" 
             :
             R"(

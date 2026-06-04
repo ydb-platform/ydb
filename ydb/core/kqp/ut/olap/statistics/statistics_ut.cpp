@@ -49,7 +49,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
 
 
     Y_UNIT_TEST(StatsUsageNotPK, EIndexForTTLColumn) {
-        // EIndexForTTLColumn == 1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
             auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -90,7 +89,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
             }
         }
     }
-
 }
 
 }   // namespace NKikimr::NKqp

@@ -19,7 +19,6 @@ enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
     EvSchemaOperationResponse,
     EvSchemaResponse,
-    EvDropTopicResponse,
     EvEnd
 };
 
@@ -120,24 +119,6 @@ NActors::IActor* CreateCreateTopicActor(NThreading::TPromise<TSchemaResponse>&& 
 //
 // Drop Topic
 //
-struct TDropTopicResponse {
-    Ydb::StatusIds::StatusCode Status;
-    TString ErrorMessage;
-    NKikimrSchemeOp::TModifyScheme ModifyScheme;
-};
-
-struct TEvDropTopicResponse : public NActors::TEventLocal<TEvDropTopicResponse, EEv::EvDropTopicResponse>
-                             , public TDropTopicResponse {
-    TEvDropTopicResponse(
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
-        TString&& errorMessage = {},
-        NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
-    )
-        : TDropTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
-    {
-    }
-};
-
 struct TDropTopicSettings {
     TString Database;
     TString PeerName;

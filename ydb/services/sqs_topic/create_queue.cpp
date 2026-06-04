@@ -101,7 +101,6 @@ namespace NKikimr::NSqsTopic::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
                 hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
-                hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -208,14 +207,6 @@ namespace NKikimr::NSqsTopic::V1 {
             if (QueueAttributes.DeadLetterQueue.Defined()) {
                 consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(*QueueAttributes.DeadLetterQueue);
             }
-        }
-
-        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
-            }
-            return ReplyAndDie(ActorContext());
         }
 
         void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {

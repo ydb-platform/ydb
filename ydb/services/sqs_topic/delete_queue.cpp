@@ -86,7 +86,6 @@ namespace NKikimr::NSqsTopic::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
-                hFunc(NPQ::NSchema::TEvDropTopicResponse, Handle);
                 hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -151,14 +150,6 @@ namespace NKikimr::NSqsTopic::V1 {
                     .UserToken = this->GetUserToken(),
                 }));
             }
-        }
-
-        void Handle(NPQ::NSchema::TEvDropTopicResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
-            }
-            this->Reply(Ydb::StatusIds::SUCCESS);
         }
 
         void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {

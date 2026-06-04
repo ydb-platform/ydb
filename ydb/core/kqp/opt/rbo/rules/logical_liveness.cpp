@@ -5,6 +5,8 @@ namespace NKqp {
 
 namespace {
 
+using namespace NYql::NNodes;
+
 bool AddLiveColumn(TInfoUnitSet& target, const TInfoUnit& iu) {
     return target.insert(iu).second;
 }
@@ -119,6 +121,110 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
     return newElements;
 }
 
+TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& liveOut) {
+    TVector<TInfoUnit> newColumns;
+    newColumns.reserve(columns.size());
+
+    for (const auto& column : columns) {
+        if (liveOut.contains(column)) {
+            newColumns.push_back(column);
+        }
+    }
+
+    return newColumns;
+}
+
+void AddReadColumnByName(const TOpRead& read, const TString& columnName, TInfoUnitSet& requiredColumns) {
+    for (const auto& outputIU : read.OutputIUs) {
+        if (outputIU.GetFullName() == columnName || outputIU.GetColumnName() == columnName) {
+            AddLiveColumn(requiredColumns, outputIU);
+        }
+    }
+}
+
+void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
+    if (!lambda) {
+        return;
+    }
+
+    const auto hasOlapProjections = FindNode(lambda, [](const TExprNode::TPtr& node) {
+        return !!TMaybeNode<TKqpOlapProjections>(node);
+    });
+    if (hasOlapProjections) {
+        AddColumnsToSet(requiredColumns, read.OutputIUs);
+        return;
+    }
+
+    const auto members = FindNodes(lambda, [](const TExprNode::TPtr& node) {
+        return !!TMaybeNode<TCoMember>(node);
+    });
+    for (const auto& member : members) {
+        AddReadColumnByName(read, TString(TCoMember(member).Name().StringValue()), requiredColumns);
+    }
+}
+
+bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
+    TInfoUnitSet requiredColumns;
+    AddColumnsToSet(requiredColumns, liveOutput);
+    AddReadLambdaDeps(*read, read->OlapFilterLambda, requiredColumns);
+
+    TVector<TString> newColumns;
+    TVector<TInfoUnit> newOutputIUs;
+    newColumns.reserve(read->Columns.size());
+    newOutputIUs.reserve(read->OutputIUs.size());
+
+    Y_ENSURE(read->Columns.size() == read->OutputIUs.size());
+    for (size_t i = 0; i < read->OutputIUs.size(); ++i) {
+        if (requiredColumns.contains(read->OutputIUs[i])) {
+            newColumns.push_back(read->Columns[i]);
+            newOutputIUs.push_back(read->OutputIUs[i]);
+        }
+    }
+
+    if (newOutputIUs == read->OutputIUs) {
+        return false;
+    }
+
+    read->Columns = std::move(newColumns);
+    read->OutputIUs = std::move(newOutputIUs);
+    return true;
+}
+
+bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TVector<TInfoUnit>& liveOutput) {
+    TInfoUnitSet liveOutputSet;
+    AddColumnsToSet(liveOutputSet, liveOutput);
+
+    TVector<TOpAggregationTraits> newTraits;
+    newTraits.reserve(aggregate->AggregationTraitsList.size());
+    for (const auto& traits : aggregate->AggregationTraitsList) {
+        if (liveOutputSet.contains(traits.ResultColName)) {
+            newTraits.push_back(traits);
+        }
+    }
+
+    if (newTraits.size() == aggregate->AggregationTraitsList.size()) {
+        return false;
+    }
+
+    aggregate->AggregationTraitsList = std::move(newTraits);
+    return true;
+}
+
+bool CanOverrideOutput(EOperator kind) {
+    switch (kind) {
+        case EOperator::Map:
+        case EOperator::Filter:
+        case EOperator::Join:
+        case EOperator::Aggregate:
+        case EOperator::Limit:
+        case EOperator::Sort:
+        case EOperator::UnionAll:
+            return true;
+        default:
+            return false;
+    }
+}
+
 } // anonymous namespace
 
 void ComputePlanLiveness(TOpRoot& root) {
@@ -150,6 +256,57 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     return true;
+}
+
+TNarrowByLivenessStage::TNarrowByLivenessStage()
+    : IRBOStage("Narrow by liveness") {
+    Props = ERuleProperties::RequireParents;
+}
+
+void TNarrowByLivenessStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
+    Y_UNUSED(ctx);
+
+    for (const auto& iter : root) {
+        iter.Current->ClearOutputIUsOverride();
+    }
+
+    ComputePlanLiveness(root);
+
+    THashMap<IOperator*, TVector<TInfoUnit>> liveOutputs;
+    for (const auto& iter : root) {
+        const auto liveIt = root.PlanProps.LiveOut.find(iter.Current.get());
+        if (liveIt == root.PlanProps.LiveOut.end()) {
+            continue;
+        }
+
+        liveOutputs[iter.Current.get()] = KeepLiveColumns(iter.Current->GetOutputIUs(), liveIt->second);
+    }
+
+    for (const auto& iter : root) {
+        auto op = iter.Current;
+        const auto outputIt = liveOutputs.find(op.get());
+        if (outputIt == liveOutputs.end()) {
+            continue;
+        }
+
+        const auto& liveOutput = outputIt->second;
+        if (op->Kind == EOperator::Source) {
+            NarrowReadColumns(CastOperator<TOpRead>(op), liveOutput);
+            continue;
+        }
+
+        if (op->Kind == EOperator::Aggregate) {
+            PruneAggregateTraits(CastOperator<TOpAggregate>(op), liveOutput);
+        }
+
+        if (!CanOverrideOutput(op->Kind)) {
+            continue;
+        }
+
+        if (op->GetOutputIUs() != liveOutput) {
+            op->SetOutputIUsOverride(liveOutput);
+        }
+    }
 }
 
 } // namespace NKqp

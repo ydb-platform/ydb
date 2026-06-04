@@ -180,6 +180,18 @@ public:
         return Type;
     }
 
+    const std::optional<TVector<TInfoUnit>>& GetOutputIUsOverride() const {
+        return OutputIUsOverride;
+    }
+
+    void SetOutputIUsOverride(TVector<TInfoUnit> outputIUs) {
+        OutputIUsOverride = std::move(outputIUs);
+    }
+
+    void ClearOutputIUsOverride() {
+        OutputIUsOverride.reset();
+    }
+
     EOperator GetKind() const {
         return Kind;
     }
@@ -190,6 +202,9 @@ public:
     const TTypeAnnotationNode* Type = nullptr;
     TVector<TIntrusivePtr<IOperator>> Children;
     TVector<std::pair<IOperator*, ui32>> Parents;
+
+private:
+    std::optional<TVector<TInfoUnit>> OutputIUsOverride;
 };
 
 template <class K>
@@ -279,6 +294,7 @@ public:
             const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "TableFullScan"; }
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;

@@ -255,6 +255,15 @@ class TPruneDeadMapElementsRule : public IRule {
 };
 
 /**
+ * Narrow physical payload schemas using final liveness.
+ */
+class TNarrowByLivenessStage : public IRBOStage {
+  public:
+    TNarrowByLivenessStage();
+    virtual void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+};
+
+/**
  * Propagate and assign hash functions on StageGraph connections.
  */
 class TPropagateHashFuncStage : public IRBOStage {

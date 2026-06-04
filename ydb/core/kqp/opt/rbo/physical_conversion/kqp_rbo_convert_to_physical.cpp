@@ -131,6 +131,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             .Done().Ptr();
             // clang-format on
 
+            if (limit->GetOutputIUs() != limit->GetInput()->GetOutputIUs()) {
+                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, limit->GetOutputIUs());
+            }
+
             if (!limit->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, limit->GetNumOfConsumers(), ctx, op->Pos);
             }
@@ -193,6 +197,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                     .Add(extendArgs)
                 .Done().Ptr();
                 // clang-format on
+            }
+
+            if (unionAll->GetOutputIUs() != unionAll->GetLeftInput()->GetOutputIUs()) {
+                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, unionAll->GetOutputIUs());
             }
 
             if (!unionAll->IsSingleConsumer()) {

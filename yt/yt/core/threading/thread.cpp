@@ -114,7 +114,7 @@ TThreadId TThread::GetThreadId() const
     return ThreadId_;
 }
 
-TString TThread::GetThreadName() const
+std::string TThread::GetThreadName() const
 {
     return ThreadName_;
 }

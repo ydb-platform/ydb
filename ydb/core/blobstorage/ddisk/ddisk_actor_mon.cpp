@@ -12,8 +12,6 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
-
 namespace NKikimr::NDDisk {
 
 namespace {
@@ -80,10 +78,8 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
         }
     }
 
-    YDB_LOG_DEBUG("TDDiskActor::Handle(TEvHttpInfo)",
-        {"Marker", "BSDD45"},
-        {"DDiskId", DDiskId},
-        {"Sender", ev->Sender});
+    STLOG(PRI_DEBUG, BS_DDISK, BSDD45, "TDDiskActor::Handle(TEvHttpInfo)",
+        (DDiskId, DDiskId), (Sender, ev->Sender));
 
     const bool diskReady = HandlingQueries && DiskFormat;
 

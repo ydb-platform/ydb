@@ -80,14 +80,14 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         }
 
         if (conflictsWithLeft) {
-            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings, true);
+            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings);
         }
 
         auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);
 
         TVector<TMapElement> renameElements;
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
+        auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements);
         unaryOp->SetInput(rename);
     }
 
@@ -106,11 +106,11 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         // FIXME: This works only for postgres types, because they are null-compatible
         // For YQL types we will need to handle optionality
         mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, subplanResType, &ctx.ExprCtx));
-        auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements);
 
         TVector<TMapElement> renameElements;
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = MakeIntrusive<TOpMap>(subplan, subplan->Pos, renameElements, true);
+        auto rename = MakeIntrusive<TOpMap>(subplan, subplan->Pos, renameElements);
         rename->Props.EnsureAtMostOne = true;
 
         auto unionAll = MakeIntrusive<TOpUnionAll>(rename, map, subplan->Pos, true);

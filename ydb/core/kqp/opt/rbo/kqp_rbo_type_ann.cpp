@@ -217,13 +217,17 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto typeItems = structType->GetItems();
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
-    if (!map->Project) {
-        const TTypeAnnotationNode* inputType = map->GetInput()->Type;
-        auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto& mapElement : map->MapElements) {
+        if (mapElement.IsRename()) {
+            Y_ENSURE(mapElement.IsColumnAccess(), "Rename map element must be a plain column access");
+            renameSources.insert(mapElement.GetRename());
+        }
+    }
 
-        for (const auto* item : structType->GetItems()) {
+    for (const auto* item : structType->GetItems()) {
+        if (!renameSources.contains(TInfoUnit(TString(item->GetName())))) {
             resStructItemTypes.push_back(item);
         }
     }

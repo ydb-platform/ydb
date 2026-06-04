@@ -16,7 +16,7 @@ TIntrusivePtr<IOperator> TPushMapRule::SimpleMatchAndApply(const TIntrusivePtr<I
     }
 
     auto map = CastOperator<TOpMap>(input);
-    if (map->Project) {
+    if (map->HasRenames()) {
         return input;
     }
 
@@ -60,17 +60,17 @@ TIntrusivePtr<IOperator> TPushMapRule::SimpleMatchAndApply(const TIntrusivePtr<I
     if (!topMapElements.size()) {
         output = join;
     } else {
-        output = MakeIntrusive<TOpMap>(join, input->Pos, topMapElements, false);
+        output = MakeIntrusive<TOpMap>(join, input->Pos, topMapElements);
     }
 
     if (leftMapElements.size()) {
         auto leftInput = join->GetLeftInput();
-        join->SetLeftInput(MakeIntrusive<TOpMap>(leftInput, input->Pos, leftMapElements, false));
+        join->SetLeftInput(MakeIntrusive<TOpMap>(leftInput, input->Pos, leftMapElements));
     }
 
     if (rightMapElements.size()) {
         auto rightInput = join->GetRightInput();
-        join->SetRightInput(MakeIntrusive<TOpMap>(rightInput, input->Pos, rightMapElements, false));
+        join->SetRightInput(MakeIntrusive<TOpMap>(rightInput, input->Pos, rightMapElements));
     }
 
     return output;

@@ -62,7 +62,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
     // Iterate over map elements and try to find an expression to push down to column shard.
     for (ui32 mapIndex = 0; mapIndex < mapElements.size(); ++mapIndex) {
         const auto& mapElement = mapElements[mapIndex];
-        if (!mapElement.IsRename()) {
+        if (!mapElement.IsColumnAccess()) {
             const auto lambda = TCoLambda(mapElement.GetExpression().Node);
             const auto& arg = lambda.Args().Arg(0).Ref();
             auto body = lambda.Body().Ptr();
@@ -155,7 +155,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
 
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newLambda, read->Limit,
                                           read->Ranges, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
-    return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements, map->Project, map->Ordered);
+    return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements, map->Ordered);
 }
 
 } // namespace NKikimr::NKqp

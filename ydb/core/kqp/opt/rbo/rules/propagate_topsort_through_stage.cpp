@@ -113,7 +113,7 @@ TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSo
     }
     auto props = sort->Props;
     props.StageId = currentStageId;
-    return MakeIntrusive<TOpMap>(newSort, sort->Pos, props, mapElements, true);
+    return MakeIntrusive<TOpMap>(newSort, sort->Pos, props, mapElements);
 }
 
 void MaybeUpdateSortElements(TVector<TSortElement>& sortElements, const TVector<TMapElement>& mapElements) {
@@ -203,7 +203,7 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
         // If map renames a sort element, update it.
         MaybeUpdateSortElements(sortElements, mapElements);
         const auto propagatedSort = MakeIntrusive<TOpSort>(map->GetInput(), sort->Pos, sort->Props, sortElements, sort->LimitCond, EOpPhase::Intermediate);
-        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements, map->Project, map->Ordered);
+        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements, map->Ordered);
     } else if (CanPushSortToOlapRead(sort, sortInput, ctx, sortDirecion)) {
         const auto read = CastOperator<TOpRead>(sortInput);
         const auto limitCond = sort->LimitCond->Node->ChildPtr(1);

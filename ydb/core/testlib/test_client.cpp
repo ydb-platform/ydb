@@ -1865,7 +1865,6 @@ namespace Tests {
         if (Runtime) {
             WaitFinalization();
             SysViewsRosterUpdateObserver.Remove();
-            Runtime->CleanupActorSystems();
         }
 
         if (YqSharedResources) {
@@ -1882,15 +1881,19 @@ namespace Tests {
             FederatedQuerySetupDriver_.reset();
         }
 
-        if (Bus) {
-            Bus->Stop();
-            Bus.Drop();
-        }
-
         if (Driver) {
             // Stop requests and wait for their completion
             Driver->Stop(true);
             Driver.Reset();
+        }
+
+        if (Runtime) {
+            Runtime->CleanupActorSystems();
+        }
+
+        if (Bus) {
+            Bus->Stop();
+            Bus.Drop();
         }
 
         if (Runtime) {

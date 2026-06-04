@@ -1,6 +1,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -54,18 +55,14 @@ void VerifyTableDescriptionAndRestartSchemeShard(
  */
 Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     /**
-     * Verify that CREATE TABLE without the detailed metrics level specified works correctly.
-     *
-     * @note This function also verifies that the detailed metrics settings are preserved
-     *       across SchemeShard restarts.
-     *
-     * @param[in] enableDetailedMetrics Indicates if the corresponding feature flag is enabled
+     * Verify that CREATE TABLE without the detailed metrics level specified works correctly
+     * regardless of EnableDetailedMetrics feature flag state.
      */
-    void VerifyCreateTableNoDetailedMetricsLevel(bool enableDetailedMetrics) {
+    Y_UNIT_TEST_TWIN(CreateTableNoDetailedMetricsLevel, EnableDetailedMetrics) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        runtime.GetAppData().FeatureFlags.SetEnableDetailedMetrics(enableDetailedMetrics);
+        runtime.GetAppData().FeatureFlags.SetEnableDetailedMetrics(EnableDetailedMetrics);
 
         TestCreateTable(
             runtime,
@@ -94,30 +91,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
                 },
             }
         );
-    }
-
-    /**
-     * Verify that CREATE TABLE without the detailed metrics level specified works correctly.
-     *
-     * @note This test also verifies that the detailed metrics settings are preserved
-     *       across SchemeShard restarts.
-     *
-     * @note This test is for the variation when the EnableDetailedMetrics feature flag is disabled.
-     */
-    Y_UNIT_TEST(CreateTableNoDetailedMetricsLevelFeatureFlagDisabled) {
-        VerifyCreateTableNoDetailedMetricsLevel(false /* enableDetailedMetrics */);
-    }
-
-    /**
-     * Verify that CREATE TABLE without the detailed metrics level specified works correctly.
-     *
-     * @note This test also verifies that the detailed metrics settings are preserved
-     *       across SchemeShard restarts.
-     *
-     * @note This test is for the variation when the EnableDetailedMetrics feature flag is enabled.
-     */
-    Y_UNIT_TEST(CreateTableNoDetailedMetricsLevelFeatureFlagEnabled) {
-        VerifyCreateTableNoDetailedMetricsLevel(true /* enableDetailedMetrics */);
     }
 
     /**
@@ -190,7 +163,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
      *
      * @param[in] metricsLevel The detailed metrics level to verify (unset == use drop)
      */
-    void VerifyCreateTableWithDetailedMetricsLevelWithFeatureFlagDisabled(
+    void VerifyCreateTableWithDetailedMetricsFlagDisabled(
         std::optional<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel> metricsLevel
     ) {
         TTestBasicRuntime runtime;
@@ -237,51 +210,33 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     }
 
     /**
-     * Verify that CREATE TABLE fails correctly, when dropping detailed metrics level
-     * is specified in the request and the EnableDetailedMetrics feature flag is disabled.
+     * Verify that CREATE TABLE fails correctly, with different detailed metrics levels
+     * and the EnableDetailedMetrics feature flag disabled.
      */
     Y_UNIT_TEST(CreateTableDroppingDetailedMetricsSettingsNotAllowedFeatureFlagDisabled) {
-        VerifyCreateTableWithDetailedMetricsLevelWithFeatureFlagDisabled(
-            {}
-        );
+        VerifyCreateTableWithDetailedMetricsFlagDisabled({});
     }
 
-    /**
-     * Verify that CREATE TABLE fails correctly, when the detailed metrics level UNSPECIFIED
-     * is specified in the request and the EnableDetailedMetrics feature flag is disabled.
-     */
     Y_UNIT_TEST(CreateTableDetailedMetricsLevelUnspecifiedNotAllowedFeatureFlagDisabled) {
-        VerifyCreateTableWithDetailedMetricsLevelWithFeatureFlagDisabled(
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
             NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
         );
     }
 
-    /**
-     * Verify that CREATE TABLE fails correctly, when the detailed metrics level DISABLED
-     * is specified in the request and the EnableDetailedMetrics feature flag is disabled.
-     */
     Y_UNIT_TEST(CreateTableDetailedMetricsLevelDisabledNotAllowedFeatureFlagDisabled) {
-        VerifyCreateTableWithDetailedMetricsLevelWithFeatureFlagDisabled(
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
             NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
         );
     }
 
-    /**
-     * Verify that CREATE TABLE fails correctly, when the detailed metrics level TABLE
-     * is specified in the request and the EnableDetailedMetrics feature flag is disabled.
-     */
     Y_UNIT_TEST(CreateTableDetailedMetricsLevelTableNotAllowedFeatureFlagDisabled) {
-        VerifyCreateTableWithDetailedMetricsLevelWithFeatureFlagDisabled(
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
             NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
         );
     }
 
-    /**
-     * Verify that CREATE TABLE fails correctly, when the detailed metrics level PARTITION
-     * is specified in the request and the EnableDetailedMetrics feature flag is disabled.
-     */
     Y_UNIT_TEST(CreateTableDetailedMetricsLevelPartitionNotAllowedFeatureFlagDisabled) {
-        VerifyCreateTableWithDetailedMetricsLevelWithFeatureFlagDisabled(
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
             NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
         );
     }
@@ -398,16 +353,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
      *
      * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
-     *
-     * @param[in] enableDetailedMetrics Indicates if the corresponding feature flag is enabled
      */
-    void VerifyAlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel(
-        bool enableDetailedMetrics
-    ) {
+    Y_UNIT_TEST_TWIN(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel, EnableDetailedMetrics) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        runtime.GetAppData().FeatureFlags.SetEnableDetailedMetrics(enableDetailedMetrics);
+        runtime.GetAppData().FeatureFlags.SetEnableDetailedMetrics(EnableDetailedMetrics);
 
         // First, create a table without any detailed metrics settings
         TestCreateTable(
@@ -449,36 +400,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
                     UNIT_ASSERT(!tableDescription.HasDetailedMetricsSettings());
                 },
             }
-        );
-    }
-
-    /**
-     * Verify that ALTER TABLE without the detailed metrics level specified works correctly,
-     * when applied to a table, which does not have any detailed metrics settings configured.
-     *
-     * @note This test also verifies that the detailed metrics settings are preserved
-     *       across Scheme Shard restarts.
-     *
-     * @note This test is for the variation when the EnableDetailedMetrics feature flag is disabled.
-     */
-    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevelFeatureFlagDisabled) {
-        VerifyAlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel(
-            false /* enableDetailedMetrics */
-        );
-    }
-
-    /**
-     * Verify that ALTER TABLE without the detailed metrics level specified works correctly,
-     * when applied to a table, which does not have any detailed metrics settings configured.
-     *
-     * @note This test also verifies that the detailed metrics settings are preserved
-     *       across Scheme Shard restarts.
-     *
-     * @note This test is for the variation when the EnableDetailedMetrics feature flag is enabled.
-     */
-    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevelFeatureFlagEnabled) {
-        VerifyAlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel(
-            true /* enableDetailedMetrics */
         );
     }
 

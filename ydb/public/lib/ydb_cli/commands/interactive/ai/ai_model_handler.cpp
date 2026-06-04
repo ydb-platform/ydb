@@ -13,6 +13,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
+#include <contrib/libs/ftxui/include/ftxui/dom/flexbox_config.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/table.hpp>
 #include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
 
@@ -157,7 +158,9 @@ void RemovePairedEmphasis(TString& s, char marker) {
     s = std::move(out);
 }
 
-TString StripInlineMarkdown(TStringBuf line) {
+// Strip leading block markers (blockquotes, headings) and inline italic / inline-code markers, but
+// keep '**' so bold can be rendered later. Used for prose, which is then styled by BuildStyledLine.
+TString StripInlineMarkdownKeepBold(TStringBuf line) {
     size_t start = 0;
     while (start < line.size() && line[start] == ' ') {
         ++start;
@@ -184,10 +187,17 @@ TString StripInlineMarkdown(TStringBuf line) {
 
     // Keep the original leading spaces unless a block marker was stripped.
     TString result(strippedBlock ? line.substr(start) : line);
-    SubstGlobal(result, "**", "");     // bold
-    RemovePairedEmphasis(result, '*'); // italic; keeps "SELECT *" intact
+    RemovePairedEmphasis(result, '*'); // italic; keeps "SELECT *" and '**' bold markers intact
     RemovePairedEmphasis(result, '_'); // italic; keeps snake_case identifiers intact
     SubstGlobal(result, "`", "");      // inline code
+    return result;
+}
+
+// Same as above, but also drops '**' bold markers. Used where inline styling is impossible, such as
+// table cells (which become plain strings).
+TString StripInlineMarkdown(TStringBuf line) {
+    TString result = StripInlineMarkdownKeepBold(line);
+    SubstGlobal(result, "**", "");
     return result;
 }
 
@@ -265,6 +275,69 @@ ftxui::Element BuildCodeBlock(const std::vector<TStringBuf>& codeLines, TStringB
     });
 }
 
+// Render a single prose line as a flexbox of space-separated tokens (mirroring how paragraph()
+// reflows words), turning "**...**" spans into bold. Inside a token the style can change between
+// pieces without inserting a space; tokens themselves are separated by a one-cell gap.
+ftxui::Element BuildStyledLine(TStringBuf line) {
+    // Unbalanced "**" would make the rest of the line bold; if so, drop the markers and render plain.
+    int markers = 0;
+    for (size_t i = 0; i + 1 < line.size();) {
+        if (line[i] == '*' && line[i + 1] == '*') {
+            ++markers;
+            i += 2;
+        } else {
+            ++i;
+        }
+    }
+    TString plain;
+    if (markers % 2 != 0) {
+        plain = line;
+        SubstGlobal(plain, "**", "");
+        line = plain;
+    }
+
+    std::vector<ftxui::Element> tokens;
+    std::vector<ftxui::Element> pieces;
+    std::string piece;
+    bool bold = false;
+
+    auto flushPiece = [&]() {
+        if (!piece.empty()) {
+            pieces.push_back(bold ? (ftxui::text(piece) | ftxui::bold) : ftxui::text(piece));
+            piece.clear();
+        }
+    };
+    auto flushToken = [&]() {
+        flushPiece();
+        if (pieces.empty()) {
+            tokens.push_back(ftxui::text("")); // keep empty tokens so repeated spaces are preserved
+        } else if (pieces.size() == 1) {
+            tokens.push_back(std::move(pieces.front()));
+        } else {
+            tokens.push_back(ftxui::hbox(std::move(pieces)));
+        }
+        pieces.clear();
+    };
+
+    for (size_t i = 0; i < line.size();) {
+        if (line[i] == '*' && i + 1 < line.size() && line[i + 1] == '*') {
+            flushPiece();
+            bold = !bold;
+            i += 2;
+        } else if (line[i] == ' ') {
+            flushToken();
+            ++i;
+        } else {
+            piece += line[i];
+            ++i;
+        }
+    }
+    flushToken();
+
+    static const auto config = ftxui::FlexboxConfig().SetGap(1, 0);
+    return ftxui::flexbox(std::move(tokens), config);
+}
+
 // The model is instructed to answer in plain text, but it still tends to emit Markdown. Our output
 // is printed to the terminal, so convert Markdown to a presentable form before showing it: inline
 // markup (headings, bold/italic, inline code, blockquotes) is reduced to plain text, Markdown tables
@@ -278,21 +351,22 @@ ftxui::Element MarkdownToElement(TStringBuf text) {
     }
 
     std::vector<ftxui::Element> blocks;
-    TStringBuilder textRun;
+    std::vector<TString> proseLines;
 
-    auto flushText = [&]() {
-        TString block = textRun;
-        textRun.clear();
-        while (!block.empty()) {
-            const char c = block.back();
-            if (c != '\n' && c != '\r' && c != ' ' && c != '\t') {
-                break;
-            }
-            block.pop_back();
+    auto flushProse = [&]() {
+        while (!proseLines.empty() && TrimSpaces(proseLines.back()).empty()) {
+            proseLines.pop_back(); // drop trailing blank lines so blocks don't get extra padding
         }
-        if (!block.empty()) {
-            blocks.push_back(ftxui::paragraph(std::string(block)));
+        if (proseLines.empty()) {
+            return;
         }
+        std::vector<ftxui::Element> styled;
+        styled.reserve(proseLines.size());
+        for (const TString& proseLine : proseLines) {
+            styled.push_back(BuildStyledLine(proseLine));
+        }
+        blocks.push_back(ftxui::vbox(std::move(styled)));
+        proseLines.clear();
     };
 
     for (size_t i = 0; i < lines.size();) {
@@ -300,7 +374,7 @@ ftxui::Element MarkdownToElement(TStringBuf text) {
 
         // Fenced code block: collect everything up to the closing fence and render it as a panel.
         if (trimmed.StartsWith("```")) {
-            flushText();
+            flushProse();
 
             // The opening fence may carry an info string ("```yql"); its first token is the language.
             TStringBuf language = trimmed;
@@ -328,7 +402,7 @@ ftxui::Element MarkdownToElement(TStringBuf text) {
 
         // A run of consecutive "| ... |" lines is a Markdown table: render it as a real table.
         if (!IsTableSeparatorLine(trimmed) && trimmed.StartsWith('|')) {
-            flushText();
+            flushProse();
             std::vector<std::vector<std::string>> rows;
             for (; i < lines.size(); ++i) {
                 const TStringBuf row = TrimSpaces(lines[i]);
@@ -345,13 +419,10 @@ ftxui::Element MarkdownToElement(TStringBuf text) {
             continue;
         }
 
-        if (!textRun.empty()) {
-            textRun << '\n';
-        }
-        textRun << StripInlineMarkdown(lines[i]);
+        proseLines.push_back(StripInlineMarkdownKeepBold(lines[i]));
         ++i;
     }
-    flushText();
+    flushProse();
 
     if (blocks.empty()) {
         return ftxui::text("");

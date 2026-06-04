@@ -232,7 +232,7 @@ struct TPDiskFailureInjectionTest {
         TObjectWithState::DeserializeCommonState(data);
         InitActorSystem();
         ActorSystem->Start();
-        LOG_NOTICE(*ActorSystem, NActorsServices::TEST, "actor system started");
+        YDB_LOG_CTX_COMP_NOTICE(*ActorSystem, NActorsServices::TEST, "actor system started");
         test->Run(this, &StopEvent, stateManager);
     }
 

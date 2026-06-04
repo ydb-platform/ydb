@@ -38,8 +38,8 @@ namespace NKikimr::NDDisk {
 
     struct TPersistentBufferBarrierRecord {
         ui64 TabletId;
-        ui64 Lsn;
         ui32 Generation;
+        ui64 Lsn;
     };
 
     struct TPersistentBufferBarriers {

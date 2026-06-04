@@ -497,7 +497,7 @@ namespace NKikimr::NDDisk {
             auto itErase = inflight.Erases.find(partCookie);
             Y_ABORT_UNLESS(itErase != inflight.Erases.end());
             for (auto& e : itErase->second) {
-                auto it = PersistentBufferEraseInflightsByRecord.find(TPersistentBufferRecordId{inflight.TabletId, std::get<1>(e), std::get<0>(e)});
+                auto it = PersistentBufferEraseInflightsByRecord.find(TPersistentBufferRecordId{inflight.TabletId, e.Generation, e.Lsn});
                 if (it == PersistentBufferEraseInflightsByRecord.end()) {
                     break;
                 }
@@ -1000,7 +1000,7 @@ namespace NKikimr::NDDisk {
         return DataParts.begin()->second;
     }
 
-    void TDDiskActor::BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn) {
+    void TDDiskActor::BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
         STLOG_I("TDDiskActor::BarrierErasePersistentBuffer", (tabletId, creds.TabletId), (lsn, lsn));
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.BarrierErasePersistentBuffer",
@@ -1046,7 +1046,7 @@ namespace NKikimr::NDDisk {
         DirectUringOp(op);
     }
 
-    void TDDiskActor::ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases) {
+    void TDDiskActor::ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.ErasePersistentBuffer",
@@ -1068,8 +1068,8 @@ namespace NKikimr::NDDisk {
 
         // TODO: flush once
         for (auto& e : erases) {
-            auto lsn = std::get<0>(e);
-            auto generation = std::get<1>(e);
+            const auto generation = e.Generation;
+            const auto lsn = e.Lsn;
             STLOG_I("TDDiskActor::ErasePersistentBuffer", (tabletId, creds.TabletId), (lsn, lsn), (generation, generation));
 
             const auto it = PersistentBuffers.find({creds.TabletId, generation});
@@ -1107,7 +1107,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, const TFastErase& fastErase) {
+    void TDDiskActor::FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, const TFastErase& fastErase) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.FastErasePersistentBuffer",
@@ -1160,8 +1160,8 @@ namespace NKikimr::NDDisk {
         auto erases = inflight.Erases.find(partCookie);
         Y_ABORT_UNLESS(erases != inflight.Erases.end());
         for (auto& e : erases->second) {
-            auto lsn = std::get<0>(e);
-            auto generation = std::get<1>(e);
+            auto generation = e.Generation;
+            auto lsn = e.Lsn;
             STLOG_I("TDDiskActor::ClearPersistentBufferRecords", (tabletId, inflight.TabletId), (lsn, lsn), (generation, generation));
 
             const auto it = PersistentBuffers.find({inflight.TabletId, generation});
@@ -1219,7 +1219,7 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
 
-        std::vector<std::tuple<ui64, ui32>> erases;
+        std::vector<TEraseLsnId> erases;
         std::vector<ui64> fastErases;
         bool canFastErase = PersistentBufferBarriersManager.CanFastErase(creds.TabletId, creds.Generation);
         fastErases.reserve(record.ErasesSize());
@@ -1231,7 +1231,7 @@ namespace NKikimr::NDDisk {
             }
             const auto it = PersistentBuffers.find({creds.TabletId, generation});
             if (it != PersistentBuffers.end() && it->second.Records.find(lsn) != it->second.Records.end()) {
-                erases.emplace_back(lsn, generation);
+                erases.emplace_back(generation, lsn);
                 if (canFastErase && PersistentBufferFormat.EnableFastErases) {
                     fastErases.push_back(lsn);
                 }
@@ -1279,15 +1279,15 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const ui64 lsn = record.GetLsn();
 
-        std::vector<std::tuple<ui64, ui32>> erases;
+        std::vector<TEraseLsnId> erases;
 
         for (auto it = PersistentBuffers.lower_bound({creds.TabletId, 0}); it != PersistentBuffers.end() &&
-                std::get<0>(it->first) == creds.TabletId; ++it) {
+                it->first.TabletId == creds.TabletId; ++it) {
             const TPersistentBuffer& buffer = it->second;
             auto recordIt = buffer.Records.begin();
             while (recordIt != buffer.Records.end()
-                && (recordIt->first <= lsn || std::get<1>(it->first) < creds.Generation)) {
-                erases.emplace_back(recordIt->first, std::get<1>(it->first));
+                && (recordIt->first <= lsn || it->first.Generation < creds.Generation)) {
+                erases.emplace_back(it->first.Generation, recordIt->first);
                 recordIt++;
             }
         }
@@ -1414,11 +1414,11 @@ namespace NKikimr::NDDisk {
 
         if (ev->Get()->DescribeTablets) {
             for (auto& [k, v] : PersistentBuffers) {
-                reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
+                reply->TabletInfos.emplace_back(k.TabletId, k.Generation,
                     v.Records.begin()->first, v.Records.rbegin()->first,
                     v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp,
                     v.Records.size(), v.Size,
-                    PersistentBufferBarriersManager.GetErasesCount(std::get<0>(k)));
+                    PersistentBufferBarriersManager.GetErasesCount(k.TabletId));
             }
             reply->EraseBarriers = PersistentBufferBarriersManager.GetBarriers();
         }
@@ -1458,7 +1458,7 @@ namespace NKikimr::NDDisk {
         auto& rr = reply->Record;
         rr.SetBarrierLsn(PersistentBufferBarriersManager.GetBarrier(creds.TabletId).Lsn);
         for (auto it = PersistentBuffers.lower_bound({creds.TabletId, 0}); it != PersistentBuffers.end() &&
-                std::get<0>(it->first) == creds.TabletId; ++it) {
+                it->first.TabletId == creds.TabletId; ++it) {
             const TPersistentBuffer& buffer = it->second;
             for (const auto& [lsn, pr] : buffer.Records) {
                 auto *pb = rr.AddRecords();
@@ -1466,7 +1466,7 @@ namespace NKikimr::NDDisk {
                 sel->SetVChunkIndex(pr.VChunkIndex);
                 sel->SetOffsetInBytes(pr.OffsetInBytes);
                 sel->SetSize(pr.Size);
-                pb->SetGeneration(std::get<1>(it->first));
+                pb->SetGeneration(it->first.Generation);
                 pb->SetLsn(lsn);
             }
         }
@@ -1479,7 +1479,7 @@ namespace NKikimr::NDDisk {
         TStringBuilder sb;
         sb << "PersistentBuffer size:" << PersistentBuffers.size() << "\n";
         for (auto [k, v] : PersistentBuffers) {
-            sb << "  TabletId:" << std::get<0>(k) << "\n";
+            sb << "  TabletId:" << k.TabletId << "\n";
             for (auto [lsn, pr] : v.Records) {
                 sb << "    Lsn:" << lsn << " Offset:" << pr.OffsetInBytes << " Size:" << pr.Size << " Sectors: ";
                 for (auto sector : pr.Sectors) {

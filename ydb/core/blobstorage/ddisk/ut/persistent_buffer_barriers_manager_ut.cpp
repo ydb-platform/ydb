@@ -350,11 +350,11 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             bh.Header.PersistentBufferUniqueId = 1;
             bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
             bh.Header.RecordIdx = 0;
-            bh.Barriers[0] = {tabletId, /*Lsn=*/30, 1};
+            bh.Barriers[0] = {tabletId, /*Generation=*/1, /*Lsn=*/30};
             mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
 
             // RestoreBarriers needs records > barrier to keep the tablet alive.
-            std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbsForBarrier;
+            std::map<TPersistentBufferId, TPersistentBuffer> pbsForBarrier;
             TPersistentBuffer buf;
             buf.Records[40] = {};
             buf.Records[50] = {};
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         // persistentBuffers only has records > barrier (records <= 30 already
         // removed by RestoreBarriers in real usage).
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        std::map<TPersistentBufferId, TPersistentBuffer> pbs;
         {
             TPersistentBuffer buf;
             buf.Records[40] = {};
@@ -415,10 +415,10 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             bh.Header.PersistentBufferUniqueId = 1;
             bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
             bh.Header.RecordIdx = 0;
-            bh.Barriers[0] = {tabletId, /*Lsn=*/100, 1};
+            bh.Barriers[0] = {tabletId, /*Generation=*/1, /*Lsn=*/100};
             mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
 
-            std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbsForBarrier;
+            std::map<TPersistentBufferId, TPersistentBuffer> pbsForBarrier;
             TPersistentBuffer buf;
             buf.Records[200] = {};
             pbsForBarrier[{tabletId, 0}] = std::move(buf);
@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         }
 
         // persistentBuffers has only record at LSN=200 (above barrier).
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        std::map<TPersistentBufferId, TPersistentBuffer> pbs;
         {
             TPersistentBuffer buf;
             buf.Records[200] = {};
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             mgr.AddErase((TPersistentBufferHeader*)&eh, /*chunkIdx=*/0, /*sectorIdx=*/3);
         }
 
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        std::map<TPersistentBufferId, TPersistentBuffer> pbs;
         {
             TPersistentBuffer buf;
             for (ui64 lsn : {5ULL, 15ULL, 25ULL, 35ULL}) {
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         // persistentBuffers only has generation 2 records (generation 1 was already
         // cleaned up by RestoreBarriers or never written).
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        std::map<TPersistentBufferId, TPersistentBuffer> pbs;
         {
             TPersistentBuffer buf;
             buf.Records[5] = {};
@@ -739,12 +739,12 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             bh.Header.PersistentBufferUniqueId = 1;
             bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
             bh.Header.RecordIdx = 0;
-            bh.Barriers[0] = {tabletId, /*Lsn=*/5, /*Generation=*/2};
+            bh.Barriers[0] = {tabletId, /*Generation=*/2, /*Lsn=*/5};
             mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
         }
 
         // persistentBuffers has records from generation 1 (old) and generation 2 (current).
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        std::map<TPersistentBufferId, TPersistentBuffer> pbs;
         {
             // Generation 1 records — all must be removed.
             TPersistentBuffer buf1;
@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             bh.Header.PersistentBufferUniqueId = 1;
             bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
             bh.Header.RecordIdx = 0;
-            bh.Barriers[0] = {tabletId, /*Lsn=*/50, /*Generation=*/1};
+            bh.Barriers[0] = {tabletId, /*Generation=*/1, /*Lsn=*/50};
             mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/1);
         }
 
@@ -847,12 +847,12 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             bh.Header.PersistentBufferUniqueId = 1;
             bh.Header.NodeId = 1; bh.Header.PDiskId = 1; bh.Header.SlotId = 1;
             bh.Header.RecordIdx = 0;
-            bh.Barriers[0] = {tabletId, /*Lsn=*/5, /*Generation=*/2};
+            bh.Barriers[0] = {tabletId, /*Generation=*/2, /*Lsn=*/5};
             mgr.AddBarrier((TPersistentBufferHeader*)&bh, /*chunkIdx=*/0, /*sectorIdx=*/2);
         }
 
         // persistentBuffers: only generation-2 records survive (gen-1 was cleaned up).
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> pbs;
+        std::map<TPersistentBufferId, TPersistentBuffer> pbs;
         {
             TPersistentBuffer buf;
             buf.Records[10] = {};

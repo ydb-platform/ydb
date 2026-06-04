@@ -27,3 +27,5 @@ items:
     href: spilling.md
   - name: Скан запросы
     href: scan_query.md
+  - name: Топики (работа через SQL)
+    href: topics.md

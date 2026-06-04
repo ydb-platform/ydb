@@ -108,6 +108,7 @@ SRCS(
     schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
+    schemeshard__monitoring.h
     schemeshard__notify.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
@@ -238,6 +239,7 @@ SRCS(
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
     schemeshard__tenant_shred_manager.cpp
@@ -359,7 +361,11 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_index_build_info.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
+GENERATE_ENUM_SERIALIZATION(schemeshard_impl.h)
+
 GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
+
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweepAlert
 
 PEERDIR(
     contrib/libs/protobuf

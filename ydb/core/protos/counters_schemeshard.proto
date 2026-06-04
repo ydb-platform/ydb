@@ -478,6 +478,9 @@ enum ECumulativeCounters {
     COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN = 142 [(CounterOpts) = {Name: "SplitMergePartitionsRewritten"}];
 
     COUNTER_FINISHED_OPS_TxCreateFullBackupOp = 143 [(CounterOpts) = {Name: "FinishedOps/CreateFullBackupOp"}];
+
+    // How much time TTableInfo::VerifyConsistency() call takes, in nanoseconds
+    COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS = 144 [(CounterOpts) = {Name: "TablePartitionsConsistencyCheckTimeNs"}];
 }
 
 enum EPercentileCounters {

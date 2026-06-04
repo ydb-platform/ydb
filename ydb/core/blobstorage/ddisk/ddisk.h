@@ -11,7 +11,8 @@
 
 namespace NKikimr::NDDisk {
 
-    constexpr size_t DataAlignment = 4096;
+    constexpr size_t MinSectorSize = 4096;
+    constexpr size_t DataAlignment = MinSectorSize;
 
     struct TEv {
         enum {
@@ -405,6 +406,10 @@ struct TPersistentBufferFormat {
 
         static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
+        }
+
+        static constexpr size_t GetPayloadHeaderSize() {
+            return MinSectorSize;
         }
     };
 

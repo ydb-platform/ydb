@@ -31,7 +31,7 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 // Parquet configuration helpers
 TString MakeParquetSettings(const TString& extraSettings = "") {
     TStringBuilder sb;
-    sb << "data_format: PARQUET ";
+    sb << "parquet { } ";
     if (extraSettings) {
         sb << extraSettings << " ";
     }
@@ -40,7 +40,7 @@ TString MakeParquetSettings(const TString& extraSettings = "") {
 
 TString MakeParquetSettingsWithRowGroupSize(ui32 rowGroupSize, const TString& extraSettings = "") {
     TStringBuilder sb;
-    sb << "data_format: PARQUET parquet_row_group_size: " << rowGroupSize << " ";
+    sb << "parquet { row_group_size: " << rowGroupSize << " } ";
     if (extraSettings) {
         sb << extraSettings << " ";
     }
@@ -49,7 +49,7 @@ TString MakeParquetSettingsWithRowGroupSize(ui32 rowGroupSize, const TString& ex
 
 TString MakeParquetSettingsWithCompression(const TString& compression, const TString& extraSettings = "") {
     TStringBuilder sb;
-    sb << "data_format: PARQUET compression: \"" << compression << "\" ";
+    sb << "parquet { } compression: \"" << compression << "\" ";
     if (extraSettings) {
         sb << extraSettings << " ";
     }

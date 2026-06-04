@@ -33,6 +33,13 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferFastErases));
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferBarriers));
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferLsnRecordHeader));
+        // The persistent-buffer write path reserves exactly GetPayloadHeaderSize() bytes (compile-time
+        // MinSectorSize) of payload headroom for the on-disk header sector, while slicing and header
+        // formatting use the runtime SectorSize. The sector math only holds when the two are equal, so
+        // pin the invariant here instead of silently mis-slicing / corrupting data when SectorSize differs.
+        Y_ABORT_UNLESS(SectorSize == TEvWritePersistentBuffer::GetPayloadHeaderSize(),
+            "PB header reservation (%u) must equal SectorSize (%u)",
+            (ui32)TEvWritePersistentBuffer::GetPayloadHeaderSize(), (ui32)SectorSize);
         ChunkSize = DiskFormat->ChunkSize;
         Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
         SectorInChunk = ChunkSize / SectorSize;
@@ -97,12 +104,11 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin) {
+    ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin, size_t numBytes) {
         Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
 
         XXH3_state_t state;
         XXH3_64bits_reset(&state);
-        size_t numBytes = SectorSize;
         for (auto it = begin; numBytes && it.Valid(); it.AdvanceToNextContiguousBlock()) {
             const size_t n = Min(numBytes, it.ContiguousSize());
             XXH3_64bits_update(&state, it.ContiguousData(), n);
@@ -154,12 +160,42 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex,
-        ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes, TRope&& payload, std::vector<TPersistentBufferSectorInfo>& sectors) {
-        auto headerData = TRcBuf::UninitializedPageAligned(SectorSize);
-        TPersistentBufferLsnRecordHeader *header = (TPersistentBufferLsnRecordHeader*)headerData.GetDataMut();
+    std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(
+        ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes,
+        TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors)
+    {
+        TRope fullData(std::move(payloadWithHeader));
+
+        // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
+        // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
+        // it via HasSignatureCorrection (JoinData restores the original byte on disk read-back). This mutates
+        // payload bytes that, on the interconnect fast path, share their backend with the payload-only rope
+        // that becomes the in-memory cache entry (pr.Data). ContiguousDataMut() routes to TRcBuf::GetDataMut(),
+        // which copies-on-write once when the backend is shared, forking fullData into a private buffer so the
+        // cached copy keeps the original bytes. This pass MUST run before the header pointer is captured below:
+        // the COW relocates fullData's backend, so a pointer taken earlier would dangle at the orphaned buffer
+        // and every subsequent header write (Locations, Header.Checksum) would miss the buffer that is actually
+        // written to disk. Do NOT switch to UnsafeContiguousDataMut(): it would mutate the shared backend in
+        // place and silently corrupt the in-memory cache. The copy is rare (only when a data sector starts with
+        // the signature byte) and fires at most once per write (fullData is private afterwards).
+        for (ui32 i = 1; i < sectors.size(); ++i) {
+            auto it = fullData.Begin() + SectorSize * i;
+            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                sectors[i].HasSignatureCorrection = true;
+                *it.ContiguousDataMut() = 0;
+            }
+        }
+
+        // Phase 2: fullData's backend is now final (private if Phase 1 copied it), so this header pointer stays
+        // valid for every write below. The header sector occupies reserved headroom that is not part of any
+        // payload view, so writing it through UnsafeContiguousDataMut() never needs (or triggers) a copy.
+        auto* header = reinterpret_cast<TPersistentBufferLsnRecordHeader*>(fullData.Begin().UnsafeContiguousDataMut());
+
         memset(header, 0, SectorSize);
-        memcpy(header->Header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, sizeof(TPersistentBufferHeader::PersistentBufferHeaderSignature));
+        memcpy(
+            header->Header.Signature,
+            TPersistentBufferHeader::PersistentBufferHeaderSignature,
+            sizeof(TPersistentBufferHeader::PersistentBufferHeaderSignature));
         header->Header.Version = 0;
         header->Header.PersistentBufferUniqueId = PersistentBufferUniqueId;
         header->Header.NodeId = BaseInfo.PDiskActorID.NodeId();
@@ -178,29 +214,29 @@ namespace NKikimr::NDDisk {
 
         for (ui32 i = 1; i < sectors.size(); ++i) {
             auto& loc = header->Locations[i - 1];
-            loc = sectors[i];
-            auto it = payload.Position(SectorSize * (i - 1));
-            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                loc.HasSignatureCorrection = true;
-                *it.ContiguousDataMut() = 0;
-            }
+            loc = sectors[i]; // carries HasSignatureCorrection set in Phase 1
+            auto it = fullData.Begin() + SectorSize * i;
             loc.Checksum = CalculateChecksum(it);
             sectors[i].Checksum = loc.Checksum;
         }
-        header->Header.Checksum = 0;
+
+        header->Header.Checksum = CalculateChecksum(fullData.Begin(), SectorSize);
+
+        // Slice fullData ([header | payload], a single contiguous, SectorSize-aligned buffer) into one part
+        // per run of physically adjacent on-disk sectors. This is zero-copy: TRope::ExtractFront moves whole
+        // chunks and turns the partial tail into a shared TRcBuf::Piece (no memcpy), so every part is a single
+        // contiguous Piece over fullData's backend, starting on a SectorSize (>= MinBlockSize) boundary. That
+        // lets PrepareWrite take its zero-copy branch (AlignedDataHolder = iter.GetChunk()). Non-adjacent
+        // (fragmented) sectors only produce more parts -> more DirectUringOps, never extra copies.
         std::vector<std::tuple<ui32, ui32, TRope>> parts;
         parts.reserve(sectors.size());
         for (ui32 sectorIdx = 0, first = 0; sectorIdx <= sectors.size(); sectorIdx++) {
             if (sectorIdx == sectors.size()
-                || sectors[first].ChunkIdx != sectors[sectorIdx].ChunkIdx
-                || sectors[first].SectorIdx + sectorIdx - first != sectors[sectorIdx].SectorIdx) {
+                    || sectors[first].ChunkIdx != sectors[sectorIdx].ChunkIdx
+                    || sectors[first].SectorIdx + sectorIdx - first != sectors[sectorIdx].SectorIdx) {
                 TRope data;
-                ui32 partSize = (sectorIdx - (first == 0 ? 1 : first)) * SectorSize;
-                if (first == 0) {
-                    data = headerData;
-                    ((TPersistentBufferHeader*)data.Begin().ContiguousDataMut())->Checksum = CalculateChecksum(data.Begin());
-                }
-                payload.ExtractFront(partSize, &data);
+                const ui32 partSize = (sectorIdx - first) * SectorSize;
+                fullData.ExtractFront(partSize, &data);
                 parts.push_back({(ui32)sectors[first].ChunkIdx, sectors[first].SectorIdx * SectorSize, std::move(data)});
                 first = sectorIdx;
             }
@@ -670,8 +706,13 @@ namespace NKikimr::NDDisk {
             .Attribute("lsn", static_cast<i64>(lsn));
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
 
+        // CheckQuery (in Handle(TEvWritePersistentBuffer)) rejects requests with a missing PayloadId or a zero
+        // selector.Size, so a payload is always present here; slicing relies on this (sectorsCnt > 1).
+        Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer reached slicing without a payload");
+        TRcBuf payloadWithHeader = ev->Get()->GetPayloadWithHeader(*instr.PayloadId);
+
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
-            selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, TRope(payload), sectors);
+            selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, std::move(payloadWithHeader), sectors);
 
         auto opCookie = NextCookie++;
         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];

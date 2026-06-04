@@ -44,7 +44,7 @@ int NewInternalClient(int argc, char** argv) {
     settings.YdbDir = "ydb";
 
     settings.BuildInfoProvider = []() -> NYdb::NConsoleClient::TYdbCliBuildInfo {
-        return {"ydb-int", "0.0.0"};
+        return {"ydb-experimental", "0.0.0"};
     };
 
     settings.EnableAiInteractive = true;

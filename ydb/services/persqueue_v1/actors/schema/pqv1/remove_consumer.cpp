@@ -20,10 +20,8 @@ public:
     void DoAction() {
         Become(&TRemoveConsumerActor::StateWork);
 
-        auto database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
-
         Register(NPQ::NSchema::CreateRemoveConsumerActor(SelfId(), {
-            .Database = database,
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
             .Path = GetProtoRequest()->path(),
             .ConsumerName = GetProtoRequest()->consumer_name(),

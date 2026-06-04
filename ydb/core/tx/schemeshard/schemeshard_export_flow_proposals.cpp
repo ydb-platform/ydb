@@ -322,9 +322,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetSecretKey(exportSettings.secret_key());
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
-            if (const auto parquetRowGroupSize = exportSettings.parquet_row_group_size()) {
-                backupSettings.MutableLimits()->SetParquetRowGroupSize(parquetRowGroupSize);
-            }
 
             backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
 
@@ -339,16 +336,17 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 Y_ABORT("Unknown scheme");
             }
 
-            switch(exportSettings.data_format()) {
-            case Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED:
-            case Ydb::Export::ExportToS3Settings::CSV:
+            switch (exportSettings.format_case()) {
+            case Ydb::Export::ExportToS3Settings::kParquet:
+                backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::PARQUET);
+                if (const auto parquetRowGroupSize = exportSettings.parquet().row_group_size()) {
+                    backupSettings.MutableLimits()->SetParquetRowGroupSize(parquetRowGroupSize);
+                }
+                break;
+            case Ydb::Export::ExportToS3Settings::kYdbDump:
+            case Ydb::Export::ExportToS3Settings::FORMAT_NOT_SET:
                 backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::CSV);
                 break;
-            case Ydb::Export::ExportToS3Settings::PARQUET:
-                backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::PARQUET);
-                break;
-            default:
-                Y_ABORT("Unknown data format");
             }
 
             if (const auto region = exportSettings.region()) {

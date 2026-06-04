@@ -225,11 +225,13 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     request.mutable_settings()->set_bucket(TStringType{settings.Bucket_});
     request.mutable_settings()->set_access_key(TStringType{settings.AccessKey_});
     request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
-    request.mutable_settings()->set_data_format(TProtoAccessor::GetProto(settings.DataFormat_));
 
-     if (settings.ParquetRowGroupSize_) {
-         request.mutable_settings()->set_parquet_row_group_size(settings.ParquetRowGroupSize_.value());
-     }
+    if (settings.DataFormat_ == TExportToS3Settings::EDataFormat::PARQUET) {
+        auto& parquet = *request.mutable_settings()->mutable_parquet();
+        if (settings.ParquetRowGroupSize_) {
+            parquet.set_row_group_size(settings.ParquetRowGroupSize_.value());
+        }
+    }
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();

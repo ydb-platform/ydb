@@ -7008,6 +7008,7 @@ R"(CREATE TABLE `test_show_create` (
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
+    }
 
     Y_UNIT_TEST_TWIN(QueryMetricsLocksBroken, UseSink) {
         TTestEnvSettings settings;

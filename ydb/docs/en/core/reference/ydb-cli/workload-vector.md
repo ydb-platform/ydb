@@ -88,6 +88,12 @@ Example:
 | `--kmeans-tree-covering <value>` | Build a covering index (`1` — enabled, `0` — disabled). | `0` |
 | `--kmeans-tree-prefixed <value>` | Build a prefixed (filtered) index (`1` — enabled, `0` — disabled). The table must have been created with the `--prefixed` option. | `0` |
 
+{% note info %}
+
+For more details on `--kmeans-tree-*` index building parameters, see [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type).
+
+{% endnote %}
+
 {% include [load_options](./_includes/workload/load_options.md) %}
 
 ### Generating synthetic data {#load-generator}
@@ -116,6 +122,12 @@ Generate random vectors and load them into the table. Vector components are samp
 | `--kmeans-tree-covering <value>` | Build a covering index. | `0` |
 | `--kmeans-tree-prefixed <value>` | Build a prefixed (filtered) index. | `0` |
 
+{% note info %}
+
+For more details on `--kmeans-tree-*` index building parameters, see [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type).
+
+{% endnote %}
+
 {% include [load_options](./_includes/workload/load_options.md) %}
 
 ## Building a vector index {#build-index}
@@ -138,6 +150,12 @@ If the table was loaded with `--index-type None`, or if you want to build an add
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. | `1` |
 | `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. | `10` |
 | `--dry-run` | Print the DDL query instead of executing it. | |
+
+{% note info %}
+
+For more details on `--kmeans-tree-*` index building parameters, see [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type).
+
+{% endnote %}
 
 ## Dropping a vector index {#drop-index}
 
@@ -342,7 +360,7 @@ In this case, you can prepare a test set by selecting random rows from the main 
 ```yql
 CREATE TABLE vector_index_sample (
     id Uint64 NOT NULL,
-    filter Uint64 NOT NULL,
+    prefix Uint64 NOT NULL,
     embedding String NOT NULL,
     PRIMARY KEY (id)
 );
@@ -352,7 +370,7 @@ A query to fill it with approximately 1000 rows from a large table:
 
 ```yql
 INSERT INTO vector_index_sample
-SELECT id, filter, embedding FROM large_table
+SELECT id, prefix, embedding FROM large_table
 WHERE RandomNumber(id) < 0xFFFFFFFFFFFFFFFF / <number_of_rows_in_table> * 1000;
 ```
 

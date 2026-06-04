@@ -88,6 +88,12 @@ vector                YDB vector workload. Reference: https://ydb.tech/docs/conc
 | `--kmeans-tree-covering <значение>` | Создавать покрывающий индекс (`1` — да, `0` — нет). | `0` |
 | `--kmeans-tree-prefixed <значение>` | Создавать prefixed (фильтрующий) индекс (`1` — да, `0` — нет). Таблица должна быть создана с параметром `--prefixed`. | `0` |
 
+{% note info %}
+
+Подробнее о параметрах построения индекса `--kmeans-tree-*` смотрите в разделе [Тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type).
+
+{% endnote %}
+
 {% include [load_options](./_includes/workload/load_options.md) %}
 
 ### Генерация синтетических данных {#load-generator}
@@ -116,6 +122,12 @@ vector                YDB vector workload. Reference: https://ydb.tech/docs/conc
 | `--kmeans-tree-covering <значение>` | Создавать покрывающий индекс. | `0` |
 | `--kmeans-tree-prefixed <значение>` | Создавать prefixed-индекс. | `0` |
 
+{% note info %}
+
+Подробнее о параметрах построения индекса `--kmeans-tree-*` смотрите в разделе [Тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type).
+
+{% endnote %}
+
 {% include [load_options](./_includes/workload/load_options.md) %}
 
 ## Построение векторного индекса {#build-index}
@@ -138,6 +150,12 @@ vector                YDB vector workload. Reference: https://ydb.tech/docs/conc
 | `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. | `1` |
 | `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. | `10` |
 | `--dry-run` | Только вывести DDL-запрос, не выполняя его. | |
+
+{% note info %}
+
+Подробнее о параметрах построения индекса `--kmeans-tree-*` смотрите в разделе [Тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type).
+
+{% endnote %}
 
 ## Удаление векторного индекса {#drop-index}
 
@@ -342,7 +360,7 @@ vector                YDB vector workload. Reference: https://ydb.tech/docs/conc
 ```yql
 CREATE TABLE vector_index_sample (
     id Uint64 NOT NULL,
-    filter Uint64 NOT NULL,
+    prefix Uint64 NOT NULL,
     embedding String NOT NULL,
     PRIMARY KEY (id)
 );
@@ -352,7 +370,7 @@ CREATE TABLE vector_index_sample (
 
 ```yql
 INSERT INTO vector_index_sample
-SELECT id, filter, embedding FROM large_table
+SELECT id, prefix, embedding FROM large_table
 WHERE RandomNumber(id) < 0xFFFFFFFFFFFFFFFF / <число_строк_в_таблице> * 1000;
 ```
 

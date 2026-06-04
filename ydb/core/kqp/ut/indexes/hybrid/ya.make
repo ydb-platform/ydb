@@ -1,15 +1,12 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(50)
 
 REQUIREMENTS(cpu:2)
 SIZE(MEDIUM)
 
 SRCS(
-    kqp_indexes_multishard_ut.cpp
-    kqp_indexes_ut.cpp
-    kqp_stream_indexes_ut.cpp
+    kqp_hybrid_search_ut.cpp
 )
 
 PEERDIR(
@@ -18,6 +15,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/udfs/common/knn
+    ydb/library/yql/udfs/common/hybrid_search
     yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/adapters/issue
 )
@@ -25,11 +23,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE_FOR_TESTS(
-    fulltext
-    hybrid
-    json
-    prefixed_vector
-    vector
-)

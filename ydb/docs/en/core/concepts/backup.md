@@ -41,6 +41,16 @@ Suitable for:
 - data migration between clusters
 - long-term archival
 
+### Export to NFS {#nfs}
+
+The [`{{ ydb-cli }} export nfs`](../reference/ydb-cli/export-import/export-nfs.md) and [`{{ ydb-cli }} import nfs`](../reference/ydb-cli/export-import/import-nfs.md) commands allow you to export and import data to a network file system (NFS) mounted on all hosts of the {{ ydb-short-name }} cluster. Unlike [dump to filesystem](#dump), export is performed on the server side and does not require transferring data through the CLI.
+
+Suitable for:
+
+- disaster recovery (data is stored outside the cluster)
+- data migration between clusters
+- long-term archival
+
 ## Incremental backups {#incremental-backup}
 
 For large tables, repeatedly creating full backups can be too expensive. Incremental backups solve this: after an initial full backup, each subsequent increment captures only the changes (inserts, updates, deletes) that occurred since the previous backup.
@@ -72,6 +82,7 @@ For details on backup collections, see [Backup collections](datamodel/backup-col
 || [Copying tables within the cluster](#copy-table) | In cluster | No | Quick copy before a risky operation ||
 || [Dump to filesystem](#dump) | Filesystem | No | Development, testing, small databases ||
 || [Export to S3-compatible storage](#s3) | S3-compatible storage | No | Disaster recovery, migration, archival ||
+|| [Export to NFS](#nfs) | Network file system (NFS) | No | Disaster recovery, migration, archival ||
 || [Incremental backups](#incremental-backup) | In cluster ([exportable](datamodel/backup-collection.md#external-storage) to S3 or filesystem) | Yes | Regular backups of large production databases ||
 |#
 

@@ -12,3 +12,6 @@ The {{ ydb-short-name }} CLI contains a set of commands designed to export and i
 - [Connecting to and authenticating with S3-compatible object storage](../auth-s3.md)
 - [Exporting data to S3-compatible object storage using `export s3`](../export-s3.md)
 - [Importing data from S3-compatible object storage using `import s3`](../import-s3.md)
+- [Configuring NFS for backup and recovery](../../../../recipes/nfs-backup/nfs-backup.md)
+- [Exporting data to NFS using `export nfs`](../export-nfs.md)
+- [Importing data from NFS using `import nfs`](../import-nfs.md)

@@ -598,9 +598,22 @@ private:
     EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
+
 /***
  * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer
  * Currently it requires that the list of operators TreeNodes is in a post-order traversal of the tree
+ *
+ * TreeRoot is the root of the packed subtree. TreeNodes are operators inside the
+ * packed CBO island. Children is inherited from IOperator and stores only
+ * boundary inputs outside TreeNodes:
+ *
+ *     JoinAB       TreeNodes = [JoinAB]
+ *     /   \        Children  = [A, B]
+ *    A     B
+ *
+ * RebuildChildren rebuilds Children by filtering internal TreeNodes from child
+ * edges when the packed island is created.
+ *
  * No validation is currently used
  */
 class TOpCBOTree: public IOperator {
@@ -623,6 +636,9 @@ public:
 
     TIntrusivePtr<IOperator> TreeRoot;
     TVector<TIntrusivePtr<IOperator>> TreeNodes;
+
+private:
+    void RebuildChildren();
 };
 
 class TOpRoot;

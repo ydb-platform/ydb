@@ -777,7 +777,9 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 
     if (JoinFilters.size()) {
-        Y_ENSURE(false, "Join filters unsupported at this stage");
+        for (auto& filter : JoinFilters) {
+            filter = filter.ApplyRenames(renameMap);
+        }
     }
 }
 
@@ -1330,7 +1332,7 @@ TOpCBOTree::TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TPositionHandle pos) :
     TreeRoot(treeRoot),
     TreeNodes({treeRoot}) 
 {
-    Children = treeRoot->Children;
+    RebuildChildren();
 }
 
 TOpCBOTree::TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TVector<TIntrusivePtr<IOperator>> treeNodes, TPositionHandle pos) :
@@ -1338,11 +1340,24 @@ TOpCBOTree::TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TVector<TIntrusivePtr<
     TreeRoot(treeRoot),
     TreeNodes({treeNodes}) 
 {
-    for (const auto& n : treeNodes) {
-        for (const auto& c : n->Children) {
-            if (std::find(treeNodes.begin(), treeNodes.end(), c) == treeNodes.end()) {
-                Children.push_back(c);
+    RebuildChildren();
+}
+
+void TOpCBOTree::RebuildChildren() {
+    Children.clear();
+
+    THashSet<IOperator*> treeNodeSet;
+    for (const auto& node : TreeNodes) {
+        treeNodeSet.insert(node.Get());
+    }
+
+    for (const auto& node : TreeNodes) {
+        for (const auto& child : node->Children) {
+            if (treeNodeSet.contains(child.Get())) {
+                continue;
             }
+
+            Children.push_back(child);
         }
     }
 }

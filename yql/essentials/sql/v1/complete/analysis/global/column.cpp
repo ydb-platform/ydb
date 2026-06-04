@@ -26,7 +26,7 @@ public:
     }
 
     std::any visitNamed_single_source(SQLv1::Named_single_sourceContext* ctx) override {
-        SQLv1::Single_sourceContext* singleSource = ctx->single_source();
+        SQLv1::Hinted_single_sourceContext* singleSource = ctx->hinted_single_source();
         if (singleSource == nullptr) {
             return {};
         }

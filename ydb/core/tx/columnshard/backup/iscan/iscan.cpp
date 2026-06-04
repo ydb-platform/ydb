@@ -65,7 +65,7 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
             }
             if (backupTask.HasS3Settings() && backupTask.GetS3Settings().GetDataFormat() == NKikimrSchemeOp::TS3Settings::PARQUET) {
                 if (!AppData()->FeatureFlags.GetEnableParquetForS3Export()) {
-                    return TConclusionStatus::Fail("Exports to S3 with parquet format are not supported");
+                    return TConclusionStatus::Fail("Parquet export to S3 is disabled by feature flag EnableParquetForS3Export");
                 }
             }
             if (exportFactory) {

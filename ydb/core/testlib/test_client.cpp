@@ -1863,12 +1863,6 @@ namespace Tests {
         Cerr << "Shutdown GRpc" << Endl;
         ShutdownGRpc();
 
-        if (Runtime) {
-            Cerr << "Shutdown Runtime" << Endl;
-            WaitFinalization();
-            SysViewsRosterUpdateObserver.Remove();
-        }
-
         if (YqSharedResources) {
             Cerr << "Stop YqSharedResources" << Endl;
             YqSharedResources->Stop();
@@ -1877,6 +1871,12 @@ namespace Tests {
         if (Settings->FederatedQuerySetupFactory) {
             Cerr << "Stop FederatedQuerySetupFactory" << Endl;
             Settings->FederatedQuerySetupFactory->Cleanup();
+        }
+
+        if (Runtime) {
+            Cerr << "Shutdown Runtime" << Endl;
+            WaitFinalization();
+            SysViewsRosterUpdateObserver.Remove();
         }
 
         if (FederatedQuerySetupDriver_) {

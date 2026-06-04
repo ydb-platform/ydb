@@ -64,7 +64,7 @@ using TKafkaUuid = NYql::TWide<ui64>;
 using TKafkaFloat64 = double;
 using TKafkaRawString = TString;
 using TKafkaString = std::optional<TKafkaRawString>;
-using TKafkaRawBytes = TString;
+using TKafkaRawBytes = TArrayRef<const char>;
 using TKafkaBytes = std::optional<TKafkaRawBytes>;
 using TKafkaRecords = std::optional<TKafkaRecordBatch>;
 
@@ -422,7 +422,7 @@ public:
         return (v >> 1) ^ -static_cast<S>(v & 1);        
     }
 
-    TString Bytes(size_t length);
+    TArrayRef<const char> Bytes(size_t length);
 
     // returns a character from the specified position. The current position does not change.
     char take(size_t shift);

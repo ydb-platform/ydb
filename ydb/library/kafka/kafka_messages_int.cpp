@@ -41,9 +41,9 @@ char TKafkaReadable::get() {
     return r;
 }
 
-TString TKafkaReadable::Bytes(size_t length) {
+TArrayRef<const char> TKafkaReadable::Bytes(size_t length) {
     checkEof(length);
-    TString r(Is.Data() + Position, length);
+    TArrayRef<const char> r(Is.Data() + Position, length);
     Position += length;
     return r;
 }

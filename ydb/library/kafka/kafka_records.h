@@ -60,6 +60,38 @@ public:
     bool operator==(const TKafkaHeader& other) const = default;
 };
 
+struct TSourceData {
+    struct THeaderData {
+        std::optional<TString> Key;
+        std::optional<TString> Value;
+    };
+
+    TKafkaBytes Key;
+    TKafkaBytes Value;
+    std::vector<TKafkaHeader> Headers;
+    ui32 Codec = 0;
+
+    TSourceData() = default;
+    TSourceData(const TSourceData& other);
+    TSourceData(TSourceData&& other);
+    TSourceData& operator=(const TSourceData& other);
+    TSourceData& operator=(TSourceData&& other);
+
+    void SetKey(TString key);
+    void SetValue(TString value);
+    void AddHeader(TString key, TString value);
+    void OwnViews();
+
+    bool operator==(const TSourceData& other) const;
+
+private:
+    std::optional<TString> KeyStorage;
+    std::optional<TString> ValueStorage;
+    std::vector<THeaderData> HeadersStorage;
+
+    void RebindStorage();
+};
+
 
 
 class TKafkaRecord: public TMessage {
@@ -146,7 +178,6 @@ public:
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
         static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
-    KeyMeta::Type Key;
 
     struct ValueMeta {
         using Type = TKafkaBytes;
@@ -161,7 +192,6 @@ public:
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
         static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
-    ValueMeta::Type Value;
 
     struct HeadersMeta {
         using ItemType = TKafkaHeader;
@@ -178,7 +208,10 @@ public:
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
         static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
-    HeadersMeta::Type Headers;
+    TSourceData SourceData;
+    KeyMeta::Type& Key;
+    ValueMeta::Type& Value;
+    HeadersMeta::Type& Headers;
 
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;

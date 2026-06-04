@@ -423,7 +423,7 @@ public:
         if (value) {
             const auto& v = *value;
             WriteArraySize<Meta>(writable, version, v.size());
-            writable << v;
+            writable.write(v.data(), v.size());
         } else {
             if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
                 WriteArraySize<Meta>(writable, version, -1);
@@ -436,7 +436,7 @@ public:
     inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytes& value) {
         const auto& v = *value;
         WriteArraySize<Meta>(writable, version, v.size());
-        writable << v;
+        writable.write(v.data(), v.size());
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaBytes& value) {
@@ -716,10 +716,11 @@ public:
         }
 
         const auto compressed = readable.Bytes(readable.left());
-        const TString decompressed = Decompress(
-            TStringBuf(compressed.data(), compressed.size()),
-            compressionType);
+        const TString decompressed = Decompress(TStringBuf(compressed.data(), compressed.size()), compressionType);
         value = DeserializeImpl(version, decompressed);
+        for (auto& record : value) {
+            record.SourceData.OwnViews();
+        }
     }
 
     inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValue& value) {

@@ -3,6 +3,7 @@
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
+#include <yql/essentials/public/udf/arrow/dense_union_scalar.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 
 #include <util/string/builder.h>
@@ -194,9 +195,36 @@ protected:
     TDatumValidatorBase::TPtr Base_;
 };
 
+class TVariantValidator: public TDatumValidatorBase {
+public:
+    TVariantValidator(TVector<TDatumValidatorBase::TPtr>&& children, const NYql::NUdf::TType* type)
+        : TDatumValidatorBase(type)
+        , Children_(std::move(children))
+    {
+    }
+
+    void Validate(arrow::Datum datum) const override {
+        if (datum.is_scalar()) {
+            MKQL_ENSURE(datum.scalar()->is_valid, "Variant type invariant violation.");
+            const auto* variantScalar = arrow::internal::checked_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
+            MKQL_ENSURE(variantScalar, "Variant scalar expected.");
+            MKQL_ENSURE(variantScalar->Index < Children_.size(), "Variant type code out of range.");
+            Children_[variantScalar->Index]->Validate(arrow::Datum(variantScalar->value));
+        } else {
+            auto array = datum.array();
+            for (size_t i = 0; i < Children_.size(); ++i) {
+                Children_[i]->Validate(*array->child_data[i]);
+            }
+        }
+    }
+
+private:
+    TVector<TDatumValidatorBase::TPtr> Children_;
+};
+
 struct TValidatorTraits {
     using TResult = TDatumValidatorBase;
-    using TVariant = TUnimplementedValidator;
+    using TVariant = TVariantValidator;
 
     template <bool Nullable>
     using TTuple = TTupleValidator<Nullable>;

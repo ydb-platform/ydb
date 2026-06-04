@@ -358,6 +358,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartit
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldRestorePartitionAfterRestart
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadFromHandoffPersistentBuffers
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadMultipleBlocksDirectPBufferFilling
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.DoubleSplit_ReadAfterFirstWrite
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.DoubleSplit_ReadCommitAtEnd
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_AllCommittedBeforeSplit
@@ -515,6 +516,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-1
+ydb/core/tx/datashard/ut_stats DataShardStats.Follower
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_BTreeIndex
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_ByKeyFilter
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Columns
@@ -659,6 +661,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.Withou
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_3_Query_SkipConflictOn
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_5_Query_SkipConflictOn
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_19_RestartAfterCommit_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_21_RestartAfterCommit_Query
@@ -710,6 +713,7 @@ ydb/tests/compatibility py3test.[test_stress.py */*] chunk
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_compact.py.TestCompactMixedCluster.test_compact_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_compact.py.TestCompactRestartToAnotherVersion.test_compact_survives_binary_restart[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_compact.py.TestCompactRolling.test_compact_rolling[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_prestable-26-3_to_stable-26-2-1-row]
@@ -745,6 +749,7 @@ ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompat
 ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read_with_long_live_consumer[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-False]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-True]
 ydb/tests/compatibility test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-2-1_to_prestable-26-3]
@@ -753,10 +758,13 @@ ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAno
 ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest.py.TestDigest.test_digest_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest_regression.py.TestDigest.test_digest_regression[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRestartToAnotherVersion.test_external_data_source[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityMixedCluster.test_external_data_source_secret_object_schema_compatibility[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityRestartToAnotherVersion.test_external_data_source_secret_object_schema_compatibility[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/olap test_min_max_index.py.TestMinMaxIndex.test_min_max_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-26-3_to_stable-26-2-1-ROW]

@@ -14,9 +14,11 @@
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
 #include <contrib/libs/ftxui/include/ftxui/dom/table.hpp>
+#include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
 
 #include <library/cpp/json/json_writer.h>
 
+#include <util/charset/utf8.h>
 #include <util/string/printf.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -215,11 +217,60 @@ ftxui::Element BuildTable(std::vector<std::vector<std::string>> rows) {
     return table.Render();
 }
 
-// The model is instructed to answer in plain text, but it still tends to emit Markdown. Our
-// output is printed to the terminal, so convert Markdown to a presentable form before showing it:
-// inline markup (headings, bold/italic, inline code, blockquotes, code fences) is reduced to plain
-// text, while Markdown tables are rendered as real bordered tables. This affects only what the user
-// sees: the model's own conversation history and the audit log keep the original text.
+// A code-block bar: a full-width horizontal rule. With a language tag it shows it as
+// "── yql ──────", mirroring the "── Agent response ──" header style; without one it is a plain rule.
+ftxui::Element BuildCodeBlockBar(TStringBuf language) {
+    if (language.empty()) {
+        return ftxui::separator() | ftxui::color(ftxui::Color::Grey42);
+    }
+
+    int languageWidth = 0;
+    for (size_t i = 0; i < language.size(); i += UTF8RuneLen(language[i])) {
+        ++languageWidth;
+    }
+
+    std::string fill;
+    const int screenWidth = ftxui::Terminal::Size().dimx;
+    for (int i = 0; i < screenWidth - languageWidth - 4; ++i) { // 4 = "──" + a space on each side
+        fill += "─";
+    }
+
+    return ftxui::hbox({
+        ftxui::text("──") | ftxui::color(ftxui::Color::Grey42),
+        ftxui::text(" " + std::string(language) + " ") | ftxui::bold | ftxui::color(ftxui::Color::Grey70),
+        ftxui::text(fill) | ftxui::color(ftxui::Color::Grey42),
+    });
+}
+
+// Render a fenced code block as its own panel: horizontal bars above and below (in their own color,
+// the top one carrying the language tag) over a separate, slightly lighter background. Both
+// background and foreground are pinned so the panel stays readable on any terminal theme. Lines are
+// kept verbatim (indentation preserved, no reflow), unlike prose which paragraph() reflows.
+ftxui::Element BuildCodeBlock(const std::vector<TStringBuf>& codeLines, TStringBuf language) {
+    std::vector<ftxui::Element> content;
+    content.reserve(codeLines.size());
+    for (const TStringBuf line : codeLines) {
+        content.push_back(ftxui::text(std::string(line)));
+    }
+
+    ftxui::Element body = ftxui::vbox(std::move(content))
+        | ftxui::xflex                         // fill the whole width so the background spans it
+        | ftxui::bgcolor(ftxui::Color::Grey19) // panel background, a touch lighter than Grey11
+        | ftxui::color(ftxui::Color::Grey85);  // pinned text color, readable on the dark panel
+
+    return ftxui::vbox({
+        BuildCodeBlockBar(language),
+        std::move(body),
+        ftxui::separator() | ftxui::color(ftxui::Color::Grey42),
+    });
+}
+
+// The model is instructed to answer in plain text, but it still tends to emit Markdown. Our output
+// is printed to the terminal, so convert Markdown to a presentable form before showing it: inline
+// markup (headings, bold/italic, inline code, blockquotes) is reduced to plain text, Markdown tables
+// are rendered as real bordered tables, and fenced code blocks become highlighted panels. This
+// affects only what the user sees: the model's conversation history and the audit log keep the
+// original text.
 ftxui::Element MarkdownToElement(TStringBuf text) {
     std::vector<TStringBuf> lines;
     for (const TStringBuf line : StringSplitter(text).Split('\n')) {
@@ -244,21 +295,34 @@ ftxui::Element MarkdownToElement(TStringBuf text) {
         }
     };
 
-    bool inCodeFence = false;
     for (size_t i = 0; i < lines.size();) {
         const TStringBuf trimmed = TrimSpaces(lines[i]);
 
+        // Fenced code block: collect everything up to the closing fence and render it as a panel.
         if (trimmed.StartsWith("```")) {
-            inCodeFence = !inCodeFence; // drop the ``` fence line, keep its content as plain text
-            ++i;
-            continue;
-        }
-        if (inCodeFence) {
-            if (!textRun.empty()) {
-                textRun << '\n';
+            flushText();
+
+            // The opening fence may carry an info string ("```yql"); its first token is the language.
+            TStringBuf language = trimmed;
+            while (language.StartsWith('`')) {
+                language.Skip(1);
             }
-            textRun << lines[i];
-            ++i;
+            language = TrimSpaces(language);
+            if (const size_t space = language.find(' '); space != TStringBuf::npos) {
+                language = language.substr(0, space);
+            }
+
+            std::vector<TStringBuf> codeLines;
+            for (++i; i < lines.size(); ++i) {
+                if (TrimSpaces(lines[i]).StartsWith("```")) {
+                    ++i; // consume the closing fence
+                    break;
+                }
+                codeLines.push_back(lines[i]);
+            }
+            if (!codeLines.empty()) {
+                blocks.push_back(BuildCodeBlock(codeLines, language));
+            }
             continue;
         }
 

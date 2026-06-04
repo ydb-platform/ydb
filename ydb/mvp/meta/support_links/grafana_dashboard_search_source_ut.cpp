@@ -252,6 +252,7 @@ public:
         };
 
         if (targetsSearchApi) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Timeout, NMVP::NSupportLinks::GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT);
             NJson::TJsonValue responseJson(NJson::JSON_ARRAY);
             for (const auto& dashboard : dashboards) {
                 bool matchesTags = true;
@@ -280,6 +281,7 @@ public:
         }
 
         if (url.Contains("/api/dashboards/uid/matched")) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Timeout, NMVP::NSupportLinks::GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT);
             ReplyJson(
                 event,
                 "HTTP/1.1 200 OK",
@@ -288,6 +290,7 @@ public:
         }
 
         if (url.Contains("/api/datasources/proxy/uid/")) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Timeout, NMVP::NSupportLinks::GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT);
             UNIT_ASSERT(url.Contains("__bucket__%3D%22utils%22"));
             UNIT_ASSERT(url.Contains("database%3D%22/root/test%22"));
             ReplyJson(event, "HTTP/1.1 200 OK", MakeProbeResponseBody("1"));
@@ -331,6 +334,7 @@ public:
         TString UrlContains;
         TString StatusLine;
         TString Body;
+        TString Error;
     };
 
     explicit TGrafanaApiReplyActor(TVector<TRule> rules)
@@ -344,6 +348,10 @@ public:
         for (const auto& rule : Rules) {
             if (!url.Contains(rule.UrlContains)) {
                 continue;
+            }
+            if (!rule.Error.empty()) {
+                ReplyError(event, rule.Error);
+                return;
             }
             Reply(event, rule.StatusLine, rule.Body);
             return;
@@ -369,6 +377,14 @@ public:
                 << "\r\n"
                 << body);
         Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+    }
+
+    void ReplyError(
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event,
+        TStringBuf error)
+    {
+        const auto request = event->Get()->Request;
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, nullptr, TString(error)));
     }
 
     STFUNC(StateWork) {
@@ -552,6 +568,41 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             {.UrlContains = "/api/dashboards/uid/storage", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeDashboardModelBody("label_values(requestBytes{__workspace__=\"$workspace\",__bucket__=\"dsproxynode\",database=\"$database\"},storagePool)")},
             {.UrlContains = "__bucket__%3D%22utils%22", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeProbeResponseBody("1")},
             {.UrlContains = "__bucket__%3D%22dsproxynode%22", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeProbeResponseBody("0")},
+        };
+        auto httpProxyId = runtime.Register(new TGrafanaApiReplyActor(std::move(rules)));
+        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+            MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
+            MakeMetaSettings());
+
+        THashMap<TString, TString> clusterInfo;
+        clusterInfo["k8s_namespace"] = "ydb-workspace";
+        clusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        auto* response = ResolveSource(
+            runtime,
+            source,
+            clusterInfo,
+            MakeUrlParameters("database=%2Froot%2Ftest"),
+            httpProxyId,
+            handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Title, "CPU");
+    }
+
+    Y_UNIT_TEST(ResolveReturnsDashboardWhenProbeTimesOut) {
+        TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
+        TTestActorRuntime runtime;
+
+        const TString body = R"json([
+            {"type":"dash-db","title":"CPU","url":"/d/ydb_cpu/cpu","uid":"ydb_cpu"}
+        ])json";
+        TVector<TGrafanaApiReplyActor::TRule> rules = {
+            {.UrlContains = "/api/search", .StatusLine = "HTTP/1.1 200 OK", .Body = body},
+            {.UrlContains = "/api/dashboards/uid/ydb_cpu", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeDashboardModelBody("label_values(ElapsedMicrosec{__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"},database)")},
+            {.UrlContains = "/api/datasources/proxy/uid/3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63/api/v1/query", .Error = "Connection timed out"},
         };
         auto httpProxyId = runtime.Register(new TGrafanaApiReplyActor(std::move(rules)));
         auto source = NMVP::MakeGrafanaDashboardSearchSource(

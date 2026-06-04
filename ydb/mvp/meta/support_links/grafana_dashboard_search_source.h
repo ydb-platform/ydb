@@ -25,6 +25,8 @@
 
 namespace NMVP::NSupportLinks {
 
+inline constexpr TDuration GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT = TDuration::Seconds(5);
+
 class TGrafanaDashboardSearchActor : public NActors::TActorBootstrapped<TGrafanaDashboardSearchActor> {
 public:
     TGrafanaDashboardSearchActor(
@@ -53,6 +55,7 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleFilteringTimeout);
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -113,7 +116,7 @@ private:
             request->Set("Authorization", AuthorizationHeaderValue);
         }
 
-        auto event = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request);
+        auto event = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request, GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT);
         Send(HttpProxyId, event.Release());
     }
 
@@ -168,6 +171,7 @@ private:
             return;
         }
 
+        Schedule(GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT, new NActors::TEvents::TEvWakeup());
         CurrentDashboardIndex = 0;
         RequestDashboardModel();
     }
@@ -219,6 +223,14 @@ private:
 
     void HandleDashboardModelResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
         const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
+        if (!event->Get()->Error.empty()) {
+            BLOG_W("Support links Grafana dashboard model timeout/error, returning dashboard without filtering: title=" << candidate.Title
+                << " url=" << candidate.DashboardApiUrl
+                << " error=" << event->Get()->Error);
+            AddCurrentDashboardAsLink();
+            AdvanceToNextDashboard();
+            return;
+        }
         if (!IsSuccessfulResponse(*event->Get())) {
             BLOG_W("Support links Grafana dashboard model fetch failed: title=" << candidate.Title
                 << " url=" << candidate.DashboardApiUrl
@@ -272,6 +284,14 @@ private:
     void HandleProbeResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
         const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
         const auto& probeGroup = CurrentProbeGroups[CurrentProbeGroupIndex];
+        if (!event->Get()->Error.empty()) {
+            BLOG_W("Support links Grafana probe timeout/error, returning dashboard without filtering: title=" << candidate.Title
+                << " datasource=" << probeGroup.DatasourceUid
+                << " error=" << event->Get()->Error);
+            AddCurrentDashboardAsLink();
+            AdvanceToNextDashboard();
+            return;
+        }
         if (!IsSuccessfulResponse(*event->Get())) {
             BLOG_W("Support links Grafana probe request failed: title=" << candidate.Title
                 << " datasource=" << probeGroup.DatasourceUid
@@ -297,11 +317,41 @@ private:
         RequestProbe();
     }
 
+    void AddCurrentDashboardAsLink() {
+        if (CurrentDashboardIndex >= DashboardCandidates.size()) {
+            return;
+        }
+
+        const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
+        Links.emplace_back(TResolvedLink{
+            .Title = candidate.Title,
+            .Url = candidate.ResolvedUrl,
+        });
+    }
+
+    void AddRemainingDashboardsAsLinks() {
+        for (size_t index = CurrentDashboardIndex; index < DashboardCandidates.size(); ++index) {
+            const auto& candidate = DashboardCandidates[index];
+            Links.emplace_back(TResolvedLink{
+                .Title = candidate.Title,
+                .Url = candidate.ResolvedUrl,
+            });
+        }
+    }
+
     void AdvanceToNextDashboard() {
         CurrentProbeGroups.clear();
         CurrentProbeGroupIndex = 0;
         ++CurrentDashboardIndex;
         RequestDashboardModel();
+    }
+
+    void HandleFilteringTimeout() {
+        if (CurrentDashboardIndex < DashboardCandidates.size()) {
+            BLOG_W("Support links Grafana filtering timed out, returning unresolved dashboards without filtering");
+            AddRemainingDashboardsAsLinks();
+        }
+        ReplyAndDie();
     }
 
     static bool IsDashboardItem(const NJson::TJsonValue& item) {

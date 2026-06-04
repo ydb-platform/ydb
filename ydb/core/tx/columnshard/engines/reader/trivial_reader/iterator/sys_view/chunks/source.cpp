@@ -260,7 +260,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                     if (json.Has("data")) {
                         NJsonWriter::TBuf buf;
                         buf.BeginObject();
-                        buf.WriteKey("min1").WriteString(json["data"]["min"].GetStringRobust());
+                        buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
                         buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
                         buf.EndObject();
                         data = buf.Str();
@@ -275,7 +275,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                             if (json.Has("data")) {
                                 NJsonWriter::TBuf buf;
                                 buf.BeginObject();
-                                buf.WriteKey("min1").WriteString(json["data"]["min"].GetStringRobust());
+                                buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
                                 buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
                                 buf.EndObject();
                                 data = buf.Str();

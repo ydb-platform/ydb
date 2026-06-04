@@ -609,14 +609,6 @@ namespace NActors {
         Nodes.clear();
     }
 
-    void TTestActorRuntimeBase::CleanupActorSystems() {
-        for (auto& [_, node]: Nodes) {
-            if (auto& actorSystem = node->ActorSystem) {
-                actorSystem->Cleanup();
-            }
-        }
-    }
-
     bool TTestActorRuntimeBase::IsRealThreads() const {
         return UseRealThreads;
     }

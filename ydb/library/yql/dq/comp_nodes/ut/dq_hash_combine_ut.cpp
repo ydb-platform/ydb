@@ -635,15 +635,20 @@ size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const ui32 re
 }
 
 template<bool UseLLVM, typename StreamCreator>
-TOperatorEndState RunDqCombineBlockTest(const bool useFlow, StreamCreator streamCreator, const ui32 keyWidth = 2)
+TOperatorEndState RunDqCombineBlockTest(const bool useFlow, StreamCreator streamCreator, const ui32 keyWidth = 2, const bool disableKeyPassthrough = false)
 {
     TDqSetup<UseLLVM> setup(GetDqNodeFactory());
 
     std::vector<TType*> columnTypes;
 
     auto graph = BuildBlockGraph(setup, useFlow, false, 128ull << 20, columnTypes, keyWidth);
+
     TOperatorEndState endState;
     SetTestEndStateUpdater(graph, endState);
+
+    if (disableKeyPassthrough) {
+        DisableKeyPassthrough(graph);
+    }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
 
@@ -660,15 +665,20 @@ TOperatorEndState RunDqCombineBlockTest(const bool useFlow, StreamCreator stream
 }
 
 template<bool UseLLVM, typename StreamCreator>
-TOperatorEndState RunDqCombineWideTest(const bool useFlow, StreamCreator streamCreator, ui32 keyWidth = 2)
+TOperatorEndState RunDqCombineWideTest(const bool useFlow, StreamCreator streamCreator, ui32 keyWidth = 2, const bool disableKeyPassthrough = false)
 {
     TDqSetup<UseLLVM> setup(GetDqNodeFactory());
 
     std::vector<TType*> columnTypes;
 
     auto graph = BuildWideGraph(setup, useFlow, false, 128ull << 20, columnTypes, keyWidth);
+
     TOperatorEndState endState;
     SetTestEndStateUpdater(graph, endState);
+
+    if (disableKeyPassthrough) {
+        DisableKeyPassthrough(graph);
+    }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
 
@@ -845,6 +855,11 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             return new TWideKVStream(ctx, 100000, 1, columnTypes, keyWidth, refMap);
         });
         UNIT_ASSERT_C(endState.WasBypassActive, "Bypass should have been activated");
+
+        endState = RunDqCombineWideTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
+            return new TWideKVStream(ctx, 100000, 1, columnTypes, keyWidth, refMap);
+        });
+        UNIT_ASSERT_C(endState.WasBypassActive, "Bypass should have been activated");
     }
 
     Y_UNIT_TEST_QUAD(TestBlockModeNoInput, UseLLVM, UseFlow) {
@@ -869,7 +884,12 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     Y_UNIT_TEST_QUAD(TestBlockModeBypass, UseLLVM, UseFlow) {
         auto endState = RunDqCombineBlockTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
             return new TBlockKVStream(ctx, 200000, 1, 40000, columnTypes, keyWidth, refMap);
-        });
+        }, 2, false);
+        UNIT_ASSERT_C(endState.WasBypassActive, "Bypass should have been activated");
+
+        endState = RunDqCombineBlockTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
+            return new TBlockKVStream(ctx, 200000, 1, 40000, columnTypes, keyWidth, refMap);
+        }, 2, true);
         UNIT_ASSERT_C(endState.WasBypassActive, "Bypass should have been activated");
     }
 

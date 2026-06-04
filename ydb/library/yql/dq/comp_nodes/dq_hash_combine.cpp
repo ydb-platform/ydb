@@ -1885,7 +1885,7 @@ public:
 
     EFillState ProcessInputDirect(EFillState fetchResult) {
         return ProcessInputInternal(fetchResult, DrainBufferPointers.data());
-    };
+    }
 
     EFillState ProcessInputInternal(EFillState fetchResult, TUnboxedValue* const* output) {
         if (fetchResult != EFillState::SourceSkipped) {

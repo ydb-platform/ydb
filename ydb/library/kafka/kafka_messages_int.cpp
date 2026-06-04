@@ -2,11 +2,6 @@
 
 namespace NKafka {
 
-TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawBytes& val) {
-    write(val.data(), val.size());
-    return *this;
-}
-
 TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawString& val) {
     write(val.data(), val.length());
     return *this;
@@ -46,9 +41,9 @@ char TKafkaReadable::get() {
     return r;
 }
 
-TArrayRef<const char> TKafkaReadable::Bytes(size_t length) {
+TString TKafkaReadable::Bytes(size_t length) {
     checkEof(length);
-    TArrayRef<const char> r(Is.Data() + Position, length);
+    TString r(Is.Data() + Position, length);
     Position += length;
     return r;
 }

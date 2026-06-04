@@ -30,7 +30,7 @@ std::optional<TConsumerProtocolSubscription> GetSubscriptions(const TJoinGroupRe
 
     TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
 
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
+    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size() - sizeof(TKafkaVersion));
     TKafkaReadable readable(buffer);
 
     TConsumerProtocolSubscription result;

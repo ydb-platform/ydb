@@ -461,7 +461,7 @@ void TKafkaOffsetFetchActor::ParseGroupsAssignments(const NKqp::TEvKqp::TEvQuery
         if (!assignmentStr.empty()) {
             TKafkaBytes assignment = assignmentStr;
             TKafkaVersion version = *(TKafkaVersion*)(assignment.value().data() + sizeof(TKafkaVersion));
-            TBuffer buffer(assignment.value().data() + sizeof(TKafkaVersion), assignment.value().size_bytes() - sizeof(TKafkaVersion));
+            TBuffer buffer(assignment.value().data() + sizeof(TKafkaVersion), assignment.value().size() - sizeof(TKafkaVersion));
             TKafkaReadable readable(buffer);
 
             TConsumerProtocolAssignment consumerAssignment;

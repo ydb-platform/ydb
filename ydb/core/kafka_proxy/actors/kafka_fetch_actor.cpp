@@ -10,6 +10,8 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
+#include <ydb/library/kafka/kafka.h>
+
 #include "actors.h"
 #include "kafka_fetch_actor.h"
 

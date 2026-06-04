@@ -241,7 +241,7 @@ void TKafkaSaslAuthActor::SendResponse() {
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = EKafkaErrors::NONE_ERROR;
     responseToClient->AuthBytesStr = AuthResponse;
-    responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
+    responseToClient->AuthBytes = responseToClient->AuthBytesStr;
     responseToClient->ErrorMessage = "";
 
     KAFKA_LOG_D("Authentication first step finished."
@@ -259,7 +259,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = errorCode;
     responseToClient->AuthBytesStr = AuthResponse;
-    responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
+    responseToClient->AuthBytes = responseToClient->AuthBytesStr;
 
     if (isFailed) {
         TStringBuilder authenticationFailureReason;

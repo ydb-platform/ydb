@@ -7,10 +7,12 @@
 #include <ydb/core/raw_socket/sock_impl.h>
 #include <yql/essentials/public/decimal/yql_wide_int.h>
 
-#include <util/generic/buffer.h>
 #include <yql/essentials/public/decimal/yql_wide_int.h>
 
 #include <util/generic/array_ref.h>
+#include <util/generic/buffer.h>
+#include <util/generic/string.h>
+#include <util/generic/yexception.h>
 #include <util/generic/deque.h>
 #include <util/generic/strbuf.h>
 #include <util/system/types.h>
@@ -62,7 +64,7 @@ using TKafkaUuid = NYql::TWide<ui64>;
 using TKafkaFloat64 = double;
 using TKafkaRawString = TString;
 using TKafkaString = std::optional<TKafkaRawString>;
-using TKafkaRawBytes = TArrayRef<const char>;
+using TKafkaRawBytes = TString;
 using TKafkaBytes = std::optional<TKafkaRawBytes>;
 using TKafkaRecords = std::optional<TKafkaRecordBatch>;
 
@@ -326,11 +328,6 @@ U AsUnsigned(S value) {
     return (value << 1) ^ (value >> Shift);
 }
 
-inline TKafkaRawBytes ToRawBytes(const TString& str) {
-    return TKafkaRawBytes(str.data(), str.size());
-}
-
-
 class TKafkaWritable {
 public:
     TKafkaWritable(TWritableBuf& buffer)
@@ -344,7 +341,6 @@ public:
     };
 
     TKafkaWritable& operator<<(const TKafkaUuid& val);
-    TKafkaWritable& operator<<(const TKafkaRawBytes& val);
     TKafkaWritable& operator<<(const TKafkaRawString& val);
 
     template<class T, typename U = std::make_unsigned_t<T>>
@@ -426,7 +422,7 @@ public:
         return (v >> 1) ^ -static_cast<S>(v & 1);        
     }
 
-    TArrayRef<const char> Bytes(size_t length);
+    TString Bytes(size_t length);
 
     // returns a character from the specified position. The current position does not change.
     char take(size_t shift);

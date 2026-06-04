@@ -65,8 +65,8 @@ TKafkaRecord MakeRecord(i64 timestampDelta, i64 offsetDelta, TStringBuf key, TSt
     TKafkaRecord record;
     record.TimestampDelta = timestampDelta;
     record.OffsetDelta = offsetDelta;
-    record.Key = TKafkaRawBytes(key.data(), key.size());
-    record.Value = TKafkaRawBytes(value.data(), value.size());
+    record.Key = key;
+    record.Value = value;
     record.Length = record.Size(2) - NKafka::NPrivate::SizeOfVarint<TKafkaRecord::LengthMeta::Type>(0);
     return record;
 }
@@ -99,12 +99,8 @@ void AssertRecordBatchRoundTrip(ECompressionType compressionType) {
     for (size_t i = 0; i < batch.Records.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records[i].TimestampDelta, batch.Records[i].TimestampDelta);
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records[i].OffsetDelta, batch.Records[i].OffsetDelta);
-        UNIT_ASSERT_VALUES_EQUAL(
-            TString(parsed.Records[i].Key->data(), parsed.Records[i].Key->size()),
-            TString(batch.Records[i].Key->data(), batch.Records[i].Key->size()));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TString(parsed.Records[i].Value->data(), parsed.Records[i].Value->size()),
-            TString(batch.Records[i].Value->data(), batch.Records[i].Value->size()));
+        UNIT_ASSERT_VALUES_EQUAL(*parsed.Records[i].Key, *batch.Records[i].Key);
+        UNIT_ASSERT_VALUES_EQUAL(*parsed.Records[i].Value, *batch.Records[i].Value);
     }
 }
 

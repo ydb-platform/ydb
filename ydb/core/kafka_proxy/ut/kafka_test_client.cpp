@@ -75,7 +75,7 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslPlainAuthentica
     TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
 
     TSaslAuthenticateRequestData request;
-    request.AuthBytes = ToRawBytes(authBytes);
+    request.AuthBytes = authBytes;
 
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
@@ -90,7 +90,7 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslScramAuthentica
 
     TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
     TSaslAuthenticateRequestData request;
-    request.AuthBytes = ToRawBytes(clientFirstMessage);
+    request.AuthBytes = clientFirstMessage;
 
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
@@ -108,7 +108,7 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslScramAuthentica
 
     TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
     TSaslAuthenticateRequestData request;
-    request.AuthBytes = ToRawBytes(clientFinalMessage);
+    request.AuthBytes = clientFinalMessage;
 
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
@@ -197,8 +197,8 @@ void TKafkaTestClient::ProduceAsync(const TTopicPartition& topicPartition,
     batch.Records.resize(keyValueMessages.size());
     for (ui32 i = 0; i < keyValueMessages.size(); i++) {
         auto& keyValueMessage = keyValueMessages[i];
-        batch.Records[i].Key = ToRawBytes(keyValueMessage.first);
-        batch.Records[i].Value = ToRawBytes(keyValueMessage.second);
+        batch.Records[i].Key = keyValueMessage.first;
+        batch.Records[i].Value = keyValueMessage.second;
     }
     if (producerInstanceId) {
         batch.ProducerId = producerInstanceId->Id;
@@ -244,8 +244,8 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartitio
     batch.Records.resize(keyValueMessages.size());
     for (ui32 i = 0; i < keyValueMessages.size(); i++) {
         auto& keyValueMessage = keyValueMessages[i];
-        batch.Records[i].Key = ToRawBytes(keyValueMessage.first);
-        batch.Records[i].Value = ToRawBytes(keyValueMessage.second);
+        batch.Records[i].Key = keyValueMessage.first;
+        batch.Records[i].Value = keyValueMessage.second;
     }
     if (producerInstanceId) {
         batch.ProducerId = producerInstanceId->Id;
@@ -301,7 +301,7 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
     writable << version;
     subscribtion.Write(writable, version);
 
-    protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+    protocol.Metadata = TString(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
 
     request.Protocols.push_back(protocol);
     return WriteAndRead<TJoinGroupResponseData>(header, request);
@@ -401,7 +401,7 @@ TMessagePtr<TLeaveGroupResponseData> TKafkaTestClient::LeaveGroup(TString& membe
 
 TConsumerProtocolAssignment TKafkaTestClient::GetAssignments(NKafka::TSyncGroupResponseData::AssignmentMeta::Type metadata) {
     TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
+    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size() - sizeof(TKafkaVersion));
     TKafkaReadable readable(buffer);
 
     TConsumerProtocolAssignment result;
@@ -1050,7 +1050,7 @@ void TKafkaTestClient::Print(const TBuffer& buffer) {
 void TKafkaTestClient::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics) {
     TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
 
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
+    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size() - sizeof(TKafkaVersion));
     TKafkaReadable readable(buffer);
 
     TConsumerProtocolSubscription result;

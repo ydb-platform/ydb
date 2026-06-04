@@ -1,5 +1,7 @@
 #include "yql_http_default_retry_policy.h"
 
+namespace NYql {
+
 namespace {
 
 std::unordered_set<CURLcode> FqRetriedCurlCodes() {
@@ -18,10 +20,8 @@ std::unordered_set<CURLcode> FqRetriedCurlCodes() {
         CURLE_COULDNT_RESOLVE_HOST
     };
 }
-
+        
 }
-
-namespace NYql {
 
 std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
     return {

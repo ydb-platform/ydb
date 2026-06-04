@@ -60,7 +60,7 @@ namespace NKikimr::NDDisk {
             auto newIt = std::upper_bound(chunkIter + 1, ChunksByFreeSpace.end(), updatedInfo, ChunksByFreeSpaceLess);
             *chunkIter = updatedInfo;
             if (newIt != chunkIter + 1) {
-                std::rotate(chunkIter, newIt - 1, newIt);
+                std::rotate(chunkIter, chunkIter + 1, newIt);
             }
         }
     }

@@ -227,6 +227,32 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         }
     }
 
+    Y_UNIT_TEST(MultiChunkFreeReordersMultiplePositions) {
+        // Four chunks with fixed free counts: 11(8), 22(2), 33(3), 44(4). Occupy(7) from best
+        // chunk 11 leaves it at index 0 with 1 free sector. Free() restores 8 free sectors and
+        // moves chunk 11 three slots right (past 22, 33, 44).
+        TPersistentBufferSpaceAllocator allocator(64);
+        allocator.AddNewChunk(11);
+        allocator.AddNewChunk(22);
+        allocator.AddNewChunk(33);
+        allocator.AddNewChunk(44);
+        allocator.MarkOccupied(MakeSectorRange(11, 8, 63));
+        allocator.MarkOccupied(MakeSectorRange(22, 2, 63));
+        allocator.MarkOccupied(MakeSectorRange(33, 3, 63));
+        allocator.MarkOccupied(MakeSectorRange(44, 4, 63));
+        auto heldFrom11 = allocator.Occupy(7);
+        UNIT_ASSERT_EQUAL(heldFrom11.size(), 7);
+        for (const auto& sector : heldFrom11) {
+            UNIT_ASSERT_EQUAL(sector.ChunkIdx, 11);
+        }
+        allocator.Free(heldFrom11);
+        auto result = allocator.Occupy(3);
+        UNIT_ASSERT_EQUAL(result.size(), 3);
+        for (const auto& sector : result) {
+            UNIT_ASSERT_EQUAL(sector.ChunkIdx, 11);
+        }
+    }
+
     Y_UNIT_TEST(MultiChunkFreeReordersToBest) {
         TPersistentBufferSpaceAllocator allocator(256);
         allocator.AddNewChunk(11);

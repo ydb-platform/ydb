@@ -7,7 +7,7 @@
 
 ## Restart via Ansible Playbook
 
-[ydb-ansible](https://github.com/ydb-platform/ydb-ansible) repository contains a playbook called `ydb_platform.ydb.restart` that can be used to restart a {{ ydb-short-name }} cluster. Run it from the same directory used for the [initial deployment](initial-deployment.md).
+[ydb-ansible](https://github.com/ydb-platform/ydb-ansible) repository contains a playbook called `ydb_platform.ydb.restart` that can be used to restart a {{ ydb-short-name }} cluster. Run it from the same directory used for the [initial deployment](initial-deployment/index.md).
 
 ### Restart All Nodes
 

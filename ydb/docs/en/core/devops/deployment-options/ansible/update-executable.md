@@ -1,6 +1,6 @@
 # Updating {{ ydb-short-name }} Version on Clusters Deployed with Ansible
 
-During the [initial deployment](initial-deployment.md), the Ansible playbook provides several options for selecting the {{ ydb-short-name }} server executable (`ydbd`). This article explains the available options for changing the cluster's [version](../../../downloads/index.md) after the initial deployment.
+During the [initial deployment](initial-deployment/index.md), the Ansible playbook provides several options for selecting the {{ ydb-short-name }} server executable (`ydbd`). This article explains the available options for changing the cluster's [version](../../../downloads/index.md) after the initial deployment.
 
 {% note warning %}
 
@@ -10,7 +10,7 @@ During the [initial deployment](initial-deployment.md), the Ansible playbook pro
 
 ## Update Executables via Ansible Playbook
 
-The [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) repository contains a playbook called `ydb_platform.ydb.update_executable` that can be used to upgrade or downgrade a {{ ydb-short-name }} cluster to another version. Navigate to the same directory used for the [initial deployment](initial-deployment.md), edit `inventory/50-inventory.yaml` to specify the target {{ ydb-short-name }} version to install (typically, via the `ydb_version` or `ydb_git_version` variables), and then run this playbook:
+The [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) repository contains a playbook called `ydb_platform.ydb.update_executable` that can be used to upgrade or downgrade a {{ ydb-short-name }} cluster to another version. Navigate to the same directory used for the [initial deployment](initial-deployment/index.md), edit `inventory/50-inventory.yaml` to specify the target {{ ydb-short-name }} version to install (typically, via the `ydb_version` or `ydb_git_version` variables), and then run this playbook:
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_executable

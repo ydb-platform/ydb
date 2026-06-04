@@ -2584,16 +2584,37 @@
     ],
     "test_sql2yql.test[combine-simple_with_multi_key]": [
         {
-            "checksum": "19ac1e3cf58c8a7b4284f2e847b7b758",
-            "size": 3120,
-            "uri": "https://{canondata_backend}/1781765/020e4f8fd1ecee128060e96b876cb21f98bb0295/resource.tar.gz#test_sql2yql.test_combine-simple_with_multi_key_/sql.yql"
+            "checksum": "96b05b6539213b01edec437e84ba34e4",
+            "size": 3104,
+            "uri": "https://{canondata_backend}/1936842/b273a2372a28bdeeea2f0fb7beb37c6ba5167d25/resource.tar.gz#test_sql2yql.test_combine-simple_with_multi_key_/sql.yql"
         }
     ],
     "test_sql2yql.test[combine-simple_with_single_key]": [
         {
-            "checksum": "0192e76e62c0c614c7a23415c147f9db",
+            "checksum": "3087d050ecbccc5b9915b4cecb5fedf3",
+            "size": 2508,
+            "uri": "https://{canondata_backend}/1936842/b273a2372a28bdeeea2f0fb7beb37c6ba5167d25/resource.tar.gz#test_sql2yql.test_combine-simple_with_single_key_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[combine-simple_with_single_key_list]": [
+        {
+            "checksum": "99c89b253e3e003231f38730231500a4",
             "size": 2524,
-            "uri": "https://{canondata_backend}/1781765/020e4f8fd1ecee128060e96b876cb21f98bb0295/resource.tar.gz#test_sql2yql.test_combine-simple_with_single_key_/sql.yql"
+            "uri": "https://{canondata_backend}/1599023/3af77e745a3b24ea60da182fd55bacf95345cefc/resource.tar.gz#test_sql2yql.test_combine-simple_with_single_key_list_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[combine-simple_with_single_key_no_presort]": [
+        {
+            "checksum": "5db71241af2489a2f5bfd46790082751",
+            "size": 2210,
+            "uri": "https://{canondata_backend}/1937027/d8c4b3eb580db4826120777ddf2b557cbd194836/resource.tar.gz#test_sql2yql.test_combine-simple_with_single_key_no_presort_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[combine-simple_with_single_key_optional]": [
+        {
+            "checksum": "f132c0da04fdea310063a815edf976a7",
+            "size": 2515,
+            "uri": "https://{canondata_backend}/1599023/3af77e745a3b24ea60da182fd55bacf95345cefc/resource.tar.gz#test_sql2yql.test_combine-simple_with_single_key_optional_/sql.yql"
         }
     ],
     "test_sql2yql.test[compute_range-adjacent_to_point]": [
@@ -14004,6 +14025,21 @@
     "test_sql_format.test[combine-simple_with_single_key]": [
         {
             "uri": "file://test_sql_format.test_combine-simple_with_single_key_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[combine-simple_with_single_key_list]": [
+        {
+            "uri": "file://test_sql_format.test_combine-simple_with_single_key_list_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[combine-simple_with_single_key_no_presort]": [
+        {
+            "uri": "file://test_sql_format.test_combine-simple_with_single_key_no_presort_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[combine-simple_with_single_key_optional]": [
+        {
+            "uri": "file://test_sql_format.test_combine-simple_with_single_key_optional_/formatted.sql"
         }
     ],
     "test_sql_format.test[compute_range-adjacent_to_point]": [

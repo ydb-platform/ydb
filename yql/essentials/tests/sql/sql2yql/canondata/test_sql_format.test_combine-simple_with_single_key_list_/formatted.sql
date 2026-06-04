@@ -1,10 +1,6 @@
 /* custom error:GetCallable(): requirement Callables_.cend() != compiler failed, message: Missed callable: SqlCombine*/
 $f = ($key, $leftList, $rightList) -> {
-    RETURN <|k: $key, v: ListZip($leftList, $rightList)|>;
-};
-
-$mul = ($field, $multiplier) -> {
-    RETURN $field * $multiplier;
+    RETURN [<|k: $key, v: ListZip($leftList, $rightList)|>];
 };
 
 $a = [
@@ -32,5 +28,5 @@ WITH AS_TABLE($b) AS B
         B.key,
         B.subkey
 ON
-    A.key == B.key AND $mul(A.subkey, 2) == $mul(B.subkey, 2)
+    A.key == B.key
 USING $f(TableRow(), TableRow());

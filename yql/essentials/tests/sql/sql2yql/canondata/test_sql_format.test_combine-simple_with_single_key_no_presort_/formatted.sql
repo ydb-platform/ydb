@@ -3,10 +3,6 @@ $f = ($key, $leftList, $rightList) -> {
     RETURN <|k: $key, v: ListZip($leftList, $rightList)|>;
 };
 
-$mul = ($field, $multiplier) -> {
-    RETURN $field * $multiplier;
-};
-
 $a = [
     <|key: 1, subkey: 11, value: '111'|>,
     <|key: 1, subkey: 12, value: '112'|>,
@@ -24,13 +20,7 @@ $b = [
 ];
 
 COMBINE AS_TABLE($a) AS A
-    PRESORT
-        A.key,
-        A.subkey
 WITH AS_TABLE($b) AS B
-    PRESORT
-        B.key,
-        B.subkey
 ON
-    A.key == B.key AND $mul(A.subkey, 2) == $mul(B.subkey, 2)
+    A.key == B.key
 USING $f(TableRow(), TableRow());

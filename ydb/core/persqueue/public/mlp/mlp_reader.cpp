@@ -134,7 +134,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             continue;
         }
 
-        auto codec = static_cast<Ydb::Topic::Codec>(proto.codec() + 1);
+        auto codec = proto.has_codec() ? static_cast<Ydb::Topic::Codec>(proto.codec() + 1) : Ydb::Topic::CODEC_RAW;
         TString codecStr;
         switch (codec) {
             case Ydb::Topic::CODEC_GZIP:
@@ -161,7 +161,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
 
         std::unordered_multimap<TString, TString> attributes(proto.GetMessageMeta().size());
         if (!codecStr.empty()) {
-            attributes.emplace("codec", std::move(codecStr));
+            attributes.emplace("__codec", std::move(codecStr));
         }
 
         TString messageGroupId;

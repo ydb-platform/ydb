@@ -66,7 +66,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);
@@ -81,7 +80,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             "ApproximateFirstReceiveTimestamp=" << response->Messages[0].ApproximateFirstReceiveTimestamp->MilliSeconds() << " now=" << now);
     }
 
-    Y_UNIT_TEST(CompressedMesage) {
+    Y_UNIT_TEST(CompressedMessage) {
         auto setup = CreateSetup();
 
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
@@ -95,7 +94,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);
@@ -104,8 +102,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Codec, Ydb::Topic::CODEC_GZIP);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.find("codec") != response->Messages[0].Attributes.end(), true);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.find("codec")->second, "gzip");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.find("__codec") != response->Messages[0].Attributes.end(), true);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Attributes.find("__codec")->second, "gzip");
 
         const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(Ydb::Topic::CODEC_GZIP));
         auto data = codecImpl->Decompress(response->Messages[0].Data);
@@ -132,7 +130,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(1),
                 .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -151,7 +148,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(0),
                 .ProcessingTimeout = TDuration::Seconds(5),
                 .MaxNumberOfMessage = 10,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -168,7 +164,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(0),
                 .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -185,7 +180,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(5),
                 .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -213,7 +207,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);
@@ -267,7 +260,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         {
@@ -285,7 +277,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         {

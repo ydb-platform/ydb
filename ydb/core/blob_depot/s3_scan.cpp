@@ -59,7 +59,7 @@ namespace NKikimr::NBlobDepot {
                 {"Marker", "BDTS18"},
                 {"Id", LogId},
                 {"Prefix", Prefix},
-                {"#_Marker", Marker});
+                {"RequestMarker", Marker});
 
             Send(WrapperId, new TEvExternalStorage::TEvListObjectsRequest(request), IEventHandle::FlagTrackDelivery);
         }

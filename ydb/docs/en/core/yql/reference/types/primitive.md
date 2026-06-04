@@ -3,6 +3,7 @@
 <!-- markdownlint-disable blanks-around-fences -->
 
 The terms "simple", "primitive", and "elementary" data types are used as synonyms.
+
 ## Numeric types {#numeric}
 
 #|
@@ -66,6 +67,7 @@ Compatible with the `Number` type of AWS DynamoDB. Not recommended for use in {{
 |#
 
 {% include [x](../_includes/type_literals_examples.md) %}
+
 ## String types {#string}
 
 #|

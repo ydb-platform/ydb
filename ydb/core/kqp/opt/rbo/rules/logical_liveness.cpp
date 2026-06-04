@@ -333,7 +333,41 @@ void AddReadColumnByName(const TOpRead& read, const TString& columnName, TInfoUn
     }
 }
 
+const TStructExprType* GetStructItemType(const TTypeAnnotationNode* type) {
+    if (!type) {
+        return nullptr;
+    }
+
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::Struct:
+            return type->Cast<TStructExprType>();
+        case ETypeAnnotationKind::List:
+            return GetStructItemType(type->Cast<TListExprType>()->GetItemType());
+        case ETypeAnnotationKind::Flow:
+            return GetStructItemType(type->Cast<TFlowExprType>()->GetItemType());
+        default:
+            return nullptr;
+    }
+}
+
+void AddReadLambdaInputTypeDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
+    if (!lambda || !lambda->IsLambda() || lambda->Head().ChildrenSize() == 0) {
+        return;
+    }
+
+    const auto* structType = GetStructItemType(lambda->Head().Child(0)->GetTypeAnn());
+    if (!structType) {
+        return;
+    }
+
+    for (const auto* item : structType->GetItems()) {
+        AddReadColumnByName(read, TString(item->GetName()), requiredColumns);
+    }
+}
+
 void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
+    AddReadLambdaInputTypeDeps(read, lambda, requiredColumns);
+
     const auto inspection = NOpt::InspectOlapProcessLambda(lambda);
     if (inspection.RequiresAllInputColumns) {
         AddColumnsToSet(requiredColumns, read.OutputIUs);
@@ -345,10 +379,40 @@ void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfo
     }
 }
 
+void AddReadExpressionMemberDeps(const TOpRead& read, const TExprNode::TPtr& node, TInfoUnitSet& requiredColumns) {
+    if (!node) {
+        return;
+    }
+
+    if (node->IsCallable("Member")) {
+        if (node->ChildrenSize() == 2 && node->Child(1)->IsAtom()) {
+            AddReadColumnByName(read, TString(node->Child(1)->Content()), requiredColumns);
+        }
+        return;
+    }
+
+    for (const auto& child : node->ChildrenList()) {
+        AddReadExpressionMemberDeps(read, child, requiredColumns);
+    }
+}
+
+void AddReadOriginalPredicateDeps(const TOpRead& read, TInfoUnitSet& requiredColumns) {
+    if (!read.OriginalPredicate) {
+        return;
+    }
+
+    AddReadExpressionMemberDeps(read, read.OriginalPredicate->Node, requiredColumns);
+}
+
 bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
+    if (read->OlapFilterLambda) {
+        return false;
+    }
+
     TInfoUnitSet requiredColumns;
     AddColumnsToSet(requiredColumns, liveOutput);
     AddReadLambdaDeps(*read, read->OlapFilterLambda, requiredColumns);
+    AddReadOriginalPredicateDeps(*read, requiredColumns);
 
     TVector<TString> newColumns;
     TVector<TInfoUnit> newOutputIUs;
@@ -493,7 +557,7 @@ bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& inpu
 
 TNarrowByLivenessStage::TNarrowByLivenessStage()
     : IRBOStage("Narrow by liveness") {
-    Props = ERuleProperties::RequireParents;
+    Props = ERuleProperties::RequireParents | ERuleProperties::RequireNameConstraints;
 }
 
 void TNarrowByLivenessStage::RunStage(TOpRoot& root, TRBOContext& ctx) {

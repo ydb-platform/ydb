@@ -2014,8 +2014,12 @@ private:
     std::variant<ui32, TArgContext> Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Filter";
-        auto pred = NPlanUtils::ExtractPredicate(filter.Lambda());
-        op.Properties["Predicate"] = pred.Body;
+        try {
+            auto pred = NPlanUtils::ExtractPredicate(filter.Lambda());
+            op.Properties["Predicate"] = pred.Body;
+        } catch (...) {
+            op.Properties["Predicate"] = "";
+        }
 
         AddOptimizerEstimates(op, filter);
 

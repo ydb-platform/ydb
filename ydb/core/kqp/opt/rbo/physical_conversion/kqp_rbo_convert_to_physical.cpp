@@ -185,16 +185,44 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
 
-            auto projectInput = [&](TExprNode::TPtr input, const TVector<TInfoUnit>& inputOutput) {
+            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) {
+                auto hasSameType = [&](const TInfoUnit& source, const TInfoUnit& target) {
+                    const auto* sourceType = inputOp->GetIUType(source);
+                    const auto* targetType = unionAll->GetIUType(target);
+                    return sourceType && targetType && IsSameAnnotation(*sourceType, *targetType);
+                };
+
+                const auto inputOutput = inputOp->GetOutputIUs();
                 if (inputOutput == unionOutput) {
                     return input;
+                }
+                if (inputOutput.size() == unionOutput.size()) {
+                    THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
+                    inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
+                    TVector<std::pair<TString, TString>> renames;
+                    renames.reserve(unionOutput.size());
+                    for (size_t i = 0; i < unionOutput.size(); ++i) {
+                        TInfoUnit source = inputOutput[i];
+                        if (inputOutputSet.contains(unionOutput[i]) && hasSameType(unionOutput[i], unionOutput[i])) {
+                            source = unionOutput[i];
+                        } else if (!hasSameType(source, unionOutput[i])) {
+                            for (const auto& candidate : inputOutput) {
+                                if (candidate.GetColumnName() == unionOutput[i].GetColumnName() && hasSameType(candidate, unionOutput[i])) {
+                                    source = candidate;
+                                    break;
+                                }
+                            }
+                        }
+                        renames.emplace_back(source.GetFullName(), unionOutput[i].GetFullName());
+                    }
+                    return NPhysicalConvertionUtils::BuildRenameMap(input, renames, ctx);
                 }
                 return NPhysicalConvertionUtils::ExtractMembers(input, ctx, unionOutput);
             };
 
             TVector<TExprNode::TPtr> extendArgs{
-                projectInput(leftArg, unionAll->GetLeftInput()->GetOutputIUs()),
-                projectInput(rightArg, unionAll->GetRightInput()->GetOutputIUs())
+                projectInput(leftArg, unionAll->GetLeftInput()),
+                projectInput(rightArg, unionAll->GetRightInput())
             };
 
             if (unionAll->Ordered) {

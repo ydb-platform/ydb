@@ -1,4 +1,5 @@
 #include "kqp_operator.h"
+#include "kqp_rbo_utils.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -132,9 +133,11 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
         const TTypeAnnotationNode* subplanType;
         auto subplanEntry = props.Subplans.PlanMap.at(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
-            auto subplan = subplanEntry.Plan;
-            auto subplanTupleType = CastOperator<IOperator>(subplan)->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            subplanType = subplanTupleType->GetItems()[0]->GetItemType();
+            auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
+            const auto resultIUs = GetSubplanResultIUs(subplan);
+            Y_ENSURE(!resultIUs.empty(), "Scalar subplan has no result columns");
+            subplanType = subplan->GetIUType(resultIUs.front());
+            Y_ENSURE(subplanType, "Cannot infer scalar subplan result type for " << resultIUs.front().GetFullName());
         } else {
             if (!props.PgSyntax) {
                 subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);

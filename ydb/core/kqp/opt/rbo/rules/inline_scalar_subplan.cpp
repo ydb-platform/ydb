@@ -4,14 +4,8 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-void RenameSubtreeIUs(
-    const TIntrusivePtr<IOperator>& root,
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap,
-    TExprContext& ctx)
-{
-    for (auto it = TOpIterator(root, nullptr); it != TOpIterator(nullptr); ++it) {
-        (*it).Current->RenameIUs(renameMap, ctx);
-    }
+bool ContainsIU(const TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
+    return std::find(ius.begin(), ius.end(), iu) != ius.end();
 }
 
 } // namespace
@@ -58,9 +52,27 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         TVector<TExpression> joinFilters;
-        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> subplanKeyRenames;
+        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> subplanOutputRenames;
 
         auto leftIUs = child->GetOutputIUs();
+        auto rightIUs = uncorrSubplan->GetOutputIUs();
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
+        usedIUs.insert(leftIUs.begin(), leftIUs.end());
+        usedIUs.insert(rightIUs.begin(), rightIUs.end());
+        auto makeInternalIU = [&]() {
+            for (;;) {
+                auto iu = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
+                if (usedIUs.insert(iu).second) {
+                    return iu;
+                }
+            }
+        };
+
+        for (const auto& iu : rightIUs) {
+            if (ContainsIU(leftIUs, iu) && !subplanOutputRenames.contains(iu)) {
+                subplanOutputRenames.emplace(iu, makeInternalIU());
+            }
+        }
 
         auto conjuncts = subplanFilter->FilterExpr.SplitConjunct();
 
@@ -80,13 +92,13 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
                 Y_ENSURE(false, "Correlated filter missing join condition");
             }
 
-            if (std::find(leftIUs.begin(), leftIUs.end(), rightKey) != leftIUs.end()) {
-                const auto renameIt = subplanKeyRenames.find(rightKey);
-                if (renameIt != subplanKeyRenames.end()) {
+            if (ContainsIU(leftIUs, rightKey)) {
+                const auto renameIt = subplanOutputRenames.find(rightKey);
+                if (renameIt != subplanOutputRenames.end()) {
                     rightKey = renameIt->second;
                 } else {
-                    auto newKey = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
-                    subplanKeyRenames.emplace(rightKey, newKey);
+                    auto newKey = makeInternalIU();
+                    subplanOutputRenames.emplace(rightKey, newKey);
                     rightKey = newKey;
                 }
             }
@@ -94,25 +106,35 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
         }
 
-        if (!subplanKeyRenames.empty()) {
-            RenameSubtreeIUs(uncorrSubplan, subplanKeyRenames, ctx.ExprCtx);
-            // Non-equi conjuncts were captured before the subtree rename; rewrite
-            // them too, otherwise they keep dangling references to pre-rename IUs
-            // that no longer exist in uncorrSubplan's output.
-            for (auto& joinFilter : joinFilters) {
-                joinFilter = joinFilter.ApplyRenames(subplanKeyRenames);
+        if (!subplanOutputRenames.empty()) {
+            TVector<TMapElement> renameElements;
+            renameElements.reserve(subplanOutputRenames.size());
+            for (const auto& [from, to] : subplanOutputRenames) {
+                renameElements.emplace_back(to, from, subplan->Pos, &ctx.ExprCtx, &props);
             }
+            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, subplan->Pos, renameElements);
+
+            // Non-equi conjuncts were captured before the output rename; rewrite
+            // them too, otherwise they keep references to hidden right-side IUs.
+            for (auto& joinFilter : joinFilters) {
+                joinFilter = joinFilter.ApplyRenames(subplanOutputRenames);
+            }
+        }
+
+        auto joinedSubplanResIU = subplanResIU;
+        if (const auto renameIt = subplanOutputRenames.find(joinedSubplanResIU); renameIt != subplanOutputRenames.end()) {
+            joinedSubplanResIU = renameIt->second;
         }
 
         auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);
 
         if (input->Kind == EOperator::Filter) {
             auto outerFilter = CastOperator<TOpFilter>(input);
-            outerFilter->FilterExpr = outerFilter->FilterExpr.ApplyRenames({{scalarIU, subplanResIU}});
+            outerFilter->FilterExpr = outerFilter->FilterExpr.ApplyRenames({{scalarIU, joinedSubplanResIU}});
             outerFilter->SetInput(leftJoin);
         } else {
             TVector<TMapElement> renameElements;
-            renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+            renameElements.emplace_back(scalarIU, joinedSubplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
             auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements);
             unaryOp->SetInput(rename);
         }

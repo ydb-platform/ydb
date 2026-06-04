@@ -4,6 +4,73 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+namespace {
+
+bool IsOlapAtomListComparison(const TExprNode::TPtr& node) {
+    if (!node || !node->IsList() || (node->ChildrenSize() != 3 && node->ChildrenSize() != 4) || !node->Child(0)->IsAtom()) {
+        return false;
+    }
+
+    const auto op = TString(node->Child(0)->Content());
+    return op == "eq" || op == "neq" || op == "lt" || op == "lte" || op == "gt" || op == "gte" ||
+        op == "string_contains" || op == "starts_with" || op == "ends_with";
+}
+
+TExprNode::TPtr RenameOlapProcessColumns(const TExprNode::TPtr& node, const THashMap<TString, TString>& renameMap, TExprContext& ctx) {
+    if (!node) {
+        return node;
+    }
+
+    if (node->IsCallable("Member") && node->ChildrenSize() == 2 && node->Child(1)->IsAtom()) {
+        const auto it = renameMap.find(TString(node->Child(1)->Content()));
+        if (it != renameMap.end()) {
+            auto children = node->ChildrenList();
+            children[1] = ctx.NewAtom(node->Child(1)->Pos(), it->second);
+            return ctx.ChangeChildren(*node, std::move(children));
+        }
+        return node;
+    }
+
+    bool changed = false;
+    auto children = node->ChildrenList();
+    for (ui32 i = 0; i < children.size(); ++i) {
+        if (IsOlapAtomListComparison(node) && i == 1 && children[i]->IsAtom()) {
+            const auto it = renameMap.find(TString(children[i]->Content()));
+            if (it != renameMap.end()) {
+                children[i] = ctx.NewAtom(children[i]->Pos(), it->second);
+                changed = true;
+                continue;
+            }
+        }
+
+        auto renamed = RenameOlapProcessColumns(children[i], renameMap, ctx);
+        if (renamed != children[i]) {
+            children[i] = std::move(renamed);
+            changed = true;
+        }
+    }
+
+    return changed ? ctx.ChangeChildren(*node, std::move(children)) : node;
+}
+
+THashMap<TString, TString> BuildOutputToPhysicalColumnMap(const TOpRead& read) {
+    THashMap<TString, TString> renameMap;
+    Y_ENSURE(read.Columns.size() == read.OutputIUs.size());
+    for (ui32 i = 0; i < read.Columns.size(); ++i) {
+        const auto& physicalColumn = read.Columns[i];
+        const auto& outputIU = read.OutputIUs[i];
+        if (outputIU.GetFullName() != physicalColumn) {
+            renameMap[outputIU.GetFullName()] = physicalColumn;
+        }
+        if (outputIU.GetColumnName() != physicalColumn) {
+            renameMap[outputIU.GetColumnName()] = physicalColumn;
+        }
+    }
+    return renameMap;
+}
+
+} // anonymous namespace
+
 TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
     TVector<TExprNode::TPtr> columns;
@@ -65,6 +132,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
             if (Read->OlapFilterLambda) {
                 processLambda = Read->OlapFilterLambda;
+                const auto renameMap = BuildOutputToPhysicalColumnMap(*Read);
+                if (!renameMap.empty()) {
+                    processLambda = RenameOlapProcessColumns(processLambda, renameMap, Ctx);
+                }
             }
 
             TKqpReadTableSettings settings;

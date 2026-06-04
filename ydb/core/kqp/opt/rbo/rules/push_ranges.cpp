@@ -197,8 +197,15 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     auto settings = PrepareExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
     auto schemeType = PrepareSchemeType(read->Alias, tableDesc->SchemeNode, ctx);
-    const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
-    YQL_ENSURE(prepareSuccess);
+    bool prepareSuccess = false;
+    try {
+        prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
+    } catch (...) {
+        return input;
+    }
+    if (!prepareSuccess) {
+        return input;
+    }
 
     TVector<TString> keyColumns;
     if (std::any_of(possibleKeys.begin(), possibleKeys.end(), [](const TString& key) { return key.find(".") != TString::npos; })) {

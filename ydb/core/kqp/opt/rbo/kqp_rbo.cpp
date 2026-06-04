@@ -171,7 +171,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                         YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
-                    ComputeRequiredProps(root, Props | ERuleProperties::RequireTypes, ctx, StageName);
+                    ComputeRequiredProps(root, Props, ctx, StageName);
                     ++numMatches;
                     break;
                 }

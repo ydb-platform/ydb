@@ -994,6 +994,60 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/sales` (
+                id Int64 NOT NULL,
+                k Int64 NOT NULL,
+                v Double,
+                PRIMARY KEY(id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            $totals = (
+                SELECT
+                    k AS group_key,
+                    Sum(v) AS total
+                FROM `/Root/sales`
+                GROUP BY k
+            );
+
+            SELECT
+                a.group_key
+            FROM $totals AS a
+            WHERE a.total > (
+                SELECT
+                    Avg(total)
+                FROM $totals AS b
+                WHERE a.group_key == b.group_key
+            )
+            ORDER BY a.group_key;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+            .ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(DistinctAllTypeMatchesLogicalOutputColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -3332,6 +3386,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                            /*rbo never finish*/{5}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
+    }
+
+    Y_UNIT_TEST(TPCDS_YQL_Q77_Scratch) {
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {77}, MakeTPC_YqlSingleQuerySkipList(EBenchType::TPCDS, 77),
+                            /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/false);
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {

@@ -1301,7 +1301,7 @@ def create_mute_issues(
             
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
             gh_out.write(f"created_issues_file={file_path}\n")
-
+            
         print(f"Result saved to env variable GITHUB_OUTPUT by key created_issues_file")
 
     return queue_items

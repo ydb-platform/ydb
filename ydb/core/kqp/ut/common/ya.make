@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/testing/common
     ydb/core/kqp/federated_query
     ydb/core/testlib
+    ydb/library/testlib
     ydb/library/yql/providers/s3/actors_factory
     yql/essentials/public/udf
     yql/essentials/udfs/common/string

@@ -170,9 +170,11 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
                 continue;
             }
 
-            Y_ASSERT(context.SS->Indexes.contains(childPathId));
-            const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
+            if (!context.SS->Indexes.contains(childPathId)) {
+                continue;
+            }
 
+            const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
             if (!DoesIndexSupportTTL(indexInfo->Type)) {
                 errStr = "TTL is not supported for tables with " << indexInfo->Type << " index";
                 status = NKikimrScheme::StatusInvalidParameter;

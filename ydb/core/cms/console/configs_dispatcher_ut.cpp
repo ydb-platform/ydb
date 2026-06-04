@@ -1686,6 +1686,7 @@ selector_config: []
             "current_json_config": {},
             "has_storage_yaml": false,
             "yaml_config": "",
+            "unknown_fields": [],
             "initial_json_config": {
                 "grpc_config": {
                     "key": "***"

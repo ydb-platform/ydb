@@ -55,19 +55,21 @@ The `.github/workflows/update_muted_ya.yml` workflow automatically:
 
 ### Automatic Issue Creation
 The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
-- Triggers after approval of PRs with `mute-unmute` label
-- Creates GitHub issues for newly muted tests and close unmute
-- Assigns issues to appropriate teams based on test ownership
-- Links issues to the PR that introduced the mutes
+- Triggers after **merge** of PRs with label **`mute-create-issues`** (and `workflow_dispatch`)
+- Bot mute PRs from `update_muted_ya` get `mute-create-issues` only for build types listed in `mute_issue_and_digest_config.json` (currently `relwithdebinfo` on `main`)
+- PRs with only `mute-unmute` (e.g. asan/msan/tsan auto-mute) do **not** run issue creation
+- Creates GitHub issues for muted tests without an open issue, closes issues when tests leave `muted_ya.txt`
+- Assigns issues to teams from test ownership; links results to that PR (comment + body append)
+- **Manual** mute on a profile with issue sync: add label `mute-create-issues` to your PR (or use `workflow_dispatch`)
 
 ## 📝 Manual mute/unmute management
 
 ### How to mute a test manually
 
 - Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and add a test line.
-- Create a PR, copy the title and description from the issue.
+- Create a PR with labels `mute-unmute` and **`mute-create-issues`** (for relwithdebinfo / profiles in digest config).
 - Get confirmation from the test owner.
-- After merging, link the PR and issue, notify the team.
+- After merging, issues are created and linked to the PR automatically; notify the team.
 
 **You can also:**
 - Use the context menu in the PR report (see screenshot).
@@ -255,7 +257,7 @@ sequenceDiagram
     participant GH as GitHub
     participant YDB as YDB
 
-    Note over WF: Trigger merged PR to main with mute-unmute label
+    Note over WF: Trigger merged PR to main with mute-create-issues label
     WF->>GH: Create issues, append PR body, post PR comment
     WF->>YDB: upload_muted_tests, flaky_tests_history, tests_monitor
     WF->>YDB: enqueue digest_queue for new mute issues

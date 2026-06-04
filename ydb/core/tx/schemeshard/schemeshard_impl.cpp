@@ -210,7 +210,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
         const TString workingDir = TPath::Init(tablePathId, this).PathString();
 
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "CollectLocalIndexMigrations: processing table " << workingDir
+            "LocalIndexMigrator: processing table " << workingDir
             << " with " << schema.IndexesSize() << " index(es)");
 
         for (const auto& indexProto : schema.GetIndexes()) {
@@ -221,7 +221,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                 const auto& child = PathsById.at(*childId);
                 if (child->IsTableIndex() && !child->Dropped()) {
                     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "CollectLocalIndexMigrations: skipping index " << indexName
+                        "LocalIndexMigrator: skipping index " << indexName
                         << " (already exists as scheme object)");
                     continue;
                 }
@@ -230,13 +230,13 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
             if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "CollectLocalIndexMigrations skip index: failed to build creation config"
+                    "LocalIndexMigrator skip index: failed to build creation config"
                     << ", table: " << workingDir << ", index: " << indexName);
                 continue;
             }
 
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectLocalIndexMigrations: adding index " << indexName << " from table " << workingDir);
+                "LocalIndexMigrator: adding index " << indexName << " from table " << workingDir);
             items.emplace_back(TLocalIndexMigrationItem{
                 .WorkingDir = workingDir,
                 .IndexConfig = std::move(indexConfig),
@@ -245,13 +245,13 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
     }
 
     if (items.empty()) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "CollectLocalIndexMigrations: no indexes to migrate");
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "LocalIndexMigrator: no indexes to migrate");
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "CollectLocalIndexMigrations: starting migrator for " << items.size() << " index(es)");
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "LocalIndexMigrator: starting migrator for " << items.size() << " index(es)");
 
     LocalIndexMigratorId = ctx.RegisterWithSameMailbox(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), this, std::move(items)).Release());
 }
@@ -509,7 +509,7 @@ TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     }
 
     if (CachedTxIds.size() == InitiateCachedTxIdsCount / 3) {
-        ctx.Send(new IEventHandle(TxAllocatorClient, SelfId(), new TEvTxAllocatorClient::TEvAllocate(InitiateCachedTxIdsCount)));
+        ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
     }
 
     return txId;

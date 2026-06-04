@@ -1934,7 +1934,7 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Gateway = FederatedQuerySetup->HttpGateway;
-        state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        state->GatewayRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         state->ExecutorPoolId = AppData()->UserPoolId;
         state->ActorSystem = ActorSystem;
         state->EnableS3ConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);

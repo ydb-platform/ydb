@@ -258,6 +258,47 @@ private:
     const TVector<std::unique_ptr<IBlockItemComparator>> Children_;
 };
 
+class TVariantBlockItemComparator: public TBlockItemComparatorBase<TVariantBlockItemComparator, false> {
+public:
+    explicit TVariantBlockItemComparator(TVector<std::unique_ptr<IBlockItemComparator>>&& children)
+        : Children_(std::move(children))
+    {
+    }
+
+    i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex < rightIndex) {
+            return -1;
+        }
+        if (leftIndex > rightIndex) {
+            return 1;
+        }
+        return Children_[leftIndex]->Compare(lhs.GetVariantItem(), rhs.GetVariantItem());
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex != rightIndex) {
+            return false;
+        }
+        return Children_[leftIndex]->Equals(lhs.GetVariantItem(), rhs.GetVariantItem());
+    }
+
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex != rightIndex) {
+            return leftIndex < rightIndex;
+        }
+        return Children_[leftIndex]->Less(lhs.GetVariantItem(), rhs.GetVariantItem());
+    }
+
+private:
+    const TVector<std::unique_ptr<IBlockItemComparator>> Children_;
+};
+
 class TExternalOptionalBlockItemComparator: public TBlockItemComparatorBase<TExternalOptionalBlockItemComparator, true> {
 public:
     explicit TExternalOptionalBlockItemComparator(std::unique_ptr<IBlockItemComparator> inner)

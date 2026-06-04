@@ -30,6 +30,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
@@ -47,6 +49,7 @@
 #include <algorithm>
 #include <array>
 #include <bitset>
+#include <deque>
 #include <expected>
 #include <map>
 #include <set>
@@ -73,6 +76,7 @@ constexpr ui32 kOpCount = GetEnumItemsCount<EOp>();
 constexpr ui32 kBscRetryLimit = 5;
 constexpr TDuration kBscRetryInitialBackoff = TDuration::MilliSeconds(500);
 constexpr TDuration kBscRetryMaxBackoff = TDuration::Seconds(10);
+constexpr ui64 kInitialDDiskSessionSeqNo = 1;
 
 // Auto-disable per-peer counters at this many DBGs (10 wires per DBG quickly
 // blows up Solomon scrape size). Honour an explicit user setting first.
@@ -196,8 +200,6 @@ struct TLsnsCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr Total;
     ::NMonitoring::TDynamicCounters::TCounterPtr MaxLsns;
     ::NMonitoring::TDynamicCounters::TCounterPtr BackpressureHits;
-    ::NMonitoring::TDynamicCounters::TCounterPtr OldestLsn;
-    ::NMonitoring::TDynamicCounters::TCounterPtr OldestLsnAgeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr NewestLsn;
     std::array<::NMonitoring::TDynamicCounters::TCounterPtr, kBufferStateCount> BufferStateGauges;
     ::NMonitoring::TDynamicCounters::TCounterPtr AvgPbUsedPct;       // 100 - free
@@ -212,8 +214,6 @@ struct TLsnsCounters {
         Total            = g->GetCounter("Total", false);
         MaxLsns          = g->GetCounter("MaxLsns", false);
         BackpressureHits = g->GetCounter("BackpressureHits", true);
-        OldestLsn        = g->GetCounter("OldestLsn", false);
-        OldestLsnAgeMs   = g->GetCounter("OldestLsnAgeMs", false);
         NewestLsn        = g->GetCounter("NewestLsn", false);
         for (ui32 i = 0; i < kBufferStateCount; ++i) {
             auto sub = g->GetSubgroup("state", ToString(static_cast<EPBufferState>(i)));
@@ -283,13 +283,18 @@ struct TPerDbgState {
     std::bitset<kHostsPerDbgMax> PBConnected;
 
     // TDDiskId -> k in [0..kHostsPerDbgMax).
-    THashMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui32, TDDiskIdHash, TDDiskIdEqual> PbIndexById;
+    absl::flat_hash_map<NKikimrBlobStorage::NDDisk::TDDiskId, ui32, TDDiskIdHash, TDDiskIdEqual> PbIndexById;
 
-    std::map<ui64, TWriteInfo> Lsns;
-    std::set<ui64> ReadyToErase;
+    absl::flat_hash_map<ui64, TWriteInfo> Lsns;
+    absl::flat_hash_set<ui64> ReadyToErase;
+
+    // FIFO work queues so DoFlush/DoErase touch only actionable LSNs (O(batch))
+    // instead of scanning all of Lsns / ReadyToErase on every completion.
+    std::deque<ui64> PendingFlush;
+    std::deque<ui64> PendingErase;
 
     // Per-vChunk slot tracking; slot = offsetInVChunk / IoSizeBytes.
-    std::vector<THashMap<ui32, ui64>> InflightLsnAtSlot;
+    std::vector<absl::flat_hash_map<ui32, ui64>> InflightLsnAtSlot;
     std::vector<TDynBitMap> FlushedSlots;
 
     std::array<ui32, kPrimaryHostsPerDbg> InFlightTo = {};
@@ -1449,8 +1454,10 @@ void TNbsDbgLikeLoadTablet::ConnectPeer(const TActorContext& ctx,
     TActorId target = isPb
         ? MakeBlobStoragePersistentBufferId(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId())
         : MakeBlobStorageDDiskId(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
-    NDDisk::TQueryCredentials creds(AllocConfig.GetTabletId(), Generation(),
-        std::nullopt);
+    auto creds = isPb
+        ? NDDisk::TQueryCredentials::ToPersistentBuffer(AllocConfig.GetTabletId(), Generation(), std::nullopt)
+        : NDDisk::TQueryCredentials::ToDDisk(
+            AllocConfig.GetTabletId(), Generation(), kInitialDDiskSessionSeqNo, std::nullopt);
     st.ConnectInFlight = true;
     ctx.Send(target, new NDDisk::TEvConnect(creds), 0,
         PackPeerCookie(dbgIdx, k, isPb));
@@ -1603,7 +1610,8 @@ void TNbsDbgLikeLoadTablet::DisconnectAllPeers() {
     for (ui32 i = 0; i < Conn.size() && i < Dbgs.size(); ++i) {
         for (ui32 k = 0; k < hostsPerDbg; ++k) {
             if (Conn[i].PB[k].Connected) {
-                NDDisk::TQueryCredentials creds(bscTabletId, generation, Conn[i].PB[k].Guid);
+                auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+                    bscTabletId, generation, Conn[i].PB[k].Guid);
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
                 creds.Serialize(ev->Record.MutableCredentials());
                 const auto& id = Dbgs[i].PBIds[k];
@@ -1614,7 +1622,8 @@ void TNbsDbgLikeLoadTablet::DisconnectAllPeers() {
                 Conn[i].PB[k].Guid = 0;
             }
             if (Conn[i].DD[k].Connected) {
-                NDDisk::TQueryCredentials creds(bscTabletId, generation, Conn[i].DD[k].Guid);
+                auto creds = NDDisk::TQueryCredentials::ToDDisk(
+                    bscTabletId, generation, kInitialDDiskSessionSeqNo, Conn[i].DD[k].Guid);
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
                 creds.Serialize(ev->Record.MutableCredentials());
                 const auto& id = Dbgs[i].DDiskIds[k];
@@ -1636,6 +1645,18 @@ void TNbsDbgLikeLoadTablet::PopulateDbgState(ui32 dbgIdx) {
         DbgStates.resize(Dbgs.size());
     }
     auto& dst = DbgStates[dbgIdx];
+    // Reserve the expected per-DBG share of in-flight LSNs up front so the flat
+    // hash tables avoid rehashing (and copying the large TWriteInfo slots) on
+    // the steady-state path. reserve() only grows capacity, so the repeated
+    // PopulateDbgState calls on reconnects are harmless.
+    {
+        const ui64 maxInflight = TabletConfig.GetMaxInflightLsns();
+        const size_t perDbg = Dbgs.empty()
+            ? static_cast<size_t>(maxInflight)
+            : static_cast<size_t>(maxInflight / Dbgs.size() + 1);
+        dst.Lsns.reserve(perDbg);
+        dst.ReadyToErase.reserve(perDbg);
+    }
     LOG_D("PopulateDbgState dbg# " << dbgIdx
         << " PBConnected_before# " << dst.PBConnected.count()
         << " DDConnected_before# " << dst.DDConnected.count());
@@ -1978,7 +1999,8 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const
 
     const ui64 bscTabletId = AllocConfig.GetTabletId();
     const ui32 generation = Generation();
-    NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[coord]);
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+        bscTabletId, generation, dbg.PBGuid[coord]);
     NDDisk::TBlockSelector selector(vChunkIndex, offset, IoSizeBytes);
     std::vector<NKikimrBlobStorage::NDDisk::TDDiskId> pbIds;
     if (TabletConfig.GetDisableReplication()) {
@@ -2038,8 +2060,8 @@ bool TNbsDbgLikeLoadTablet::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 ls
     const ui32 k = PickRandomSetBit(info.WriteConfirmed, Rng.GenRand());
     const ui64 bscTabletId = AllocConfig.GetTabletId();
     const ui32 generation = Generation();
-    NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[k],
-        /*fromPersistentBuffer=*/true);
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+        bscTabletId, generation, dbg.PBGuid[k]);
     NDDisk::TBlockSelector selector(info.VChunkIndex,
         static_cast<ui32>(info.OffsetInVChunk), info.Size);
     auto ev = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
@@ -2072,7 +2094,8 @@ bool TNbsDbgLikeLoadTablet::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
     const ui32 k = PickRandomSetBit(effectiveMask, Rng.GenRand());
     const ui64 bscTabletId = AllocConfig.GetTabletId();
     const ui32 generation = Generation();
-    NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.DDGuid[k]);
+    auto creds = NDDisk::TQueryCredentials::ToDDisk(
+        bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.DDGuid[k]);
     NDDisk::TBlockSelector selector(vChunkIndex, static_cast<ui32>(offset), size);
     auto ev = std::make_unique<NDDisk::TEvRead>(
         creds, selector, NDDisk::TReadInstruction(true));
@@ -2284,10 +2307,13 @@ void TNbsDbgLikeLoadTablet::HandleWritePbsResult(
             // reclaim PB space without sending TEvSyncWithPersistentBuffer.
             info.State = EPBufferState::PBufferFlushed;
             EnterState(dbg, EPBufferState::PBufferFlushed, /*delta=*/+1);
-            dbg.ReadyToErase.insert(lsn);
+            if (dbg.ReadyToErase.insert(lsn).second) {
+                dbg.PendingErase.push_back(lsn);
+            }
         } else {
             info.State = EPBufferState::PBufferWritten;
             EnterState(dbg, EPBufferState::PBufferWritten, /*delta=*/+1);
+            dbg.PendingFlush.push_back(lsn);
         }
         const ui64 quorumMs = (now - info.WriteStart).MilliSeconds();
         if (RootCnt.Request.WriteQuorumMs) {
@@ -2353,11 +2379,21 @@ void TNbsDbgLikeLoadTablet::DoFlush(TPerDbgState& dbg) {
     const ui32 batch = Max<ui32>(1, TabletConfig.GetFlushBatchSize());
     std::array<std::vector<std::tuple<ui64, NDDisk::TBlockSelector>>, kPrimaryHostsPerDbg> pending;
     std::array<ui32, kPrimaryHostsPerDbg> count = {};
+    ui32 saturated = 0;
 
-    for (auto& [lsn, info] : dbg.Lsns) {
-        if (info.State != EPBufferState::PBufferWritten) {
+    // Consume only actionable LSNs from the FIFO work queue instead of scanning
+    // all of dbg.Lsns. An LSN stays at the front until every confirmed host has
+    // been flush-requested, then it transitions to PBufferFlushing and is popped.
+    while (!dbg.PendingFlush.empty() && saturated < kPrimaryHostsPerDbg) {
+        const ui64 lsn = dbg.PendingFlush.front();
+        auto it = dbg.Lsns.find(lsn);
+        if (it == dbg.Lsns.end()
+            || it->second.State != EPBufferState::PBufferWritten) {
+            dbg.PendingFlush.pop_front();
             continue;
         }
+        TWriteInfo& info = it->second;
+        bool fullyScheduled = true;
         for (ui32 k = 0; k < kPrimaryHostsPerDbg; ++k) {
             if (!info.WriteConfirmed.test(k)) {
                 continue;
@@ -2366,15 +2402,26 @@ void TNbsDbgLikeLoadTablet::DoFlush(TPerDbgState& dbg) {
                 continue;
             }
             if (count[k] >= batch) {
+                fullyScheduled = false;
                 continue;
             }
             info.FlushDesired.set(k);
             info.FlushRequested.set(k);
-            ++count[k];
+            if (++count[k] == batch) {
+                ++saturated;
+            }
             pending[k].push_back({lsn, NDDisk::TBlockSelector(
                 info.VChunkIndex,
                 static_cast<ui32>(info.OffsetInVChunk), info.Size)});
         }
+        if (!fullyScheduled) {
+            // A host batch filled mid-LSN; resume this LSN on the next call.
+            break;
+        }
+        EnterState(dbg, EPBufferState::PBufferWritten, /*delta=*/-1);
+        info.State = EPBufferState::PBufferFlushing;
+        EnterState(dbg, EPBufferState::PBufferFlushing, /*delta=*/+1);
+        dbg.PendingFlush.pop_front();
     }
 
     const ui64 bscTabletId = AllocConfig.GetTabletId();
@@ -2383,7 +2430,8 @@ void TNbsDbgLikeLoadTablet::DoFlush(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.DDGuid[k]);
+        auto creds = NDDisk::TQueryCredentials::ToDDisk(
+            bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.DDGuid[k]);
         std::tuple<ui32, ui32, ui32> srcId{
             dbg.PBIdsPb[k].GetNodeId(),
             dbg.PBIdsPb[k].GetPDiskId(),
@@ -2398,12 +2446,6 @@ void TNbsDbgLikeLoadTablet::DoFlush(TPerDbgState& dbg) {
         for (auto& [lsn, sel] : pending[k]) {
             ev->AddSegment(sel, lsn, generation);
             batchInfo.Lsns.push_back(lsn);
-            auto& info = dbg.Lsns[lsn];
-            if (info.State == EPBufferState::PBufferWritten) {
-                EnterState(dbg, EPBufferState::PBufferWritten, /*delta=*/-1);
-                info.State = EPBufferState::PBufferFlushing;
-                EnterState(dbg, EPBufferState::PBufferFlushing, /*delta=*/+1);
-            }
         }
         const ui64 cookie = NextBatchCookie++;
         FlushInflight.emplace(cookie, std::move(batchInfo));
@@ -2495,7 +2537,9 @@ void TNbsDbgLikeLoadTablet::HandleSyncResult(
                 if (info.VChunkIndex < dbg.FlushedSlots.size() && info.Size != 0) {
                     dbg.FlushedSlots[info.VChunkIndex].Set(info.OffsetInVChunk / info.Size);
                 }
-                dbg.ReadyToErase.insert(lsn);
+                if (dbg.ReadyToErase.insert(lsn).second) {
+                    dbg.PendingErase.push_back(lsn);
+                }
                 const ui64 flushMs = ((info.WrittenAt != NActors::TMonotonic::Zero())
                     ? (now - info.WrittenAt).MilliSeconds()
                     : (now - info.WriteStart).MilliSeconds());
@@ -2508,6 +2552,17 @@ void TNbsDbgLikeLoadTablet::HandleSyncResult(
             }
         } else {
             info.FlushRequested.reset(k);
+            // Reopen this host's flush and requeue so DoFlush retries it. The
+            // LSN was moved to PBufferFlushing and popped from PendingFlush when
+            // fully requested; move it back to PBufferWritten so DoFlush (which
+            // only processes PBufferWritten) picks it up again. The guard makes
+            // repeated per-host failures idempotent.
+            if (info.State == EPBufferState::PBufferFlushing) {
+                EnterState(dbg, EPBufferState::PBufferFlushing, /*delta=*/-1);
+                info.State = EPBufferState::PBufferWritten;
+                EnterState(dbg, EPBufferState::PBufferWritten, /*delta=*/+1);
+            }
+            dbg.PendingFlush.push_back(lsn);
             if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Flush)]; c.Retries) {
                 c.Retries->Inc();
             }
@@ -2567,15 +2622,24 @@ void TNbsDbgLikeLoadTablet::DoErase(TPerDbgState& dbg) {
     std::array<ui32, kHostsPerDbgMax> count = {};
 
     const ui32 hostsPerDbg = HostsPerDbg();
-    for (ui64 lsn : dbg.ReadyToErase) {
+    ui32 saturated = 0;
+
+    // Consume only actionable LSNs from the FIFO work queue instead of scanning
+    // all of ReadyToErase. An LSN stays at the front until every erase-target
+    // host has been erase-requested, then it transitions to PBufferErasing and
+    // is popped. It is dropped from ReadyToErase later, once erases confirm.
+    while (!dbg.PendingErase.empty() && saturated < hostsPerDbg) {
+        const ui64 lsn = dbg.PendingErase.front();
         auto it = dbg.Lsns.find(lsn);
         if (it == dbg.Lsns.end()) {
+            dbg.PendingErase.pop_front();
             continue;
         }
         TWriteInfo& info = it->second;
         if (!info.EraseTarget.any()) {
             info.EraseTarget |= info.WriteConfirmed;
         }
+        bool fullyScheduled = true;
         for (ui32 k = 0; k < hostsPerDbg; ++k) {
             if (!info.EraseTarget.test(k)) {
                 continue;
@@ -2584,11 +2648,18 @@ void TNbsDbgLikeLoadTablet::DoErase(TPerDbgState& dbg) {
                 continue;
             }
             if (count[k] >= batch) {
+                fullyScheduled = false;
                 continue;
             }
             info.EraseRequested.set(k);
-            ++count[k];
+            if (++count[k] == batch) {
+                ++saturated;
+            }
             pending[k].push_back(lsn);
+        }
+        if (!fullyScheduled) {
+            // A host batch filled mid-LSN; resume this LSN on the next call.
+            break;
         }
         if (info.State == EPBufferState::PBufferFlushed
             && info.EraseTarget.any()
@@ -2598,6 +2669,7 @@ void TNbsDbgLikeLoadTablet::DoErase(TPerDbgState& dbg) {
             info.State = EPBufferState::PBufferErasing;
             EnterState(dbg, EPBufferState::PBufferErasing, /*delta=*/+1);
         }
+        dbg.PendingErase.pop_front();
     }
 
     const ui64 bscTabletId = AllocConfig.GetTabletId();
@@ -2606,7 +2678,8 @@ void TNbsDbgLikeLoadTablet::DoErase(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[k]);
+        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+            bscTabletId, generation, dbg.PBGuid[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
@@ -2689,6 +2762,9 @@ void TNbsDbgLikeLoadTablet::HandleEraseResult(
             }
         } else {
             info.EraseRequested.reset(k);
+            // Reopen erase work for this host; re-queue so DoErase retries it
+            // (the LSN was popped from PendingErase once fully requested).
+            dbg.PendingErase.push_back(lsn);
             if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Erase)]; c.SubReplyErr) {
                 c.SubReplyErr->Inc();
             }
@@ -2788,7 +2864,8 @@ void TNbsDbgLikeLoadTablet::BestEffortEraseAll(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[k]);
+        auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+            bscTabletId, generation, dbg.PBGuid[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
@@ -2999,44 +3076,10 @@ void TNbsDbgLikeLoadTablet::HandleConfigureTablet(
 }
 
 void TNbsDbgLikeLoadTablet::HandleUpdateMonitoring(
-    NKikimr::TEvUpdateMonitoring::TPtr&, const TActorContext& ctx)
+    NKikimr::TEvUpdateMonitoring::TPtr&, const TActorContext&)
 {
     Schedule(TDuration::MilliSeconds(NKikimr::MonitoringUpdateCycleMs),
         new NKikimr::TEvUpdateMonitoring);
-    const NActors::TMonotonic now = ctx.Monotonic();
-    ui64 globalOldest = 0;
-    ui64 globalOldestAge = 0;
-    for (auto& d : DbgStates) {
-        if (d.Lsns.empty()) {
-            if (d.Counters.Lsns.OldestLsn) {
-                d.Counters.Lsns.OldestLsn->Set(0);
-            }
-            if (d.Counters.Lsns.OldestLsnAgeMs) {
-                d.Counters.Lsns.OldestLsnAgeMs->Set(0);
-            }
-            continue;
-        }
-        const auto& [lsn, info] = *d.Lsns.begin();
-        const ui64 age = (now - info.WriteStart).MilliSeconds();
-        if (d.Counters.Lsns.OldestLsn) {
-            d.Counters.Lsns.OldestLsn->Set(lsn);
-        }
-        if (d.Counters.Lsns.OldestLsnAgeMs) {
-            d.Counters.Lsns.OldestLsnAgeMs->Set(age);
-        }
-        if (globalOldest == 0 || lsn < globalOldest) {
-            globalOldest = lsn;
-        }
-        if (age > globalOldestAge) {
-            globalOldestAge = age;
-        }
-    }
-    if (RootCnt.Lsns.OldestLsn) {
-        RootCnt.Lsns.OldestLsn->Set(globalOldest);
-    }
-    if (RootCnt.Lsns.OldestLsnAgeMs) {
-        RootCnt.Lsns.OldestLsnAgeMs->Set(globalOldestAge);
-    }
 }
 
 void TNbsDbgLikeLoadTablet::InitWorkerCounters(const TActorContext& ctx) {

@@ -490,7 +490,8 @@ private:
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
             name == "KqpReadTable" ||
-            name == "MultiHoppingCore") {
+            name == "MultiHoppingCore" ||
+            name == "DqWatermarkGenerator") {
             PatternNodes->SuitableForCache = false;
         }
 

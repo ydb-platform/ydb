@@ -57,6 +57,7 @@ public:
     bool StreamingTopicsReadByDefault = true;
     bool UseYtflowEngine = false;
     bool EnableTopicsPredicatePushdown = false;
+    bool EnablePqConstraintsTransformer = false;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

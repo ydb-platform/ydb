@@ -367,6 +367,66 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(queryWithOldGeneration, TReplyStatus::SESSION_MISMATCH);
     }
 
+    Y_UNIT_TEST(ConnectSessionSeqNoRules) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(2, 2);
+
+        NDDisk::TQueryCredentials seq1 = NDDisk::TQueryCredentials::ToDDisk(12, 4, 1, std::nullopt);
+        auto seq1Connect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvConnect(seq1));
+        AssertStatus(seq1Connect, TReplyStatus::OK);
+        seq1.DDiskInstanceGuid = seq1Connect->Get()->Record.GetDDiskInstanceGuid();
+
+        NDDisk::TQueryCredentials obsoleteSeq = seq1;
+        obsoleteSeq.DDiskSessionSeqNo = 0;
+        auto obsoleteConnect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvConnect(obsoleteSeq));
+        AssertStatus(obsoleteConnect, TReplyStatus::BLOCKED);
+
+        NDDisk::TQueryCredentials seq2 = seq1;
+        seq2.DDiskSessionSeqNo = 2;
+        auto seq2Connect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvConnect(seq2));
+        AssertStatus(seq2Connect, TReplyStatus::OK);
+        seq2.DDiskInstanceGuid = seq2Connect->Get()->Record.GetDDiskInstanceGuid();
+
+        auto oldSessionRead = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvRead(seq1, {0, 0, BlockSize}, {true}));
+        AssertStatus(oldSessionRead, TReplyStatus::SESSION_MISMATCH);
+
+        auto newSessionRead = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvRead(seq2, {0, 0, BlockSize}, {true}));
+        AssertStatus(newSessionRead, TReplyStatus::OK);
+
+        auto internalRead = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                NDDisk::TQueryCredentials::ForInternal(12, 4, std::nullopt),
+                {0, 0, BlockSize},
+                {true}));
+        AssertStatus(internalRead, TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(PersistentBufferCredentialsSkipSessionSeqNo) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(2, 3);
+
+        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ToPersistentBuffer(12, 4, std::nullopt);
+        auto connect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvConnect(creds));
+        AssertStatus(connect, TReplyStatus::OK);
+        creds.DDiskInstanceGuid = connect->Get()->Record.GetDDiskInstanceGuid();
+
+        NDDisk::TQueryCredentials mismatchedSeq = creds;
+        mismatchedSeq.DDiskSessionSeqNo = 42;
+        auto disconnect = std::make_unique<NDDisk::TEvDisconnect>();
+        mismatchedSeq.Serialize(disconnect->Record.MutableCredentials());
+        auto disconnectResult = SendToDDiskAndWait<NDDisk::TEvDisconnectResult>(
+            ctx, disk.PBServiceId, disconnect.release());
+        AssertStatus(disconnectResult, TReplyStatus::OK);
+    }
+
     Y_UNIT_TEST(IncorrectRequestValidation) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(3, 1);

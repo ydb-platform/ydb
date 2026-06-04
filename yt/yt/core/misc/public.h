@@ -21,6 +21,12 @@ class RepeatedPtrField;
 
 class Timestamp;
 
+template <class TProtobufEnum>
+const EnumDescriptor* GetEnumDescriptor();
+
+template <class TEnum>
+struct is_proto_enum;
+
 namespace io {
 
 class ZeroCopyInputStream;

@@ -6,7 +6,7 @@
 
 namespace NKikimr::NKqp {
 
-NYql::NNodes::TExprBase KqpRewriteEquiJoin(
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     NYql::NDq::EHashJoinMode mode,
     bool useCBO,
@@ -15,7 +15,7 @@ NYql::NNodes::TExprBase KqpRewriteEquiJoin(
     TKqpStatsStore& kqpStats,
     const TOptimizerHints& hints = {});
 
-NYql::NNodes::TExprBase KqpRewriteEquiJoin(
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     NYql::NDq::EHashJoinMode mode,
     bool useCBO,

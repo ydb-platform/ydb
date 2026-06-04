@@ -85,7 +85,7 @@ TString TBordersFlowController::DebugString() const {
     sb << "ReadyBorders=" << ReadyBorders.size() << ";";
     sb << "BordersQueue=" << BordersQueue.size() << ";";
     sb << "Reverse=" << IsReversed() << ";";
-    sb << "InFlight=" << IsInflight << ";";
+    sb << "MergeInflight=" << IsInflight << ";";
     sb << "}";
     return sb;
 }
@@ -142,10 +142,12 @@ void TBordersFlowController::DrainQueue() {
     const std::shared_ptr<TMergeBorders> task = std::make_shared<TMergeBorders>(ev.Get()->Recipient, MergeContext, ev, readyBorders);
     NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
     IsInflight = true;
+    Counters->OnMergeInflight(1);
 }
 
 void TBordersFlowController::OnReadyMergeBorders() {
     IsInflight = false;
+    Counters->OnMergeInflight(-1);
     DrainQueue();
 }
 

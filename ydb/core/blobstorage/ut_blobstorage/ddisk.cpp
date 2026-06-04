@@ -709,13 +709,13 @@ Y_UNIT_TEST_SUITE(DDisk) {
         info = f.GetPBInfo(false, true);
         newFreeSectors = info->Get()->FreeSectors;
         UNIT_ASSERT_EQUAL(newFreeSectors, freeSectors + 39 * 500 - 1);
-        UNIT_ASSERT_EQUAL(3800, info->Get()->TabletInfos[0].FastErasesCount);
+        UNIT_ASSERT_EQUAL(3900, info->Get()->TabletInfos[0].FastErasesCount);
 
         //move barrier
         f.MoveBarrier(2000);
         f.BatchErasePB(100, true);
         info = f.GetPBInfo(false, true);
-        UNIT_ASSERT_EQUAL(1900, info->Get()->TabletInfos[0].FastErasesCount);
+        UNIT_ASSERT_EQUAL(2000, info->Get()->TabletInfos[0].FastErasesCount);
     }
 
     Y_UNIT_TEST(PersistentBufferFillAndRead) {

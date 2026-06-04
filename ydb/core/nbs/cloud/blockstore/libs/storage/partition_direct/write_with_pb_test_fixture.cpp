@@ -52,20 +52,20 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
         Y_UNUSED(coordinatorHostIndex, replyTimeout, guardedSglist, traceId);
 
         UNIT_ASSERT_VALUES_EQUAL(UserLsn, lsn);
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
         UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
 
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.PBufferHosts.GetPrimary().Get(hostIndexes[0]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[0]));
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.PBufferHosts.GetPrimary().Get(hostIndexes[1]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[1]));
         UNIT_ASSERT_EQUAL(
             true,
-            VChunkConfig.PBufferHosts.GetPrimary().Get(hostIndexes[2]));
+            VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[2]));
 
         callback(CreateOkResponse());
     };
@@ -119,7 +119,7 @@ TWriteWithPbTestFixture::GetDirectWriteHandlerHanging()
     {
         Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
 
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
         TPromise<TDBGWriteBlocksResponse> response(

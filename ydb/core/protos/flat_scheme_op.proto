@@ -1310,6 +1310,13 @@ message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
+// Control op for a BackupCollection full backup (runs first in the CCT decomposition).
+message TCreateFullBackupOp {
+    // Total CopyTable sub-ops expected (base tables + index impl tables).
+    // Used to detect when the control op is fully terminal.
+    optional uint32 ExpectedItemCount = 1;
+}
+
 message TTruncateTable {
     optional string TableName = 1;
 }
@@ -2082,6 +2089,8 @@ message TModifyScheme {
     optional TTruncateTable TruncateTable = 92;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 93;
+
+    optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
     // Some entries are grouped by semantics, so are out of order
 }

@@ -15,6 +15,20 @@ struct TOracleMock: public IOracle
     TDuration PBufferReplyTimeout;
     EWriteMode WriteMode = EWriteMode::DirectPBuffersFilling;
 
+    void OnRequestStarted(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+    void OnRequestSucceeded(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now,
+        TDuration executionTime) override;
+    void OnRequestFailed(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         std::span<const THostIndex> hostIndexes,
         EOperation operation) const override;
@@ -23,6 +37,8 @@ struct TOracleMock: public IOracle
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
     [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
+
+    [[nodiscard]] TString Dump() const override;
 };
 
 class TDirectBlockGroupMock: public IDirectBlockGroup

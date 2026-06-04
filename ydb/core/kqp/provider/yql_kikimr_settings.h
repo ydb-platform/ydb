@@ -42,6 +42,7 @@ public:
     NCommon::TConfSetting<bool, Static> _KqpEnableSpilling;
     NCommon::TConfSetting<bool, Static> _KqpDisableLlvmForUdfStages;
     NCommon::TConfSetting<ui64, Static> _KqpYqlCombinerMemoryLimit;
+    NCommon::TConfSetting<bool, Static> _KqpYqlConstraintsTransformerEnabled;
 
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, Static> KqpPushOlapProcess;
@@ -93,6 +94,7 @@ public:
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
     NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
+    NCommon::TConfSetting<bool, Static> OptValidateStreamingConstraints;
 
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, Static> CostBasedOptimization;
@@ -114,6 +116,7 @@ public:
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
+    NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
 
     /* Internal CBO constants for tuning */
     NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
@@ -253,6 +256,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetDqHashOperatorsUseBlocks() const;
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
+    bool GetUseKqpTasksGraphV2() const;
 };
 
-}
+} // namespace NYql

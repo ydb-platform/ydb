@@ -2522,6 +2522,60 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    // Control op row for a trackable full backup. BackupCollectionPathId pair
+    // lets reboot rebuild BCPathToFullBackup from non-terminal rows.
+    struct FullBackups : Table<136> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<2, NScheme::NTypeIds::Uint8> {};
+
+        struct DomainPathOwnerId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+
+        struct UserSID : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct StartTime : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct FinalIssues : Column<8, NScheme::NTypeIds::Utf8> {};
+
+        struct BackupCollectionPathOwnerId : Column<9, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct BackupCollectionLocalPathId : Column<10, NScheme::NTypeIds::Uint64> {};
+
+        // Total expected items (base tables + non-omitted index impl tables).
+        // Source-of-truth for item count after reboot; item rows are written lazily.
+        struct ExpectedItemCount : Column<11, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<
+            Id,
+            State,
+            DomainPathOwnerId,
+            DomainPathId,
+            UserSID,
+            StartTime,
+            EndTime,
+            FinalIssues,
+            BackupCollectionPathOwnerId,
+            BackupCollectionLocalPathId,
+            ExpectedItemCount
+        >;
+    };
+
+    // Per-item row of a full backup. Key includes destination TPathId, not sub-op TxId.
+    struct FullBackupItems : Table<137> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathOwnerId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct PathId : Column<3, NScheme::NTypeIds::Uint64> {};
+
+        struct State : Column<4, NScheme::NTypeIds::Uint8> {};
+
+        using TKey = TableKey<Id, PathOwnerId, PathId>;
+        using TColumns = TableColumns<
+            Id,
+            PathOwnerId,
+            PathId,
+            State
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2655,7 +2709,9 @@ struct Schema : NIceDb::Schema {
         SharedShards,
         IncrementalRestoreItem,
         TablePartitionsByShardIdx,
-        TablePartitionStatsByShardIdx
+        TablePartitionStatsByShardIdx,
+        FullBackups,
+        FullBackupItems
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

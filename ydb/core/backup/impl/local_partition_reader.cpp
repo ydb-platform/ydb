@@ -76,8 +76,14 @@ private:
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
             return;
         }
-        Y_VERIFY_S(record.GetErrorCode() == NPersQueue::NErrorCode::OK, "Unimplemented!");
-        Y_VERIFY_S(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdGetClientOffsetResult(), "Unimplemented!");
+        if (record.GetErrorCode() != NPersQueue::NErrorCode::OK
+                || !record.HasPartitionResponse()
+                || !record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
+            // Retry via worker
+            LOG_W("HandleInit unexpected response, leaving: " << ev->Get()->ToString());
+            Y_ABORT_UNLESS(Worker, "Worker is always set before any PQ response: the offset request is only sent from the handshake handler");
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+        }
         const auto& resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
         Offset = resp.GetOffset();
         SentOffset = Offset;

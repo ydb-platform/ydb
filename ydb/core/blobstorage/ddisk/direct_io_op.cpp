@@ -112,7 +112,20 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " chunkIdx=" << ChunkIdx
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
-        YDB_LOG_CTX_ERROR(*actorSystem, "",
+        YDB_LOG_CTX_ERROR(*actorSystem, "On complete reply error",
+            {"io_uring ", opName},
+            {"errno", (-result)},
+            {"errno_text", strerror(-result)},
+            {"diskOffset", GetDiskOffset()},
+            {"totalSize", GetTotalSize()},
+            {"iovLen", GetOperationBytes()},
+            {"bufAddr", Hex(bufAddr)},
+            {"bufAligned4k", (int)(bufAddr % MinBlockSize == 0)},
+            {"offsetAligned4k", (int)(GetDiskOffset() % MinBlockSize == 0)},
+            {"sizeAligned4k", (int)(GetOperationBytes() % MinBlockSize == 0)},
+            {"chunkIdx", ChunkIdx},
+            {"chunkOffset", ChunkOffsetInBytes},
+            {"DDiskId", DDiskId},
             {"reason", reason});
         Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
         Y_UNUSED(guard.release());

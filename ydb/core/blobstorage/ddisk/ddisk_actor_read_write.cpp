@@ -73,7 +73,7 @@ namespace NKikimr::NDDisk {
                     << " dataSize# " << data.size()
                     << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
 
-                YDB_LOG_CTX_COMP_DEBUG(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "",
+                YDB_LOG_CTX_COMP_DEBUG(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "Send reply",
                     {"DDiskId", DDiskId},
                     {"Str", ss.Str()});
 

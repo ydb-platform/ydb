@@ -2,6 +2,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/stream/output.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_OTHER
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -73,10 +75,7 @@ namespace NKikimr {
         if (msg) {
             ctx.Send(PDiskCtx->PDiskId, msg.release());
 
-            LOG_DEBUG(ctx, BS_VDISK_OTHER,
-                      VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: "
-                             "update pdisk scheduler weights: msg# %s freshWeightStatus# %s",
-                             msg->ToString().data(), status.ToString().data()));
+            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: " "update pdisk scheduler weights: msg# %s freshWeightStatus# %s", msg->ToString().data(), status.ToString().data()));
         }
         // calculate new value
         const bool newVal = StopPuts();
@@ -92,9 +91,7 @@ namespace NKikimr {
         NActors::NLog::EPriority pri = res.Status == NKikimrProto::OK ?
                 NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
 
-        LOG_LOG(ctx, pri, BS_VDISK_OTHER,
-                VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: "
-                       "response from Yard: msg# %s", res.ToString().data()));
+        YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: " "response from Yard: msg# %s", res.ToString().data()));
     }
 
     void TDynamicPDiskWeightsManager::RenderHtml(IOutputStream &str) const {

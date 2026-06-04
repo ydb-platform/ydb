@@ -3,6 +3,8 @@
 #include <optional>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
+
 namespace NKikimr {
 
     void TScrubCoroImpl::ScrubHugeBlobs() {
@@ -10,14 +12,16 @@ namespace NKikimr {
         THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, false> heapIt(&iter);
         if (State->HasBlobId()) {
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(State->GetBlobId());
-            STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS19, VDISKP(LogPrefix, "resuming huge blob scrubbing"),
-                (Id, id));
+            YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "resuming huge blob scrubbing"),
+                {"Marker", "VDS19"},
+                {"Id", id});
             heapIt.Seek(id);
             if (heapIt.Valid() && heapIt.GetCurKey() == id) {
                 heapIt.Prev(); // skip already processed blob
             }
         } else {
-            STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS20, VDISKP(LogPrefix, "starting huge blob scrubbing"));
+            YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "starting huge blob scrubbing"),
+                {"Marker", "VDS20"});
             heapIt.SeekToLast();
         }
 

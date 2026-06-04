@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLCOMP
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -28,9 +30,10 @@ namespace NKikimr {
             Job.Work();
             auto endTime = TAppData::TimeProvider->Now();
 
-            LOG_INFO_S(ctx, NKikimrServices::BS_HULLCOMP, VCtx->VDiskLogPrefix
-                    << PDiskSignatureForHullDbKey<TKey>().ToString().data()
-                    << ": FreshAppendix Compaction Job finished: duration# " << (endTime - startTime));
+            YDB_LOG_CTX_INFO(ctx, ": FreshAppendix Compaction Job finished:",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"data", PDiskSignatureForHullDbKey<TKey>().ToString().data()},
+                {"duration", (endTime - startTime)});
 
             ctx.Send(Recipient, new TFreshAppendixCompactionDone(std::move(Job)));
             TThis::Die(ctx);

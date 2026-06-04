@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
+
 using namespace NKikimrServices;
 using namespace NKikimr::NSync;
 
@@ -643,8 +645,7 @@ namespace NKikimr {
             // Ask Guid from other VDisks
             ////////////////////////////////////////////////////////////////////////
             void Bootstrap(const TActorContext &ctx) {
-                LOG_INFO(ctx, BS_SYNCER,
-                         VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: START"));
+                YDB_LOG_CTX_INFO(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: START"));
                 SUBLOGLINE(NotifyId, ctx, { stream << "GuidRecovery: START"; });
 
                 // run Obtain VDisk Guid proxy for every VDisk in the group
@@ -709,9 +710,7 @@ namespace NKikimr {
                     auto pri = NActors::NLog::PRI_INFO;
                     if (Decision->BadDecision())
                         pri = NActors::NLog::PRI_ERROR;
-                    LOG_LOG(ctx, pri, BS_SYNCER,
-                            VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s",
-                                  Decision->ToString().data()));
+                    YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s", Decision->ToString().data()));
                     SUBLOGLINE(NotifyId, ctx, {
                         stream << "GuidRecovery: DECISION: " << Decision->ToString();
                     });
@@ -763,8 +762,7 @@ namespace NKikimr {
                 auto pri = NActors::NLog::PRI_INFO;
                 if (outcome.BadDecision())
                     pri = NActors::NLog::PRI_ERROR;
-                LOG_LOG(ctx, pri, BS_SYNCER,
-                        VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: FINISH: %s", outcome.ToString().data()));
+                YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: FINISH: %s", outcome.ToString().data()));
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: FINISH: " << outcome.ToString();
                 });
@@ -779,8 +777,7 @@ namespace NKikimr {
             void FirstRunPhase(const TActorContext &ctx, EFirstRunStep f) {
                 if (ReadOnly) {
                     const TString explanation = "unable to establish new GUID while in read-only";
-                    LOG_WARN(ctx, BS_SYNCER,
-                        VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: %s", explanation.data()));
+                    YDB_LOG_CTX_WARN(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: %s", explanation.data()));
                     *Decision = TDecision::Inconsistency(explanation);
                     Finish(ctx, *Decision);
                     return;

@@ -118,24 +118,13 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext& ctx) {
             TThis::Become(&TThis::StateFunc);
-            LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                    VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "sending %s lsn# %" PRIu64 " %s",
-                        THullCommitFinished::TypeToString(NotifyType), CommitMsg->Lsn, CommitMsg->ToString().data()));
+            YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "sending %s lsn# %" PRIu64 " %s", THullCommitFinished::TypeToString(NotifyType), CommitMsg->Lsn, CommitMsg->ToString().data()));
 
             if (CommitRecord.CommitChunks || CommitRecord.DeleteChunks) {
-                LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
-                        VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "commit %s signature# %s CommitChunks# %s"
-                            " DeleteChunks# %s", THullCommitFinished::TypeToString(NotifyType),
-                            PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                            FormatList(CommitRecord.CommitChunks).data(),
-                            FormatList(CommitRecord.DeleteChunks).data()));
+                YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_SKELETON, VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "commit %s signature# %s CommitChunks# %s" " DeleteChunks# %s", THullCommitFinished::TypeToString(NotifyType), PDiskSignatureForHullDbKey<TKey>().ToString().data(), FormatList(CommitRecord.CommitChunks).data(), FormatList(CommitRecord.DeleteChunks).data()));
             }
 
-            LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
-                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s RemovedHugeBlobs# %s",
-                            Ctx->PDiskCtx->PDiskIdString.data(), LsnSeg.ToString().data(),
-                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data(),
-                            Metadata.RemovedHugeBlobs.ToString().data()));
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s RemovedHugeBlobs# %s", Ctx->PDiskCtx->PDiskIdString.data(), LsnSeg.ToString().data(), THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data(), Metadata.RemovedHugeBlobs.ToString().data()));
 
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
         }
@@ -166,12 +155,9 @@ namespace NKikimr {
             const auto& results = msg->Results;
             Y_DEBUG_ABORT_UNLESS(results.size() == 1 && results.front().Lsn == LsnSeg.Last);
 
-            LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s lsn# %s done wId# %" PRIu64,
-                        THullCommitFinished::TypeToString(NotifyType), LsnSeg.ToString().data(), WId));
+            YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s lsn# %s done wId# %" PRIu64, THullCommitFinished::TypeToString(NotifyType), LsnSeg.ToString().data(), WId));
 
-            LOG_INFO(ctx, NKikimrServices::BS_HULLRECS,
-                    VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s", DebugMessage.Str().data()));
+            YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s", DebugMessage.Str().data()));
 
             // advance LSN
             LevelIndex->CurEntryPointLsn = LsnSeg.Last;

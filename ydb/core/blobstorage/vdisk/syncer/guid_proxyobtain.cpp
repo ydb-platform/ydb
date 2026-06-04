@@ -3,6 +3,8 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -24,9 +26,7 @@ namespace NKikimr {
             auto guidInfo = record.GetReadInfo();
             auto guid = guidInfo.GetGuid();
             auto state = guidInfo.GetState();
-            LOG_DEBUG(ctx, BS_SYNCER,
-                      VDISKP(VCtx->VDiskLogPrefix, "TObtainVDiskGuidProxy: SUCCESS; vdisk# %s guid# %" PRIu64,
-                            fromVDisk.ToString().data(), guid));
+            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TObtainVDiskGuidProxy: SUCCESS; vdisk# %s guid# %" PRIu64, fromVDisk.ToString().data(), guid));
 
             ctx.Send(NotifyId, new TEvVDiskGuidObtained(fromVDisk, guid, state));
 

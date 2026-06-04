@@ -10,6 +10,8 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOGCUTTER
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -66,19 +68,12 @@ namespace NKikimr {
 
             auto update = [&](ui64 &target, TInstant &time, const char *name) {
                 if (msg->LastKeepLsn < target) {
-                    LOG_CRIT(ctx, NKikimrServices::BS_LOGCUTTER,
-                             VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
-                                "Log rollback component# %s current# %" PRIu64
-                                " new# %" PRIu64, name, target, msg->LastKeepLsn));
+                    YDB_LOG_CTX_CRIT(ctx, VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix, "Log rollback component# %s current# %" PRIu64 " new# %" PRIu64, name, target, msg->LastKeepLsn));
                 } else {
                     target = msg->LastKeepLsn;
                     time = msg->GenerationTime;
 
-                    LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
-                            VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
-                                "UPDATED: Component# %s Hull# %" PRIu64 " SyncLog# %" PRIu64
-                                " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
-                                name, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
+                    YDB_LOG_CTX_DEBUG(ctx, VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix, "UPDATED: Component# %s Hull# %" PRIu64 " SyncLog# %" PRIu64 " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks", name, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
                 }
             };
 
@@ -153,11 +148,7 @@ namespace NKikimr {
                 WriteInProgress = true;
                 FirstLsnToKeepLastWritten = curLsn;
 
-                LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
-                        VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
-                            "CUT: Lsn# %" PRIu64 " Hull# %" PRIu64 " SyncLog# %" PRIu64
-                            " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
-                            curLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix, "CUT: Lsn# %" PRIu64 " Hull# %" PRIu64 " SyncLog# %" PRIu64 " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks", curLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
             }
         }
 

@@ -609,15 +609,15 @@ namespace NKikimr {
 
                 const TLogoBlobID& id = Key.LogoBlobID();
                 if (!TBlobStorageGroupType::IsCrcModeValid(id.CrcMode())) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_SKELETON, HullCtx->VCtx->VDiskLogPrefix
-                        << "invalid CrcMode in BlobId found during compaction"
-                        << " BlobId# " << id.ToString()
-                        << " KeepIndex# " << keep.KeepIndex
-                        << " KeepData# " << keep.KeepData
-                        << " SubsKeep# " << subsKeep
-                        << " SubsDoNotKeep# " << subsDoNotKeep
-                        << " WholeKeep# " << wholeKeep
-                        << " WholeDoNotKeep# " << wholeDoNotKeep);
+                    YDB_LOG_COMP_CRIT(NKikimrServices::BS_SKELETON, "invalid CrcMode in BlobId found during compaction",
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"BlobId", id.ToString()},
+                        {"KeepIndex", keep.KeepIndex},
+                        {"KeepData", keep.KeepData},
+                        {"SubsKeep", subsKeep},
+                        {"SubsDoNotKeep", subsDoNotKeep},
+                        {"WholeKeep", wholeKeep},
+                        {"WholeDoNotKeep", wholeDoNotKeep});
                 }
 
                 IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);

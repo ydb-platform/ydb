@@ -7,7 +7,7 @@ namespace NKikimr {
     static TLogger ActorSystemLogger(TActorSystem *as) {
         Y_ABORT_UNLESS(as);
         auto logger = [as] (NLog::EPriority p, NLog::EComponent c, const TString &s) {
-            LOG_LOG(*as, p, c, s);
+            YDB_LOG_CTX_COMP(*as, p, c, s);
         };
         return logger;
     }
@@ -88,10 +88,7 @@ namespace NKikimr {
 
     bool TVDiskContext::CheckPDiskResponseReadable(const TActorContext &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message) {
         if (!ev.Data.IsReadable()) {
-            LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                    VDISKP(VDiskLogPrefix,
-                        "CheckPDiskResponseReadable: not readable chunk from PDisk: %s",
-                        FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+            YDB_LOG_CTX_COMP_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponseReadable: not readable chunk from PDisk: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
             return false;
         }
         return true;

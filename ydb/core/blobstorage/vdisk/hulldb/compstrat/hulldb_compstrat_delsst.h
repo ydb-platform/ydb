@@ -38,13 +38,7 @@ namespace NKikimr {
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
-                            NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: DelSst: action# %s timeSpent# %s sstsToDelete# %" PRIu32,
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(),
-                                SstToDelete));
+                    YDB_LOG_CTX_COMP(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: DelSst: action# %s timeSpent# %s sstsToDelete# %" PRIu32, PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data(), SstToDelete));
                 }
 
                 return action;
@@ -68,8 +62,10 @@ namespace NKikimr {
                     if (p.Level > 0 && ratio && ratio->CanDeleteSst()) {
                         action = ActDeleteSsts;
                         if (HullCtx->VCtx->ActorSystem) {
-                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                HullCtx->VCtx->VDiskLogPrefix << " TStrategyDelSst going to delete SST# " << p.ToString() << " because of ration# " << ratio->ToString());
+                            YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyDelSst going to delete because of",
+                                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                {"SST", p.ToString()},
+                                {"ration", ratio->ToString()});
                         }
                         Task->DeleteSsts.DeleteSst(p.Level, p.SstPtr);
                         SstToDelete++;

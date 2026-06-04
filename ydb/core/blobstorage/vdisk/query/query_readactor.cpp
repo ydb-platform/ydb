@@ -5,6 +5,8 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_GET
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -48,8 +50,7 @@ namespace NKikimr {
 
                 msg->BlobId = it->HugeBlobId;
 
-                LOG_DEBUG(ctx, BS_VDISK_GET,
-                    VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
 
                 // send request
                 TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
@@ -60,10 +61,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx) {
-            LOG_DEBUG(ctx, BS_VDISK_GET,
-                VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD FINISHED(%p): actualReadN# %" PRIu32
-                    " origReadN# %" PRIu32, this, ui32(Result->GlueReads.size()),
-                    ui32(Result->DiskDataItemPtrs.size())));
+            YDB_LOG_CTX_DEBUG(ctx, VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD FINISHED(%p): actualReadN# %" PRIu32 " origReadN# %" PRIu32, this, ui32(Result->GlueReads.size()), ui32(Result->DiskDataItemPtrs.size())));
             ctx.Send(NotifyID, new TEvents::TEvCompleted);
             Span.EndOk();
             Die(ctx);

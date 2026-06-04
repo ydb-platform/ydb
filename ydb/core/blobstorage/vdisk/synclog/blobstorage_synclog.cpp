@@ -13,6 +13,8 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCLOG
+
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
 
@@ -134,12 +136,7 @@ namespace NKikimr {
                 // check that the disk is from this group
                 if (!SelfVDiskId.SameGroupAndGeneration(sourceVDisk) ||
                     !SelfVDiskId.SameDisk(targetVDisk)) {
-                    LOG_WARN(ctx, BS_SYNCLOG,
-                              VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                    "Handle(TEvSyncLogRead): check vdisk id failed; "
-                                    "SelfVDiskId# %s sourceVDisk# %s targetVDisk# %s",
-                                    SelfVDiskId.ToString().data(), sourceVDisk.ToString().data(),
-                                    targetVDisk.ToString().data()));
+                    YDB_LOG_CTX_WARN(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): check vdisk id failed; " "SelfVDiskId# %s sourceVDisk# %s targetVDisk# %s", SelfVDiskId.ToString().data(), sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
 
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
@@ -154,11 +151,7 @@ namespace NKikimr {
                 if (NeighborsPtr->IsLocked(sourceVDisk)) {
                     // we already have a lock set by this vdisk, i.e. read request up and running;
                     // reply with error, it's an error from their side
-                    LOG_ERROR(ctx, BS_SYNCLOG,
-                              VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                    "Handle(TEvSyncLogRead): locked; "
-                                    "sourceVDisk# %s targetVDisk# %s",
-                                    sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
+                    YDB_LOG_CTX_ERROR(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): locked; " "sourceVDisk# %s targetVDisk# %s", sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
 
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
@@ -170,13 +163,7 @@ namespace NKikimr {
                 // check IncarnationGuid and reply with correct (IncarnationGuid, DbBirthLsn)
                 // if it has been changed
                 if (VDiskIncarnationGuid != oldSyncState.Guid) {
-                    LOG_WARN(ctx, BS_SYNCLOG,
-                             VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                    "Handle(TEvSyncLogRead): FULL_RECOVER(unequal guid); "
-                                   "sourceVDisk# %s targetVDisk# %s oldSyncState# %s"
-                                   " DbBirthLsn# %" PRIu64,
-                                   sourceVDisk.ToString().data(), targetVDisk.ToString().data(),
-                                   oldSyncState.ToString().data(), GetDbBirthLsn()));
+                    YDB_LOG_CTX_WARN(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): FULL_RECOVER(unequal guid); " "sourceVDisk# %s targetVDisk# %s oldSyncState# %s" " DbBirthLsn# %" PRIu64, sourceVDisk.ToString().data(), targetVDisk.ToString().data(), oldSyncState.ToString().data(), GetDbBirthLsn()));
 
                     auto status = NKikimrProto::RESTART;
                     TSyncState syncState(VDiskIncarnationGuid, GetDbBirthLsn());
@@ -204,10 +191,7 @@ namespace NKikimr {
 
             void Handle(TEvSyncLogPut::TPtr &ev, const TActorContext &ctx) {
                 ++SlCtx->IFaceMonGroup.SyncPutMsgs();
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "Handle(TEvSyncLogPut): recs# %s",
-                                ev->Get()->GetRecs().ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogPut): recs# %s", ev->Get()->GetRecs().ToString().data()));
                 ctx.Send(ev->Forward(KeeperId));
             }
 

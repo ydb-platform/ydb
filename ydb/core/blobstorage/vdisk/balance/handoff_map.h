@@ -156,9 +156,7 @@ namespace NKikimr {
                                                                               newItem, doMerge, crash);
         }
 
-        LOG_INFO(*TlsActivationContext, NKikimrServices::BS_HANDOFF,
-                 VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                    "THandoffMap: map build: %s", Stat.ToStringBuildPlanStat().data()));
+        YDB_LOG_CTX_COMP_INFO(*TlsActivationContext, NKikimrServices::BS_HANDOFF, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "THandoffMap: map build: %s", Stat.ToStringBuildPlanStat().data()));
     }
 
     ////////////////////////////////////////////////////////////////////////////

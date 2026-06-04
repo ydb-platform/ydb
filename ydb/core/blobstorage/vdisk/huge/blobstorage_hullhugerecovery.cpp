@@ -2,6 +2,7 @@
 #include "blobstorage_hullhugeheap.h"
 #include <library/cpp/random_provider/random_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_HULLHUGE
 
 using namespace NKikimrServices;
 
@@ -400,22 +401,14 @@ namespace NKikimr {
                 const NHuge::TAllocChunkRecoveryLogRec &rec)
         {
             if (lsn > LogPos.ChunkAllocationLsn) {
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "AllocChunk apply: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeAddChunk(rec.ChunkId);
                 LogPos.ChunkAllocationLsn = lsn;
                 PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "AllocChunk skip: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -428,22 +421,14 @@ namespace NKikimr {
         {
             if (lsn > LogPos.ChunkFreeingLsn) {
                 // apply
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "FreeChunk apply(remove): %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk apply(remove): %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeRemoveChunks(rec.ChunkIds);
                 LogPos.ChunkFreeingLsn = lsn;
                 PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "FreeChunk skip: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -472,9 +457,7 @@ namespace NKikimr {
             }
             if (lsn > *logPosDelLsn) {
                 // apply
-                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
-                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn,
-                    rec.ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 for (const auto &x : rec) {
                     Heap->RecoveryModeFree(x);
                 }
@@ -487,9 +470,7 @@ namespace NKikimr {
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
-                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn,
-                    rec.ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -514,17 +495,9 @@ namespace NKikimr {
             if (lsn > LogPos.HugeBlobLoggedLsn) {
                 // apply
                 if (DeleteSlotInFlight(hugeSlot)) {
-                    LOG_DEBUG(ctx, BS_HULLHUGE,
-                              VDISKP(VCtx->VDiskLogPrefix,
-                                    "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                    "HugeBlob apply(1): rec# %s hugeSlot# %s",
-                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                    YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(1): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                 } else {
-                    LOG_DEBUG(ctx, BS_HULLHUGE,
-                              VDISKP(VCtx->VDiskLogPrefix,
-                                    "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                    "HugeBlob apply(2): rec# %s hugeSlot# %s",
-                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                    YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(2): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                     Heap->RecoveryModeAllocate(rec.DiskAddr);
                 }
                 LogPos.HugeBlobLoggedLsn = lsn;
@@ -532,11 +505,7 @@ namespace NKikimr {
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "HugeBlob skip: rec# %s hugeSlot# %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob skip: rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -567,11 +536,7 @@ namespace NKikimr {
 
             Y_VERIFY_S(logPos.EntryPointLsn == lsn, VCtx->VDiskLogPrefix);
 
-            LOG_DEBUG(ctx, BS_HULLHUGE,
-                    VDISKP(VCtx->VDiskLogPrefix,
-                        "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                        "EntryPoint: logPos# %s",
-                        Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
+            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "EntryPoint: logPos# %s", Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
 
             return TRlas(true, false);
         }
@@ -584,8 +549,7 @@ namespace NKikimr {
             SlotsInFlight.clear();
 
             Recovered = true;
-            LOG_DEBUG(ctx, BS_HULLHUGE,
-                VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
+            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
         }
 
         void THullHugeKeeperPersState::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
@@ -613,8 +577,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
-                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+                YDB_LOG_CRIT("size is not as",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"HugeSlot", hugeSlot.ToString()},
+                    {"Expected", size});
             }
             ++refcount;
         }
@@ -626,8 +592,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
-                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+                YDB_LOG_CRIT("size is not as",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"HugeSlot", hugeSlot.ToString()},
+                    {"Expected", size});
             }
             if (!--refcount) {
                 ChunkToSlotSize.erase(jt);

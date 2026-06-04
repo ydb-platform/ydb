@@ -57,10 +57,10 @@ namespace NKikimr {
         TLogoBlobID genId(Id, 0);
         hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix << "TEvVPut: reply;"
-                << " id# " << Id
-                << " msg# " << Result->ToString()
-                << " Marker# BSVSLR01");
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: reply; Marker# BSVSLR01",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"id", Id},
+            {"msg", Result->ToString()});
 
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
@@ -112,11 +112,10 @@ namespace NKikimr {
         TLogoBlobID genId(Id, 0);
         hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVMultiPut: item reply;"
-                << " id# " << Id
-                << " msg# " << Result->ToString()
-                << " Marker# BSVSLR02");
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVMultiPut: item reply; Marker# BSVSLR02",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"id", Id},
+            {"msg", Result->ToString()});
 
         Span.EndOk();
         ctx.Send(Recipient, Result.release(), 0, RecipientCookie);
@@ -162,9 +161,9 @@ namespace NKikimr {
             ctx.Send(HugeKeeperId, new TEvHullHugeBlobLogged(msg->WriteId, msg->HugeBlob, Seg.Point(), true));
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVPut: realtime# false result# " << msg->Result->ToString()
-                << " Marker# BSVSLR03");
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: realtime# false Marker# BSVSLR03",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"result", msg->Result->ToString()});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, vCtx, msg->HandleClass);
@@ -199,9 +198,9 @@ namespace NKikimr {
 
         hull.AddBlockCmd(ctx, TabletId, Gen, IssuerGuid, Seg.Point(), replySender);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BLOCK, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVBlock: result# " << Result->ToString()
-                << " Marker# BSVSLR04");
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_BLOCK, "TEvVBlock: Marker# BSVSLR04",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"result", Result->ToString()});
         SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
     }
 
@@ -225,9 +224,9 @@ namespace NKikimr {
         NKikimrBlobStorage::TEvVCollectGarbage &record = OrigEv->Get()->Record;
         hull.AddGCCmd(ctx, record, Ingress, Seg);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_GC, hull.GetHullCtx()->VCtx->VDiskLogPrefix
-                << "TEvVCollectGarbage: result# " << Result->ToString()
-                << " Marker# BSVSLR05");
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_GC, "TEvVCollectGarbage: Marker# BSVSLR05",
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"result", Result->ToString()});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});

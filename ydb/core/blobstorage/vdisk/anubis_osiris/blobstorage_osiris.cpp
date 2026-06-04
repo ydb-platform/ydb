@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -148,8 +150,7 @@ namespace NKikimr {
         friend class TActorBootstrapped<THullOsirisActor>;
 
         void Bootstrap(const TActorContext &ctx) {
-            LOG_INFO(ctx, BS_SYNCER,
-                VDISKP(HullCtx->VCtx->VDiskLogPrefix, "THullOsirisActor: START"));
+            YDB_LOG_CTX_INFO(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "THullOsirisActor: START"));
             Become(&TThis::StateFunc);
             // prepare filter
             LogoBlobFilter->BuildBarriersEssence();
@@ -173,9 +174,7 @@ namespace NKikimr {
                 for (ui8 i = v.FirstPosition(); i != v.GetSize(); i = v.NextPosition(i)) {
                     auto partId = i + 1;
                     TLogoBlobID id(lb, partId);
-                    LOG_ERROR(ctx, BS_SYNCER,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "THullOsirisActor: RESURRECT: id# %s", id.ToString().data()));
+                    YDB_LOG_CTX_ERROR(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "THullOsirisActor: RESURRECT: id# %s", id.ToString().data()));
                     ctx.Send(SkeletonId, new TEvAnubisOsirisPut(id));
                     ++InFly;
                     ++PartsResurrected;
@@ -197,10 +196,7 @@ namespace NKikimr {
 
         void FinishIfRequired(const TActorContext& ctx) {
             if (InFly == 0) {
-                LOG_ERROR(ctx, BS_SYNCER,
-                         VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                            "THullOsirisActor: FINISH: BlobsResurrected# %" PRIu64 " PartsResurrected# %" PRIu64,
-                            BlobsResurrected, PartsResurrected));
+                YDB_LOG_CTX_ERROR(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "THullOsirisActor: FINISH: BlobsResurrected# %" PRIu64 " PartsResurrected# %" PRIu64, BlobsResurrected, PartsResurrected));
                 ctx.Send(NotifyId, new TEvOsirisDone(ConfirmedLsn));
                 ctx.Send(ParentId, new TEvents::TEvGone);
                 Die(ctx);

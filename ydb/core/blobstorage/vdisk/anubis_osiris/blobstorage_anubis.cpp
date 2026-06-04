@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -168,9 +170,7 @@ namespace NKikimr {
             while (BlobsToRemove.Valid() && InFly < MaxInFly) {
                 const TLogoBlobID &id = BlobsToRemove.Get();
                 Y_VERIFY_S(id.PartId() == 0, HullCtx->VCtx->VDiskLogPrefix);
-                LOG_ERROR(ctx, BS_SYNCER,
-                          VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "TAnubisQuantumActor: DELETE: id# %s", id.ToString().data()));
+                YDB_LOG_CTX_ERROR(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TAnubisQuantumActor: DELETE: id# %s", id.ToString().data()));
                 ctx.Send(SkeletonId, new TEvAnubisOsirisPut(id));
                 ++InFly;
 
@@ -182,10 +182,7 @@ namespace NKikimr {
             // check reply and notify about error
             if (ev->Get()->Status != NKikimrProto::OK) {
                 Result.Issues.LocalWriteErrors = true;
-                LOG_ERROR(ctx, BS_SYNCER,
-                          VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "TAnubisQuantumActor: local write failed: Status# %s",
-                                NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data()));
+                YDB_LOG_CTX_ERROR(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TAnubisQuantumActor: local write failed: Status# %s", NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data()));
             }
 
             --InFly;

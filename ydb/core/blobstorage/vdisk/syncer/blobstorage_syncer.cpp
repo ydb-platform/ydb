@@ -219,9 +219,7 @@ namespace NKikimr {
 
         void StartScheduler(const TActorContext& ctx) {
             Y_ABORT_UNLESS(!SchedulerId);
-            LOG_DEBUG(ctx, BS_SYNCER,
-                VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                    "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
+            YDB_LOG_CTX_COMP_DEBUG(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
             SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId, SelfId()));
             ActiveActors.Insert(SchedulerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -269,14 +267,14 @@ namespace NKikimr {
                 case EDecision::FirstRun:
                 case EDecision::Good:
                     StandardMode(ctx);
-                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Good", SyncerCtx->PDiskCtx->PDiskIdString.data()));
+                    YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Good", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     break;
                 case EDecision::LostData:
-                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s LostData", SyncerCtx->PDiskCtx->PDiskIdString.data()));
+                    YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s LostData", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     RecoverLostData(ctx);
                     break;
                 case EDecision::Inconsistency:
-                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Inconsistency", SyncerCtx->PDiskCtx->PDiskIdString.data()));
+                    YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Inconsistency", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     InconsistentState(ctx);
                     break;
                 default:
@@ -324,9 +322,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         void RecoverLostData(const TActorContext &ctx) {
             if (SyncerCtx->Config->BaseInfo.ReadOnly) {
-                LOG_WARN(ctx, BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "Unable to recover lost data in read-only mode. Transitioning to inconsistent state."));
+                YDB_LOG_CTX_COMP_WARN(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Unable to recover lost data in read-only mode. Transitioning to inconsistent state."));
                 InconsistentState(ctx);
                 return;
             }
@@ -387,9 +383,7 @@ namespace NKikimr {
                 QueryStartupDataSyncToken(ctx);
             } else {
                 Become(&TThis::StandardModeStateFunc);
-                LOG_WARN(ctx, BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "%s: Skipping scheduler start due to read-only", __PRETTY_FUNCTION__));
+                YDB_LOG_CTX_COMP_WARN(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "%s: Skipping scheduler start due to read-only", __PRETTY_FUNCTION__));
             }
         }
 
@@ -402,8 +396,7 @@ namespace NKikimr {
         void HandleStartupDataSyncBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
                 // No startup data sync broker service. Continue without it.
-                LOG_WARN(ctx, BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Startup data sync broker is not available, continuing without it"));
+                YDB_LOG_CTX_COMP_WARN(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Startup data sync broker is not available, continuing without it"));
                 StartupDataSyncTokenRequested = false;
                 Become(&TThis::StandardModeStateFunc);
                 StartScheduler(ctx);
@@ -471,10 +464,7 @@ namespace NKikimr {
                     auto msg = TEvSyncerCommit::Remote(vdisk, state, guid, cookie);
                     ctx.Send(CommitterId, msg.release());
                 } else {
-                    LOG_WARN(ctx, BS_SYNCER,
-                        VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                            "%s: Skipping commit of incoming EvVSyncGuid: saved guid %s",
-                            __PRETTY_FUNCTION__, prevGuidInMemory != guid ? "differs" : "matches"));
+                    YDB_LOG_CTX_COMP_WARN(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "%s: Skipping commit of incoming EvVSyncGuid: saved guid %s", __PRETTY_FUNCTION__, prevGuidInMemory != guid ? "differs" : "matches"));
                 }
             } else {
                 // handle READ request

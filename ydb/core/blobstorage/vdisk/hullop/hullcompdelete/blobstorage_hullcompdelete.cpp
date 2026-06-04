@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_VDISK_CHUNKS
+
 namespace NKikimr {
 
     void TDelayedCompactionDeleterInfo::ProcessReleaseQueue(const TActorContext& ctx, const TActorId& hugeKeeperId,
@@ -19,9 +21,7 @@ namespace NKikimr {
                         std::move(item.AllocatedHugeBlobs), item.RecordLsn, item.Signature, item.WId));
                 }
                 if (item.ChunksToForget) {
-                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(vctx->VDiskLogPrefix,
-                        "FORGET: PDiskId# %s ChunksToForget# %s", pdiskCtx->PDiskIdString.data(),
-                        FormatList(item.ChunksToForget).data()));
+                    YDB_LOG_CTX_DEBUG(ctx, VDISKP(vctx->VDiskLogPrefix, "FORGET: PDiskId# %s ChunksToForget# %s", pdiskCtx->PDiskIdString.data(), FormatList(item.ChunksToForget).data()));
                     ctx.Send(skeletonId, new TEvNotifyChunksDeleted(item.RecordLsn, item.ChunksToForget));
                     TActivationContext::Send(new IEventHandle(pdiskCtx->PDiskId, skeletonId, new NPDisk::TEvChunkForget(
                         pdiskCtx->Dsk->Owner, pdiskCtx->Dsk->OwnerRound, std::move(item.ChunksToForget))));

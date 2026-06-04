@@ -162,9 +162,7 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::TrimTailEvent(ui64 trimTailLsn) {
-            LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
-                    VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                        "KEEPER: TEvSyncLogTrim: trimLsn# %" PRIu64, trimTailLsn));
+            YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogTrim: trimLsn# %" PRIu64, trimTailLsn));
 
             TrimTailLsn = trimTailLsn;
             DelayedActions.TrimTail = true;
@@ -179,15 +177,10 @@ namespace NKikimr {
                     DropUnsyncedChunks(droppedChunks, snapshot);
                 }
 
-                LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: TEvSyncLogBaldLog DropChunksExplicitly: numChunks# %" PRIu32,
-                            numCurChunks));
+                YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogBaldLog DropChunksExplicitly: numChunks# %" PRIu32, numCurChunks));
             } else {
                 const ui64 baldLsn = SyncLogPtr->GetLastLsn();
-                LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: TEvSyncLogBaldLog: baldLsn# %" PRIu64, baldLsn));
+                YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogBaldLog: baldLsn# %" PRIu64, baldLsn));
 
                 TrimTailLsn = baldLsn;
                 DelayedActions.TrimTail = true;
@@ -195,9 +188,7 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::CutLogEvent(ui64 freeUpToLsn) {
-            LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
-                    VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                        "KEEPER: NPDisk::TEvCutLog: freeUpToLsn# %" PRIu64, freeUpToLsn));
+            YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_LOGCUTTER, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: NPDisk::TEvCutLog: freeUpToLsn# %" PRIu64, freeUpToLsn));
 
             FreeUpToLsn = freeUpToLsn;
             CutLogRetries = 0;
@@ -208,13 +199,9 @@ namespace NKikimr {
             ++CutLogRetries;
             if (CutLogRetries > 2) {
                 // error condition, retry doens't help
-                LOG_ERROR(*LoggerCtx, BS_LOGCUTTER,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: RetryCutLogEvent: limit exceeded; FreeUpToLsn# %" PRIu64, FreeUpToLsn));
+                YDB_LOG_CTX_COMP_ERROR(*LoggerCtx, BS_LOGCUTTER, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: RetryCutLogEvent: limit exceeded; FreeUpToLsn# %" PRIu64, FreeUpToLsn));
             } else {
-                LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: RetryCutLogEvent: retried; FreeUpToLsn# %" PRIu64, FreeUpToLsn));
+                YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_LOGCUTTER, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: RetryCutLogEvent: retried; FreeUpToLsn# %" PRIu64, FreeUpToLsn));
 
                 // retry event with old value of FreeUpToLsn
                 DelayedActions.CutLog = true;
@@ -222,8 +209,7 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::FreeChunkEvent(ui32 chunkIdx) {
-            LOG_DEBUG(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                "KEEPER: TEvSyncLogFreeChunk: chunkIdx# %" PRIu32, chunkIdx));
+            YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogFreeChunk: chunkIdx# %" PRIu32, chunkIdx));
             const size_t n = DeletedChunksPending.erase(chunkIdx);
             Y_ABORT_UNLESS(n == 1);
             if (DeletedChunks.erase(chunkIdx)) {
@@ -259,10 +245,7 @@ namespace NKikimr {
                 notCommitHandler(firstLsnToKeep);
             }
 
-            LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
-                    VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                        "KEEPER: PerformCutLogAction: commit# %d decomposed# %s",
-                        int(commit), CalculateFirstLsnToKeepDecomposed().data()));
+            YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_LOGCUTTER, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: PerformCutLogAction: commit# %d decomposed# %s", int(commit), CalculateFirstLsnToKeepDecomposed().data()));
 
             return commit;
         }
@@ -274,19 +257,14 @@ namespace NKikimr {
                 return false;
             }
 
-            LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
-                    VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                        "KEEPER: cut log: TrimTailLsn# %" PRIu64
-                        " ChunksToDelete# %s", TrimTailLsn,
-                        FormatList(ChunksToDelete).data()));
+            YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: cut log: TrimTailLsn# %" PRIu64 " ChunksToDelete# %s", TrimTailLsn, FormatList(ChunksToDelete).data()));
 
             // If TrimTailLsn is outdated, we just ignore it and log it,
             // SynclogKeeper can decide to cut log by some other reason.
             // Currently the only one reason for now is log was truncated
             // as being too large.
             auto logger = [this] (const TString &msg) {
-                LOG_INFO(*LoggerCtx, BS_SYNCLOG,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: %s", msg.data()));
+                YDB_LOG_CTX_COMP_INFO(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: %s", msg.data()));
             };
 
             TVector<ui32> scheduledChunks = SyncLogPtr->TrimLogByConfirmedLsn(TrimTailLsn, Notifier, logger);
@@ -358,12 +336,7 @@ namespace NKikimr {
 
             const TEntryPointDbgInfo &info = SyncLogPtr->GetLastEntryPointDbgInfo();
             if (info.ByteSize > SyncLogMaxEntryPointSize) {
-                LOG_ERROR(*LoggerCtx, BS_SYNCLOG,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: last entry point size "
-                            "is too large; LastEntryPointDbgInfo# %s "
-                            "SyncLogMaxEntryPointSize# %" PRIu64,
-                            info.ToString().data(), SyncLogMaxEntryPointSize));
+                YDB_LOG_CTX_COMP_ERROR(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: last entry point size " "is too large; LastEntryPointDbgInfo# %s " "SyncLogMaxEntryPointSize# %" PRIu64, info.ToString().data(), SyncLogMaxEntryPointSize));
             }
             const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();
             return firstLsnToKeep;
@@ -382,10 +355,7 @@ namespace NKikimr {
                 }
             }
 
-            LOG_NOTICE(*LoggerCtx, BS_SYNCLOG,
-                    VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                        "KEEPER: DisposeDiskSyncLog: droppedChunks# %s allocatedChunks# %s",
-                        FormatList(existing).data(), FormatList(allocatedChunks).data()));
+            YDB_LOG_CTX_COMP_NOTICE(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: DisposeDiskSyncLog: droppedChunks# %s allocatedChunks# %s", FormatList(existing).data(), FormatList(allocatedChunks).data()));
 
             // Existing chunks: schedule them for deletion through the regular machinery.
             ChunksToDelete.insert(ChunksToDelete.end(), existing.begin(), existing.end());
@@ -435,9 +405,7 @@ namespace NKikimr {
             // not swap memory to disk, otherwise it would hit OUT_OF_SPACE again.
             if (SuppressSwapToDisk) {
                 SuppressSwapToDisk = false;
-                LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: BuildSwapSnap: swap suppressed for disposal commit"));
+                YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_LOGCUTTER, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: BuildSwapSnap: swap suppressed for disposal commit"));
                 return {};
             }
 
@@ -460,14 +428,7 @@ namespace NKikimr {
 
                 // build swap snap
                 swapSnap = SyncLogPtr->BuildMemSwapSnapshot(diskLastLsn, freeUpToLsn, freeNPages);
-                LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: BuildSwapSnap: wantToCutRecoveryLog# %" PRIu32
-                            " stillMemOverflow# %" PRIu32 " diskLastLsn# %" PRIu64
-                            " freeUpToLsn# %" PRIu64 " freeNPages# %" PRIu32 " swapSnap# %s",
-                            ui32(wantToCutRecoveryLog), ui32(stillMemOverflow),
-                            diskLastLsn, freeUpToLsn, freeNPages,
-                            (swapSnap ? swapSnap->BoundariesToString().data() : "{Mem: empty}")));
+                YDB_LOG_CTX_COMP_DEBUG(*LoggerCtx, BS_LOGCUTTER, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: BuildSwapSnap: wantToCutRecoveryLog# %" PRIu32 " stillMemOverflow# %" PRIu32 " diskLastLsn# %" PRIu64 " freeUpToLsn# %" PRIu64 " freeNPages# %" PRIu32 " swapSnap# %s", ui32(wantToCutRecoveryLog), ui32(stillMemOverflow), diskLastLsn, freeUpToLsn, freeNPages, (swapSnap ? swapSnap->BoundariesToString().data() : "{Mem: empty}")));
             }
 
             return swapSnap;
@@ -485,11 +446,7 @@ namespace NKikimr {
             // multiple unsuccessful attempts to recover), we want to save to disk
             // too much data and overflow quota, log this event at least
             if (numChunksToAdd > MaxDiskChunks) {
-                LOG_ERROR(*LoggerCtx, BS_SYNCLOG,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: we've got disk overflow for SyncLog:"
-                            " numCurChunks# %" PRIu32 " numChunksToAdd# %" PRIu32
-                            " MaxDiskChunks# %" PRIu32, numCurChunks, numChunksToAdd, MaxDiskChunks));
+                YDB_LOG_CTX_COMP_ERROR(*LoggerCtx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: we've got disk overflow for SyncLog:" " numCurChunks# %" PRIu32 " numChunksToAdd# %" PRIu32 " MaxDiskChunks# %" PRIu32, numCurChunks, numChunksToAdd, MaxDiskChunks));
             }
 
             // trim SyncLog in case of disk overflow

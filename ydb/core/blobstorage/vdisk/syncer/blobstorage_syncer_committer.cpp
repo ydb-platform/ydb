@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SYNCER
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////
@@ -132,9 +134,7 @@ namespace NKikimr {
             if (EnableSelfCommit) {
                 ScheduleWakeup(ctx);
             } else {
-                LOG_WARN(ctx, NKikimrServices::BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "SelfCommit in TSyncerCommitter is disabled"));
+                YDB_LOG_CTX_WARN(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "SelfCommit in TSyncerCommitter is disabled"));
             }
             TThis::Become(&TThis::StateFunc);
         }

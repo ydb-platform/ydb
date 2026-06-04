@@ -29,7 +29,8 @@ namespace NKikimr {
         void Bootstrap(const TActorId& parentId) {
             ParentId = parentId;
             Become(&TThis::StateFunc);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " starting Donor-mode query");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::BS_VDISK_GET, "starting Donor-mode query",
+                {"SelfId", SelfId()});
 
             const auto& result = Result->Record;
             UnresolvedItems.Reserve(result.ResultSize());
@@ -74,8 +75,10 @@ namespace NKikimr {
             }
 
             if (action) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " sending " << query->ToString()
-                    << " to " << queueActorId);
+                YDB_LOG_COMP_DEBUG(NKikimrServices::BS_VDISK_GET, "sending to",
+                    {"SelfId", SelfId()},
+                    {"query", query->ToString()},
+                    {"queueActorId", queueActorId});
                 Send(queueActorId, query.release(), IEventHandle::FlagTrackDelivery);
             } else {
                 PassAway();
@@ -83,7 +86,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " received " << ev->Get()->ToString());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::BS_VDISK_GET, "received",
+                {"SelfId", SelfId()},
+                {"event", ev->Get()->ToString()});
             auto& result = Result->Record;
             for (const auto& item : ev->Get()->Record.GetResult()) {
                 const ui64 index = item.GetCookie();
@@ -113,7 +118,8 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " finished query");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::BS_VDISK_GET, "finished query",
+                {"SelfId", SelfId()});
             Send(ParentId, new TEvents::TEvGone);
             SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx, Query->Record.GetHandleClass());
             TActorBootstrapped::PassAway();

@@ -44,13 +44,7 @@ namespace NKikimr {
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
-                            NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: FreeSpace: action# %s timeSpent# %s freeSpaceThreshold# %g candidate# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(), FreeSpaceThreshold,
-                                Candidate.ToString().data()));
+                    YDB_LOG_CTX_COMP(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: FreeSpace: action# %s timeSpent# %s freeSpaceThreshold# %g candidate# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data(), FreeSpaceThreshold, Candidate.ToString().data()));
                 }
 
                 return action;
@@ -121,10 +115,9 @@ namespace NKikimr {
 
                 if (FreeSpaceThreshold <= 0) {
                     if (HullCtx->VCtx->ActorSystem) {
-                        LOG_DEBUG_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                HullCtx->VCtx->VDiskLogPrefix
-                                << " TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is "
-                                << FreeSpaceThreshold);
+                        YDB_LOG_CTX_COMP_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is",
+                            {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                            {"FreeSpaceThreshold", FreeSpaceThreshold});
                     }
                     return ActNothing;
                 }
@@ -145,9 +138,10 @@ namespace NKikimr {
 
                 if (Candidate.CompactSstToFreeSpace()) {
                     // free space by compacting this Sst
-                    LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                            HullCtx->VCtx->VDiskLogPrefix << " TStrategyFreeSpace decided to compact Ssts " << Task->CompactSsts.ToString()
-                            << " because of high garbage/data ratio " << Candidate.ToString());
+                    YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace decided to compact Ssts because of high garbage/data ratio",
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"CompactSsts", Task->CompactSsts.ToString()},
+                        {"Candidate", Candidate.ToString()});
                     action = ActCompactSsts;
                     TUtils::SqueezeOneSst(LevelSnap.SliceSnap, Candidate.LevelSstPtr, Task->CompactSsts);
                 }

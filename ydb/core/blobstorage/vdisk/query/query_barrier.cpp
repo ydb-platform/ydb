@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_GC
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -30,9 +32,7 @@ namespace NKikimr {
 
         void Finish(const TActorContext &ctx) {
             // send response
-            LOG_DEBUG(ctx, BS_VDISK_GC,
-                    VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                            "TEvVGetBarrierResult: %s", Result->ToString().data()));
+            YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TEvVGetBarrierResult: %s", Result->ToString().data()));
             SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx, {});
             ctx.Send(ParentId, new TEvents::TEvGone);
             Die(ctx);

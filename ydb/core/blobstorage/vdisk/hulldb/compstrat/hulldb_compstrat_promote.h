@@ -43,12 +43,7 @@ namespace NKikimr {
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
-                            NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: PromoteSsts: action# %s timeSpent# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data()));
+                    YDB_LOG_CTX_COMP(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: PromoteSsts: action# %s timeSpent# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data()));
                 }
 
                 return action;
@@ -80,8 +75,10 @@ namespace NKikimr {
                             action = ActMoveSsts;
                             Task->MoveSsts.MoveSst(level, level + 1, sst);
                             if (HullCtx->VCtx->ActorSystem) {
-                                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyPromoteSsts: move sst# " << p.ToString() << " to level " << level + 1);
+                                YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyPromoteSsts: move to level",
+                                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                    {"sst", p.ToString()},
+                                    {"to_level", level + 1});
                             }
                             break;
                         }

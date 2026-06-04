@@ -93,7 +93,6 @@ public:
     void operator=(TDqRobinHoodHashSet&&) = delete;
 
     // returns iterator
-    // "bring your own hash" version; hash must be equal to Hasher(key) if you want to mix both versions of Insert in the same hashmap instance
     Y_FORCE_INLINE char* Insert(TKey key, const ui32 hash, bool& isNew) {
         auto ptr = MakeIterator(hash, Data_, CapacityShift_);
         auto ret = InsertImpl(key, hash, isNew, Data_, DataEnd_, ptr);
@@ -191,7 +190,8 @@ private:
     };
 
     Y_FORCE_INLINE char* MakeIterator(const ui32 hash, char* data, ui32 capacityShift) {
-        // Use most significant bits; only top 32 bits of (hash << 32) can be non-zero, lower bits of the bucket will be zeroes when growing beyond 32-bit capacities
+        // Use most significant bits; only top 32 bits of (hash << 32) can be non-zero, lower bits of the bucket will be zeroes when growing beyond 32-bit capacities.
+        // Affects performance somewhat but at least you can have humongous hash maps
         ui64 bucket = (static_cast<ui64>(hash) << 32) >> capacityShift;
         char* ptr = data + GetCellSize() * bucket;
         return ptr;

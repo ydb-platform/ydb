@@ -8,6 +8,31 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TOracleMock::OnRequestStarted(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    Y_UNUSED(hostIndex, operation, now);
+}
+
+void TOracleMock::OnRequestSucceeded(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now,
+    TDuration executionTime)
+{
+    Y_UNUSED(hostIndex, operation, now, executionTime);
+}
+
+void TOracleMock::OnRequestFailed(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    Y_UNUSED(hostIndex, operation, now);
+}
+
 THostIndex TOracleMock::SelectBestPBufferHost(
     std::span<const THostIndex> hostIndexes,
     EOperation operation) const
@@ -34,6 +59,11 @@ TDuration TOracleMock::GetPBufferReplyTimeout() const
 EWriteMode TOracleMock::GetWriteMode() const
 {
     return WriteMode;
+}
+
+TString TOracleMock::Dump() const
+{
+    return {};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -461,6 +461,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp:
             return *modifyScheme.MutableBackupIncrementalBackupCollection()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateFullBackupOp:
+            // The aggregator has no sub-name; WorkingDir is the collection path.
+            return *modifyScheme.MutableWorkingDir();
+
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
             return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
 
@@ -1057,6 +1061,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             auto collectionPath = SplitPath(pbModifyScheme.GetBackupIncrementalBackupCollection().GetName());
             std::move(collectionPath.begin(), collectionPath.end(), std::back_inserter(toResolve.Path));
+            toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateFullBackupOp: {
+            // WorkingDir IS the backup-collection path; no sub-name to append.
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::GenericWrite;
             ResolveForACL.push_back(toResolve);
             break;

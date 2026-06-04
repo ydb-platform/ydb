@@ -121,8 +121,8 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
 
     def skip_if_unsupported(self):
-        if min(self.versions) < (26, 3):
-            pytest.skip("Only available since stable-26-3")
+        if min(self.versions) < (26, 2):
+            pytest.skip("Only available since stable-26-2")
 
     def test_encoding(self):
         self.skip_if_unsupported()

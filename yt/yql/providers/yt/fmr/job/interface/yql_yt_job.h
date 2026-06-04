@@ -42,6 +42,15 @@ public:
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
     ) = 0;
 
+    virtual std::variant<TFmrError, TStatistics> Fill(
+        const TFillTaskParams& params,
+        std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr,
+        const TMaybe<TString>& jobEnvironmentDir = Nothing(),
+        const std::vector<TFileInfo>& jobFiles = {},
+        const std::vector<TYtResourceInfo>& jobYtResources = {},
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
+    ) = 0;
+
     virtual std::variant<TFmrError, TString> Pull(
         const TPullTaskParams& params,
         std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr

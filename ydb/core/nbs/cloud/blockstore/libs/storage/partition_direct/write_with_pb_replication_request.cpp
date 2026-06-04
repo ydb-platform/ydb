@@ -75,9 +75,8 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     , PbufferReplyTimeout(
           directBlockGroup->GetOracle()->GetPBufferReplyTimeout())
 {
-    const auto& pbufferHosts = VChunkConfig.PBufferHosts;
-    AvailableHostsForDirectSending =
-        pbufferHosts.GetPrimary().Include(pbufferHosts.GetHandOff());
+    AvailableHostsForDirectSending = VChunkConfig.GetDesiredPBuffers().Include(
+        VChunkConfig.GetSecondaryPBuffers());
 }
 
 void TWriteWithPbReplicationRequestExecutor::Run()
@@ -85,8 +84,7 @@ void TWriteWithPbReplicationRequestExecutor::Run()
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
 
-    SendWriteRequestToManyPBuffers(
-        VChunkConfig.PBufferHosts.GetPrimary().Hosts());
+    SendWriteRequestToManyPBuffers(VChunkConfig.GetDesiredPBuffers().Hosts());
 }
 
 void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
@@ -114,7 +112,7 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
     }
 
     DirectBlockGroup->WriteBlocksToManyPBuffers(
-        VChunkConfig.VChunkIndex,
+        VChunkConfig.GetVChunkIndex(),
         coordinatorHostIndex,
         std::move(hosts),
         Lsn,
@@ -225,8 +223,8 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
     }
 
     TVector<std::optional<THostIndex>> mainCandidates = {
-        VChunkConfig.PBufferHosts.GetHandOff().Nth(0),
-        VChunkConfig.PBufferHosts.GetHandOff().Nth(1)};
+        VChunkConfig.GetSecondaryPBuffers().Nth(0),
+        VChunkConfig.GetSecondaryPBuffers().Nth(1)};
     for (auto host: TakeNHosts(
              std::move(mainCandidates),
              AvailableHostsForDirectSending,

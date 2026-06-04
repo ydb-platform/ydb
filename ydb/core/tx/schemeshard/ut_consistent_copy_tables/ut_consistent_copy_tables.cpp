@@ -29,6 +29,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Columns { Name: "embedding" Type: "String" }
                 Columns { Name: "prefix" Type: "String" }
                 Columns { Name: "value" Type: "Utf8" }
+                Columns { Name: "json" Type: "Json" }
                 KeyColumnNames: ["key"]
             }
             %s
@@ -163,6 +164,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain,
         {"value"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalJsonIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["json"]
+                Type: EIndexTypeGlobalJson
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalJson,
+        {"json"});
     }
 
     Y_UNIT_TEST(ConsistentCopyTableWithGlobalFulltextRelevanceIndex) {

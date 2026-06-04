@@ -101,10 +101,11 @@ TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
 }
 
 bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
-    if (AllowedDataCenters.empty()) {
+    const auto& dcs = AllowedDataCenters.GetDataCenter();
+    if (dcs.empty()) {
         return true;
     }
-    return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
+    return std::find(dcs.begin(), dcs.end(), dc) != dcs.end();
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {

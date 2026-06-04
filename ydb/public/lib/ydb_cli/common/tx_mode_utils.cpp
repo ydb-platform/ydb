@@ -56,19 +56,13 @@ bool TokensStartWith(const TVector<TString>& tokens, std::initializer_list<TStri
     return true;
 }
 
-// How many leading tokens form the BEGIN/START preamble. Returns 0 if the
-// line does not start with a BEGIN-style preamble.
+// How many leading tokens form the BEGIN preamble. Returns 0 if the line does
+// not start with a BEGIN-style preamble.
 size_t MatchBeginPrefix(const TVector<TString>& tokens) {
     if (tokens.empty()) {
         return 0;
     }
-    if (TokensStartWith(tokens, {"START", "TRANSACTION"})) {
-        return 2;
-    }
     if (TokensStartWith(tokens, {"BEGIN", "TRANSACTION"})) {
-        return 2;
-    }
-    if (TokensStartWith(tokens, {"BEGIN", "WORK"})) {
         return 2;
     }
     if (tokens.front() == "BEGIN") {
@@ -132,12 +126,10 @@ TString GetTxModeNamesForHelp() {
 TVector<TString> GetTransactionControlCompletions() {
     TVector<TString> result;
 
-    // Every BEGIN / START prefix can optionally be followed by a tx mode.
+    // Every BEGIN prefix can optionally be followed by a tx mode.
     static constexpr TStringBuf kBeginPrefixes[] = {
         "BEGIN",
         "BEGIN TRANSACTION",
-        "BEGIN WORK",
-        "START TRANSACTION",
     };
     const auto modes = GetSupportedTxModeNames();
     for (auto prefix : kBeginPrefixes) {
@@ -150,9 +142,6 @@ TVector<TString> GetTransactionControlCompletions() {
     static constexpr TStringBuf kCommitForms[] = {
         "COMMIT",
         "COMMIT TRANSACTION",
-        "COMMIT WORK",
-        "END",
-        "END TRANSACTION",
     };
     for (auto form : kCommitForms) {
         result.emplace_back(form);
@@ -161,7 +150,6 @@ TVector<TString> GetTransactionControlCompletions() {
     static constexpr TStringBuf kRollbackForms[] = {
         "ROLLBACK",
         "ROLLBACK TRANSACTION",
-        "ROLLBACK WORK",
     };
     for (auto form : kRollbackForms) {
         result.emplace_back(form);
@@ -177,7 +165,7 @@ std::optional<NQuery::TTxSettings> ParseBeginTransactionIsolation(TStringBuf lin
         return {};
     }
 
-    // Bare BEGIN/START TRANSACTION/etc. defaults to SerializableRW.
+    // Bare BEGIN/BEGIN TRANSACTION defaults to SerializableRW.
     if (skip == tokens.size()) {
         return NQuery::TTxSettings::SerializableRW();
     }
@@ -209,6 +197,15 @@ bool IsOneShotOnlyTxMode(TStringBuf mode) {
     return normalized == "online-ro" || normalized == "stale-ro";
 }
 
+bool HasTrailingBeginTokens(TStringBuf line) {
+    const auto tokens = TokenizeUpper(line);
+    const size_t skip = MatchBeginPrefix(tokens);
+    if (skip == 0 || skip >= tokens.size()) {
+        return false;
+    }
+    return skip + 1 < tokens.size();
+}
+
 bool IsBeginCommand(TStringBuf line) {
     const auto tokens = TokenizeUpper(line);
     return MatchBeginPrefix(tokens) > 0;
@@ -217,17 +214,13 @@ bool IsBeginCommand(TStringBuf line) {
 bool IsCommitCommand(TStringBuf line) {
     const auto tokens = TokenizeUpper(line);
     return MatchExactCommand(tokens, {"COMMIT"})
-        || MatchExactCommand(tokens, {"COMMIT", "TRANSACTION"})
-        || MatchExactCommand(tokens, {"COMMIT", "WORK"})
-        || MatchExactCommand(tokens, {"END"})
-        || MatchExactCommand(tokens, {"END", "TRANSACTION"});
+        || MatchExactCommand(tokens, {"COMMIT", "TRANSACTION"});
 }
 
 bool IsRollbackCommand(TStringBuf line) {
     const auto tokens = TokenizeUpper(line);
     return MatchExactCommand(tokens, {"ROLLBACK"})
-        || MatchExactCommand(tokens, {"ROLLBACK", "TRANSACTION"})
-        || MatchExactCommand(tokens, {"ROLLBACK", "WORK"});
+        || MatchExactCommand(tokens, {"ROLLBACK", "TRANSACTION"});
 }
 
 } // namespace NYdb::NConsoleClient

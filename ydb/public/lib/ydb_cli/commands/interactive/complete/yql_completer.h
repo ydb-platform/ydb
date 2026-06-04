@@ -19,6 +19,10 @@ namespace NYdb::NConsoleClient {
 
         virtual TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) = 0;
         virtual THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) = 0;
+
+        // When true, scheme (DDL) statement keywords are omitted from YQL completion.
+        virtual void SetExcludeSchemeQueryCompletion(bool /*exclude*/) {}
+
         virtual ~IYQLCompleter() = default;
     };
 

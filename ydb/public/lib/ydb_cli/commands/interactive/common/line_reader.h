@@ -36,6 +36,9 @@ public:
 
     virtual void SetPrompt(const TString& prompt) = 0;
 
+    // Omit scheme (DDL) keywords from YQL TAB-completion (interactive transaction mode).
+    virtual void SetExcludeSchemeQueryCompletion(bool exclude) = 0;
+
     virtual ~ILineReader() = default;
 };
 

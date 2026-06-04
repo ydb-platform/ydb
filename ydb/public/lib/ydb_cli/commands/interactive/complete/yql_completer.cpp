@@ -3,6 +3,7 @@
 #include "ydb_schema.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_query_utils.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
@@ -18,6 +19,7 @@
 #include <util/charset/utf8.h>
 #include <util/generic/hash_set.h>
 
+#include <algorithm>
 #include <cctype>
 #include <vector>
 
@@ -37,6 +39,10 @@ namespace {
             , LightEngine(std::move(lightEngine))
             , Color(std::move(color))
         {
+        }
+
+        void SetExcludeSchemeQueryCompletion(bool exclude) override {
+            ExcludeSchemeQueryCompletion = exclude;
         }
 
         TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) override {
@@ -72,7 +78,31 @@ namespace {
                 });
             }
 
+            if (ExcludeSchemeQueryCompletion) {
+                FilterSchemeQueryCandidates(completion.Candidates, text, prefix.length());
+            }
+
             return ReplxxCompletionsOf(std::move(completion.Candidates));
+        }
+
+        static void FilterSchemeQueryCandidates(
+            TVector<NSQLComplete::TCandidate>& candidates,
+            TStringBuf text,
+            size_t cursorPos)
+        {
+            const TStringBuf textBeforeCursor = text.SubStr(0, cursorPos);
+            candidates.erase(
+                std::remove_if(
+                    candidates.begin(),
+                    candidates.end(),
+                    [&](const NSQLComplete::TCandidate& candidate) {
+                        if (candidate.Kind != NSQLComplete::ECandidateKind::Keyword) {
+                            return false;
+                        }
+                        return IsExcludedSchemeQueryCompletionKeyword(
+                            candidate.Content, textBeforeCursor);
+                    }),
+                candidates.end());
         }
 
         NSQLComplete::ISqlCompletionEngine::TPtr& GetEngine(bool light) {
@@ -124,6 +154,7 @@ namespace {
 
         NSQLComplete::ISqlCompletionEngine::TPtr HeavyEngine;
         NSQLComplete::ISqlCompletionEngine::TPtr LightEngine;
+        bool ExcludeSchemeQueryCompletion = false;
         TColorSchema Color;
     };
 
@@ -131,7 +162,7 @@ namespace {
     // interactive transaction control line.
     static const std::vector<TString>& TclKeywords() {
         static const std::vector<TString> kKeywords = {
-            "BEGIN", "START", "COMMIT", "END", "ROLLBACK",
+            "BEGIN", "COMMIT", "ROLLBACK",
         };
         return kKeywords;
     }
@@ -202,10 +233,10 @@ namespace {
     //
     // Given the user's input split into completed tokens and a partial last
     // token, the completer scans a precomputed list of "full TCL commands"
-    // (e.g. "BEGIN TRANSACTION online-ro INCONSISTENT READS") and for every
-    // match returns only the *next word* — never the whole tail. This produces
-    // the same UX as the YQL completer (e.g. typing `BEGIN T<TAB>` proposes
-    // `TRANSACTION`, not `TRANSACTION online-ro INCONSISTENT READS`).
+    // (e.g. "BEGIN TRANSACTION serializable-rw") and for every match returns
+    // only the *next word* — never the whole tail. This produces the same UX
+    // as the YQL completer (e.g. typing `BEGIN T<TAB>` proposes `TRANSACTION`,
+    // not `TRANSACTION serializable-rw`).
     class TTclCompleter {
     public:
         explicit TTclCompleter(const std::vector<TString>& commands) {
@@ -305,6 +336,12 @@ namespace {
                 ? MakeYQLCompleter(*config.YqlCompleterConfig)
                 : nullptr)
         {}
+
+        void SetExcludeSchemeQueryCompletion(bool exclude) final {
+            if (YQLCompleter) {
+                YQLCompleter->SetExcludeSchemeQueryCompletion(exclude);
+            }
+        }
 
         TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) final {
             const TStringBuf prefixView(prefix.data(), prefix.size());

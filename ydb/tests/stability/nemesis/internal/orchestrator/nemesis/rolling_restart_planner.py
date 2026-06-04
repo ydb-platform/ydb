@@ -104,6 +104,12 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
         """Disabled: planner relies on cross-tick state."""
         return None
 
+    def _register_inject(self, host: str) -> None:
+        pass
+
+    def _register_extract(self, host: str) -> None:
+        pass
+
     def _find_node_by_host(self, host: str) -> "YdbCluster.Node | None":
         for node in self._target_nodes:
             if node.host == host:

@@ -54,6 +54,8 @@
 
 #include <util/string/printf.h>
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
@@ -520,8 +522,6 @@ public:
             (pool_id, QueryState->UserRequestContext->PoolId),
             (trace_id, TraceId()));
 
-        KQP_REQ_LOG(TLogQuery::Started(*QueryState));
-
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
@@ -919,14 +919,19 @@ public:
             }
 
             if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
-                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, Settings.TableService.GetAggregationConfig(), RequestCounters, {}, nullptr);
+                auto tasksGraph = TKqpTasksGraph(
+                    Settings.Database, txs, txAlloc,
+                    Settings.TableService.GetResourceManager(),
+                    Settings.TableService.GetAggregationConfig(),
+                    RequestCounters, {}, nullptr,
+                    QueryState->PreparedQuery->GetUseKqpTasksGraphV2());
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
                 tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
                 tasksGraph.GetMeta().SecureParams = std::move(secureParams);
 
                 // Resolve tables
                 {
-                    auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph, true);
+                    auto* kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph, true);
                     RegisterWithSameMailbox(kqpTableResolver);
                     auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
                     if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
@@ -2067,7 +2072,8 @@ public:
         }
 
         AFL_ENSURE(txCtx->TxManager);
-        auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
+        auto* executerActor = CreateKqpExecuter(
+            std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig, CreateUserContext()),
@@ -2076,7 +2082,11 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService);
+            llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
+            (QueryState && QueryState->PreparedQuery)
+                ? QueryState->PreparedQuery->GetUseKqpTasksGraphV2()
+                : Settings.TableService.GetUseKqpTasksGraphV2()
+        );
 
         auto exId = RegisterWithSameMailbox(executerActor);
         STLOG_D("Created new KQP executer",
@@ -2739,6 +2749,7 @@ public:
         }
     }
 
+
     template<class TEvRecord>
     void AddTrailingInfo(TEvRecord& record) {
         if (ShutdownState) {
@@ -3118,7 +3129,8 @@ public:
             }
         }
 
-        Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
+        const ui64 responseByteSize = record.ByteSize();
+        Counters->ReportResponseStatus(Settings.DbCounters, responseByteSize, record.GetYdbStatus());
         for (auto& issue : record.GetResponse().GetQueryIssues()) {
             Counters->ReportIssues(Settings.DbCounters, CachedIssueCounters, issue);
         }
@@ -3131,7 +3143,7 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
-        KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record));
+        KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record, responseByteSize));
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         STLOG_D("Sent query response back to proxy",
@@ -3458,7 +3470,9 @@ public:
     void ReplyQueryError(Ydb::StatusIds::StatusCode ydbStatus,
         const TString& message, std::optional<google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>> issues = {})
     {
-        STLOG_W("Create QueryResponse for error on request, msg: " << message,
+        // DEBUG, not WARN: the [REQ_JSON] completed envelope already carries
+        // status/issues/trace_id at WARN on failure (see kqp_log_query.cpp).
+        STLOG_D("Create QueryResponse for error on request, msg: " << message,
             (status, ydbStatus),
             (issues, issues ? Join(", ", *issues) : TString()),
             (trace_id, TraceId()));

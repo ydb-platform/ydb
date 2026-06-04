@@ -13,14 +13,10 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
-    failure_row_from_test_result,
-    get_debug_texts_from_cache,
     is_not_launched_issue,
-    is_sanitizer_classification,
     is_timeout_issue,
-    is_verify_classification,
     is_xfailed_issue,
-    prefetch_text_cache_for_failure_rows,
+    source_has_tag,
 )
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
@@ -192,7 +188,7 @@ class TestResult:
             stderr_url=log_urls.get('stderr', ''),
             log_url=log_url,
             error_type=error_type or '',
-            # is_sanitizer_issue, is_verify_issue and is_possible_oom are set after stderr/log prefetch in gen_summary.
+            # is_sanitizer_issue, is_verify_issue and is_possible_oom are set in gen_summary from error_type.
             is_sanitizer_issue=False,
             is_timeout_issue=is_timeout_issue(error_type),
             is_xfailed_issue=is_xfailed_issue(error_type),
@@ -556,19 +552,21 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
+def _list_build_results_report_files(path):
+    """Return paths to build-results-report JSON files."""
+    import glob
+
+    if os.path.isfile(path):
+        return [path]
+    files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
+    if not files:
+        files = glob.glob(os.path.join(path, "report.json"))
+    return files
+
+
 def iter_build_results_files(path):
     """Iterate over build-results-report JSON files"""
-    import glob
-    
-    if os.path.isfile(path):
-        files = [path]
-    else:
-        # If it's a directory, look for report.json files
-        files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
-        if not files:
-            files = glob.glob(os.path.join(path, "report.json"))
-    
-    for fn in files:
+    for fn in _list_build_results_report_files(path):
         try:
             with open(fn, 'r') as f:
                 report = json.load(f)
@@ -584,29 +582,6 @@ def iter_build_results_files(path):
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
             continue
-
-
-def _status_string_for_error_utils(st: TestStatus) -> str:
-    """Map TestStatus to the failure|error|mute tokens used by is_failure_like_status."""
-    return {
-        TestStatus.FAIL: "failure",
-        TestStatus.ERROR: "error",
-        TestStatus.MUTE: "mute",
-    }.get(st, "")
-
-
-def _failure_row_pairs_for_summary_tests(tests):
-    """Return ``[(TestResult, FailureRow)]`` for tests with failure-like statuses."""
-    pairs = []
-    for test in tests:
-        st = getattr(test, "status", None)
-        if st is None or not getattr(st, "is_error", False):
-            continue
-        status_str = _status_string_for_error_utils(st)
-        if not status_str:
-            continue
-        pairs.append((test, failure_row_from_test_result(test, status_str)))
-    return pairs
 
 
 # Did dmesg show ANY OOM-killer event during this try?
@@ -629,22 +604,8 @@ def _dmesg_has_oom(oom_dmesg_log):
         return False
 
 
-# Test runner reports `Process exit_code = -9` when the test process was killed
-# by SIGKILL — the typical signal the kernel OOM-killer sends. Flag such tests
-# as "possible OOM".
-_POSSIBLE_OOM_RE = re.compile(r'\bProcess exit_code\s*=\s*-9\b')
-
-
-def _is_possible_oom(status_description):
-    """True if status_description shows a SIGKILL exit (likely OOM)."""
-    if not status_description:
-        return False
-    return _POSSIBLE_OOM_RE.search(status_description) is not None
-
-
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None, oom_dmesg_log=None):
     summary = TestSummary(is_retry=is_retry)
-    stderr_fetch_cache = {}
     summary.dmesg_has_oom = _dmesg_has_oom(oom_dmesg_log)
     if summary.dmesg_has_oom and oom_dmesg_log:
         try:
@@ -659,30 +620,18 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
 
-        for fn, result in iter_build_results_files(path):
+        for _fn, result in iter_build_results_files(path):
             test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
 
-        pairs = _failure_row_pairs_for_summary_tests(summary_line.tests)
-        stderr_fetch_cache = prefetch_text_cache_for_failure_rows(
-            [fr for _, fr in pairs],
-            existing_cache=stderr_fetch_cache,
-            local_dir=public_dir,
-            local_url_prefix=public_dir_url,
-        )
-        # Set text-derived badge flags after prefetch.
-        for test, fr in pairs:
-            stderr_text, log_text = get_debug_texts_from_cache(fr, stderr_fetch_cache)
-            test.is_sanitizer_issue = is_sanitizer_classification(
-                test.status_description, stderr_text, log_text
-            )
-            test.is_verify_issue = is_verify_classification(
-                test.status_description, stderr_text, log_text
-            )
-            # "Possible OOM": status_description has `Process exit_code = -9`
-            # (SIGKILL — most likely from the kernel OOM-killer).
-            test.is_possible_oom = _is_possible_oom(test.status_description)
-        
+        for test in summary_line.tests:
+            if not test.status.is_error:
+                continue
+            et = test.error_type
+            test.is_sanitizer_issue = source_has_tag(et, "SANITIZER")
+            test.is_verify_issue = source_has_tag(et, "VERIFY")
+            test.is_possible_oom = source_has_tag(et, "POSSIBLE_OOM")
+
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"

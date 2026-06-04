@@ -30,15 +30,14 @@ struct TFixture: public TBaseFixture
     {
         TBaseFixture::Init();
 
-        DirtyMap.UpdateConfig(
-            VChunkConfig.PBufferHosts.GetPrimary(),
-            VChunkConfig.DDiskHosts.GetPrimary().Include(THostMask::MakeOne(3)),
-            /*disabled=*/THostMask::MakeEmpty());
+        VChunkConfig.PromoteHost(3);
+        VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
+        DirtyMap.UpdateConfig(VChunkConfig);
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
             VChunkConfig,
-            PartitionDirectService,
             DirectBlockGroup,
             &DirtyMap,
             FreshDDisk);
@@ -53,14 +52,22 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
     {
         Init();
 
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
+            DirtyMap.DebugPrintDDiskState());
+
         // Mark DDisk#1 completely fresh.
         DirtyMap.MarkFresh(FreshDDisk, 0);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Operational,32768,32768};"
-            "H1{Fresh,0,0};"   // Watermarks
-            "H2{Operational,32768,32768};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Operational,32768,32768};"
+            "H1*{Fresh,0,0};"   // Watermarks
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
             DirtyMap.DebugPrintDDiskState());
 
         // No ranges locked.
@@ -102,12 +109,12 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             if (i == 5) {
                 // Check state on 5th iteration
                 UNIT_ASSERT_VALUES_EQUAL(
-                    "H0{Operational,32768,32768};"
-                    "H1{Fresh,1536,1792};"   // Watermarks for reading
-                                             // and writing raised
-                    "H2{Operational,32768,32768};"
-                    "H3{Operational,32768,32768};"
-                    "H4{Operational,32768,32768};",
+                    "H0*{Operational,32768,32768};"
+                    "H1*{Fresh,1536,1792};"   // Watermarks for reading
+                                              // and writing raised
+                    "H2*{Operational,32768,32768};"
+                    "H3*{Operational,32768,32768};"
+                    "H4+{Disabled,0,0};",
                     DirtyMap.DebugPrintDDiskState());
             }
         }
@@ -120,11 +127,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         // All DDisk fully operational
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Operational,32768,32768};"
-            "H1{Operational,32768,32768};"
-            "H2{Operational,32768,32768};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
             DirtyMap.DebugPrintDDiskState());
     }
 
@@ -165,11 +172,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap.GetFreshWatermark(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Operational,32768,32768};"
-            "H1{Fresh,0,256};"   // Watermarks
-            "H2{Operational,32768,32768};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Operational,32768,32768};"
+            "H1*{Fresh,0,256};"   // Watermarks
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
             DirtyMap.DebugPrintDDiskState());
     }
 
@@ -214,11 +221,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(0, *DirtyMap.GetFreshWatermark(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Operational,32768,32768};"
-            "H1{Fresh,0,256};"   // Watermarks
-            "H2{Operational,32768,32768};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Operational,32768,32768};"
+            "H1*{Fresh,0,256};"   // Watermarks
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
             DirtyMap.DebugPrintDDiskState());
     }
 
@@ -257,11 +264,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Operational,32768,32768};"
-            "H1{Fresh,256,256};"   // Watermarks
-            "H2{Operational,32768,32768};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Operational,32768,32768};"
+            "H1*{Fresh,256,256};"   // Watermarks
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
             DirtyMap.DebugPrintDDiskState());
 
         // Start data coping again
@@ -292,11 +299,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             complete.GetValue());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Operational,32768,32768};"
-            "H1{Fresh,512,512};"   // Watermarks
-            "H2{Operational,32768,32768};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Operational,32768,32768};"
+            "H1*{Fresh,512,512};"   // Watermarks
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
             DirtyMap.DebugPrintDDiskState());
     }
 
@@ -332,11 +339,11 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             *DirtyMap.GetFreshWatermark(FreshDDisk));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0{Operational,32768,32768};"
-            "H1{Fresh,512,512};"   // Watermarks
-            "H2{Operational,32768,32768};"
-            "H3{Operational,32768,32768};"
-            "H4{Operational,32768,32768};",
+            "H0*{Operational,32768,32768};"
+            "H1*{Fresh,512,512};"   // Watermarks
+            "H2*{Operational,32768,32768};"
+            "H3*{Operational,32768,32768};"
+            "H4+{Disabled,0,0};",
             DirtyMap.DebugPrintDDiskState());
     }
 

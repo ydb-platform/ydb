@@ -16,6 +16,7 @@ SRCS(
     ddisk_actor_ut.cpp
     ddisk_actor_pdisk_ut.cpp
     ddisk_sync_ut.cpp
+    persistent_buffer_barriers_manager_ut.cpp
     segment_manager_ut.cpp
 )
 

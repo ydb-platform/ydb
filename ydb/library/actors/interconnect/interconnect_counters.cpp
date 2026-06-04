@@ -1,5 +1,5 @@
 #include "interconnect_counters.h"
-#include "interconnect_host_metrics_aggregator.h"
+#include "interconnect_metrics_aggregator.h"
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -33,11 +33,11 @@ namespace {
         };
 
         template <typename TEvent, typename... TArgs>
-        void SendHostMetricsEvent(const TInterconnectProxyCommon::TPtr& common, TArgs&&... args) {
-            if (!TlsActivationContext || !common->HostMetricsAggregatorId) {
+        void SendMetricsAggregationEvent(const TInterconnectProxyCommon::TPtr& common, TArgs&&... args) {
+            if (!TlsActivationContext || !common->MetricsAggregatorId) {
                 return;
             }
-            TActivationContext::Send(new IEventHandle(common->HostMetricsAggregatorId, TActorId(),
+            TActivationContext::Send(new IEventHandle(common->MetricsAggregatorId, TActorId(),
                 new TEvent(std::forward<TArgs>(args)...)));
         }
 
@@ -123,7 +123,7 @@ namespace {
         const TInterconnectProxyCommon::TPtr Common;
         const bool MergePerDataCenterCounters;
         const bool MergePerHostCounters;
-        const bool UseHostAggregation;
+        const bool UseMetricsAggregation;
         const bool MergePerPeerCounters;
         const bool HasSessionCounters;
         NMonitoring::TDynamicCounterPtr Counters;
@@ -137,18 +137,18 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr Events;
         NMonitoring::TDynamicCounters::TCounterPtr ScopeErrors;
         TString MetricPeerLabel;
-        TString HostAggregationLabel;
-        TString HostAggregationPeer;
+        TString MetricsAggregationLabel;
+        TString MetricsAggregationPeer;
         ui32 ConnectedValue = 0;
         i64 ClockSkewValue = 0;
-        bool HostAggregationRegistered = false;
+        bool MetricsAggregationRegistered = false;
 
     public:
         TInterconnectCounters(const TInterconnectProxyCommon::TPtr& common)
             : Common(common)
             , MergePerDataCenterCounters(common->Settings.MergePerDataCenterCounters)
             , MergePerHostCounters(common->Settings.MergePerHostCounters)
-            , UseHostAggregation(MergePerHostCounters && common->HostMetricsAggregatorId)
+            , UseMetricsAggregation(MergePerHostCounters && common->MetricsAggregatorId)
             , MergePerPeerCounters(common->Settings.MergePerPeerCounters)
             , HasSessionCounters(!MergePerDataCenterCounters && !MergePerPeerCounters)
             , Counters(common->MonCounters)
@@ -158,7 +158,7 @@ namespace {
         {}
 
         ~TInterconnectCounters() override {
-            UnregisterHostAggregation();
+            UnregisterMetricsAggregation();
         }
 
         void AddInflightDataAmount(ui64 value) override {
@@ -182,12 +182,12 @@ namespace {
         }
 
         void SetClockSkewMicrosec(i64 value) override {
-            if (UseHostAggregation) {
+            if (UseMetricsAggregation) {
                 if (ClockSkewValue != value) {
                     ClockSkewValue = value;
-                    if (HostAggregationRegistered) {
-                        SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateClockSkew>(Common,
-                            HostAggregationLabel, HostAggregationPeer, ClockSkewValue);
+                    if (MetricsAggregationRegistered) {
+                        SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateClockSkew>(Common,
+                            MetricsAggregationLabel, MetricsAggregationPeer, ClockSkewValue);
                     }
                 }
                 return;
@@ -204,12 +204,12 @@ namespace {
         }
 
         void SetConnected(ui32 value) override {
-            if (UseHostAggregation) {
+            if (UseMetricsAggregation) {
                 if (ConnectedValue != value) {
                     ConnectedValue = value;
-                    if (HostAggregationRegistered) {
-                        SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateConnected>(Common,
-                            HostAggregationLabel, HostAggregationPeer, ConnectedValue);
+                    if (MetricsAggregationRegistered) {
+                        SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateConnected>(Common,
+                            MetricsAggregationLabel, MetricsAggregationPeer, ConnectedValue);
                     }
                 }
                 return;
@@ -440,8 +440,8 @@ namespace {
                 ++*std::get<1>(Starvation[PrevStarvation]);
             }
 
-            if (UseHostAggregation && updatePerSession) {
-                RebindHostAggregation();
+            if (UseMetricsAggregation && updatePerSession) {
+                RebindMetricsAggregation();
             }
 
             Initialized = true;
@@ -453,31 +453,31 @@ namespace {
             return it != OutputChannels.end() ? it->second : OtherOutputChannel;
         }
 
-        void UnregisterHostAggregation() {
-            if (!UseHostAggregation || !HostAggregationRegistered) {
+        void UnregisterMetricsAggregation() {
+            if (!UseMetricsAggregation || !MetricsAggregationRegistered) {
                 return;
             }
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvUnregisterPeer>(Common, HostAggregationLabel, HostAggregationPeer);
-            HostAggregationLabel.clear();
-            HostAggregationPeer.clear();
-            HostAggregationRegistered = false;
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUnregisterPeer>(Common, MetricsAggregationLabel, MetricsAggregationPeer);
+            MetricsAggregationLabel.clear();
+            MetricsAggregationPeer.clear();
+            MetricsAggregationRegistered = false;
         }
 
-        void RebindHostAggregation() {
-            if (!UseHostAggregation || MetricPeerLabel.empty() || !HumanFriendlyPeerHostName) {
+        void RebindMetricsAggregation() {
+            if (!UseMetricsAggregation || MetricPeerLabel.empty() || !HumanFriendlyPeerHostName) {
                 return;
             }
-            if (HostAggregationRegistered && HostAggregationLabel == MetricPeerLabel
-                    && HostAggregationPeer == *HumanFriendlyPeerHostName) {
+            if (MetricsAggregationRegistered && MetricsAggregationLabel == MetricPeerLabel
+                    && MetricsAggregationPeer == *HumanFriendlyPeerHostName) {
                 return;
             }
-            UnregisterHostAggregation();
-            HostAggregationLabel = MetricPeerLabel;
-            HostAggregationPeer = *HumanFriendlyPeerHostName;
-            HostAggregationRegistered = true;
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvRegisterPeer>(Common, HostAggregationLabel, HostAggregationPeer);
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateConnected>(Common, HostAggregationLabel, HostAggregationPeer, ConnectedValue);
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateClockSkew>(Common, HostAggregationLabel, HostAggregationPeer, ClockSkewValue);
+            UnregisterMetricsAggregation();
+            MetricsAggregationLabel = MetricPeerLabel;
+            MetricsAggregationPeer = *HumanFriendlyPeerHostName;
+            MetricsAggregationRegistered = true;
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvRegisterPeer>(Common, MetricsAggregationLabel, MetricsAggregationPeer);
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateConnected>(Common, MetricsAggregationLabel, MetricsAggregationPeer, ConnectedValue);
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateClockSkew>(Common, MetricsAggregationLabel, MetricsAggregationPeer, ClockSkewValue);
         }
 
     private:
@@ -597,7 +597,7 @@ namespace {
             : Common(common)
             , MergePerDataCenterMetrics_(common->Settings.MergePerDataCenterCounters)
             , MergePerHostMetrics_(common->Settings.MergePerHostCounters)
-            , UseHostAggregation_(MergePerHostMetrics_ && common->HostMetricsAggregatorId)
+            , UseMetricsAggregation_(MergePerHostMetrics_ && common->MetricsAggregatorId)
             , MergePerPeerMetrics_(common->Settings.MergePerPeerCounters)
             , Metrics_(common->Metrics)
             , AdaptiveMetrics_(MergePerDataCenterMetrics_
@@ -606,7 +606,7 @@ namespace {
         {}
 
         ~TInterconnectMetrics() override {
-            UnregisterHostAggregation();
+            UnregisterMetricsAggregation();
         }
 
         void AddInflightDataAmount(ui64 value) override {
@@ -630,12 +630,12 @@ namespace {
         }
 
         void SetClockSkewMicrosec(i64 value) override {
-            if (UseHostAggregation_) {
+            if (UseMetricsAggregation_) {
                 if (ClockSkewValue_ != value) {
                     ClockSkewValue_ = value;
-                    if (HostAggregationRegistered_) {
-                        SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateClockSkew>(Common,
-                            HostAggregationLabel_, HostAggregationPeer_, ClockSkewValue_);
+                    if (MetricsAggregationRegistered_) {
+                        SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateClockSkew>(Common,
+                            MetricsAggregationLabel_, MetricsAggregationPeer_, ClockSkewValue_);
                     }
                 }
                 return;
@@ -652,12 +652,12 @@ namespace {
         }
 
         void SetConnected(ui32 value) override {
-            if (UseHostAggregation_) {
+            if (UseMetricsAggregation_) {
                 if (ConnectedValue_ != value) {
                     ConnectedValue_ = value;
-                    if (HostAggregationRegistered_) {
-                        SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateConnected>(Common,
-                            HostAggregationLabel_, HostAggregationPeer_, ConnectedValue_);
+                    if (MetricsAggregationRegistered_) {
+                        SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateConnected>(Common,
+                            MetricsAggregationLabel_, MetricsAggregationPeer_, ConnectedValue_);
                     }
                 }
                 return;
@@ -918,8 +918,8 @@ namespace {
                 std::get<1>(Starvation_[PrevStarvation_])->Inc();
             }
 
-            if (UseHostAggregation_ && updatePerSession) {
-                RebindHostAggregation();
+            if (UseMetricsAggregation_ && updatePerSession) {
+                RebindMetricsAggregation();
             }
 
             Initialized_ = true;
@@ -931,40 +931,40 @@ namespace {
             return it != OutputChannels_.end() ? it->second : OtherOutputChannel_;
         }
 
-        void UnregisterHostAggregation() {
-            if (!UseHostAggregation_ || !HostAggregationRegistered_) {
+        void UnregisterMetricsAggregation() {
+            if (!UseMetricsAggregation_ || !MetricsAggregationRegistered_) {
                 return;
             }
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvUnregisterPeer>(Common, HostAggregationLabel_, HostAggregationPeer_);
-            HostAggregationLabel_.clear();
-            HostAggregationPeer_.clear();
-            HostAggregationRegistered_ = false;
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUnregisterPeer>(Common, MetricsAggregationLabel_, MetricsAggregationPeer_);
+            MetricsAggregationLabel_.clear();
+            MetricsAggregationPeer_.clear();
+            MetricsAggregationRegistered_ = false;
         }
 
-        void RebindHostAggregation() {
-            if (!UseHostAggregation_ || MetricPeerLabel_.empty() || !HumanFriendlyPeerHostName) {
+        void RebindMetricsAggregation() {
+            if (!UseMetricsAggregation_ || MetricPeerLabel_.empty() || !HumanFriendlyPeerHostName) {
                 return;
             }
-            if (HostAggregationRegistered_ && HostAggregationLabel_ == MetricPeerLabel_
-                    && HostAggregationPeer_ == *HumanFriendlyPeerHostName) {
+            if (MetricsAggregationRegistered_ && MetricsAggregationLabel_ == MetricPeerLabel_
+                    && MetricsAggregationPeer_ == *HumanFriendlyPeerHostName) {
                 return;
             }
-            UnregisterHostAggregation();
-            HostAggregationLabel_ = MetricPeerLabel_;
-            HostAggregationPeer_ = *HumanFriendlyPeerHostName;
-            HostAggregationRegistered_ = true;
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvRegisterPeer>(Common, HostAggregationLabel_, HostAggregationPeer_);
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateConnected>(Common,
-                HostAggregationLabel_, HostAggregationPeer_, ConnectedValue_);
-            SendHostMetricsEvent<NInterconnectHostMetrics::TEvUpdateClockSkew>(Common,
-                HostAggregationLabel_, HostAggregationPeer_, ClockSkewValue_);
+            UnregisterMetricsAggregation();
+            MetricsAggregationLabel_ = MetricPeerLabel_;
+            MetricsAggregationPeer_ = *HumanFriendlyPeerHostName;
+            MetricsAggregationRegistered_ = true;
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvRegisterPeer>(Common, MetricsAggregationLabel_, MetricsAggregationPeer_);
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateConnected>(Common,
+                MetricsAggregationLabel_, MetricsAggregationPeer_, ConnectedValue_);
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateClockSkew>(Common,
+                MetricsAggregationLabel_, MetricsAggregationPeer_, ClockSkewValue_);
         }
 
     private:
         const TInterconnectProxyCommon::TPtr Common;
         const bool MergePerDataCenterMetrics_;
         const bool MergePerHostMetrics_;
-        const bool UseHostAggregation_;
+        const bool UseMetricsAggregation_;
         const bool MergePerPeerMetrics_;
         std::shared_ptr<NMonitoring::IMetricRegistry> Metrics_;
         std::shared_ptr<NMonitoring::IMetricRegistry> PerSessionMetrics_;
@@ -972,11 +972,11 @@ namespace {
         std::shared_ptr<NMonitoring::IMetricRegistry>& AdaptiveMetrics_;
         bool Initialized_ = false;
         TString MetricPeerLabel_;
-        TString HostAggregationLabel_;
-        TString HostAggregationPeer_;
+        TString MetricsAggregationLabel_;
+        TString MetricsAggregationPeer_;
         ui32 ConnectedValue_ = 0;
         i64 ClockSkewValue_ = 0;
-        bool HostAggregationRegistered_ = false;
+        bool MetricsAggregationRegistered_ = false;
 
         NMonitoring::IRate* Traffic_ = nullptr;
 

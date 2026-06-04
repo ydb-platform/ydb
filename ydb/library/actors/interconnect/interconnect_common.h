@@ -156,7 +156,7 @@ namespace NActors {
         double CalculateNetworkUtilization();
         void AddSessionWithDataInQueue();
         void RemoveSessionWithDataInQueue();
-        TActorId HostMetricsAggregatorId;
+        TActorId MetricsAggregatorId;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

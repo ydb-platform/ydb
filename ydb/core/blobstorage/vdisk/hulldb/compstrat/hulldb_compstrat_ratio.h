@@ -4,6 +4,7 @@
 #include "hulldb_compstrat_defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullmergeits.h>
+#include <util/digest/numeric.h>
 
 namespace NKikimr {
     namespace NHullComp {
@@ -71,27 +72,44 @@ namespace NKikimr {
             };
 
             struct TTimeSst {
-                ui64 Seconds;
+                TInstant NextCalculationTime;
                 TLevelSstPtr LevelSstPtr;
 
-                TTimeSst(ui64 seconds, const TLevelSstPtr &p)
-                    : Seconds(seconds)
+                TTimeSst(TInstant nextCalculationTime, const TLevelSstPtr &p)
+                    : NextCalculationTime(nextCalculationTime)
                     , LevelSstPtr(p)
                 {}
 
                 bool operator < (const TTimeSst &s) const {
-                    return Seconds < s.Seconds;
+                    return NextCalculationTime < s.NextCalculationTime;
                 }
             };
 
-            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec) {
+            static TDuration GetRecalculationDelay(const TLevelSstPtr &p, TDuration calcPeriod) {
+                const ui64 calcPeriodUs = calcPeriod.MicroSeconds();
+                if (!calcPeriodUs) {
+                    return calcPeriod;
+                }
+
+                const ui64 sstId = p.SstPtr->AssignedSstId ? p.SstPtr->AssignedSstId : p.SstPtr->VolatileOrderId;
+                const ui64 jitterUs = IntHash(sstId) % calcPeriodUs;
+                return TDuration::MicroSeconds(calcPeriodUs / 2 + jitterUs);
+            }
+
+            static TInstant GetNextCalculationTime(const TLevelSstPtr &p, TDuration calcPeriod) {
+                const TInstant time = p.SstPtr->StorageRatio.GetTime();
+                return time == TInstant::Zero()
+                    ? time
+                    : time + GetRecalculationDelay(p, calcPeriod);
+            }
+
+            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec, TDuration calcPeriod) {
                 vec.clear();
                 TSstIterator it(&LevelSnap.SliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
                     TLevelSstPtr p = it.Get();
-                    ui64 seconds = p.SstPtr->StorageRatio.GetTime().Seconds();
-                    vec.push_back(TTimeSst(seconds, p));
+                    vec.push_back(TTimeSst(GetNextCalculationTime(p, calcPeriod), p));
                     it.Next();
                 }
                 Sort(vec.begin(), vec.end());
@@ -104,21 +122,11 @@ namespace NKikimr {
                 // order all ssts (including level 0) by storage ratio calculation time
                 TVector<TTimeSst> vec;
                 vec.reserve(1000u);
-                OrderSstByStorageRatioTime(vec);
+                OrderSstByStorageRatioTime(vec, calcPeriod);
 
                 // calculate storage ratio, don't spend much time on it, skip ssts that are actualized
                 for (const auto &x : vec) {
-                    TInstant time = x.LevelSstPtr.SstPtr->StorageRatio.GetTime();
-                    if (time == TInstant::Zero()) {
-                        const ui64 jitterUs = calcPeriod.MicroSeconds() > 0
-                            ? RandomNumber<ui64>(calcPeriod.MicroSeconds())
-                            : 0;
-                        time = startTime - calcPeriod + TDuration::MicroSeconds(jitterUs);
-                        TSstRatioPtr placeholder = MakeIntrusive<TSstRatio>(time);
-                        x.LevelSstPtr.SstPtr->StorageRatio.Set(placeholder);
-                    }
-
-                    if (startTime >= time + calcPeriod) {
+                    if (startTime >= x.NextCalculationTime) {
                         TSstRatioPtr newRatio = CalculateSstRatio(x.LevelSstPtr.SstPtr, startTime);
                         x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio);
                         stat.SstsChecked++;

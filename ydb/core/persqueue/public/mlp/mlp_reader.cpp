@@ -149,13 +149,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             case Ydb::Topic::CODEC_CUSTOM:
                 codecStr = "custom";
                 break;
-            case Ydb::Topic::CODEC_RAW:
-                [[fallthrough]];
-            case Ydb::Topic::CODEC_UNSPECIFIED:
-                [[fallthrough]];
-            case Ydb::Topic::Codec_INT_MIN_SENTINEL_DO_NOT_USE_:
-                [[fallthrough]];
-            case Ydb::Topic::Codec_INT_MAX_SENTINEL_DO_NOT_USE_:
+            default:
                 break;
         }
 

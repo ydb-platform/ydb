@@ -65,7 +65,6 @@ public:
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
         runnerSettings.FeatureFlags.SetEnableColumnshardBool(true);
         runnerSettings.FeatureFlags.SetEnableColumnStore(true);
-        runnerSettings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
         TestHelper.emplace(runnerSettings);
         // Shorten LongTx delays directly on AppData so MinSnapshotForNewReads advances quickly
         // for tier blob GC to run within the test's WaitCondition window.
@@ -654,7 +653,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(10));
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
-        // After tiering: index chunks must follow the portion to the external tier
+        // After tiering: index chunks must follow the portion to the external tier if inherit_portion_storage is set to true, and stay in BS otherwise
         {
             auto selectQuery = TStringBuilder() << R"(
                 SELECT *
@@ -664,9 +663,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_GT(rows.size(), 0);
             for (auto& row : rows) {
-                for (auto& kv: row) {
-                    Cerr << "kv:" << kv.first << " : " << kv.second.GetProto().DebugString() << '\n';
-                }
                 if (InheritPortionStorage) {
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), DEFAULT_TIER_PATH);
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");

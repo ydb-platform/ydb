@@ -68,8 +68,8 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(20, 10),
-            VChunkConfig.PBufferHosts.GetPrimary(),
-            VChunkConfig.PBufferHosts.GetPrimary());
+            VChunkConfig.GetDesiredPBuffers(),
+            VChunkConfig.GetDesiredPBuffers());
         auto readHint = DirtyMap.MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
@@ -134,14 +134,14 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(20, 10),
-            VChunkConfig.PBufferHosts.GetPrimary(),
-            VChunkConfig.PBufferHosts.GetPrimary());
+            VChunkConfig.GetDesiredPBuffers(),
+            VChunkConfig.GetDesiredPBuffers());
 
         DirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(40, 10),
-            VChunkConfig.PBufferHosts.GetPrimary(),
-            VChunkConfig.PBufferHosts.GetPrimary());
+            VChunkConfig.GetDesiredPBuffers(),
+            VChunkConfig.GetDesiredPBuffers());
 
         const TBlockRange64 range = TBlockRange64::WithLength(10, 100);
         ExpectedRange = range;

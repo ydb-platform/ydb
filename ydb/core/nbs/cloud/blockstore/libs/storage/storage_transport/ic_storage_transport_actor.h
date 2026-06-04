@@ -60,6 +60,9 @@ private:
     void HandleConnect(
         const TEvTransportPrivate::TEvConnect::TPtr& ev,
         const NActors::TActorContext& ctx);
+    void HandleConnectUndelivery(
+        const NKikimr::NDDisk::TEvConnect::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
     void HandleConnectResult(
         const NKikimr::NDDisk::TEvConnectResult::TPtr& ev,

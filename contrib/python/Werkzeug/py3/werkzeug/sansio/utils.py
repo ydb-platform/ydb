@@ -1,9 +1,11 @@
-import typing as t
+from __future__ import annotations
 
-from .._internal import _encode_idna
+import typing as t
+from urllib.parse import quote
+
+from .._internal import _plain_int
 from ..exceptions import SecurityError
 from ..urls import uri_to_iri
-from ..urls import url_quote
 
 
 def host_is_trusted(hostname: str, trusted_list: t.Iterable[str]) -> bool:
@@ -18,19 +20,13 @@ def host_is_trusted(hostname: str, trusted_list: t.Iterable[str]) -> bool:
     if not hostname:
         return False
 
+    try:
+        hostname = hostname.partition(":")[0].encode("idna").decode("ascii")
+    except UnicodeEncodeError:
+        return False
+
     if isinstance(trusted_list, str):
         trusted_list = [trusted_list]
-
-    def _normalize(hostname: str) -> bytes:
-        if ":" in hostname:
-            hostname = hostname.rsplit(":", 1)[0]
-
-        return _encode_idna(hostname)
-
-    try:
-        hostname_bytes = _normalize(hostname)
-    except UnicodeError:
-        return False
 
     for ref in trusted_list:
         if ref.startswith("."):
@@ -40,14 +36,11 @@ def host_is_trusted(hostname: str, trusted_list: t.Iterable[str]) -> bool:
             suffix_match = False
 
         try:
-            ref_bytes = _normalize(ref)
-        except UnicodeError:
+            ref = ref.partition(":")[0].encode("idna").decode("ascii")
+        except UnicodeEncodeError:
             return False
 
-        if ref_bytes == hostname_bytes:
-            return True
-
-        if suffix_match and hostname_bytes.endswith(b"." + ref_bytes):
+        if ref == hostname or (suffix_match and hostname.endswith(f".{ref}")):
             return True
 
     return False
@@ -55,9 +48,9 @@ def host_is_trusted(hostname: str, trusted_list: t.Iterable[str]) -> bool:
 
 def get_host(
     scheme: str,
-    host_header: t.Optional[str],
-    server: t.Optional[t.Tuple[str, t.Optional[int]]] = None,
-    trusted_hosts: t.Optional[t.Iterable[str]] = None,
+    host_header: str | None,
+    server: tuple[str, int | None] | None = None,
+    trusted_hosts: t.Iterable[str] | None = None,
 ) -> str:
     """Return the host for the given parameters.
 
@@ -104,9 +97,9 @@ def get_host(
 def get_current_url(
     scheme: str,
     host: str,
-    root_path: t.Optional[str] = None,
-    path: t.Optional[str] = None,
-    query_string: t.Optional[bytes] = None,
+    root_path: str | None = None,
+    path: str | None = None,
+    query_string: bytes | None = None,
 ) -> str:
     """Recreate the URL for a request. If an optional part isn't
     provided, it and subsequent parts are not included in the URL.
@@ -127,39 +120,40 @@ def get_current_url(
         url.append("/")
         return uri_to_iri("".join(url))
 
-    url.append(url_quote(root_path.rstrip("/")))
+    # safe = https://url.spec.whatwg.org/#url-path-segment-string
+    # as well as percent for things that are already quoted
+    url.append(quote(root_path.rstrip("/"), safe="!$&'()*+,/:;=@%"))
     url.append("/")
 
     if path is None:
         return uri_to_iri("".join(url))
 
-    url.append(url_quote(path.lstrip("/")))
+    url.append(quote(path.lstrip("/"), safe="!$&'()*+,/:;=@%"))
 
     if query_string:
         url.append("?")
-        url.append(url_quote(query_string, safe=":&%=+$!*'(),"))
+        url.append(quote(query_string, safe="!$&'()*+,/:;=?@%"))
 
     return uri_to_iri("".join(url))
 
 
 def get_content_length(
-    http_content_length: t.Union[str, None] = None,
-    http_transfer_encoding: t.Union[str, None] = "",
-) -> t.Optional[int]:
-    """Returns the content length as an integer or ``None`` if
-    unavailable or chunked transfer encoding is used.
+    http_content_length: str | None = None,
+    http_transfer_encoding: str | None = None,
+) -> int | None:
+    """Return the ``Content-Length`` header value as an int. If the header is not given
+    or the ``Transfer-Encoding`` header is ``chunked``, ``None`` is returned to indicate
+    a streaming request. If the value is not an integer, or negative, 0 is returned.
 
     :param http_content_length: The Content-Length HTTP header.
     :param http_transfer_encoding: The Transfer-Encoding HTTP header.
 
     .. versionadded:: 2.2
     """
-    if http_transfer_encoding == "chunked":
+    if http_transfer_encoding == "chunked" or http_content_length is None:
         return None
 
-    if http_content_length is not None:
-        try:
-            return max(0, int(http_content_length))
-        except (ValueError, TypeError):
-            pass
-    return None
+    try:
+        return max(0, _plain_int(http_content_length))
+    except ValueError:
+        return 0

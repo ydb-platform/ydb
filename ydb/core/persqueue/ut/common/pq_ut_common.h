@@ -89,6 +89,7 @@ struct TTestContext {
     THolder<TTestActorRuntime> Runtime;
     TActorId Edge;
     THashMap<ui32, ui32> MsgSeqNoMap;
+    THashMap<ui32, TString> OwnerCookieMap;
     bool EnableDetailedPQLog = ENABLE_DETAILED_PQ_LOG;
 
     TTestContext() {
@@ -664,6 +665,40 @@ struct TCmdWriteOptions {
     bool DisableDeduplication = false;
 };
 void CmdWrite(const TCmdWriteOptions&);
+
+struct TBatchedMessageSpec {
+    ui64 SeqNo = 0;
+    ui64 MessageCount = 0;
+    ui64 Offset = Max<ui64>();
+    char Fill = 'a';
+};
+
+void AssertBatchedReadResults(
+    const NKikimrClient::TCmdReadResult& readResult,
+    const TVector<TBatchedMessageSpec>& expected,
+    size_t dataSize);
+
+void CmdReadAndAssertBatched(
+    TPQCmdReadSettings settings,
+    TTestContext& tc,
+    const TVector<TBatchedMessageSpec>& expected,
+    size_t dataSize);
+
+NKikimrClient::TCmdReadResult CmdReadAndGetResult(
+    const TPQCmdReadSettings& settings,
+    TTestContext& tc);
+
+void CmdWriteBatched(
+    const ui32 partition,
+    const TString& sourceId,
+    ui64 seqNo,
+    const TString& data,
+    ui64 totalBatchMessages,
+    TTestContext& tc,
+    i64 offset = -1,
+    bool disableDeduplication = false,
+    std::optional<ui64> maxSeqNo = std::nullopt,
+    NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK);
 
 void CmdRunCompaction(TTestActorRuntime& runtime,
                       ui64 tabletId,

@@ -65,7 +65,7 @@ void TBaseFixture::Init()
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
 
         if (RangeData.empty()) {
@@ -96,7 +96,7 @@ void TBaseFixture::Init()
     {
         Y_UNUSED(lsn);
         Y_UNUSED(traceId);
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
@@ -126,7 +126,7 @@ void TBaseFixture::Init()
         Y_UNUSED(hostIndex);
         Y_UNUSED(lsn);
 
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
@@ -159,7 +159,7 @@ void TBaseFixture::Init()
     {
         Y_UNUSED(traceId);
 
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
@@ -240,18 +240,23 @@ bool TBaseFixture::WaitScheduledTasks(size_t count, TDuration timeout)
     return Wait(ScheduledTasks, count, timeout);
 }
 
-void TBaseFixture::RunScheduledTasks()
+NThreading::TFuture<void> TBaseFixture::RunScheduledTasks()
 {
+    TPromise<void> promise = NewPromise<void>();
+    auto result = promise.GetFuture();
     auto guard = TGuard(PromisesGuard);
-    auto f = [scheduledTasks = std::move(ScheduledTasks)]   //
+    auto f = [scheduledTasks = std::move(ScheduledTasks),
+              promise = std::move(promise)]   //
         () mutable
     {
         for (auto& task: scheduledTasks) {
             task.Callback();
         }
+        promise.SetValue();
     };
 
     DirectBlockGroup->GetExecutor()->ExecuteSimple(f);
+    return result;
 }
 
 void TBaseFixture::SetReadResult(TDBGReadBlocksResponse response, bool async)

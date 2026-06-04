@@ -50,13 +50,11 @@ Syntax (case-insensitive, trailing semicolon allowed):
 
 ```sql
 -- Begin a transaction. Default mode: serializable-rw.
-BEGIN [TRANSACTION | WORK] [<mode>]
-START TRANSACTION              [<mode>]
+BEGIN [TRANSACTION] [<mode>]
 
 -- Commit / rollback:
-COMMIT [TRANSACTION | WORK]
-END    [TRANSACTION]
-ROLLBACK [TRANSACTION | WORK]
+COMMIT [TRANSACTION]
+ROLLBACK [TRANSACTION]
 ```
 
 Supported `<mode>` values are the YDB-native mode names also accepted by

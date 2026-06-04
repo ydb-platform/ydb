@@ -7,9 +7,11 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_query_utils.h>
 #include <ydb/public/lib/ydb_cli/common/tx_mode_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/folder/path.h>
 #include <util/generic/scope.h>
@@ -19,6 +21,26 @@
 namespace NYdb::NConsoleClient {
 
 namespace {
+
+constexpr NYdb::NIssue::TIssueCode KikimrTransactionNotFoundIssueCode = 2015; // NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND
+
+bool IsStaleInteractiveTransactionError(const TStatus& status) {
+    if (NStatusHelpers::StatusContainsIssueWithCode(status, KikimrTransactionNotFoundIssueCode)) {
+        return true;
+    }
+    if (status.GetStatus() == EStatus::NOT_FOUND) {
+        for (const auto& issue : status.GetIssues()) {
+            if (issue.GetMessage().contains("Transaction not found")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool IsStaleInteractiveTransactionError(TStringBuf text) {
+    return text.find("Transaction not found") != TStringBuf::npos;
+}
 
 class TSqlSessionRunner final : public TSessionRunnerBase, public TInterruptableCommand {
     using TBase = TSessionRunnerBase;
@@ -82,11 +104,13 @@ public:
         : TBase(CreateSessionSettings(settings))
         , QueryPlanPrinter(EDataFormat::Default)
         , SqlLazyDriver(settings.SqlLazyDriver)
+        , SqlTxLazyDriver(settings.SqlTxLazyDriver)
         , EnableAiInteractive(settings.EnableAiInteractive)
         , EnableInteractiveTransactions(settings.EnableInteractiveTransactions)
         , BasePrompt(Settings.Prompt)
     {
         Y_VALIDATE(SqlLazyDriver, "TSqlSessionRunner requires a non-null SqlLazyDriver");
+        Y_VALIDATE(SqlTxLazyDriver, "TSqlSessionRunner requires a non-null SqlTxLazyDriver");
         Y_VALIDATE(settings.CompleterLazyDriver, "TSqlSessionRunner requires a non-null CompleterLazyDriver");
     }
 
@@ -100,12 +124,13 @@ public:
 
     void HandleLine(const TString& line) final {
         Y_DEFER { ResetInterrupted(); };
-        // Stop the driver at the end of the line iff no transaction is active.
+        // Stop the drivers at the end of the line if no transaction is active.
         // The flag is re-evaluated at scope exit (after BEGIN/COMMIT/ROLLBACK
-        // mutate the state) so the driver lives across queries inside a tx.
+        // mutate the state) so the tx driver lives across queries inside a tx.
         Y_DEFER {
             if (!IsInteractiveTransactionActive()) {
                 SqlLazyDriver->Stop(true);
+                SqlTxLazyDriver->Stop(true);
             }
         };
 
@@ -215,7 +240,7 @@ public:
         auto txSettings = ParseBeginTransactionIsolation(line);
         if (!txSettings) {
             const auto modeToken = ExtractBeginModeToken(line);
-            if (modeToken && IsOneShotOnlyTxMode(*modeToken)) {
+            if (modeToken && IsOneShotOnlyTxMode(*modeToken) && !HasTrailingBeginTokens(line)) {
                 Cerr << Colors.Red()
                      << "\nMode \"" << *modeToken
                      << "\" cannot be used with BEGIN — the Query service does"
@@ -236,7 +261,9 @@ public:
             auto beginResult = Session->BeginTransaction(*txSettings).GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(beginResult);
             Transaction = beginResult.GetTransaction();
+            InteractiveTxActive = true;
             UpdateTransactionPrompt();
+            UpdateSchemeQueryCompletionMode();
             Cout << "BEGIN" << Endl;
         } catch (NStatusHelpers::TYdbErrorException& error) {
             PrintTcError("Failed to begin transaction", ToString(error));
@@ -253,17 +280,22 @@ public:
             return;
         }
 
+        Y_DEFER { ResetTransactionState(); };
+
         try {
             auto commitResult = Transaction->Commit().GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(commitResult);
             Cout << "COMMIT" << Endl;
-            ResetTransactionState();
         } catch (NStatusHelpers::TYdbErrorException& error) {
             PrintTcError("Failed to commit transaction", ToString(error));
-            // Keep the transaction state so the user can retry the COMMIT or
-            // explicitly ROLLBACK. The destructor rolls it back if needed.
+            if (IsStaleInteractiveTransactionError(error.GetStatus())) {
+                PrintBeginAgainHint();
+            }
         } catch (std::exception& error) {
             PrintTcError("Failed to commit transaction", error.what());
+            if (IsStaleInteractiveTransactionError(TStringBuf(error.what()))) {
+                PrintBeginAgainHint();
+            }
         }
     }
 
@@ -273,19 +305,37 @@ public:
             return;
         }
 
+        Y_DEFER { ResetTransactionState(); };
+
         try {
             auto rollbackResult = Transaction->Rollback().GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(rollbackResult);
             Cout << "ROLLBACK" << Endl;
-            ResetTransactionState();
         } catch (NStatusHelpers::TYdbErrorException& error) {
             PrintTcError("Failed to rollback transaction", ToString(error));
+            if (IsStaleInteractiveTransactionError(error.GetStatus())) {
+                PrintBeginAgainHint();
+            }
         } catch (std::exception& error) {
             PrintTcError("Failed to rollback transaction", error.what());
+            if (IsStaleInteractiveTransactionError(TStringBuf(error.what()))) {
+                PrintBeginAgainHint();
+            }
         }
     }
 
     void ExecuteInTransaction(const TString& line) {
+        if (LooksLikeSchemeQuery(line)) {
+            Cerr << Colors.Yellow()
+                 << "\nDDL statements (CREATE, ALTER, DROP, etc.) cannot be executed inside an"
+                    " interactive transaction."
+                 << Colors.OldColor() << Endl;
+            Cerr << "SHOW CREATE TABLE/VIEW is allowed. COMMIT or ROLLBACK the transaction first,"
+                    " then run other DDL outside of a transaction."
+                 << Endl;
+            return;
+        }
+
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
         settings.ConcurrentResultSets(false);
@@ -294,7 +344,7 @@ public:
         }
 
         try {
-            TExecuteGenericQuery executeRunner(SqlLazyDriver->Get());
+            TExecuteGenericQuery executeRunner(SqlTxLazyDriver->Get());
             executeRunner.Execute(line, {
                 .Settings = settings,
                 .AddIndent = true,
@@ -303,8 +353,10 @@ public:
             });
         } catch (NStatusHelpers::TYdbErrorException& error) {
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(ToString(error)) << Endl;
+            InvalidateInteractiveTransactionAfterQueryError();
         } catch (std::exception& error) {
             Cerr << Colors.Red() << "\nFailed to execute query:" << Colors.OldColor() << Endl << Strip(error.what()) << Endl;
+            InvalidateInteractiveTransactionAfterQueryError();
         }
     }
 
@@ -368,26 +420,26 @@ private:
 
         if (enableInteractiveTransactions) {
             elements.emplace_back(CreateListItem(hbox({
-                keyword("BEGIN"), text(" ["), keyword("TRANSACTION"), text(" | "),
-                keyword("WORK"), text("] ["), CreateEntityName("MODE"),
+                keyword("BEGIN"), text(" ["), keyword("TRANSACTION"), text("] ["),
+                CreateEntityName("MODE"),
                 text("]: start an interactive transaction (Query service session).")
-            })));
-            elements.emplace_back(CreateListItem(hbox({
-                keyword("START TRANSACTION"), text(" ["), CreateEntityName("MODE"),
-                text("]: alias of BEGIN TRANSACTION.")
             })));
             elements.emplace_back(CreateListItem(hbox({
                 text("  "), CreateEntityName("MODE"), text(": "), CreateEntityName(GetTxModeNamesForHelp()),
                 text(" (default: "), CreateEntityName(TString(kTxModeSerializableRw)), text(").")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("COMMIT"), text(" | "), keyword("COMMIT TRANSACTION"), text(" | "),
-                keyword("COMMIT WORK"), text(" | "), keyword("END"), text(" | "),
-                keyword("END TRANSACTION"), text(": commit the current transaction.")
+                keyword("COMMIT"), text(" ["), keyword("TRANSACTION"),
+                text("]: commit the current transaction.")
             })));
             elements.emplace_back(CreateListItem(hbox({
-                keyword("ROLLBACK"), text(" | "), keyword("ROLLBACK TRANSACTION"), text(" | "),
-                keyword("ROLLBACK WORK"), text(": rollback the current transaction.")
+                keyword("ROLLBACK"), text(" ["), keyword("TRANSACTION"),
+                text("]: rollback the current transaction.")
+            })));
+            elements.emplace_back(CreateListItem(hbox({
+                text("Destructive DDL (CREATE, ALTER, DROP, ...) is not supported inside a"
+                     " transaction; SHOW CREATE TABLE/VIEW is allowed. A failed query ends the"
+                     " transaction on the server — the CLI clears local state automatically.")
             })));
         }
 
@@ -478,14 +530,45 @@ private:
         if (Session) {
             return;
         }
-        QueryClient = NQuery::TQueryClient(SqlLazyDriver->Get());
+        QueryClient = NQuery::TQueryClient(SqlTxLazyDriver->Get());
         auto sessionResult = QueryClient->GetSession().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
         Session = sessionResult.GetSession();
     }
 
     bool IsInteractiveTransactionActive() const {
-        return EnableInteractiveTransactions && Transaction && Transaction->IsActive();
+        return EnableInteractiveTransactions && InteractiveTxActive;
+    }
+
+    void PrintBeginAgainHint() const {
+        Cerr << Colors.Yellow()
+             << "No open interactive transaction. Issue BEGIN to start a new one."
+             << Colors.OldColor() << Endl;
+    }
+
+    void PrintTransactionAutoRolledBackNotice() const {
+        Cerr << Colors.Yellow()
+             << "Transaction was automatically rolled back after the error."
+             << Colors.OldColor() << Endl;
+        PrintBeginAgainHint();
+    }
+
+    void InvalidateInteractiveTransaction() {
+        ResetTransactionState();
+    }
+
+    void InvalidateInteractiveTransactionAfterQueryError() {
+        if (!IsInteractiveTransactionActive()) {
+            return;
+        }
+        InvalidateInteractiveTransaction();
+        PrintTransactionAutoRolledBackNotice();
+    }
+
+    void UpdateSchemeQueryCompletionMode() {
+        if (LineReader && EnableInteractiveTransactions) {
+            LineReader->SetExcludeSchemeQueryCompletion(IsInteractiveTransactionActive());
+        }
     }
 
     void PrintTcError(TStringBuf prefix, TStringBuf details) {
@@ -506,23 +589,27 @@ private:
     }
 
     void ResetTransactionState() {
+        InteractiveTxActive = false;
         Transaction.reset();
         Session.reset();
         QueryClient.reset();
         ResetTransactionPrompt();
+        UpdateSchemeQueryCompletionMode();
     }
 
     // Rollback any transaction left open at shutdown. Errors are swallowed.
     void RollbackOpenTransaction(bool silent) {
-        if (!Transaction || !Transaction->IsActive()) {
+        if (!InteractiveTxActive) {
             ResetTransactionState();
             return;
         }
-        try {
-            Transaction->Rollback().GetValueSync();
-        } catch (...) {
-            if (!silent) {
-                throw;
+        if (Transaction) {
+            try {
+                Transaction->Rollback().GetValueSync();
+            } catch (...) {
+                if (!silent) {
+                    throw;
+                }
             }
         }
         ResetTransactionState();
@@ -531,6 +618,7 @@ private:
 private:
     TQueryPlanPrinter QueryPlanPrinter;
     TLazyDriver::TPtr SqlLazyDriver;
+    TLazyDriver::TPtr SqlTxLazyDriver;
     NQuery::EStatsMode CollectStatsMode = NQuery::EStatsMode::None;
     std::string ResourcePool;
     bool EnableAiInteractive;
@@ -540,6 +628,7 @@ private:
     std::optional<NQuery::TQueryClient> QueryClient;
     std::optional<NQuery::TSession> Session;
     std::optional<NQuery::TTransaction> Transaction;
+    bool InteractiveTxActive = false;
 };
 
 } // anonymous namespace

@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 

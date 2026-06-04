@@ -8,6 +8,7 @@ RECURSE(
     kv
     kv_volume
     log
+    min_max_workload
     mixedpy
     nfs_backups
     node_broker

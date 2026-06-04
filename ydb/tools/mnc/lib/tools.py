@@ -33,7 +33,7 @@ async def chain_async(*tasks):
                 for remaining_task in running_tasks:
                     if not remaining_task.done():
                         remaining_task.cancel()
-                return False
+                return result
         return True
     except Exception:
         for task in running_tasks:

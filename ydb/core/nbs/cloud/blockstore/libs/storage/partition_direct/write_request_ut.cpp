@@ -85,7 +85,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -166,7 +168,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -252,7 +256,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -350,7 +356,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -438,10 +446,10 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.GetDesiredPBuffers(),
             response.RequestedWrites);
         UNIT_ASSERT_EQUAL(
-            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.GetDesiredPBuffers(),
             response.CompletedWrites);
     }
 
@@ -521,7 +529,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
         UNIT_ASSERT_EQUAL(
-            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.GetDesiredPBuffers(),
             response.CompletedWrites);
     }
 
@@ -573,9 +581,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{0}));
         bool atLeastOneHandoffResponded =
             response.CompletedWrites.Get(
-                *VChunkConfig.PBufferHosts.GetHandOff().Nth(0)) ||
+                *VChunkConfig.GetSecondaryPBuffers().Nth(0)) ||
             response.CompletedWrites.Get(
-                *VChunkConfig.PBufferHosts.GetHandOff().Nth(1));
+                *VChunkConfig.GetSecondaryPBuffers().Nth(1));
         UNIT_ASSERT_EQUAL(true, atLeastOneHandoffResponded);
     }
 

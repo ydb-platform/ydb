@@ -44,9 +44,4 @@ jobs:
           YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Push repair в fork / при 403 на upstream — раскомментируйте:
-          # GITHUB_PUSH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}
-          #
-          # Модели: по умолчанию из образа (default.yaml). Override только если нужно:
-          # YDBDOC_LLM_MODELS_CRITIC_PRIMARY: ${{ vars.YDBDOC_LLM_MODELS_CRITIC_PRIMARY }}
-          # YDBDOC_LLM_MODELS_CRITIC_FALLBACKS: ${{ vars.YDBDOC_LLM_MODELS_CRITIC_FALLBACKS }}
+        

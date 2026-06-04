@@ -182,7 +182,6 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto opRoot = MakeIntrusive<TOpRoot>(rootInput, node->Pos(), columnOrder);
     opRoot->Node = node;
     opRoot->PlanProps = PlanProps;
-    opRoot->PlanProps.PgSyntax = std::stoi(kqpOpRoot.PgSyntax().StringValue());
  
     // We need to propagate plan properties reference into expressions in the plan
     for (auto it : *opRoot) {
@@ -225,6 +224,8 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         result = ConvertTKqpOpSort(node);
     } else if (NYql::NNodes::TKqpOpAggregate::Match(node.Get())) {
         result = ConvertTKqpOpAggregate(node);
+    } else if (NYql::NNodes::TKqpOpReplaceAlias::Match(node.Get())) {
+        result = ConvertTKqpOpReplaceAlias(node);
     } else {
         YQL_ENSURE(false, "Unknown operator node");
     }
@@ -463,4 +464,17 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
     return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Undefined, distinctAll, node->Pos());
 }
 
-} // namespace NKikimr::NKqp
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPtr node) {
+    auto opReplaceAlias = TKqpOpReplaceAlias(node);
+    const auto input = ExprNodeToOperator(opReplaceAlias.Input().Ptr());
+    auto alias = TString(opReplaceAlias.Alias());
+
+    TVector<TMapElement> mapElements;
+    for (const auto& iu: input->GetOutputIUs()) {
+        mapElements.push_back(TMapElement(TInfoUnit(alias, iu.GetColumnName()), iu, input->Pos, &Ctx));
+    }
+
+    return MakeIntrusive<TOpMap>(input, input->Pos, mapElements, true);
+}
+
+} // namespace NKikimr::Nkqp

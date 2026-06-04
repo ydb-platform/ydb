@@ -200,7 +200,7 @@ namespace {
         if (IsPersistentBufferActor) {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
-            WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            WritePersistentBuffersActor = Register(new TWritePersistentBuffersRequestActor(SelfId()));
             CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {

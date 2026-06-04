@@ -34,15 +34,12 @@ TVector<TStringBuf> GetSupportedTxModeNames();
 // (online-ro / stale-ro are not interactive — see GetSupportedTxModeNames).
 std::optional<NQuery::TTxSettings> ParseTxModeName(TStringBuf mode);
 
-// Parse the isolation specification of a BEGIN / START TRANSACTION command line.
+// Parse the isolation specification of a BEGIN command line.
 //
 // Accepted forms (case-insensitive, trailing semicolon allowed):
 //   BEGIN
-//   BEGIN WORK
 //   BEGIN TRANSACTION
-//   START TRANSACTION
-//   BEGIN [TRANSACTION | WORK] <mode>
-//   START TRANSACTION <mode>
+//   BEGIN [TRANSACTION] <mode>
 //
 // Returns:
 //   - SerializableRW() for the bare command (no mode specified);
@@ -53,8 +50,8 @@ std::optional<NQuery::TTxSettings> ParseBeginTransactionIsolation(TStringBuf lin
 
 // Extracts the user-facing mode token from a BEGIN line, if any.
 //
-// Returns the lowercased mode token (e.g. "online-ro") for inputs like
-// "BEGIN online-ro" or "START TRANSACTION online-ro INCONSISTENT READS".
+// Returns the lowercased mode token (e.g. "snapshot-ro") for inputs like
+// "BEGIN snapshot-ro" or "BEGIN TRANSACTION read-committed-rw".
 // Returns std::nullopt if the line is not a BEGIN command or has no mode
 // token after the prefix. Used to produce targeted diagnostics for known but
 // unsupported modes.
@@ -64,6 +61,11 @@ std::optional<TString> ExtractBeginModeToken(TStringBuf line);
 // tx_control (--tx-mode), not as an open interactive transaction. Today:
 // online-ro and stale-ro.
 bool IsOneShotOnlyTxMode(TStringBuf mode);
+
+// True if a BEGIN line has tokens after the mode (e.g. "BEGIN serializable-rw
+// extra"). Such lines are rejected as malformed rather than with the
+// one-shot-mode hint.
+bool HasTrailingBeginTokens(TStringBuf line);
 
 // Human-readable list of supported mode names for help / error messages.
 TString GetTxModeNamesForHelp();

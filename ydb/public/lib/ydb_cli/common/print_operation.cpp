@@ -398,6 +398,40 @@ namespace {
         row.FreeText(freeText);
     }
 
+    // Full backup
+    TPrettyTable MakeTable(const NYdb::NBackup::TFullBackupResponse&) {
+        return TPrettyTable({"id", "ready", "status", "progress"});
+    }
+
+    TString PrintProgress(const NYdb::NBackup::TFullBackupResponse::TMetadata& metadata) {
+        TStringBuilder result;
+
+        result << metadata.Progress;
+        if (metadata.Progress != NYdb::NBackup::EBackupProgress::TransferData) {
+            return result;
+        }
+
+        result << " (" << ToString(metadata.ProgressPercent) + "%)";
+        return result;
+    }
+
+    void PrettyPrint(const NYdb::NBackup::TFullBackupResponse& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+
+        auto& row = table.AddRow();
+        row
+            .Column(0, operation.Id().ToString())
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus())
+            .Column(3, PrintProgress(metadata));
+
+        TStringBuilder freeText;
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
+        row.FreeText(freeText);
+    }
+
     // Incremental restore
     TPrettyTable MakeTable(const NYdb::NBackup::TBackupCollectionRestoreResponse&) {
         return TPrettyTable({"id", "ready", "status", "progress"});
@@ -574,6 +608,15 @@ void PrintOperation(const NYdb::NBackup::TIncrementalBackupResponse& operation, 
 }
 
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalBackupResponse>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
+// Full backup
+void PrintOperation(const NYdb::NBackup::TFullBackupResponse& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TFullBackupResponse>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 

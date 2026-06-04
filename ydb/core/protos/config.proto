@@ -2467,6 +2467,19 @@ message THiveConfig {
         optional double Priority = 2;
     }
 
+    message THiveTabletAllowedMetrics {
+        enum EAllowedMetricValue {
+            Default = 0;  // Not configured, take from hive defaults
+            Disabled = 1; // Explicitly disabled
+            Enabled = 2;  // Explicitly enabled
+        }
+
+        repeated NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
+        optional EAllowedMetricValue CPU = 2;
+        optional EAllowedMetricValue Memory = 3;
+        optional EAllowedMetricValue Network = 4;
+    }
+
     optional uint64 MaxTabletsScheduled = 2 [default = 100];
     optional uint64 MaxResourceCounter = 3 [default = 100000000];
     optional uint64 MaxResourceCPU = 4 [default = 10000000];
@@ -2556,6 +2569,7 @@ message THiveConfig {
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
     optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
+    repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
 }
 
 message THealthCheckConfig {

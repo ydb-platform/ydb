@@ -159,7 +159,6 @@ namespace NKikimr::NDDisk {
         return result;
     }
 
-
     void TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::MarkOccupied(ui32 fromSectorIdx, ui32 toSectorIdx) {
         OwnerChunksQueue.erase(GetRank());
         Y_ABORT_UNLESS(FreeSpace >= toSectorIdx - fromSectorIdx + 1);

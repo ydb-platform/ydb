@@ -3688,6 +3688,7 @@ state: STATE_ENABLED
               Columns { Name: "embedding" Type: "String" }
               Columns { Name: "prefix" Type: "String" }
               Columns { Name: "value" Type: "Utf8" }
+              Columns { Name: "json" Type: "Json" }
               KeyColumnNames: ["key"]
             }
             %s
@@ -3876,6 +3877,17 @@ state: STATE_ENABLED
                   }
                 }
               }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalJson) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["json"]
+              Type: EIndexTypeGlobalJson
             }
         )");
     }

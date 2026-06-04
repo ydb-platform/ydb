@@ -28,6 +28,14 @@ THashSet<std::string> AsSet(const THints& hints) {
     return set;
 }
 
+THashSet<std::string> SupportedInteractiveModeNames() {
+    THashSet<std::string> set;
+    for (auto mode : GetSupportedTxModeNames()) {
+        set.insert(TString(mode));
+    }
+    return set;
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TclCompleter) {
@@ -41,7 +49,6 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT(AsSet(hints).contains("BEGIN"));
         // Must not propose tail words yet.
         UNIT_ASSERT(!AsSet(hints).contains("TRANSACTION"));
-        UNIT_ASSERT(!AsSet(hints).contains("WORK"));
     }
 
     Y_UNIT_TEST(SuggestsBeginOnPrefixLowerCase) {
@@ -53,15 +60,6 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT(AsSet(hints).contains("BEGIN"));
     }
 
-    Y_UNIT_TEST(SuggestsStartOnPrefix) {
-        auto completer = MakeTclOnlyCompleter();
-        int contextLen = -1;
-        const TString text = "STA";
-        auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-        UNIT_ASSERT_VALUES_EQUAL(contextLen, 3);
-        UNIT_ASSERT(AsSet(hints).contains("START"));
-    }
-
     Y_UNIT_TEST(NextWordAfterBeginSpace) {
         auto completer = MakeTclOnlyCompleter();
         int contextLen = -1;
@@ -70,14 +68,10 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT_VALUES_EQUAL(contextLen, 0);
         const auto set = AsSet(hints);
         UNIT_ASSERT(set.contains("TRANSACTION"));
-        UNIT_ASSERT(set.contains("WORK"));
-        UNIT_ASSERT(set.contains("serializable-rw"));
-        UNIT_ASSERT(set.contains("read-committed-rw"));
-        UNIT_ASSERT(set.contains("snapshot-ro"));
-        UNIT_ASSERT(set.contains("snapshot-rw"));
-        // online-ro / stale-ro are NOT supported as interactive modes.
-        UNIT_ASSERT(!set.contains("online-ro"));
-        UNIT_ASSERT(!set.contains("stale-ro"));
+        for (const auto& mode : SupportedInteractiveModeNames()) {
+            UNIT_ASSERT(set.contains(mode));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(set.size(), SupportedInteractiveModeNames().size() + 1);
     }
 
     Y_UNIT_TEST(NextWordAfterBeginPartialT) {
@@ -88,8 +82,7 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         UNIT_ASSERT_VALUES_EQUAL(contextLen, 1);
         const auto set = AsSet(hints);
         UNIT_ASSERT(set.contains("TRANSACTION"));
-        UNIT_ASSERT(!set.contains("WORK"));
-        UNIT_ASSERT(!set.contains("serializable-rw"));
+        UNIT_ASSERT_VALUES_EQUAL(set.size(), 1u);
     }
 
     Y_UNIT_TEST(NextWordAfterBeginPartialS) {
@@ -113,46 +106,27 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
         auto hints = completer->ApplyLight(text, std::string(text), contextLen);
         UNIT_ASSERT_VALUES_EQUAL(contextLen, 0);
         const auto set = AsSet(hints);
-        UNIT_ASSERT(set.contains("serializable-rw"));
-        UNIT_ASSERT(set.contains("read-committed-rw"));
-        UNIT_ASSERT(set.contains("snapshot-ro"));
-        UNIT_ASSERT(set.contains("snapshot-rw"));
-        UNIT_ASSERT(!set.contains("online-ro"));
-        UNIT_ASSERT(!set.contains("stale-ro"));
-        UNIT_ASSERT(!set.contains("TRANSACTION"));
-        UNIT_ASSERT(!set.contains("WORK"));
-    }
-
-    Y_UNIT_TEST(NextWordAfterStartTransactionSpace) {
-        auto completer = MakeTclOnlyCompleter();
-        int contextLen = -1;
-        const TString text = "START TRANSACTION ";
-        auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-        UNIT_ASSERT_VALUES_EQUAL(contextLen, 0);
-        const auto set = AsSet(hints);
-        UNIT_ASSERT(set.contains("serializable-rw"));
-        UNIT_ASSERT(set.contains("snapshot-ro"));
-        // Repeated phrase must NOT be proposed.
-        UNIT_ASSERT(!set.contains("START TRANSACTION serializable-rw"));
+        for (const auto& mode : SupportedInteractiveModeNames()) {
+            UNIT_ASSERT(set.contains(mode));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(set.size(), SupportedInteractiveModeNames().size());
         UNIT_ASSERT(!set.contains("TRANSACTION"));
     }
 
-    Y_UNIT_TEST(NoOnlineRoSuggestion) {
+    Y_UNIT_TEST(NoModeSuggestionForUnknownPrefix) {
         auto completer = MakeTclOnlyCompleter();
         int contextLen = -1;
         const TString text = "BEGIN o";
         auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-        // No mode starts with 'o' anymore (online-ro removed).
         UNIT_ASSERT(hints.empty());
     }
 
-    Y_UNIT_TEST(NoInconsistentReadsModifier) {
+    Y_UNIT_TEST(NoSuggestionAfterCompleteBeginLine) {
         auto completer = MakeTclOnlyCompleter();
         int contextLen = -1;
         for (auto text : {TString("BEGIN snapshot-ro "), TString("BEGIN snapshot-rw ")}) {
             auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-            const auto set = AsSet(hints);
-            UNIT_ASSERT(!set.contains("INCONSISTENT"));
+            UNIT_ASSERT(hints.empty());
         }
     }
 
@@ -171,7 +145,7 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
             UNIT_ASSERT_VALUES_EQUAL(contextLen, 0);
             const auto set = AsSet(hints);
             UNIT_ASSERT(set.contains("TRANSACTION"));
-            UNIT_ASSERT(set.contains("WORK"));
+            UNIT_ASSERT_VALUES_EQUAL(set.size(), 1u);
         }
     }
 
@@ -189,18 +163,8 @@ Y_UNIT_TEST_SUITE(TclCompleter) {
             auto hints = completer->ApplyLight(text, std::string(text), contextLen);
             const auto set = AsSet(hints);
             UNIT_ASSERT(set.contains("TRANSACTION"));
-            UNIT_ASSERT(set.contains("WORK"));
+            UNIT_ASSERT_VALUES_EQUAL(set.size(), 1u);
         }
-    }
-
-    Y_UNIT_TEST(EndForms) {
-        auto completer = MakeTclOnlyCompleter();
-        int contextLen = -1;
-        const TString text = "END ";
-        auto hints = completer->ApplyLight(text, std::string(text), contextLen);
-        const auto set = AsSet(hints);
-        UNIT_ASSERT(set.contains("TRANSACTION"));
-        UNIT_ASSERT(!set.contains("WORK"));
     }
 
     Y_UNIT_TEST(NoTclSuggestionsForUnrelatedInput) {

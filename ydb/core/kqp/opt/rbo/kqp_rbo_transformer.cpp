@@ -42,7 +42,6 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx,
                 .Count(take.Count())
             .Build()
             .ColumnOrder(root.Cast().ColumnOrder())
-            .PgSyntax(root.Cast().PgSyntax())
         .Done().Ptr();
         // clang-format on
     } else {
@@ -50,65 +49,25 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx,
     }
 }
 
-TExprNode::TPtr RewriteSublink(const TExprNode::TPtr& node, TExprContext& ctx, bool pgSyntax) {
-    if (node->Child(0)->Content() == "expr") {
-        // clang-format off
-        return Build<TKqpExprSublink>(ctx, node->Pos())
-            .Subquery(node->Child(4))
-            .Done().Ptr();
-        // clang-format on
-    } else if (node->Child(0)->Content() == "any") {
-        // clang-format off
-        return Build<TKqpInSublink>(ctx, node->Pos())
-            .Subquery(node->Child(4))
-            .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
-            .OuterType(node->Child(2))
-            .InLambda(node->Child(3))
-            .Done().Ptr();
-        // clang-format on
-    } else if (node->Child(0)->Content() == "exists") {
-        // clang-format off
-        return Build<TKqpExistsSublink>(ctx, node->Pos())
-            .Subquery(node->Child(4))
-            .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
-            .Done().Ptr();
-        // clang-format on
-    }
-    else {
-        Y_ENSURE(false, "Uknown sublink type in query");
+void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLevelSelects, THashSet<TExprNode*>& visited) {
+    if (visited.contains(input.Get())) {
+        return;
     }
 
-}
-
-TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto sublink = TKqpSublinkBase(node);
-    if (auto root = sublink.Subquery().Maybe<TKqpOpRoot>()) {
-        if (TKqpExprSublink::Match(node.Get())) {
-            // clang-format off
-            return Build<TKqpExprSublink>(ctx, node->Pos())
-                .Subquery(root.Cast().Input())
-                .Done().Ptr();
-            // clang-format on
-        } else if (TKqpExistsSublink::Match(node.Get())) {
-            // clang-format off
-            return Build<TKqpExistsSublink>(ctx, node->Pos())
-                .Subquery(root.Cast().Input())
-                .ReturnPgBool(node->Child(TKqpExistsSublink::idx_ReturnPgBool))
-                .Done().Ptr();
-            // clang-format on
-        } else if (TKqpInSublink::Match(node.Get())) {
-            auto inSublink = sublink.Cast<TKqpInSublink>();
-            // clang-format off
-            return Build<TKqpInSublink>(ctx, node->Pos())
-                .Subquery(root.Cast().Input())
-                .ReturnPgBool(inSublink.ReturnPgBool())
-                .OuterType(inSublink.OuterType())
-                .InLambda(inSublink.InLambda())
-                .Done().Ptr();
-            // clang-format on
-        }
+    if (input->IsCallable("KqpOpRoot")) {
+        visited.insert(input.Get());
+        return;
     }
-    return node;
+
+    if (input->IsCallable("YqlSelect")) {
+        topLevelSelects.insert(input.Get());
+        visited.insert(input.Get());
+        return;
+    }
+    for (auto c: input->Children()) {
+        CollectTopLevelSelects(c, topLevelSelects, visited);
+    }
+    return;
 }
 
 } // anonymous namespace
@@ -117,36 +76,19 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
+    THashSet<TExprNode*> topLevelSelects;
+    THashSet<TExprNode*> visited;
+
+    CollectTopLevelSelects(input, topLevelSelects, visited);
+
     auto status = OptimizeExpr(
         output, output,
-        [](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
-            if (node->IsCallable("PgSubLink")) {
-                return RewriteSublink(node, ctx, true);
-            } else if (node->IsCallable("YqlSubLink")) {
-                return RewriteSublink(node, ctx, false);
-            } else {
-                return node;
-            }
-        },
-        ctx, settings);
-    
-    if (status != TStatus::Ok) {
-        return status;
-    }
-
-    status = OptimizeExpr(
-        output, output,
-        [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
-            // PostgreSQL AST rewrtiting
-            if (TCoPgSelect::Match(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter,  true);
-            }
+        [this, &topLevelSelects](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
             
             // YQL AST rewriting
-            else if (TCoYqlSelect::Match(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, false);
-            } else if (TKqpSublinkBase::Match(node.Get())) {
-                return RemoveRootFromSublink(node, ctx);
+            if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
+                THashMap<const TExprNode*, TExprNode::TPtr> translated;
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, translated, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else {

@@ -1,4 +1,3 @@
-#include "log_impl.h"
 #include "local_pgwire_util.h"
 #include "pgwire_kqp_proxy.h"
 #include <ydb/core/kqp/common/events/events.h>
@@ -303,7 +302,9 @@ protected:
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    BLOG_ENSURE(record.GetResponse().GetYdbResults().empty());
+                    if(!record.GetResponse().GetYdbResults().empty()) {
+                        YDB_LOG_COMP_ERROR(NKikimrServices::LOCAL_PGWIRE, "record.GetResponse().GetYdbResults().empty()");
+                    }
 
                     // HACK
                     if (Response_->Tag == "SELECT") {

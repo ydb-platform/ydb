@@ -3219,6 +3219,12 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     if (options.ReplicationFactor) {
         req->set_replication_factor(*options.ReplicationFactor);
     }
+    if (options.UsePushBasedShuffle) {
+        req->set_use_push_based_shuffle(true);
+    }
+    if (options.Schema) {
+        ToProto(req->mutable_schema(), options.Schema);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
         return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));

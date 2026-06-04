@@ -1,4 +1,3 @@
-#include "log_impl.h"
 #include "local_pgwire_util.h"
 #include "sql_parser.h"
 #include "pgwire_kqp_proxy.h"

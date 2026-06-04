@@ -7198,6 +7198,27 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         {"value"});
     }
 
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalJsonIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "json"
+              type { optional_type { item { type_id: JSON } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "json"
+              global_json_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalJson,
+        {"json"});
+    }
+
     Y_UNIT_TEST(ReplicationImport) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()

@@ -12,6 +12,8 @@ namespace NKqp {
 
 using namespace NYql;
 
+class IOperator;
+
 enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 
 struct TPlanProps;
@@ -60,6 +62,7 @@ struct TSubplans {
  */
 struct TPlanProps {
     TStageGraph StageGraph;
+    THashMap<IOperator*, TInfoUnitSet> LiveOut;
     int InternalVarIdx = 1;
     TSubplans Subplans;
     bool PgSyntax = false;

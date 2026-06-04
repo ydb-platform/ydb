@@ -85,8 +85,8 @@ class TFuseFiltersRule : public ISimplifiedRule {
 };
 
 /**
- * Push down a non-projecting map operator
- * Currently only pushes below joins that are immediately below
+ * Push append-only map elements closer to sources through maps and joins.
+ * If only part of a map can move safely, leave the rest above.
  */
 class TPushMapRule : public ISimplifiedRule {
   public:
@@ -242,6 +242,16 @@ class TConstantFoldingStage : public IRBOStage {
   public:
     TConstantFoldingStage();
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+};
+
+/**
+ * Remove append-only map elements whose outputs are not live.
+ */
+class TPruneDeadMapElementsRule : public IRule {
+  public:
+    TPruneDeadMapElementsRule() : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**

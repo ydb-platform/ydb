@@ -25,6 +25,7 @@ SRCS(
     interruptable.cpp
     lazy_driver.cpp
     local_paths.cpp
+    markdown.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp

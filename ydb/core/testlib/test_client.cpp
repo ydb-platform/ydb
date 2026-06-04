@@ -1888,16 +1888,12 @@ namespace Tests {
         }
 
         if (Runtime) {
-            Runtime->CleanupActorSystems();
+            Runtime.Destroy();
         }
 
         if (Bus) {
             Bus->Stop();
             Bus.Drop();
-        }
-
-        if (Runtime) {
-            Runtime.Destroy();
         }
     }
 

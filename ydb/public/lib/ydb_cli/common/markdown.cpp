@@ -100,8 +100,9 @@ void RemovePairedEmphasis(TString& s, char marker) {
     s = std::move(out);
 }
 
-// Strip leading block markers (blockquotes, headings) and inline italic markers, but keep '**'
-// (bold) and '`' (inline code) so BuildStyledLine can style them. Used for prose.
+// Strip leading block markers (blockquotes, headings) and inline italic markers, keeping '**' bold
+// markers for BuildStyledLine. Backticks are left untouched on purpose: the model often writes YQL
+// inline, where backticks quote identifiers, so they must survive verbatim. Used for prose.
 TString StripInlineMarkdownKeepStyles(TStringBuf line) {
     size_t start = 0;
     while (start < line.size() && line[start] == ' ') {
@@ -129,17 +130,16 @@ TString StripInlineMarkdownKeepStyles(TStringBuf line) {
 
     // Keep the original leading spaces unless a block marker was stripped.
     TString result(strippedBlock ? line.substr(start) : line);
-    RemovePairedEmphasis(result, '*'); // italic; keeps "SELECT *", '**' bold and '`' code intact
+    RemovePairedEmphasis(result, '*'); // italic; keeps "SELECT *" and '**' bold markers intact
     RemovePairedEmphasis(result, '_'); // italic; keeps snake_case identifiers intact
     return result;
 }
 
-// Same as above, but also drops '**' bold and '`' code markers. Used where inline styling is
-// impossible, such as table cells (which become plain strings).
+// Same as above, but also drops '**' bold markers. Used where inline styling is impossible, such as
+// table cells (which become plain strings). Backticks are kept verbatim (see above).
 TString StripInlineMarkdown(TStringBuf line) {
     TString result = StripInlineMarkdownKeepStyles(line);
     SubstGlobal(result, "**", "");
-    SubstGlobal(result, "`", "");
     return result;
 }
 
@@ -218,57 +218,37 @@ ftxui::Element BuildCodeBlock(const std::vector<TStringBuf>& codeLines, TStringB
 }
 
 // Render a single prose line as a flexbox of space-separated tokens (mirroring how paragraph()
-// reflows words): "**...**" spans become bold and "`...`" spans are shown in the accent color.
-// Inside a token the style can change between pieces without inserting a space; tokens themselves
-// are separated by a one-cell gap.
+// reflows words), turning "**...**" spans into bold. Single backticks are passed through verbatim:
+// the model uses them to quote YQL identifiers, so they must not be stripped or recolored. Inside a
+// token the style can change between pieces without inserting a space; tokens are separated by a gap.
 ftxui::Element BuildStyledLine(TStringBuf line) {
-    // An unbalanced marker would restyle the rest of the line; if so, drop that marker kind so the
-    // affected parts render plain.
-    int boldMarkers = 0;
+    // Unbalanced "**" would make the rest of the line bold; if so, drop the markers and render plain.
+    int markers = 0;
     for (size_t i = 0; i + 1 < line.size();) {
         if (line[i] == '*' && line[i + 1] == '*') {
-            ++boldMarkers;
+            ++markers;
             i += 2;
         } else {
             ++i;
         }
     }
-    size_t codeMarkers = 0;
-    for (const char c : line) {
-        if (c == '`') {
-            ++codeMarkers;
-        }
-    }
-    TString sanitized;
-    if (boldMarkers % 2 != 0 || codeMarkers % 2 != 0) {
-        sanitized = line;
-        if (boldMarkers % 2 != 0) {
-            SubstGlobal(sanitized, "**", "");
-        }
-        if (codeMarkers % 2 != 0) {
-            SubstGlobal(sanitized, "`", "");
-        }
-        line = sanitized;
+    TString plain;
+    if (markers % 2 != 0) {
+        plain = line;
+        SubstGlobal(plain, "**", "");
+        line = plain;
     }
 
     std::vector<ftxui::Element> tokens;
     std::vector<ftxui::Element> pieces;
     std::string piece;
     bool bold = false;
-    bool code = false;
 
     auto flushPiece = [&]() {
-        if (piece.empty()) {
-            return;
+        if (!piece.empty()) {
+            pieces.push_back(bold ? (ftxui::text(piece) | ftxui::bold) : ftxui::text(piece));
+            piece.clear();
         }
-        ftxui::Element element = ftxui::text(piece);
-        if (code) {
-            element = element | ftxui::color(ftxui::Color::Cyan); // inline code, same accent as the header
-        } else if (bold) {
-            element = element | ftxui::bold;
-        }
-        pieces.push_back(std::move(element));
-        piece.clear();
     };
     auto flushToken = [&]() {
         flushPiece();
@@ -283,11 +263,7 @@ ftxui::Element BuildStyledLine(TStringBuf line) {
     };
 
     for (size_t i = 0; i < line.size();) {
-        if (line[i] == '`') {
-            flushPiece();
-            code = !code;
-            ++i;
-        } else if (!code && line[i] == '*' && i + 1 < line.size() && line[i + 1] == '*') {
+        if (line[i] == '*' && i + 1 < line.size() && line[i + 1] == '*') {
             flushPiece();
             bold = !bold;
             i += 2;

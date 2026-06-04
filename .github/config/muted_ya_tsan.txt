@@ -181,6 +181,7 @@ ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.MessageWrite
 ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.SharedConsumer
 ydb/services/persqueue_v1/actors/schema/topic/ut CreateTopic_TopicAPI.CreateTopicWithNameEqDB
 ydb/tests/compatibility py3test.[test_compatibility.py */*] chunk
+ydb/tests/compatibility py3test.[test_kafka_topic.py */*] chunk
 ydb/tests/compatibility py3test.[test_stress.py */*] chunk
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-26-2-1_to_prestable-26-3]
@@ -203,6 +204,7 @@ ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_def
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_nullable[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_set_default[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_example.py.TestExampleRestartToAnotherVersion.test_example[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_in_memory.py.TestInMemoryRestartToAnotherVersion.test_in_memory_restart_to_version[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_in_memory.py.TestInMemoryRolling.test_in_memory_rolling[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-3_and_stable-26-2-1]
@@ -226,6 +228,7 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1_and_stable-26-1-1-column]
 ydb/tests/compatibility test_system_tablet_backup.py.TestSystemTabletBackupRestartToAnotherVersion.test[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_schema_changes_in_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_table_operations_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-2-1_to_prestable-26-3]

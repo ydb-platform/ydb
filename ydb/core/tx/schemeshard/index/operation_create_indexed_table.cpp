@@ -198,7 +198,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         if (baseTableDescription.HasTTLSettings() && !DoesIndexSupportTTL(indexType)) {
             auto msg = TStringBuilder() << "Table with " << indexType << " index doesn't support TTL";
-            return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter, msg)};
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
         TTableColumns implTableColumns;

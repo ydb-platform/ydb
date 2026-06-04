@@ -1,28 +1,11 @@
 #pragma once
 
+#include "create_message_impl.h"
 #include "structured_message.h"
 
 #include <initializer_list>
 
 namespace NActors::NStructuredLog {
-
-class TCreateMessageArg;
-
-class TCreateMessageGuard {
-    friend class TCreateMessageArg;
-
-public:
-    TCreateMessageGuard();
-    ~TCreateMessageGuard();
-    TStructuredMessage Pop();
-
-protected:
-    static TStructuredMessage& PushBuildMessage();
-    static TStructuredMessage& GetBuildMessage();
-    static TStructuredMessage PopBuildMessage();
-
-    bool Popped{false};
-};
 
 // YDB_LOG_CREATE_MESSAGE and YDB_LOG_UPDATE_MESSAGE use lamdba because of following reasons:
 // 1. YDB_LOG_CREATE_MESSAGE must return created structured message.

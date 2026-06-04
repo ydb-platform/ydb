@@ -3540,7 +3540,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) final {
-        const auto input = Source_->Build(ctx);
+        auto input = Source_->Build(ctx);
         if (!input) {
             return nullptr;
         }
@@ -3552,16 +3552,21 @@ public:
                                              Source_->Y("SqlExtractKey", "row", presortKeySelector));
         }
 
-        auto keys = Source_->Y();
-        for (const auto& key : Keys_) {
-            const auto keyName = *key->GetColumnName();
-            YQL_ENSURE(keyName, "Key column name is missing");
-            keys = Source_->L(keys, BuildQuotedAtom(Pos_, keyName));
+        TMap<TString, TNodePtr> extraColumns;
+        const auto extractKey = BuildKeyExtractor(ctx, extraColumns);
+        if (!extraColumns.empty()) {
+            TNodePtr extraMembers = Y();
+            for (const auto& [name, node] : extraColumns) {
+                const auto addMember = Source_->Y("AddMember", "row", BuildQuotedAtom(node->GetPos(), name), node);
+                extraMembers = Source_->L(extraMembers, Source_->Y("let", "row", addMember));
+            }
+            const auto extraMembersLambda = BuildLambda(Pos_, Source_->Y("row"), extraMembers, "row");
+            input = Source_->Y(ctx.UseUnordered(*Source_) ? "OrderedMap" : "Map", input, extraMembersLambda);
         }
 
         return Source_->Y("SqlCombineInput", input,
                           presortKeySelector, presortDirection,
-                          Source_->Q(keys),
+                          BuildLambda(Pos_, Source_->Y("row"), extractKey),
                           BuildLambda(Pos_, Source_->Y("row"), Arg_));
     }
 
@@ -3579,6 +3584,30 @@ public:
     }
 
 private:
+    TNodePtr BuildKeyExtractor(TContext& ctx, TMap<TString, TNodePtr>& extraColumns) {
+        const auto emitGetKey = [this](const auto& key, auto& extraColumns, auto& ctx) {
+            TString keyName;
+            if (key->GetColumnName()) {
+                keyName = *key->GetColumnName();
+            } else {
+                keyName = ctx.MakeName("_yql_combine_column_");
+                extraColumns.insert({keyName, key});
+            }
+            return Source_->Y("PersistableRepr", Source_->Y("Member", "row", BuildQuotedAtom(Pos_, keyName)));
+        };
+
+        auto keysTuple = Source_->Y();
+        if (Keys_.size() == 1) {
+            keysTuple = emitGetKey(Keys_.back(), extraColumns, ctx);
+        } else {
+            for (const auto& key : Keys_) {
+                keysTuple = Source_->L(keysTuple, emitGetKey(key, extraColumns, ctx));
+            }
+            keysTuple = Source_->Q(keysTuple);
+        }
+        return Y("SqlExtractKey", "row", BuildLambda(Pos_, Source_->Y("row"), keysTuple));
+    }
+
     TSourcePtr Source_;
     TVector<TSortSpecificationPtr> Presort_;
     TVector<TNodePtr> Keys_;

@@ -927,9 +927,9 @@ class TestInteractiveHighlightAndCompletion(BaseSqlInteractiveTest):
 
 
 class TestInteractiveTransactions(BaseSqlInteractiveTest):
-    """Verify interactive transaction control via Query service session (ydb_int only)."""
+    """Verify interactive transaction control via Query service session (experimental ydb client only)."""
 
-    CLI_BINARY_ENV = "YDB_CLI_INT_BINARY"
+    CLI_BINARY_ENV = "YDB_CLI_EXPERIMENTAL_BINARY"
 
     @classmethod
     def run_interactive_session(cls, queries: List[str], tmp_path: Path, extra_args: List[str] = None, endpoint: Optional[str] = None) -> BaseInteractiveTest.ExecutionResult:
@@ -1393,11 +1393,12 @@ class TestInteractiveTransactionsAutocomplete(BaseSqlInteractiveTest):
     """
     Verify TAB-completion for transaction control commands.
 
-    These tests run ydb_int under a pty so we can drive the completer the way
-    a human user would: send a partial prefix, press TAB, observe the result.
+    These tests run the experimental ydb client under a pty so we can drive
+    the completer the way a human user would: send a partial prefix, press
+    TAB, observe the result.
     """
 
-    CLI_BINARY_ENV = "YDB_CLI_INT_BINARY"
+    CLI_BINARY_ENV = "YDB_CLI_EXPERIMENTAL_BINARY"
     COMPLETION_TIMEOUT = 10
 
     @classmethod
@@ -1557,17 +1558,17 @@ class TestInteractiveTransactionsNotInPublicYdb(BaseSqlInteractiveTest):
         result = self.run_interactive_session(["BEGIN", "exit"], self.tmp_path)
         assert result.exit_code == 0
         combined = result.stdout + result.stderr
-        assert "ydb_int" in combined.lower()
+        assert "experimental" in combined.lower()
         assert "BEGIN" not in result.stdout.split("\n")[-5:]
 
     def test_commit_not_available_in_public_ydb(self):
         result = self.run_interactive_session(["COMMIT", "exit"], self.tmp_path)
         assert result.exit_code == 0
         combined = result.stdout + result.stderr
-        assert "ydb_int" in combined.lower()
+        assert "experimental" in combined.lower()
 
     def test_rollback_not_available_in_public_ydb(self):
         result = self.run_interactive_session(["ROLLBACK", "exit"], self.tmp_path)
         assert result.exit_code == 0
         combined = result.stdout + result.stderr
-        assert "ydb_int" in combined.lower()
+        assert "experimental" in combined.lower()

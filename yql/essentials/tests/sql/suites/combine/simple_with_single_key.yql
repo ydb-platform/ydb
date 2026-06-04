@@ -21,5 +21,5 @@ COMBINE AS_TABLE($a) as A
     PRESORT A.key, A.subkey
 WITH AS_TABLE($b) as B
     PRESORT B.key, B.subkey
-ON A.key = B.key AND A.subkey = B.subkey
+ON A.key = B.key
 USING $f(TableRow(), TableRow())

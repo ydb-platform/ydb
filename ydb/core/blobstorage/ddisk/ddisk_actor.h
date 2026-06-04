@@ -762,13 +762,17 @@ namespace NKikimr::NDDisk {
         TActorId WritePersistentBuffersActor;
         TActorId PersistentBufferActorId;
 
-        ui64 CalculateChecksum(const TRope::TIterator begin);
+        ui64 CalculateChecksum(const TRope::TIterator begin) {
+            return CalculateChecksum(begin, SectorSize);
+        }
+
+        ui64 CalculateChecksum(const TRope::TIterator begin, size_t numBytes);
 
         void CreatePersistentBuffer();
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
-        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, std::vector<TPersistentBufferSectorInfo>& sectors);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void ReplyReadPersistentBuffer(ui64 operationCookie);

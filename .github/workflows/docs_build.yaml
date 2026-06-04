@@ -55,3 +55,26 @@ jobs:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
           cli-version: stable
+
+      # docs-build-action writes github.event.number to inputs/pr-number.
+      # For workflow_dispatch this field is empty, so patch the artifact.
+      - name: Download inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs
+
+      - name: Save PR number to inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PULL_NUMBER: ${{ inputs.pull_number }}
+        run: printf '%s' "$PULL_NUMBER" > ./inputs/pr-number
+
+      - name: Upload inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs/
+          overwrite: true

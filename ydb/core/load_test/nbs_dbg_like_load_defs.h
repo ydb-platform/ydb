@@ -25,7 +25,7 @@ inline const TVector<double>& LoadActorResponseTimeUsBounds() {
         for (double v = 150; v <= 1000; v += 50) {
             b.push_back(v);
         }
-        for (double v = 1000; v <= 5000; v += 250) {
+        for (double v = 1250; v <= 5000; v += 250) {
             b.push_back(v);
         }
         b.push_back(10000);

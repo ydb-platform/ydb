@@ -1028,7 +1028,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"hdd-3", 0}});
 
-        // Double remove of same group
+        // Double remove of same groups
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"hdd", 1, 3}, {"hdd", 1, 3}});
 

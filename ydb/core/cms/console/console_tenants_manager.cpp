@@ -1302,7 +1302,6 @@ private:
     TTenantsManager::TStoragePool::TPtr Pool;
     TVector<ui32> Groups;
     TVector<ui32> SuccessGroups;
-    size_t GroupsDone = 0;
     TActorId BSControllerPipe;
 
 public:
@@ -1325,22 +1324,22 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateWork);
-        SendRequests(ctx);
-        CheckCompletion(ctx);
+        SendRequest(ctx);
     }
 
-    void SendRequests(const TActorContext &ctx) {
+    void SendRequest(const TActorContext &ctx) {
         OpenPipe(ctx);
 
-        for (size_t i = 0; i < Groups.size(); ++i) {
-            LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send decommit request for group " << Groups[i]);
-            NTabletPipe::SendData(ctx, BSControllerPipe, new TEvBlobStorage::TEvControllerGroupDecommittedNotify(Groups[i], true), 0, i);
-        }
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto *groups = request->Record.MutableRequest()->AddCommand()->MutableDeleteSpecificGroups();
+        groups->MutableGroupIds()->Assign(Groups.begin(), Groups.end());
+
+        NTabletPipe::SendData(ctx, BSControllerPipe, request.release());
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
+            HFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
@@ -1351,34 +1350,28 @@ public:
         }
     }
 
-    void Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr& ev, const TActorContext& ctx) {
-        auto cookie = ev->Cookie;
-        if (cookie >= Groups.size()) {
-            Y_DEBUG_ABORT_UNLESS(false, "Got invalid cookie %" PRIu64, cookie);
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev, const TActorContext& ctx)
+    {
+        auto &rec = ev->Get()->Record.GetResponse();
+
+        BLOG_D("TDcecommitGroups got config response: " << rec.ShortDebugString());
+
+        if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
+            TString error = rec.GetErrorDescription();
+            if (rec.StatusSize() && rec.GetStatus(0).GetErrorDescription())
+                error = rec.GetStatus(0).GetErrorDescription();
+
+            BLOG_ERROR("TDecommitGroups cannot decommit groups '"
+                        << Pool->Config.GetName() << "' ("
+                        << Pool->Config.GetStoragePoolId() << "): " << error);
+            Pool->Issue = error;
+            ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, error));
+            Die(ctx);
             return;
         }
-        if (auto group = std::exchange(Groups[cookie], 0)) {
-            ++GroupsDone;
-            switch (ev->Get()->Record.GetStatus()) {
-                case NKikimrProto::OK:
-                case NKikimrProto::ALREADY:
-                    SuccessGroups.push_back(group);
-                    break;
-                default:
-                    LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                                "TDecommitGroups got error reply"
-                                << ", reply# " << ev->Get()->Record.ShortDebugString());
-                    break;
-            }
-        }
-        CheckCompletion(ctx);
+        ReplyAndDie(ctx);
     }
 
-    void CheckCompletion(const TActorContext& ctx) {
-        if (GroupsDone == Groups.size()) {
-            ReplyAndDie(ctx);
-        }
-    }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Status != NKikimrProto::OK) {
@@ -1394,7 +1387,7 @@ public:
         if (BSControllerPipe) {
             NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), BSControllerPipe);
         }
-        SendRequests(ctx);
+        SendRequest(ctx);
     }
 
     void OpenPipe(const TActorContext &ctx) {
@@ -1408,6 +1401,10 @@ public:
     void ReplyAndDie(const TActorContext &ctx)
     {
         ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvGroupsDecommitted(Tenant, Pool, std::move(SuccessGroups)));
+        Die(ctx);
+    }
+
+    void Die(const TActorContext& ctx) {
         if (BSControllerPipe) {
             NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), BSControllerPipe);
         }
@@ -4036,7 +4033,10 @@ void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const 
     BLOG_TRACE("Handle TEvShrinkStoragePoolDone " << ev->Get()->Record.ShortDebugString());
     const auto &poolName = ev->Get()->Record.GetStoragePool();
     const auto split = SplitString(poolName, ":");
-    Y_ABORT_UNLESS(split.size() == 2);
+    if (split.size() != 2) {
+        BLOG_ERROR("Invalid pool name format: " << poolName);
+        return;
+    }
     const auto &tenantName = split[0];
     const auto &poolKind = split[1];
     auto tenant = GetTenant(tenantName);

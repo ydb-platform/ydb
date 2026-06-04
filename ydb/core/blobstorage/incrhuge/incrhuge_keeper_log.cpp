@@ -5,6 +5,8 @@
 #include <google/protobuf/text_format.h>
 #include <util/generic/variant.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_INCRHUGE
+
 namespace NKikimr {
     namespace NIncrHuge {
 
@@ -456,8 +458,10 @@ namespace NKikimr {
                 const TActorContext& ctx) {
             Y_ABORT_UNLESS(ChunkQueue && &item == &ChunkQueue.front());
 
-            IHLOG_DEBUG(ctx, "ApplyLogChunkItem Lsn# %" PRIu64 " Status# %s",
-                    item.Lsn, NKikimrProto::EReplyStatus_Name(status).data());
+            YDB_LOG_CTX_DEBUG((ctx), "",
+                {"LogPrefix", LogPrefix},
+                {"Lsn", item.Lsn},
+                {"Status", NKikimrProto::EReplyStatus_Name(status).data()});
 
             if (status == NKikimrProto::OK) {
                 // if this was an entrypoint, reset merger and update LSN
@@ -470,8 +474,10 @@ namespace NKikimr {
                 std::visit([this](const auto& content) { ConfirmedChunkMerger(content); }, item.Content);
                 // if it was chunk deletion, propagate this information to deleter state
                 if (auto *record = std::get_if<TChunkRecordMerger::TChunkDeletion>(&item.Content)) {
-                    IHLOG_DEBUG(ctx, "DeleteChunk ChunkIdx# %" PRIu32 " ChunkSerNum# %s",
-                            record->ChunkIdx, record->ChunkSerNum.ToString().data());
+                    YDB_LOG_CTX_DEBUG((ctx), "",
+                        {"LogPrefix", LogPrefix},
+                        {"ChunkIdx", record->ChunkIdx},
+                        {"ChunkSerNum", record->ChunkSerNum});
 
                     TDeleteQueueItem deleteItem{
                         TDeleteRecordMerger::TDeleteChunk{record->ChunkSerNum, record->NumItems}, // Content
@@ -537,11 +543,16 @@ namespace NKikimr {
             Y_ABORT_UNLESS(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
 
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
-                IHLOG_DEBUG(ctx, "LogBlobDeletes ChunkIdx# %" PRIu32 " ChunkSerNum# %s"
-                        " Id# %016" PRIx64 " IndexInsideChunk# %" PRIu32 " SizeInBlocks# %" PRIu32 " Lsn# %" PRIu64
-                        " Owner# %d SeqNo# %" PRIu64, deleteLocator.ChunkIdx, deleteLocator.ChunkSerNum.ToString().data(),
-                        deleteLocator.Id, deleteLocator.IndexInsideChunk, deleteLocator.SizeInBlocks, Lsn, owner,
-                        seqNo);
+                YDB_LOG_CTX_DEBUG((ctx), "",
+                    {"LogPrefix", LogPrefix},
+                    {"ChunkIdx", deleteLocator.ChunkIdx},
+                    {"ChunkSerNum", deleteLocator.ChunkSerNum},
+                    {"Id", deleteLocator.Id},
+                    {"IndexInsideChunk", deleteLocator.IndexInsideChunk},
+                    {"SizeInBlocks", deleteLocator.SizeInBlocks},
+                    {"Lsn", Lsn},
+                    {"Owner", owner},
+                    {"SeqNo", seqNo});
             }
 
             // format blob deletes record
@@ -574,10 +585,14 @@ namespace NKikimr {
             Y_ABORT_UNLESS(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
 
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
-                IHLOG_DEBUG(ctx, "LogVirtualBlobDeletes ChunkIdx# %" PRIu32 " ChunkSerNum# %s"
-                        " Id# %016" PRIx64 " IndexInsideChunk# %" PRIu32 " SizeInBlocks# %" PRIu32 " Lsn# %" PRIu64,
-                        deleteLocator.ChunkIdx, deleteLocator.ChunkSerNum.ToString().data(), deleteLocator.Id,
-                        deleteLocator.IndexInsideChunk, deleteLocator.SizeInBlocks, Lsn);
+                YDB_LOG_CTX_DEBUG((ctx), "LogVirtualBlobDeletes",
+                    {"LogPrefix", LogPrefix},
+                    {"ChunkIdx", deleteLocator.ChunkIdx},
+                    {"ChunkSerNum", deleteLocator.ChunkSerNum},
+                    {"Id", deleteLocator.Id},
+                    {"IndexInsideChunk", deleteLocator.IndexInsideChunk},
+                    {"SizeInBlocks", deleteLocator.SizeInBlocks},
+                    {"Lsn", Lsn});
             }
 
             DeleteQueue.push_back(TDeleteQueueItem{
@@ -634,8 +649,11 @@ namespace NKikimr {
             DeleteQueue.emplace_back(std::move(newItem));
             TDeleteQueueItem& item = DeleteQueue.back();
 
-            IHLOG_DEBUG(ctx, "ProcessDeleteQueueItem Lsn# %" PRIu64 " Entrypoint# %s"
-                    " Virtual# %s", item.Lsn, item.Entrypoint ? "true" : "false", item.Virtual ? "true" : "false");
+            YDB_LOG_CTX_DEBUG((ctx), "",
+                {"LogPrefix", LogPrefix},
+                {"Lsn", item.Lsn},
+                {"Entrypoint", item.Entrypoint},
+                {"Virtual", item.Virtual});
 
             if (item.Virtual) {
                 ProcessDeleteQueueVirtualItems(ctx);
@@ -644,8 +662,10 @@ namespace NKikimr {
 
             // create callback that will be invoked upon completion of log
             auto callback = [this, p = &item](NKikimrProto::EReplyStatus status, IEventBase *msg, const TActorContext& ctx) {
-                IHLOG_DEBUG(ctx, "ProcessDeleteQueueItem Lsn# %" PRIu64 " Status# %s",
-                        p->Lsn, NKikimrProto::EReplyStatus_Name(status).data());
+                YDB_LOG_CTX_DEBUG((ctx), "",
+                    {"LogPrefix", LogPrefix},
+                    {"Lsn", p->Lsn},
+                    {"Status", NKikimrProto::EReplyStatus_Name(status).data()});
                 ApplyLogDeleteItem(*p, status, msg, ctx);
             };
 
@@ -682,9 +702,15 @@ namespace NKikimr {
                     ConfirmedDeletesMerger = TDeleteRecordMerger();
                 }
                 // update confirmed state
-                IHLOG_DEBUG(ctx, "ApplyLogDeleteItem Entrypoint# %s Lsn# %" PRIu64
-                        " Virtual# %s", item.Entrypoint ? "true" : "false", item.Lsn, item.Virtual ? "true" : "false");
-                std::visit([this](const auto& content) { ConfirmedDeletesMerger(content); }, item.Content);
+                if (IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_DEBUG, NKikimrServices::BS_INCRHUGE, 0ull)) {
+                    YDB_LOG_CTX_DEBUG((ctx), "ApplyLogDeleteItem",
+                        {"LogPrefix", LogPrefix},
+                        {"Entrypoint", item.Entrypoint},
+                        {"Lsn", item.Lsn},
+                        {"Virtual", item.Virtual});
+
+                    std::visit([this](const auto& content) { ConfirmedDeletesMerger(content); }, item.Content);
+                }
             } else {
                 // set failure expected flag for all pending items -- they are already in flight and should also fail
                 for (TDeleteQueueItem& item : DeleteQueue) {

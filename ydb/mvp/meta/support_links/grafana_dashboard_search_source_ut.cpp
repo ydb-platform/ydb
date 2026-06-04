@@ -28,6 +28,7 @@ public:
     TTestActorRuntime()
         : TMvpTestRuntime(1, false)
     {
+        NMVP::NSupportLinks::TGrafanaDashboardModelCache::ResetForTests();
         Initialize();
     }
 };
@@ -428,6 +429,68 @@ public:
     }
 };
 
+class TDashboardModelCacheCheckActor : public NActors::TActor<TDashboardModelCacheCheckActor> {
+public:
+    using TBase = NActors::TActor<TDashboardModelCacheCheckActor>;
+
+    explicit TDashboardModelCacheCheckActor(size_t* dashboardModelRequests)
+        : TBase(&TDashboardModelCacheCheckActor::StateWork)
+        , DashboardModelRequests(dashboardModelRequests)
+    {}
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
+        const TString url(event->Get()->Request->URL);
+        if (url.Contains("/api/search")) {
+            Reply(event, "HTTP/1.1 200 OK", R"json([
+                {"type":"dash-db","title":"CPU","url":"/d/ydb_cpu/cpu","uid":"ydb_cpu"}
+            ])json");
+            return;
+        }
+        if (url.Contains("/api/dashboards/uid/ydb_cpu")) {
+            ++(*DashboardModelRequests);
+            Reply(
+                event,
+                "HTTP/1.1 200 OK",
+                MakeDashboardModelBody("label_values(ElapsedMicrosec{__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"},database)"));
+            return;
+        }
+        if (url.Contains("/api/datasources/proxy/uid/")) {
+            Reply(event, "HTTP/1.1 200 OK", MakeProbeResponseBody("1"));
+            return;
+        }
+
+        Reply(event, "HTTP/1.1 404 Not Found", R"({"message":"not found"})");
+    }
+
+    void Reply(
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event,
+        TStringBuf statusLine,
+        TStringBuf body)
+    {
+        const auto request = event->Get()->Request;
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
+        EatWholeString(
+            response,
+            TStringBuilder()
+                << statusLine << "\r\n"
+                << "Connection: close\r\n"
+                << "Content-Type: application/json; charset=utf-8\r\n"
+                << "Content-Length: " << body.size() << "\r\n"
+                << "\r\n"
+                << body);
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+        }
+    }
+
+private:
+    size_t* DashboardModelRequests;
+};
+
 NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse* ResolveSource(
     TTestActorRuntime& runtime,
     std::shared_ptr<NMVP::ILinkSource> source,
@@ -684,6 +747,43 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         UNIT_ASSERT_VALUES_EQUAL(extendedProbeGroups[0].DatasourceUid, baseProbeGroups[0].DatasourceUid);
         UNIT_ASSERT_VALUES_EQUAL(extendedProbeGroups[0].Buckets, baseProbeGroups[0].Buckets);
         UNIT_ASSERT_VALUES_EQUAL(extendedProbeGroups[0].Query, baseProbeGroups[0].Query);
+    }
+
+    Y_UNIT_TEST(UsesDashboardModelCacheForRepeatedResolve) {
+        TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
+        TTestActorRuntime runtime;
+
+        size_t dashboardModelRequests = 0;
+        auto httpProxyId = runtime.Register(new TDashboardModelCacheCheckActor(&dashboardModelRequests));
+        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+            MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
+            MakeMetaSettings());
+
+        THashMap<TString, TString> clusterInfo;
+        clusterInfo["k8s_namespace"] = "ydb-workspace";
+        clusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        auto* firstResponse = ResolveSource(
+            runtime,
+            source,
+            clusterInfo,
+            MakeUrlParameters("database=%2Froot%2Ftest"),
+            httpProxyId,
+            handle);
+        UNIT_ASSERT_VALUES_EQUAL(firstResponse->Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(firstResponse->Links.size(), 1);
+
+        auto* secondResponse = ResolveSource(
+            runtime,
+            source,
+            clusterInfo,
+            MakeUrlParameters("database=%2Froot%2Ftest"),
+            httpProxyId,
+            handle);
+        UNIT_ASSERT_VALUES_EQUAL(secondResponse->Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(secondResponse->Links.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dashboardModelRequests, 1);
     }
 
     Y_UNIT_TEST(ResolveReturnsHttpError) {

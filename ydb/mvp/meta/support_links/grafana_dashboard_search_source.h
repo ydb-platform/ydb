@@ -18,7 +18,10 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/vector.h>
+#include <util/system/mutex.h>
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
@@ -26,6 +29,59 @@
 namespace NMVP::NSupportLinks {
 
 inline constexpr TDuration GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT = TDuration::Seconds(5);
+inline constexpr TDuration GRAFANA_DASHBOARD_MODEL_CACHE_TTL = TDuration::Minutes(5);
+
+class TGrafanaDashboardModelCache {
+public:
+    static bool TryGet(TStringBuf dashboardApiUrl, TString& body) {
+        TGuard<TMutex> guard(Mutex());
+        auto& entries = Entries();
+        const auto it = entries.find(TString(dashboardApiUrl));
+        if (it == entries.end()) {
+            return false;
+        }
+        if (it->second.ExpireAt <= TInstant::Now()) {
+            entries.erase(it);
+            return false;
+        }
+        body = it->second.Body;
+        return true;
+    }
+
+    static void Put(TString dashboardApiUrl, TString body) {
+        TGuard<TMutex> guard(Mutex());
+        Entries()[std::move(dashboardApiUrl)] = TEntry{
+            .Body = std::move(body),
+            .ExpireAt = TInstant::Now() + GRAFANA_DASHBOARD_MODEL_CACHE_TTL,
+        };
+    }
+
+    static void Erase(TStringBuf dashboardApiUrl) {
+        TGuard<TMutex> guard(Mutex());
+        Entries().erase(TString(dashboardApiUrl));
+    }
+
+    static void ResetForTests() {
+        TGuard<TMutex> guard(Mutex());
+        Entries().clear();
+    }
+
+private:
+    struct TEntry {
+        TString Body;
+        TInstant ExpireAt;
+    };
+
+    static TMutex& Mutex() {
+        static TMutex mutex;
+        return mutex;
+    }
+
+    static THashMap<TString, TEntry>& Entries() {
+        static THashMap<TString, TEntry> entries;
+        return entries;
+    }
+};
 
 class TGrafanaDashboardSearchActor : public NActors::TActorBootstrapped<TGrafanaDashboardSearchActor> {
 public:
@@ -216,8 +272,18 @@ private:
             return;
         }
 
-        RequestKind = ERequestKind::DashboardModel;
         const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
+        TString cachedBody;
+        if (TGrafanaDashboardModelCache::TryGet(candidate.DashboardApiUrl, cachedBody)) {
+            BLOG_D("Support links Grafana dashboard model cache hit: title=" << candidate.Title
+                << " url=" << candidate.DashboardApiUrl);
+            if (TryHandleDashboardModelBody(cachedBody, false)) {
+                return;
+            }
+            TGrafanaDashboardModelCache::Erase(candidate.DashboardApiUrl);
+        }
+
+        RequestKind = ERequestKind::DashboardModel;
         SendGrafanaGetRequest(candidate.DashboardApiUrl, "fetch dashboard model");
     }
 
@@ -239,13 +305,22 @@ private:
             return;
         }
 
+        if (TryHandleDashboardModelBody(event->Get()->Response->Body, true)) {
+            TGrafanaDashboardModelCache::Put(candidate.DashboardApiUrl, TString(event->Get()->Response->Body));
+        }
+    }
+
+    bool TryHandleDashboardModelBody(TStringBuf body, bool advanceOnInvalidJson) {
+        const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
         NJson::TJsonValue responseJson;
         NJson::TJsonReaderConfig jsonReaderConfig;
-        if (!NJson::ReadJsonTree(event->Get()->Response->Body, &jsonReaderConfig, &responseJson) || responseJson.GetType() != NJson::JSON_MAP) {
+        if (!NJson::ReadJsonTree(body, &jsonReaderConfig, &responseJson) || responseJson.GetType() != NJson::JSON_MAP) {
             BLOG_W("Support links Grafana dashboard model has invalid JSON: title=" << candidate.Title
                 << " url=" << candidate.DashboardApiUrl);
-            AdvanceToNextDashboard();
-            return;
+            if (advanceOnInvalidJson) {
+                AdvanceToNextDashboard();
+            }
+            return false;
         }
 
         const NJson::TJsonValue* dashboard = &responseJson;
@@ -259,10 +334,11 @@ private:
             BLOG_D("Support links Grafana dashboard has no probeable buckets: title=" << candidate.Title
                 << " url=" << candidate.ResolvedUrl);
             AdvanceToNextDashboard();
-            return;
+            return true;
         }
 
         RequestProbe();
+        return true;
     }
 
     void RequestProbe() {

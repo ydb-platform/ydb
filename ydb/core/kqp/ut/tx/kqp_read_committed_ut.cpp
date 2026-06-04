@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
     }
 
     Y_UNIT_TEST(TUpdateWhereTakesLocksWithUniqueIndex) {
-        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test2` SET Comment = "Updated" WHERE Name == "Paul")", 2, 4, 2);
+        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test2` SET Comment = "Updated" WHERE Name == "Paul")", 3, 4, 3);
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
     }
 
     Y_UNIT_TEST(TUpdateOnTakesLocksWithUniqueIndex) {
-        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test2` ON (Group, Name, Comment) VALUES (1u, "Paul", "Updated"))", 1, 4, 1);
+        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test2` ON (Group, Name, Comment) VALUES (1u, "Paul", "Updated"))", 2, 4, 2);
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

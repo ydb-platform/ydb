@@ -1989,9 +1989,6 @@ private:
                     indexSettings->SetIndexName(indexDescription.Name);
                     FillTableId(*implTable, *indexSettings->MutableTable());
 
-                    Cerr << "TEST >> INDEX :: " << (indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique)
-                        << " -- " << settings.Mode().StringValue()
-                        << " -- " << affectedKeysIndexes.contains(index) << Endl;
                     indexSettings->SetIsUniq(
                         indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
                         && settings.Mode().StringValue() != "delete"

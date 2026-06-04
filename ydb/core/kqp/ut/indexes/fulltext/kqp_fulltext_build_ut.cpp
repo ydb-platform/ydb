@@ -3374,6 +3374,33 @@ Y_UNIT_TEST(FulltextIndexBuildCustomParallel) {
     UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
 }
 
+Y_UNIT_TEST_TWIN(TtlNotAllowed_Both, IsRelevance) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const std::string query = std::format(R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text String,
+                Stamp Timestamp,
+                INDEX fulltext_idx GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true),
+                PRIMARY KEY (Key)
+            ) WITH (
+                TTL = Interval("PT1H") ON Stamp
+            );
+        )", IsRelevance ? "relevance" : "plain");
+        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+
+        if (IsRelevance) {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextPlain index doesn't support TTL");
+        }
+    }
+}
+
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtl, IsRelevance) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();

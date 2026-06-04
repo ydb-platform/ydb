@@ -107,14 +107,7 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-1-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-2-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-2-8388608-ROW]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_stable-26-2-1]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_stable-26-2-1]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_prestable-26-3]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-1-1]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/fq/generic/analytics py3test.sole chunk
 ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[True-False-kikimr0]
@@ -158,8 +151,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
-ydb/tests/functional/ydb_cli test_ydb_interactive_sql.py.TestInteractiveTransactions.test_inconsistent_reads_modifier_rejected
-ydb/tests/functional/ydb_cli test_ydb_interactive_sql.py.TestInteractiveTransactionsAutocomplete.test_no_ddl_completion_inside_transaction
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_solomon
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

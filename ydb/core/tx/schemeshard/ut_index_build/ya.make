@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/wrappers/ut_helpers
     ydb/public/sdk/cpp/src/client/table
 )
 

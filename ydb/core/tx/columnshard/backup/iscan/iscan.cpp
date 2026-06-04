@@ -8,15 +8,16 @@ namespace NKikimr::NColumnShard::NBackup {
 
 TRowWriter::TRowWriter(TVector<TSerializedCellVec>& rows)
     : Rows(rows)
-{}
+{
+}
 
 void TRowWriter::AddRow(const TConstArrayRef<TCell>& cells) {
     TSerializedCellVec serializedKey(cells);
     Rows.emplace_back(std::move(serializedKey));
 }
 
-TConclusion<TVector<TSerializedCellVec>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                     const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
+TConclusion<TVector<TSerializedCellVec>> BatchToRows(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
     Y_ABORT_UNLESS(batch);
     TVector<TSerializedCellVec> cellVecs;
     cellVecs.reserve(batch->num_rows());
@@ -41,7 +42,9 @@ ui64 TExportDriver::GetTotalCpuTimeUs() const {
     return 0;
 }
 
-TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TActorId& subscriberActorId, const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId) {
+TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TActorId& subscriberActorId,
+    const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory,
+    const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId) {
     std::shared_ptr<::NKikimr::NDataShard::IExport> exp;
     switch (backupTask.GetSettingsCase()) {
         case NKikimrSchemeOp::TBackupTask::kYTSettings:
@@ -75,15 +78,16 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
         return exp->CreateUploader(subscriberActorId, txId);
     };
 
-    THolder<NKikimr::NDataShard::NExportScan::IBuffer> buffer{exp->CreateBuffer()};
-    std::unique_ptr<NTable::IScan> scan{NDataShard::CreateExportScan(std::move(buffer), createUploader)};
+    THolder<NKikimr::NDataShard::NExportScan::IBuffer> buffer{ exp->CreateBuffer() };
+    std::unique_ptr<NTable::IScan> scan{ NDataShard::CreateExportScan(std::move(buffer), createUploader) };
 
     return scan;
 }
 
 TExportDriver::TExportDriver(TActorSystem* actorSystem, const TActorId& subscriberActorId)
     : ActorSystem(actorSystem)
-    , SubscriberActorId(subscriberActorId) {
+    , SubscriberActorId(subscriberActorId)
+{
 }
 
 class TUploaderActor: public TActorBootstrapped<TUploaderActor> {
@@ -115,13 +119,15 @@ public:
         }
     };
 
-    TUploaderActor(const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, const TActorId& subscriberActorId, ui64 txId)
+    TUploaderActor(const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory,
+        const NDataShard::IExport::TTableColumns& tableColumns, const TActorId& subscriberActorId, ui64 txId)
         : BackupTask(backupTask)
         , ExportFactory(exportFactory)
         , TableColumns(tableColumns)
         , SubscriberActorId(subscriberActorId)
         , TxId(txId)
-        , ColumnTypes(MakeColumnTypes()) {
+        , ColumnTypes(MakeColumnTypes())
+    {
     }
 
     void Bootstrap() {
@@ -149,19 +155,14 @@ public:
         PassAway();
     }
 
-    STRICT_STFUNC(
-        StateMain,
-        hFunc(TEvPrivate::TEvBackupExportError, Handle)
-        hFunc(TEvPrivate::TEvBackupExportState, Handle)
-        hFunc(TEvPrivate::TEvBackupExportRecordBatch, Handle)
-    )
+    STRICT_STFUNC(StateMain, hFunc(TEvPrivate::TEvBackupExportError, Handle) hFunc(TEvPrivate::TEvBackupExportState, Handle)
+                                 hFunc(TEvPrivate::TEvBackupExportRecordBatch, Handle))
 
     void Handle(const TEvPrivate::TEvBackupExportRecordBatch::TPtr& ev) {
         const auto& event = *ev.Get()->Get();
         DataQueue.emplace(event.Data, event.IsLast);
         UploadData();
     }
-
 
     void Handle(const TEvPrivate::TEvBackupExportError::TPtr& ev) {
         Fail(ev.Get()->Get()->ErrorMessage);
@@ -182,36 +183,28 @@ public:
             CurrentBatch.NeedResult = false;
         }
     }
-    
+
     void SendFinalResult() {
         auto result = Exporter->Finish(NTable::EStatus::Done);
         auto* scanProduct = static_cast<NDataShard::TExportScanProduct*>(result.Get());
         switch (scanProduct->Outcome) {
             case NDataShard::EExportOutcome::Success:
                 AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
-                    ("component", "TUploaderActor")
-                    ("reason", "successfully finished")
-                    ("bytes_read", scanProduct->BytesRead)
-                    ("rows_read", scanProduct->RowsRead);
+                ("component", "TUploaderActor")("reason", "successfully finished")("bytes_read", scanProduct->BytesRead)(
+                    "rows_read", scanProduct->RowsRead);
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
                 break;
             case NDataShard::EExportOutcome::Error:
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                    ("component", "TUploaderActor")
-                    ("reason", "error")
-                    ("error", scanProduct->Error)
-                    ("bytes_read", scanProduct->BytesRead)
-                    ("rows_read", scanProduct->RowsRead);
+                ("component", "TUploaderActor")("reason", "error")("error", scanProduct->Error)("bytes_read", scanProduct->BytesRead)(
+                    "rows_read", scanProduct->RowsRead);
                 break;
             case NDataShard::EExportOutcome::Aborted:
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                    ("component", "TUploaderActor")
-                    ("reason", "aborted")
-                    ("error", scanProduct->Error)
-                    ("bytes_read", scanProduct->BytesRead)
-                    ("rows_read", scanProduct->RowsRead);
+                ("component", "TUploaderActor")("reason", "aborted")("error", scanProduct->Error)("bytes_read", scanProduct->BytesRead)(
+                    "rows_read", scanProduct->RowsRead);
                 break;
         }
         PassAway();
@@ -223,7 +216,7 @@ public:
         }
 
         while (true) {
-            if (DataQueue.empty() && !CurrentBatch.HasMoreRows() ) {
+            if (DataQueue.empty() && !CurrentBatch.HasMoreRows()) {
                 return;
             }
             if (!CurrentBatch.HasMoreRows()) {
@@ -261,7 +254,7 @@ public:
             auto& row = CurrentBatch.GetRow();
             NTable::TRowState rowState(row.GetCells().size());
             int i = 0;
-            for (const auto& cell: row.GetCells()) {
+            for (const auto& cell : row.GetCells()) {
                 rowState.Set(i++, { NTable::ECellOp::Set, NTable::ELargeObj::Inline }, cell);
             }
             auto result = Exporter->Feed({}, rowState);
@@ -313,8 +306,6 @@ private:
         return columnTypes;
     }
 
-
-
 private:
     TCurrentBatchItem CurrentBatch;
     NTable::EScan LastState = NTable::EScan::Sleep;
@@ -329,8 +320,9 @@ private:
     TVector<std::pair<TString, NScheme::TTypeInfo>> ColumnTypes;
 };
 
-std::unique_ptr<IActor> CreateExportUploaderActor(const TActorId& subscriberActorId, const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId) {
+std::unique_ptr<IActor> CreateExportUploaderActor(const TActorId& subscriberActorId, const NKikimrSchemeOp::TBackupTask& backupTask,
+    const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId) {
     return std::make_unique<TUploaderActor>(backupTask, exportFactory, tableColumns, subscriberActorId, txId);
 }
 
-} // namespace NKikimr::NColumnShard::NBackup
+}   // namespace NKikimr::NColumnShard::NBackup

@@ -16,7 +16,8 @@ class TCleanInsertedPortionsNormalizer::TNormalizerResult: public INormalizerCha
 
 public:
     TNormalizerResult(std::vector<TPortionDataAccessor>&& portions)
-        : InsertedPortions(std::move(portions)) {
+        : InsertedPortions(std::move(portions))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
@@ -56,7 +57,8 @@ public:
     }
 };
 
-bool TCleanInsertedPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
+bool TCleanInsertedPortionsNormalizer::CheckPortion(
+    const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
     return false;
 }
 

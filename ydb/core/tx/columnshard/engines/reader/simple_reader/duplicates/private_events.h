@@ -28,6 +28,7 @@ public:
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& ExtractAllocationGuard() {
         return std::move(AllocationGuard);
     }
+
     std::unique_ptr<TFilterBuildingGuard>&& ExtractRequestGuard() {
         AFL_VERIFY(RequestGuard);
         return std::move(RequestGuard);
@@ -43,7 +44,8 @@ private:
 
 public:
     TEvFilterConstructionResult(TConclusion<TFilters>&& result, TJobStatus::TResultInFlightGuard&& guard)
-        : Result(std::move(result)), ResultGuard(std::move(guard))
+        : Result(std::move(result))
+        , ResultGuard(std::move(guard))
     {
     }
 

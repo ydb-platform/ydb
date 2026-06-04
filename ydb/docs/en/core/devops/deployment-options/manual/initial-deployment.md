@@ -1,6 +1,11 @@
 # Deploying {{ ydb-short-name }} Cluster Manually
 
 <!-- markdownlint-disable blanks-around-fences -->
+{% note warning %}
+
+This guide is only for deploying clusters with [V1 configuration](../../configuration-management/configuration-v1/index.md). Deploying clusters with [V2 configuration](../../configuration-management/configuration-v2/index.md) is currently under development.
+
+{% endnote %}
 
 This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluster on multiple bare-metal or virtual servers.
 
@@ -8,7 +13,7 @@ This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluste
 
 ### Prerequisites {#requirements}
 
-Review the [system requirements](../../concepts/system-requirements.md) and the [cluster topology](../../../concepts/topology.md).
+Review the [system requirements](../../../devops/concepts/system-requirements.md) and the [cluster topology](../../../concepts/topology.md).
 
 Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} executable.
 
@@ -36,7 +41,7 @@ Run each static node (data node) on a separate server. Both static and dynamic n
 
 {% endnote %}
 
-For more information about hardware requirements, see [{#T}](../../concepts/system-requirements.md).
+For more information about hardware requirements, see [{#T}](../../../devops/concepts/system-requirements.md).
 
 ### Preparing TLS Keys and Certificates {#tls-certificates}
 
@@ -79,7 +84,7 @@ sudo usermod -aG disk ydb
 
 ## Configure File Descriptor Limits {#file-descriptors}
 
-For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
+For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/query_execution/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
 
 To change the file descriptor limit, add the following lines to the `/etc/security/limits.conf` file:
 

@@ -179,7 +179,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
 TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTransferContext transferContext)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
-    , PathIds(pathIds) {
+    , PathIds(pathIds)
+{
 }
 
 void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId) {
@@ -194,7 +195,8 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
+    THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions,
+    std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
     SchemeHistory = std::move(schemeHistory);
     AFL_VERIFY(!IsStartedFlag);
     std::map<TInternalPathId, std::map<ui32, std::shared_ptr<TPortionDataAccessor>>> local;
@@ -237,4 +239,4 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
     IsStartedFlag = true;
     return true;
 }
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

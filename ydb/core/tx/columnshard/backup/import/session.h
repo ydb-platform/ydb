@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
+
 #include <contrib/libs/protobuf/src/google/protobuf/empty.pb.h>
 
 namespace NKikimr::NColumnShard {
@@ -19,24 +20,25 @@ class IStoragesManager;
 }
 
 namespace NKikimr::NOlap::NImport {
-class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardImportProto::TImportSessionLogic, NProtoBuf::Empty, NKikimrColumnShardImportProto::TImportSessionState> {
+class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardImportProto::TImportSessionLogic, NProtoBuf::Empty,
+                    NKikimrColumnShardImportProto::TImportSessionState> {
 public:
-  static TString GetClassNameStatic();
+    static TString GetClassNameStatic();
 
-  enum class EStatus : ui64 {
-    Draft = 0 /*"draft"*/,
-    Confirmed = 1 /*"confirmed"*/,
-    Started = 2 /*"started"*/,
-    Finished = 3 /*"finished"*/,
-    Aborted = 4 /*"aborted"*/
-  };
+    enum class EStatus: ui64 {
+        Draft = 0 /*"draft"*/,
+        Confirmed = 1 /*"confirmed"*/,
+        Started = 2 /*"started"*/,
+        Finished = 3 /*"finished"*/,
+        Aborted = 4 /*"aborted"*/
+    };
 
 private:
     std::shared_ptr<TImportTask> Task;
     TString ErrorMessage;
     mutable EStatus Status = EStatus::Draft;
 
-    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext& context) const override;
+    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext &context) const override;
 
     virtual TConclusionStatus DoDeserializeProgressFromProto(const TProtoProgress & /* proto */) override;
 
@@ -53,39 +55,39 @@ private:
     static const inline TFactory::TRegistrator<TSession> Registrator = TFactory::TRegistrator<TSession>(GetClassNameStatic());
 
 public:
-  std::optional<ui64> GetTxId() const;
+    std::optional<ui64> GetTxId() const;
 
-  virtual bool IsReadyForStart() const override;
+    virtual bool IsReadyForStart() const override;
 
-  virtual bool IsFinished() const override;
+    virtual bool IsFinished() const override;
 
-  virtual bool IsReadyForRemoveOnFinished() const override;
-  
-  virtual TStatus GetStatus() const override;
+    virtual bool IsReadyForRemoveOnFinished() const override;
 
-  virtual TString GetClassName() const override;
+    virtual TStatus GetStatus() const override;
 
-  TSession() = default;
+    virtual TString GetClassName() const override;
 
-  TSession(const std::shared_ptr<TImportTask> &task);
+    TSession() = default;
 
-  bool IsConfirmed() const;
+    TSession(const std::shared_ptr<TImportTask> &task);
 
-  TString DebugString() const;
+    bool IsConfirmed() const;
 
-  bool IsDraft() const;
+    TString DebugString() const;
 
-  void Confirm();
+    bool IsDraft() const;
 
-  void Abort(const TString& errorMessage);
+    void Confirm();
 
-  bool IsStarted() const;
+    void Abort(const TString &errorMessage);
 
-  const TImportTask &GetTask() const;
+    bool IsStarted() const;
 
-  const TInternalPathId GetInternalPathId() const;
+    const TImportTask &GetTask() const;
 
-  void Finish();
+    const TInternalPathId GetInternalPathId() const;
+
+    void Finish();
 };
 
 }   // namespace NKikimr::NOlap::NImport

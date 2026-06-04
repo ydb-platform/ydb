@@ -1482,6 +1482,7 @@ message TEvControllerReplaceConfigRequest {
     optional bool SwitchEnableConfigV2 = 10; // if set, overrides EnableConfigV2 field in BSC
     optional string PeerName = 11;
     optional bytes UserToken = 12;
+    optional bool DryRun = 13;
     // console flags
     optional bool AllowUnknownFields = 8;
     optional bool BypassMetadataChecks = 9;
@@ -1566,6 +1567,7 @@ message TEvControllerDistconfRequest {
     optional string PeerName = 6;
     optional bytes UserToken = 7;
     optional google.protobuf.Any StorageConfig = 8; // TStorageConfig with this request that is going to be applied after operation
+    optional bool DryRun = 9; // if set, perform validation without committing changes
 }
 
 message TEvControllerDistconfResponse {

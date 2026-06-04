@@ -243,6 +243,10 @@ void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration perio
     Client->AddPeriodicTask(std::move(cb), period);
 }
 
+void TDbDriverState::PostToResponseQueue(TPostTaskCb&& f) {
+    Client->PostToResponseQueue(std::move(f));
+}
+
 NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
     TDbDriverState::ENotifyType type
 ) {

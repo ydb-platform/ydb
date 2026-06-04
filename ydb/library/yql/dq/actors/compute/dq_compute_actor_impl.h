@@ -1401,9 +1401,11 @@ protected:
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
 
-            if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+            if (Channels) {
+                if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+                }
             }
 
             auto channel = info.Channel;
@@ -1600,21 +1602,20 @@ protected:
 #undef DUMP_PREFIXED
     }
 
-    virtual void TaskRunnerMonitoringInfo(TStringStream& str) {
+    virtual void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters& cgi) {
         Y_UNUSED(str);
+        Y_UNUSED(cgi);
     }
 
-    void DefaultMonitoringPage(TStringStream& str, TCgiParameters cgi) {
+    void DefaultMonitoringPage(TStringStream& str, const TCgiParameters& cgi) {
         HTML(str) {
             PRE() {
                 str << "TDqComputeActorBase, SelfId=" << this->SelfId() << ' ';
-                cgi.ReplaceUnescaped("view", "dump");
-                HREF(TStringBuilder() << "?" << cgi.Print()) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "dump"}})) {
                     str << "Dump";
                 }
                 str << ' ';
-                cgi.ReplaceUnescaped("view", "run");
-                HREF(TStringBuilder() << "?" << cgi.Print()) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "run"}})) {
                     str << "Run";
                 }
                 str << Endl;
@@ -1622,7 +1623,7 @@ protected:
                 str << "  StageId: " << Task.GetStageId() << Endl;
                 str << "  State: " << NDqProto::EComputeState_Name(State) << Endl;
                 str << "  ExecuterId: ";
-                HREF(TStringBuilder() << "/node/" << ExecuterId.NodeId() << "/actors/kqp_node?ex=" << ExecuterId)  {
+                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ex", ToString(ExecuterId)}, {"ca", ""}, {"sf", ""}, {"view", ""}}))  {
                     str << ExecuterId;
                 }
                 str << Endl;
@@ -1638,7 +1639,7 @@ protected:
                     }
                     str << Endl;
                 }
-                TaskRunnerMonitoringInfo(str);
+                ExtraMonitoringInfo(str, cgi);
 
                 COLLAPSED_BUTTON_CONTENT("ProcessOutputsState", TStringBuilder() << "ProcessOutputsState: " << ProcessOutputsState.LastRunTime << ' ' << ProcessOutputsState.LastRunStatus) {
                     str << "  Inflight: " << ProcessOutputsState.Inflight << Endl;
@@ -1653,7 +1654,7 @@ protected:
 
                 str << Endl;
                 if (Task.GetDqChannelVersion() >= 2u) {
-                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                    HREF("kqp_channels") {
                         str << "Input Channels:" << Endl;
                     }
                 } else {
@@ -1684,7 +1685,7 @@ protected:
                                 TABLED() {str << info.InputIndex;}
                                 TABLED() {
                                     if (info.HasPeer) {
-                                        HREF(TStringBuilder() << "/node/" << info.PeerId.NodeId() << "/actors/kqp_node?ca=" << info.PeerId)  {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ca", ToString(info.PeerId)}, {"view", ""}}))  {
                                             str << info.PeerId;
                                         }
                                     } else {
@@ -1734,7 +1735,7 @@ protected:
 
                 str << Endl;
                 if (Task.GetDqChannelVersion() >= 2u) {
-                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                    HREF("kqp_channels") {
                         str << "Output Channels:" << Endl;
                     }
                 } else {
@@ -1763,7 +1764,7 @@ protected:
                                 TABLED() {str << info.DstStageId;}
                                 TABLED() {
                                     if (info.HasPeer) {
-                                        HREF(TStringBuilder() << "/node/" << info.PeerId.NodeId() << "/actors/kqp_node?ca=" << info.PeerId)  {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ca", ToString(info.PeerId)}, {"view", ""}}))  {
                                             str << info.PeerId;
                                         }
                                     } else {

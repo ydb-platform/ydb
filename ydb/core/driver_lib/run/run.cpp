@@ -104,6 +104,7 @@
 
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/other/mon_blob_range_page.h>
+#include <ydb/core/blobstorage/other/mon_check_integrity.h>
 #include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
@@ -751,7 +752,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    if (runConfig.AppConfig.GetTableServiceConfig().HasCompileCacheWarmupConfig()) {
+    if (runConfig.AppConfig.GetTableServiceConfig().GetEnableCompileCacheWarmup()) {
         auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
             runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
         GRpcWarmupTimeout = warmupConfig.HardDeadline;
@@ -1779,6 +1780,8 @@ void TKikimrRunner::InitializeActorSystem(
             TMailboxType::HTSwap, AppData->SystemPoolId));
         setup->LocalServices.emplace_back(MakeMonBlobRangeId(), TActorSetupCmd(CreateMonBlobRangeActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonCheckIntegrityId(), TActorSetupCmd(CreateMonCheckIntegrityActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
     }
 
     ApplyLogSettings(runConfig);
@@ -1844,6 +1847,14 @@ void TKikimrRunner::InitializeActorSystem(
 
         Monitoring->RegisterActorPage(
                 nullptr,
+                "check_integrity",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonCheckIntegrityId());
+
+        Monitoring->RegisterActorPage(
+                nullptr,
                 "vdisk_stream",
                 TString(),
                 false,
@@ -1902,6 +1913,16 @@ void TKikimrRunner::InitializeActorSystem(
                 );
             }
         }
+    }
+}
+
+void TKikimrRunner::RecordEmptyDomainSensor() {
+    const auto& labels = AppData->Labels;
+    const auto it = labels.find("empty_domain_during_node_registration");
+    if (it != labels.end() && it->second == "true") {
+        GetServiceCounters(AppData->Counters, "ydb")
+            ->GetSubgroup("subsystem", "nodeRegistration")
+            ->GetCounter("EmptyDomainName")->Inc();
     }
 }
 
@@ -2251,7 +2272,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
             THolder<TEvent> event = MakeHolder<TEvent>();
             event->Record.SetNodeId(nodeId);
 
-            NTabletPipe::SendData({}, nodeBrokerPipe, event.Release());
+            auto pipeEv = new IEventHandle(nodeBrokerPipe, TActorId(), event.Release());
+            pipeEv->Rewrite(TEvTabletPipe::EvSend, nodeBrokerPipe);
+            ActorSystem->Send(pipeEv);
         }
     }
 
@@ -2446,6 +2469,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeControlBoard(runConfig);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
+    runner->RecordEmptyDomainSensor();
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));
     runner->InitializeActorSystem(runConfig, sil, runConfig.ServicesMask);
     runner->InitializeMonitoringLogin(runConfig);

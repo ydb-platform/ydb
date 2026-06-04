@@ -35,6 +35,7 @@ public:
     void OnFilterCacheHit(const ui64 count = 1) const {
         FilterCacheHits->Add(count);
     }
+
     void OnFilterCacheMiss(const ui64 count = 1) const {
         FilterCacheMisses->Add(count);
     }

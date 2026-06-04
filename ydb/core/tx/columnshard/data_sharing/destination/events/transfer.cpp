@@ -7,9 +7,8 @@
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-THashMap<TTabletId, TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
-    const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId, const TTransferContext& context,
-    const TVersionedIndex& index) {
+THashMap<TTabletId, TTaskForTablet> TPathIdData::BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages,
+    const TTabletId selfTabletId, const TTransferContext& context, const TVersionedIndex& index) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
         auto schema = i->GetPortionInfo().GetSchema(index);

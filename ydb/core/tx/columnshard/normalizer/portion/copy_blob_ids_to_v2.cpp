@@ -14,7 +14,8 @@ private:
 
 public:
     TBlobsWriting(THashMap<TPortionAddress, std::vector<TString>>&& tasks)
-        : BlobsToWrite(std::move(tasks)) {
+        : BlobsToWrite(std::move(tasks))
+    {
     }
 
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {

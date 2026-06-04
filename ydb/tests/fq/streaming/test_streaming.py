@@ -6,40 +6,13 @@ import time
 
 import ydb
 
-from ydb.tests.fq.streaming.common import StreamingTestBase
+from ydb.tests.fq.streaming_common.common import StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)
 
 
 class TestStreamingInYdb(StreamingTestBase):
-    def get_input_name(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
-        endpoint = self.get_endpoint(kikimr, local_topics)
-        source_name = entity_name(name)
-        self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
-
-        if local_topics:
-            return f"`{self.input_topic}`", endpoint
-        else:
-            return f"`{source_name}`.`{self.input_topic}`", endpoint
-
-    def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
-        endpoint = self.get_endpoint(kikimr, local_topics)
-        source_name = entity_name(name)
-        self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
-
-        if local_topics:
-            return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
-        else:
-            return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])

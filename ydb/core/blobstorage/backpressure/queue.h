@@ -144,6 +144,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueSerializedBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedItems;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueDeserializedBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueueConnected;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
 
 public:

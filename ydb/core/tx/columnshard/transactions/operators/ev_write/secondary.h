@@ -53,9 +53,11 @@ private:
     virtual TString DoGetOpType() const override {
         return "EvWriteSecondary";
     }
+
     virtual TString DoDebugString() const override {
         return "EV_WRITE_SECONDARY";
     }
+
     class TTxWriteReceivedAck: public TExtendedTransactionBase {
     private:
         using TBase = TExtendedTransactionBase;
@@ -77,13 +79,15 @@ private:
             }
             return true;
         }
+
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
         }
 
     public:
         TTxWriteReceivedAck(TColumnShard& owner, const ui64 txId)
             : TBase(&owner, "write_received_ack")
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
     };
 
@@ -109,9 +113,10 @@ private:
                 // send the ack anyway, so that the primary waits less time to progress
                 TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, ArbiterTabletId);
                 return true;
-            } 
-            
-            BrokenFlagAck = TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), ArbiterTabletId);
+            }
+
+            BrokenFlagAck =
+                TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), ArbiterTabletId);
             if (op->TxBroken.has_value()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
                 // we cannot send the ack here, because the previous transaction (that successfully set TxBroken) may be not completed yet
@@ -129,6 +134,7 @@ private:
             }
             return true;
         }
+
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
@@ -145,7 +151,8 @@ private:
             , TxId(txId)
             , Step(step)
             , ArbiterTabletId(arbiterTabletId)
-            , BrokenFlag(broken) {
+            , BrokenFlag(broken)
+        {
         }
     };
 
@@ -162,7 +169,8 @@ private:
         }
         NKikimrTx::TReadSetData readSetData;
         readSetData.SetDecision(SelfBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
-        auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), readSetData.SerializeAsString());
+        auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(
+            0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), readSetData.SerializeAsString());
         TEvWriteCommitSyncTransactionOperator::SendPersistent(owner, std::move(event), ArbiterTabletId, GetTxId());
     }
 
@@ -187,13 +195,15 @@ private:
             }
             return true;
         }
+
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
         }
 
     public:
         TTxStartPreparation(TColumnShard* owner, const ui64 txId)
             : TBase(owner, "start_preparation")
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
     };
 
@@ -214,6 +224,7 @@ private:
 
 public:
     using TBase::TBase;
+
     virtual bool IsTxBroken() const override {
         AFL_VERIFY(TxBroken);
         return *TxBroken;
@@ -223,7 +234,8 @@ public:
         const TFullTxInfo& txInfo, const ui64 lockId, const ui64 arbiterTabletId, const bool needReceiveBroken)
         : TBase(txInfo, lockId)
         , ArbiterTabletId(arbiterTabletId)
-        , NeedReceiveBroken(needReceiveBroken) {
+        , NeedReceiveBroken(needReceiveBroken)
+    {
     }
 };
 

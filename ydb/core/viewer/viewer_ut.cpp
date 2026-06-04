@@ -17,6 +17,7 @@
 #include "viewer_pdiskinfo.h"
 #include <ydb/services/ydb/ydb_keys_ut.h>
 #include "query_autocomplete_helper.h"
+#include "viewer_groups.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -490,11 +491,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         client.CreateUser("/Root", "username", "password");
         client.GrantConnect("username");
 
+        const auto grantStatus = client.Grant("/", "Root", "username", NACLib::EAccessRights::DescribeSchema);
+        UNIT_ASSERT_EQUAL(grantStatus, NMsgBusProxy::MSTATUS_OK);
+
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },
             { "database_id", "test_database_id" },
         });
         UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
+    void GrantRead(TClient& client) {
+        GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
     }
 
    TKeepAliveHttpClient::THttpCode PostOffsetCommit(TKeepAliveHttpClient& httpClient,
@@ -535,7 +544,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TKeepAliveHttpClient httpClient("localhost", monPort);
@@ -575,7 +584,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         QueryTest("select \"Hello\"", false, "Hello");
     }
 
-    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit, const bool isExpectingGroup) {
+    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit,
+            const bool isExpectingGroup, const std::optional<TString> expectedGroupDiskSpace = {}) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -625,25 +635,108 @@ Y_UNIT_TEST_SUITE(Viewer) {
             Ctest << ex.what() << Endl;
         }
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
+
+        if (isExpectingGroup) {
+            const auto& storageGroups = json["StorageGroups"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(storageGroups.size(), 1);
+            const auto& group = storageGroups[0];
+            if (expectedGroupDiskSpace) {
+                UNIT_ASSERT(group.GetMap().contains("DiskSpace"));
+                UNIT_ASSERT_VALUES_EQUAL(group["DiskSpace"].GetString(), *expectedGroupDiskSpace);
+            } else {
+                UNIT_ASSERT(!group.GetMap().contains("DiskSpace"));
+            }
+        }
     }
 
     Y_UNIT_TEST(StorageGroupOutputWithoutFilterNoDepends)
     {
-        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true);
-        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 90, 100, true);
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true, "Green");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 90, 100, true, "Red");
     }
 
     Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnVDiskSpaceStatus)
     {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 10, 100, false);
-        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Red, 10, 100, true);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
     }
 
     Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnUsage)
     {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 70, 100, false);
-        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
-        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true, "Green");
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true, "Green");
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputFlagMatchesWorstVDiskFlag)
+    {
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Grey, 10, 100, true, std::nullopt);
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true, "Green");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Yellow, 10, 100, true, "Yellow");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Orange, 10, 100, true, "Orange");
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
+    }
+
+    Y_UNIT_TEST(StorageGroupDiskSpaceDoesNotDependOnUsage)
+    {
+        TStorageGroups::TGroup group;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 99;
+        vdisk.AvailableSize = 1;
+        vdisk.DiskSpace = NKikimrViewer::EFlag::Green;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 99.0, 1e-6);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrViewer::EFlag_Name(group.DiskSpace), "Green");
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageWithDynamicSlotSize)
+    {
+        // In this test vdisk.AvailableSize is intentionally inconsistent with pdisk.EnforcedDynamicSlotSize
+        // The test checks that EnforcedDynamicSlotSize takes the precedence and that vdisk weight is accounted
+
+        TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 100;
+        vdisk.AvailableSize = 900;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+        pdisk.SlotSizeInUnits = 1;
+        pdisk.TotalSize = 10000;
+        pdisk.AvailableSize = 9000;
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 50.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageWithoutDynamicSlotSize)
+    {
+        TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 100;
+        vdisk.AvailableSize = 1; // intentionally inconsistent, doesn't matter
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 0;
+        pdisk.TotalSize = 10000;
+        pdisk.AvailableSize = 1; // intentionally inconsistent, doesn't matter
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 2000);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 5.0, 1e-6);
     }
 
     const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};

@@ -8,6 +8,7 @@ bool TTxGarbageCollectionFinished::Execute(TTransactionContext& txc, const TActo
     Action->OnExecuteTxAfterCleaning(*Self, blobManagerDb);
     return true;
 }
+
 void TTxGarbageCollectionFinished::Complete(const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxGarbageCollectionFinished::Complete");
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tx", "TxGarbageCollectionFinished")("event", "complete");
@@ -21,6 +22,7 @@ bool TTxGarbageCollectionStart::Execute(TTransactionContext& txc, const TActorCo
     Action->OnExecuteTxBeforeCleaning(*Self, blobManagerDb);
     return true;
 }
+
 void TTxGarbageCollectionStart::Complete(const TActorContext& /*ctx*/) {
     TMemoryProfileGuard mpg("TTxGarbageCollectionStart::Complete");
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tx", "TTxGarbageCollectionStart")("event", "complete");
@@ -28,4 +30,4 @@ void TTxGarbageCollectionStart::Complete(const TActorContext& /*ctx*/) {
     Operator->StartGC(Action);
 }
 
-}
+}   // namespace NKikimr::NColumnShard

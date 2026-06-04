@@ -20,4 +20,4 @@ TReadCounters::TReadCounters(const TConsumerCounters& owner)
     FailDurationByCount = TBase::GetHistogram("Fails/Duration/Count", NMonitoring::ExponentialHistogram(15, 2, 2));
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

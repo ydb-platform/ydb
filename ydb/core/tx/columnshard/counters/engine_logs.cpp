@@ -1,9 +1,11 @@
 #include "engine_logs.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/counters/histogram_borders.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/serialized_enum.h>
@@ -16,13 +18,12 @@ ui64 GetBadPortionSizeLimit() {
     return HasAppData() ? AppData()->ColumnShardConfig.GetBadPortionSizeLimit() : 512_KB;
 }
 
-}
+}   // namespace
 
 TEngineLogsCounters::TEngineLogsCounters()
     : TBase("EngineLogs")
     , GranuleDataAgent("EngineLogs")
 {
-
     for (auto&& i : GetEnumNames<NOlap::NPortion::EProduced>()) {
         if (BlobSizeDistribution.size() <= (ui32)i.first) {
             BlobSizeDistribution.resize((ui32)i.first + 1);
@@ -32,9 +33,12 @@ TEngineLogsCounters::TEngineLogsCounters()
         if (PortionSizeDistribution.size() <= (ui32)i.first) {
             PortionSizeDistribution.resize((ui32)i.first + 1);
         }
-        BlobSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "BlobSizeDistribution", i.second, NColumnShard::THistorgamBorders::BlobSizeBorders);
-        PortionSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "PortionSizeDistribution", i.second, NColumnShard::THistorgamBorders::BytesBorders);
-        PortionRecordsDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "PortionRecordsDistribution", i.second, NColumnShard::THistorgamBorders::PortionRecordBorders);
+        BlobSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>(
+            "EngineLogs", "BlobSizeDistribution", i.second, NColumnShard::THistorgamBorders::BlobSizeBorders);
+        PortionSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>(
+            "EngineLogs", "PortionSizeDistribution", i.second, NColumnShard::THistorgamBorders::BytesBorders);
+        PortionRecordsDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>(
+            "EngineLogs", "PortionRecordsDistribution", i.second, NColumnShard::THistorgamBorders::PortionRecordBorders);
     }
     for (auto&& i : BlobSizeDistribution) {
         Y_ABORT_UNLESS(i);
@@ -43,13 +47,15 @@ TEngineLogsCounters::TEngineLogsCounters()
     PortionToDropCount = TBase::GetDeriviative("Ttl/PortionToDrop/Count");
     PortionToDropBytes = TBase::GetDeriviative("Ttl/PortionToDrop/Bytes");
     PortionToDropLag = TBase::GetHistogram("Ttl/PortionToDrop/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
-    SkipDeleteWithProcessMemory = TBase::GetHistogram("Ttl/PortionToDrop/Skip/ProcessMemory/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
+    SkipDeleteWithProcessMemory =
+        TBase::GetHistogram("Ttl/PortionToDrop/Skip/ProcessMemory/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
     SkipDeleteWithTxLimit = TBase::GetHistogram("Ttl/PortionToDrop/Skip/TxLimit/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
 
     PortionToEvictCount = TBase::GetDeriviative("Ttl/PortionToEvict/Count");
     PortionToEvictBytes = TBase::GetDeriviative("Ttl/PortionToEvict/Bytes");
     PortionToEvictLag = TBase::GetHistogram("Ttl/PortionToEvict/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
-    SkipEvictionWithProcessMemory = TBase::GetHistogram("Ttl/PortionToEvict/Skip/ProcessMemory/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
+    SkipEvictionWithProcessMemory =
+        TBase::GetHistogram("Ttl/PortionToEvict/Skip/ProcessMemory/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
     SkipEvictionWithTxLimit = TBase::GetHistogram("Ttl/PortionToEvict/Skip/TxLimit/Lag/Duration", NMonitoring::ExponentialHistogram(18, 2, 5));
 
     ActualizationTaskSizeRemove = TBase::GetHistogram("Actualization/RemoveTasks/Size", NMonitoring::ExponentialHistogram(18, 2));
@@ -122,4 +128,4 @@ NKikimr::NColumnShard::TBaseGranuleDataClassSummary TBaseGranuleDataClassSummary
     return result;
 }
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -3,7 +3,7 @@ import pytest
 import time
 from typing import Callable
 
-from ydb.tests.fq.streaming.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 
 logger = logging.getLogger(__name__)
 

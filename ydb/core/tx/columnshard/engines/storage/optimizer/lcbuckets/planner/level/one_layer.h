@@ -34,10 +34,7 @@ private:
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TSimpleRow& from, 
-        const NArrow::TSimpleRow& to,
-        const TMayUsePortion& mayUsePortion
-    ) const override {
+        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -67,7 +64,7 @@ private:
         // So, that is why here we check all the portions if they are blocked, so that the client's
         // code can skip this [from, to] part completely.
         bool consistBlockedPortions = false;
-        for (auto& it: result) {
+        for (auto& it : result) {
             if (!mayUsePortion(it)) {
                 consistBlockedPortions = true;
                 break;
@@ -115,11 +112,7 @@ private:
     }
 
     void TryAddPortionToTask(
-        const TPortionInfo::TConstPtr& portion, 
-        TCompactionTaskData& task, 
-        ui64& compactedData,
-        const TMayUsePortion& mayUsePortion
-    ) const;
+        const TPortionInfo::TConstPtr& portion, TCompactionTaskData& task, ui64& compactedData, const TMayUsePortion& mayUsePortion) const;
 
 public:
     TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,

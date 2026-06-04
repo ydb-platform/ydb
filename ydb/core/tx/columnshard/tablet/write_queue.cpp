@@ -22,7 +22,8 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
 
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
     owner->SubscribeLockIfNotAlready(LockId, LockNodeId);
-    auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
+    auto writeOperation =
+        owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
         "in_flight", NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly())(
@@ -32,25 +33,29 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     writeOperation->SetBehaviour(Behaviour);
     const auto& applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : NOlap::TSnapshot::Max();
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
-        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId, LockMode,
-        writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId, IsBulk);
+        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
+        LockMode, writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId,
+        IsBulk);
     // We don't need to split here portions by the last level
     // ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;
 }
 
-void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status) const {
+void TWriteTask::Abort(
+    TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status) const {
     LWPROBE(EvWriteResult, owner->TabletID(), SourceId.ToString(), TxId, Cookie, "write_queue", false, reason);
-    auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-        owner->TabletID(), TxId, status, reason);
+    auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, status, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
         result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
         ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
-            std::make_unique<NOverload::TEvOverloadSubscribe>(NOverload::TColumnShardInfo{.ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID()},
-                NOverload::TPipeServerInfo{.PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId]},
-                NOverload::TOverloadSubscriberInfo{.PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo}));
+            std::make_unique<NOverload::TEvOverloadSubscribe>(
+                NOverload::TColumnShardInfo{ .ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID() },
+                NOverload::TPipeServerInfo{
+                    .PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId] },
+                NOverload::TOverloadSubscriberInfo{
+                    .PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo }));
     }
     ctx.Send(SourceId, result.release(), 0, Cookie);
 }

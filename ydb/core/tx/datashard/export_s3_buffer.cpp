@@ -23,6 +23,7 @@
 
 #include <contrib/libs/zstd/include/zstd.h>
 
+#include <functional>
 
 namespace NKikimr::NDataShard {
 
@@ -75,6 +76,7 @@ private:
 };
 
 class TS3Buffer: public NExportScan::IBuffer {
+    using TChecksumCreator = std::function<NBackup::IChecksum*()>;
     using TTagToColumn = IExport::TTableColumns;
     using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
 
@@ -95,7 +97,7 @@ private:
     bool Collect(const NTable::IScan::TRow& row, IOutputStream& out);
     virtual TMaybe<TBuffer> Flush(bool last);
 
-    static NBackup::IChecksum* CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
+    static TChecksumCreator GenChecksumCreator(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
     static TZStdCompressionProcessor* CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings);
 
 private:
@@ -111,6 +113,7 @@ protected:
     ui64 BytesRead = 0;
     TBuffer Buffer;
 
+    TChecksumCreator ChecksumCreator;
     NBackup::IChecksum::TPtr Checksum;
     TZStdCompressionProcessor::TPtr Compression;
     TMaybe<NBackup::TEncryptedFileSerializer> Encryption;
@@ -123,7 +126,8 @@ TS3Buffer::TS3Buffer(TS3ExportBufferSettings&& settings)
     , RowsLimit(settings.MaxRows)
     , MinBytes(settings.MinBytes)
     , MaxBytes(settings.MaxBytes)
-    , Checksum(CreateChecksum(settings.ChecksumSettings))
+    , ChecksumCreator(GenChecksumCreator(settings.ChecksumSettings))
+    , Checksum(ChecksumCreator())
     , Compression(CreateCompression(settings.CompressionSettings))
 {
     if (settings.EncryptionSettings) {
@@ -135,14 +139,16 @@ TS3Buffer::TS3Buffer(TS3ExportBufferSettings&& settings)
     }
 }
 
-NBackup::IChecksum* TS3Buffer::CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
-    if (settings) {
-        switch (settings->ChecksumType) {
-        case TS3ExportBufferSettings::TChecksumSettings::EChecksumType::Sha256:
-            return NBackup::CreateChecksum();
+std::function<NBackup::IChecksum*()> TS3Buffer::GenChecksumCreator(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
+    return [settings]() -> NBackup::IChecksum* {
+        if (settings) {
+            switch (settings->ChecksumType) {
+            case TS3ExportBufferSettings::TChecksumSettings::EChecksumType::Sha256:
+                return NBackup::CreateChecksum();
+            }
         }
-    }
-    return nullptr;
+        return nullptr;
+    };
 }
 
 TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings) {
@@ -329,6 +335,10 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
 void TS3Buffer::Clear() {
     Rows = 0;
     BytesRead = 0;
+    Buffer = TBuffer();
+    if (Checksum) {
+        Checksum.reset(ChecksumCreator());
+    }
     if (Compression) {
         Compression->Clear();
     }
@@ -407,8 +417,10 @@ TMaybe<TBuffer> TZStdCompressionProcessor::Flush() {
         } while (res != DONE);
     }
 
+    auto buffer = std::exchange(Buffer, TBuffer());
+
     Reset();
-    return std::exchange(Buffer, TBuffer());
+    return buffer;
 }
 
 TZStdCompressionProcessor::ECompressionResult TZStdCompressionProcessor::Compress(ZSTD_inBuffer* input, ZSTD_EndDirective endOp) {
@@ -433,6 +445,7 @@ void TZStdCompressionProcessor::Reset() {
     ZSTD_CCtx_reset(Context.Get(), ZSTD_reset_session_only);
     ZSTD_CCtx_refCDict(Context.Get(), NULL);
     ZSTD_CCtx_setParameter(Context.Get(), ZSTD_c_compressionLevel, CompressionLevel);
+    Buffer = TBuffer();
 }
 
 } // anonymous

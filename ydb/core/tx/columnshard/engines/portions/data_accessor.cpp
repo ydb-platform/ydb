@@ -240,8 +240,8 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddressesImpl(
         if (!record.HasBlobRange()) {
             continue;
         }
-        std::optional<TString> blob =
-            blobs.ExtractOptional(PortionInfo->GetEntityStorageId(record.GetIndexId(), indexInfo), RestoreBlobRange(record.GetBlobRangeVerified()));
+        std::optional<TString> blob = blobs.ExtractOptional(
+            PortionInfo->GetEntityStorageId(record.GetIndexId(), indexInfo), RestoreBlobRange(record.GetBlobRangeVerified()));
         if (blob) {
             result.emplace(record.GetAddress(), std::move(*blob));
         }
@@ -257,8 +257,9 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
     return result;
 }
 
-std::vector<THashMap<TChunkAddress, TString>> TPortionDataAccessor::DecodeBlobAddresses(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
-    const std::vector<ISnapshotSchema::TPtr>& schemas, NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
+std::vector<THashMap<TChunkAddress, TString>> TPortionDataAccessor::DecodeBlobAddresses(
+    const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors, const std::vector<ISnapshotSchema::TPtr>& schemas,
+    NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
     std::vector<THashMap<TChunkAddress, TString>> result;
     AFL_VERIFY(accessors.size() == schemas.size())("accessors", accessors.size())("info", schemas.size());
     for (ui64 i = 0; i < accessors.size(); ++i) {
@@ -389,7 +390,8 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
             , EntityId(entityId)
             , ChunkIdx(chunkIdx)
             , MemoryStartChunk(memStartChunk)
-            , MemoryFinishChunk(memFinishChunk) {
+            , MemoryFinishChunk(memFinishChunk)
+        {
         }
 
         bool operator<(const TEntityDelimiter& item) const {
@@ -405,7 +407,8 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
 
     public:
         TGlobalDelimiter(const ui32 indexStart)
-            : IndexStart(indexStart) {
+            : IndexStart(indexStart)
+        {
         }
     };
 
@@ -479,20 +482,26 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
 
 std::vector<TPortionDataAccessor::TPage> TPortionDataAccessor::BuildPages() const {
     std::vector<TPage> pages;
+
     struct TPart {
     public:
         const TColumnRecord* Record = nullptr;
         const TIndexChunk* Index = nullptr;
         const ui32 RecordsCount;
+
         TPart(const TColumnRecord* record, const ui32 recordsCount)
             : Record(record)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
+
         TPart(const TIndexChunk* record, const ui32 recordsCount)
             : Index(record)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
     };
+
     std::map<ui32, std::deque<TPart>> entities;
     std::map<ui32, ui32> currentCursor;
     ui32 currentSize = 0;
@@ -553,6 +562,7 @@ ui64 TPortionDataAccessor::GetMinMemoryForReadColumns(const std::optional<std::s
     struct TDelta {
         i64 BlobBytes = 0;
         i64 RawBytes = 0;
+
         void operator+=(const TDelta& add) {
             BlobBytes += add.BlobBytes;
             RawBytes += add.RawBytes;

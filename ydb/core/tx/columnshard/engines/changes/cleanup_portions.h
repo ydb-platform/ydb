@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract/abstract.h"
 #include "abstract/remove_portions.h"
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
@@ -24,21 +25,28 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
+
     virtual void DoCompile(TFinalizationContext& /*context*/) override {
     }
+
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& /*context*/) noexcept override {
         return TConclusionStatus::Success();
     }
+
     virtual bool NeedConstruction() const override {
         return false;
     }
+
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+
     virtual NDataLocks::ELockCategory GetLockCategory() const override {
         return NDataLocks::ELockCategory::Cleanup;
     }
+
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
         auto portionsDropLock = std::make_shared<NDataLocks::TListPortionsLock>(
             TypeString() + "::PORTIONS_DROP::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
@@ -51,7 +59,8 @@ protected:
 
 public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
+        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS)
+    {
     }
 
     void AddTableToDrop(const TInternalPathId pathId) {
@@ -75,9 +84,11 @@ public:
     virtual ui32 GetWritePortionsCount() const override {
         return 0;
     }
+
     virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 /*index*/) override {
         return nullptr;
     }
+
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {
         return false;
     }

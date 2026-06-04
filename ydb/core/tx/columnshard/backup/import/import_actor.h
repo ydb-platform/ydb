@@ -29,22 +29,21 @@ private:
     TActorId ImportActorId;
     void SwitchStage(const EStage from, const EStage to);
 
-  protected:
-
+protected:
     virtual void OnSessionStateSaved() override;
 
     virtual void OnTxCompleted(const ui64 /*txId*/) override;
 
     virtual void OnSessionProgressSaved() override;
 
-    virtual void OnBootstrap(const TActorContext & /*ctx*/) override;
-    
+    virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
+
     void Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::TPtr& ev);
-    
+
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
 
-  public:
-    TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter> &adapter);
+public:
+    TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter);
 
     STATEFN(StateFunc) {
         try {

@@ -1,6 +1,8 @@
 #include "conveyor_task.h"
-#include <ydb/library/actors/core/actor.h>
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -20,4 +22,4 @@ void IDataTasksProcessor::ITask::DoOnCannotExecute(const TString& reason) {
         OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(TConclusionStatus::Fail(reason), std::move(Guard)));
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader

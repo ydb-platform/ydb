@@ -23,6 +23,10 @@ TSolomonConfiguration::TSolomonConfiguration()
     REGISTER_SETTING(*this, ComputeActorBatchSize);
     REGISTER_SETTING(*this, MaxApiInflight);
     REGISTER_SETTING(*this, MaxDataInflightBytes);
+    REGISTER_SETTING(*this, MaxPointsPerOneRequest);
+    REGISTER_SETTING(*this, PoisonTimeoutSec);
+    REGISTER_SETTING(*this, RoundRobinStageTimeoutMs);
+    REGISTER_SETTING(*this, LabelsListingLimit);
 }
 
 TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {

@@ -16,6 +16,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -3874,6 +3875,7 @@ void TSchemeShard::PersistBackupSettings(
 
     PERSIST_BACKUP_SETTINGS(YTSettings)
     PERSIST_BACKUP_SETTINGS(S3Settings)
+    PERSIST_BACKUP_SETTINGS(FSSettings)
 
 #undef PERSIST_BACKUP_SETTINGS
 }
@@ -4168,7 +4170,7 @@ void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, con
     }
 }
 
-void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx)
+void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx, bool skipStatsUpdate)
 {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     auto tablePtr = ColumnTables.at(pathId);
@@ -4189,7 +4191,9 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         storeInfo->ColumnTables.erase(pathId);
     }
 
-    UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
+    if (!skipStatsUpdate) {
+        UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
+    }
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);

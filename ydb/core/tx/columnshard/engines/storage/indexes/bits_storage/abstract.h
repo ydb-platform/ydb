@@ -6,7 +6,6 @@
 #include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/object_factory/object_factory.h>
-
 #include <util/generic/bitmap.h>
 #include <util/generic/string.h>
 
@@ -46,9 +45,11 @@ public:
     virtual ~IBitsStorageConstructor() = default;
 
     using TFactory = NObjectFactory::TObjectFactory<IBitsStorageConstructor, TString>;
+
     [[nodiscard]] TString SerializeToString(TDynBitMap&& bm) const {
         return DoSerializeToString(std::move(bm));
     }
+
     [[nodiscard]] TString SerializeToString(const TArrayPower2BitsStorage& storage) const {
         return DoSerializeToString(storage);
     }

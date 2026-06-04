@@ -8,7 +8,8 @@ TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 poin
     const std::shared_ptr<TScanWithLimitCollection>& collection)
     : TBase(pointIndex, "SYNC_LIMIT", context, collection)
     , Limit(limit)
-    , Collection(collection) {
+    , Collection(collection)
+{
     AFL_VERIFY(Collection);
 }
 
@@ -19,9 +20,9 @@ bool TSyncPointLimitControl::DrainToLimit() {
     }
 
     while (FilledIterators.size() &&
-        (!nextInHeap || FilledIterators.front().ComparePrefix(*nextInHeap, *PKPrefixSize) == std::partial_ordering::less) &&
-        (!UnfilledIterators.size() || FilledIterators.front().ComparePrefix(UnfilledIterators.front(), *PKPrefixSize) == std::partial_ordering::less)) {
-
+           (!nextInHeap || FilledIterators.front().ComparePrefix(*nextInHeap, *PKPrefixSize) == std::partial_ordering::less) &&
+           (!UnfilledIterators.size() ||
+               FilledIterators.front().ComparePrefix(UnfilledIterators.front(), *PKPrefixSize) == std::partial_ordering::less)) {
         std::pop_heap(FilledIterators.begin(), FilledIterators.end());
 
         if (!FilledIterators.back().Next()) {
@@ -64,16 +65,19 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         if (FindIf(UnfilledIterators, [&](const auto& item) {
                 return item.GetSourceIdx() == source->GetSourceIdx();
             }) != UnfilledIterators.end()) {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())
-                ("back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "source_idx", source->GetSourceIdx());
         } else if (FindIf(FilledIterators, [&](const auto& item) {
-                return item.GetSourceIdx() == source->GetSourceIdx();
-            }) != FilledIterators.end()) {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())
-                ("back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+                       return item.GetSourceIdx() == source->GetSourceIdx();
+                   }) != FilledIterators.end()) {
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "source_idx", source->GetSourceIdx());
         } else {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())
-                ("back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "source_idx", source->GetSourceIdx());
         }
     }
 

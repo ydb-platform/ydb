@@ -179,6 +179,7 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
             std::optional<TString> storageConfig,
             std::optional<bool> switchDedicatedStorageSection,
             bool dedicatedConfigMode,
+            bool dryRun,
             const std::function<void(const Ydb::Config::ReplaceConfigResponse&)>& checker) {
 
         std::unique_ptr<Ydb::Config::V1::ConfigService::Stub> stub;
@@ -213,6 +214,7 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         } else {
             Y_ABORT("invariant violation");
         }
+        request.set_dry_run(dryRun);
 
         Ydb::Config::ReplaceConfigResponse response;
 
@@ -330,7 +332,7 @@ config:
     port: 12001
     host_config_id: 2
 )", pdiskPath.c_str());
-        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
             });
@@ -363,7 +365,7 @@ config:
     port: 12001
     host_config_id: 1
 )", pdiskPath.c_str(), pdiskPath.c_str());
-        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::INTERNAL_ERROR);
                 TString opDebugString = resp.operation().DebugString();
@@ -441,15 +443,11 @@ config:
   feature_flags:
     switch_to_config_v2: true
 )", pdiskPath.c_str());
-        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
+
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
             });
-        std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
-        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
-        UNIT_ASSERT(yamlConfigFetched);
-        UNIT_ASSERT(!storageYamlConfigFetched);
-        UNIT_ASSERT_VALUES_EQUAL(yamlConfig, *yamlConfigFetched);
 
         auto* runtime = server.GetRuntime();
         bool switchToConfigV2 = false;
@@ -462,6 +460,12 @@ config:
             Sleep(TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT(switchToConfigV2);
+
+        std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        UNIT_ASSERT(yamlConfigFetched);
+        UNIT_ASSERT(!storageYamlConfigFetched);
+        UNIT_ASSERT_VALUES_EQUAL(yamlConfig, *yamlConfigFetched);
 
         std::unique_ptr<Ydb::DynamicConfig::V1::DynamicConfigService::Stub> stub;
         stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(server.GetChannel());
@@ -478,6 +482,137 @@ config:
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(response.operation().issues(0).message(), "Dynamic Config V1 is disabled. Use V2 API.");
     }
+
+    Y_UNIT_TEST(CheckDryRun) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(server.GetChannel());
+
+        TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
+
+        TString yamlConfig = Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
+
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: SectorMap:1:64
+      type: SSD
+      expected_slot_count: 9
+    - path: SectorMap:2:64
+      type: SSD
+      expected_slot_count: 9
+  - host_config_id: 2
+    drive:
+    - path: %s
+      type: SSD
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 2
+  feature_flags:
+    switch_to_config_v2: true
+)", pdiskPath.c_str());
+
+        ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+
+        auto* runtime = server.GetRuntime();
+        bool switchToConfigV2 = false;
+        for (int i = 0; i < 10; ++i) {
+            auto& appData = runtime->GetAppData(0);
+            if (appData.FeatureFlags.GetSwitchToConfigV2()) {
+                switchToConfigV2 = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(switchToConfigV2);
+
+        std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        UNIT_ASSERT(yamlConfigFetched);
+        UNIT_ASSERT(!storageYamlConfigFetched);
+        TString originalConfig = *yamlConfigFetched;
+
+        TString yamlConfigV2 = Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 2
+
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: SectorMap:1:64
+      type: SSD
+      expected_slot_count: 10
+    - path: SectorMap:2:64
+      type: SSD
+      expected_slot_count: 10
+  - host_config_id: 2
+    drive:
+    - path: %s
+      type: SSD
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 2
+  feature_flags:
+    switch_to_config_v2: true
+)", pdiskPath.c_str());
+
+        ReplaceConfig(server.GetChannel(), yamlConfigV2, std::nullopt, std::nullopt, false, true,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        UNIT_ASSERT(yamlConfigFetched);
+        UNIT_ASSERT(!storageYamlConfigFetched);
+        UNIT_ASSERT_VALUES_EQUAL(originalConfig, *yamlConfigFetched);
+
+        TString invalidYamlConfig = Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 2
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: SSD
+    - path: %s
+      type: SSD
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+  feature_flags:
+    switch_to_config_v2: true
+)", pdiskPath.c_str(), pdiskPath.c_str());
+
+        ReplaceConfig(server.GetChannel(), invalidYamlConfig, std::nullopt, std::nullopt, false, true,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::INTERNAL_ERROR);
+                TString opDebugString = resp.operation().DebugString();
+                UNIT_ASSERT_C(opDebugString.Contains("duplicate path"), opDebugString);
+            });
+
+        FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
+        UNIT_ASSERT(yamlConfigFetched);
+        UNIT_ASSERT(!storageYamlConfigFetched);
+        UNIT_ASSERT_VALUES_EQUAL(originalConfig, *yamlConfigFetched);
+    }
+
 }
 
 } // NKikimr::NGRpcService

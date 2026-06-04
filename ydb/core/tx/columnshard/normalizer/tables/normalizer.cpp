@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap {
 
-class TRemovedTablesNormalizer::TNormalizerResult : public INormalizerChanges {
+class TRemovedTablesNormalizer::TNormalizerResult: public INormalizerChanges {
     struct TPathInfo {
         TInternalPathId PathId;
         ui64 Step;
@@ -16,14 +16,15 @@ class TRemovedTablesNormalizer::TNormalizerResult : public INormalizerChanges {
 public:
     TNormalizerResult(std::vector<TPathInfo>&& pathIds)
         : PathIds(std::move(pathIds))
-    {}
+    {
+    }
 
 public:
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        for (auto&& pathInfo: PathIds) {
+        for (auto&& pathInfo : PathIds) {
             db.Table<Schema::TableVersionInfo>().Key(pathInfo.PathId.GetRawValue(), pathInfo.Step, pathInfo.TxId).Delete();
             db.Table<Schema::TableInfo>().Key(pathInfo.PathId.GetRawValue()).Delete();
         }
@@ -63,7 +64,6 @@ public:
             }
         }
 
-
         std::set<TInternalPathId> droppedTables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
@@ -73,7 +73,8 @@ public:
 
             while (!rowset.EndOfSet()) {
                 const auto pathId = rowset.GetValue<Schema::TableInfo::PathId>();
-                const NOlap::TSnapshot dropSnapshot(rowset.GetValue<Schema::TableInfo::DropStep>(), rowset.GetValue<Schema::TableInfo::DropTxId>());
+                const NOlap::TSnapshot dropSnapshot(
+                    rowset.GetValue<Schema::TableInfo::DropStep>(), rowset.GetValue<Schema::TableInfo::DropTxId>());
 
                 if (dropSnapshot.Valid() && !notEmptyPaths.contains(pathId)) {
                     droppedTables.emplace(TInternalPathId::FromRawValue(pathId));
@@ -123,13 +124,14 @@ public:
         ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << fullCount << " chunks found");
         return changes;
     }
-
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TRemovedTablesNormalizer::DoInit(const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TRemovedTablesNormalizer::DoInit(
+    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(txc);
     if (!changes) {
-        return TConclusionStatus::Fail("Not ready");;
+        return TConclusionStatus::Fail("Not ready");
+        ;
     }
     std::vector<INormalizerTask::TPtr> tasks;
     for (auto&& c : *changes) {
@@ -138,4 +140,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TRemovedTablesNormalizer::DoInit
     return tasks;
 }
 
-}
+}   // namespace NKikimr::NOlap

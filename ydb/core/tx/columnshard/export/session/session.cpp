@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NExport {
 
-NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext& context) const {
+NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext &context) const {
     AFL_VERIFY(IsConfirmed());
     Status = EStatus::Started;
     return std::make_unique<TActor>(context.GetSessionSelfPtr(), context.GetAdapter());
@@ -29,7 +29,7 @@ bool TSession::IsStarted() const {
     return Status == EStatus::Started;
 }
 
-void TSession::Abort(const TString& errorMessage) {
+void TSession::Abort(const TString &errorMessage) {
     AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
     Status = EStatus::Aborted;
     ErrorMessage = errorMessage;
@@ -45,8 +45,7 @@ bool TSession::IsDraft() const {
 }
 
 TString TSession::DebugString() const {
-    return TStringBuilder() << "task=" << Task->DebugString()
-                          << ";status=" << Status;
+    return TStringBuilder() << "task=" << Task->DebugString() << ";status=" << Status;
 }
 
 TCursor &TSession::MutableCursor() {
@@ -62,7 +61,8 @@ bool TSession::IsConfirmed() const {
 }
 
 TSession::TSession(const std::shared_ptr<TExportTask> &task)
-    : Task(task) {
+    : Task(task)
+{
     AFL_VERIFY(Task);
 }
 
@@ -75,7 +75,7 @@ bool TSession::IsReadyForRemoveOnFinished() const {
 }
 
 TSession::TStatus TSession::GetStatus() const {
-    return TStatus{Status == EStatus::Finished, ErrorMessage};
+    return TStatus{ Status == EStatus::Finished, ErrorMessage };
 }
 
 bool TSession::IsFinished() const {
@@ -104,17 +104,16 @@ TConclusionStatus TSession::DoDeserializeFromProto(const TProtoLogic &proto) {
 TSession::TProtoState TSession::DoSerializeStateToProto() const {
     TProtoState result;
     if (Status == EStatus::Started) {
-    result.SetStatus(::ToString(EStatus::Confirmed));
+        result.SetStatus(::ToString(EStatus::Confirmed));
     } else {
-    result.SetStatus(::ToString(Status));
+        result.SetStatus(::ToString(Status));
     }
     return result;
 }
 
 TConclusionStatus TSession::DoDeserializeStateFromProto(const TProtoState &proto) {
     if (!TryFromString(proto.GetStatus(), Status)) {
-    return TConclusionStatus::Fail("cannot read status from proto: " +
-                                   proto.GetStatus());
+        return TConclusionStatus::Fail("cannot read status from proto: " + proto.GetStatus());
     }
     return TConclusionStatus::Success();
 }
@@ -126,7 +125,7 @@ TSession::TProtoProgress TSession::DoSerializeProgressToProto() const {
 TConclusionStatus TSession::DoDeserializeProgressFromProto(const TProtoProgress &proto) {
     auto cursorConclusion = TCursor::BuildFromProto(proto);
     if (cursorConclusion.IsFail()) {
-    return cursorConclusion;
+        return cursorConclusion;
     }
     Cursor = cursorConclusion.DetachResult();
     return TConclusionStatus::Success();
@@ -136,4 +135,4 @@ TString TSession::GetClassNameStatic() {
     return "CS::EXPORT";
 }
 
-} // namespace NKikimr::NOlap::NExport
+}   // namespace NKikimr::NOlap::NExport

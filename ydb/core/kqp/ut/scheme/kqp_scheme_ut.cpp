@@ -12382,9 +12382,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     std::unique_ptr<TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true) {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
-        config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
-        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+        auto& featureFlags = *config.MutableFeatureFlags();
+        featureFlags.SetEnableStreamingQueries(enableStreamingQueries);
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableResourcePools(true);
+        featureFlags.SetEnableStreamingQueryDisposition(true);
         config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
@@ -13750,7 +13752,7 @@ END DO)",
         }
         {
             auto query = R"sql(
-                ALTER TABLE `/Root/TestTable` COMPACT WITH (MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
             )sql";
             auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());

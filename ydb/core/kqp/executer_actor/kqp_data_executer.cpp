@@ -3030,7 +3030,7 @@ private:
             (StateLoadMode, FederatedQuery::StateLoadMode_Name(stateLoadMode)),
             (StreamingDisposition, streamingDisposition.ShortDebugString()),
             (HasQueryPhysicalGraph, Request.QueryPhysicalGraph != nullptr),
-            (EnableWatermarks, Request.QueryPhysicalGraph ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks() : false),
+            (EnableWatermarks, Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()),
             (trace_id, TraceId()));
     }
 

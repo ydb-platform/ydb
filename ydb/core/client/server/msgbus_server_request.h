@@ -8,12 +8,15 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 template <typename TDerived>
-class TMessageBusServerRequestBase : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder {
+class TMessageBusServerRequestBase : public TMessageBusCancellableRequest<TDerived> {
+    using TActorBase = TMessageBusCancellableRequest<TDerived>;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR; }
 
-    TMessageBusServerRequestBase(TBusMessageContext &msg) {
-        InitSession(msg);
+    TMessageBusServerRequestBase(TBusMessageContext &msg)
+        : TActorBase(msg)
+    {
     }
 
     void HandleError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TActorContext &ctx) {
@@ -26,7 +29,7 @@ public:
         if (proxyStatus != TEvTxUserProxy::TResultStatus::Unknown)
             response->Record.SetProxyErrorCode(proxyStatus);
 
-        SendReplyAutoPtr(response);
+        this->SendReplyAutoPtr(response);
 
         this->Die(ctx);
     }

@@ -15,6 +15,10 @@
 
 #include <ydb/core/http_proxy/events.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+
+#include <memory>
+
 namespace NKikimr::NSQS {
 
 constexpr TDuration CLOUD_AUTH_TIMEOUT = TDuration::Seconds(30);
@@ -47,6 +51,7 @@ public:
 private:
     bool IsYandexCloudMode_ {false};
     TAuthFactory AuthFactory_ {};
+    std::shared_ptr<NYdb::ICoreFacility> CoreFacility_;
     NYdb::TCredentialsProviderPtr CredentialsProvider_;
     bool UseResourceManagerFolderService_ {false};
 };

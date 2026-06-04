@@ -49,6 +49,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/security/util.h>
 
 #include <util/string/printf.h>
 
@@ -1280,7 +1281,7 @@ public:
             if (!QueryState->TxCtx->EnableOltpSink) {
                 QueryState->TxCtx->EnableOltpSink = phyQuery.GetEnableOltpSink();
             }
-            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink()) {
+            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink() && !AppData()->FeatureFlags.GetEnableOltpSinkForTopicOnlyTx()) {
                 ReplyQueryError(Ydb::StatusIds::ABORTED,
                                 "Transaction execution settings have been changed (EnableOltpSink).");
                 return false;
@@ -2712,7 +2713,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT: {
                 TString text = QueryState->ExtractQueryText();
-                if (IsQueryAllowedToLog(text)) {
+                if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();
                     CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
                         userSID, QueryState->ParametersSize, database, type, requestUnits);

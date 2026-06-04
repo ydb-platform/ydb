@@ -33,7 +33,8 @@ TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)
     , IsNullable(isNullable)
-    , DefaultValue(defaultValue) {
+    , DefaultValue(defaultValue)
+{
     ColumnName = ArrowField->name();
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
 }
@@ -65,7 +66,8 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
             auto chunkedArray = sourceColumnFeatures.Loader->ApplyVerified(s->GetData(), s->GetRecordsCountVerified());
             auto newArray = DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult();
             rawBytes = newArray->GetRawSizeVerified();
-            data = DataAccessorConstructor.SerializeToString(DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult(), loadContext);
+            data = DataAccessorConstructor.SerializeToString(
+                DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult(), loadContext);
         } else {
             data = DataAccessorConstructor.SerializeToString(
                 DataAccessorConstructor.DeserializeFromString(s->GetData(), loadContext).DetachResult(), loadContext);

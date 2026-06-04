@@ -17,7 +17,8 @@ protected:
 public:
     TAccessor(const TString& path, const NColumnShard::TUnifiedOptionalPathId pathId)
         : TBase(path)
-        , PathId(pathId) {
+        , PathId(pathId)
+    {
     }
 
     virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const override {

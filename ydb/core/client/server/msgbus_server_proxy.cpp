@@ -74,6 +74,7 @@ public:
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         }
     }
 

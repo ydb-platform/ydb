@@ -104,6 +104,7 @@ public:
         : Actions(std::move(actions))
     {
     }
+
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normController*/) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -162,11 +163,13 @@ bool TDeleteTrashImpl::PrechargeV0(NTabletFlatExecutor::TTransactionContext& txc
     using namespace NColumnShard;
     return Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
 }
+
 bool TDeleteTrashImpl::PrechargeV1(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     using namespace NColumnShard;
     return Schema::Precharge<Schema::IndexColumnsV1>(db, txc.DB.GetScheme());
 }
+
 bool TDeleteTrashImpl::PrechargeV2(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     using namespace NColumnShard;

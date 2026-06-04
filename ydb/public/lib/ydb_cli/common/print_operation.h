@@ -26,6 +26,14 @@ void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToS3R
 void PrintOperation(const NImport::TImportFromS3Response& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS3Response>& operations, EDataFormat format);
 
+/// NFS
+// export
+void PrintOperation(const NExport::TExportToFsResponse& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToFsResponse>& operations, EDataFormat format);
+// import
+void PrintOperation(const NImport::TImportFromFsResponse& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromFsResponse>& operations, EDataFormat format);
+
 /// Index build
 void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EDataFormat format);

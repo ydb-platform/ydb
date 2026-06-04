@@ -9,6 +9,10 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/core/util/aws.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
@@ -1925,4 +1929,100 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST_FLAG(ImportExport, Materialized) {
+        NKikimr::InitAwsAPI();
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        NWrappers::NTestHelpers::TS3Mock s3Mock({}, NWrappers::NTestHelpers::TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(Materialized));
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                buildIndexOperation.DebugString()
+            );
+        }
+
+        auto checkIndex = [&](const TString& tablePath) {
+            const auto d = DescribePath(runtime, tablePath, true, true);
+            bool found = false;
+            for (const auto& idx : d.GetPathDescription().GetTable().GetTableIndexes()) {
+                if (idx.GetName() == "index1") {
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_C(found, "missing index1 on " << tablePath);
+        };
+
+        checkIndex("/MyRoot/Table");
+
+        const ui64 exportTxId = ++txId;
+        TestExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "test"
+                }
+                %s
+            }
+        )", port, Materialized ? "include_index_data: true" : ""));
+        env.TestWaitNotification(runtime, exportTxId);
+        TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        const TString popMode = Materialized
+            ? "index_population_mode: " + Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT)
+            : "";
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "test"
+                    destination_path: "/MyRoot/TableImported"
+                }
+                %s
+            }
+        )", port, popMode.c_str()));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        checkIndex("/MyRoot/TableImported");
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableImported/index1", true, true), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+
+        NKikimr::ShutdownAwsAPI();
+    }
 }

@@ -1878,6 +1878,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 a Uint64 NOT NULL,
                 b Uint32 NOT NULL,
                 c Timestamp NOT NULL,
+                d Utf8,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1909,6 +1910,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                 select count(*) from `/Root/t1` as t1
                 where t1.b = $sub;
+            )",
+            R"(
+                SELECT
+                    d,
+                FROM
+                    `/Root/t1` as t1
+                WHERE
+                    t1.d is not distinct from "some_str";
             )",
         };
 

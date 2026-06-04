@@ -38,6 +38,7 @@ private:
     using TBase = TExtendedTransactionBase;
     const std::set<NOlap::TSnapshot> SaveSnapshots;
     const std::set<NOlap::TSnapshot> RemoveSnapshots;
+
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -58,7 +59,8 @@ public:
         NColumnShard::TColumnShard* self, std::set<NOlap::TSnapshot>&& saveSnapshots, std::set<NOlap::TSnapshot>&& removeSnapshots)
         : TBase(self, "save_persistent_snapshots")
         , SaveSnapshots(std::move(saveSnapshots))
-        , RemoveSnapshots(std::move(removeSnapshots)) {
+        , RemoveSnapshots(std::move(removeSnapshots))
+    {
         AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
     }
 };

@@ -94,26 +94,53 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+        );
+        // работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
-      );
-      // работа с reader
-  }
-  ```
+  - JDBC
+
+    JDBC-драйвер не позволяет явно указать режим `ImplicitTx` для выполнения транзакций. Он самостоятельно использует этот режим для выполнения тех запросов, для которых он необходим:
+    * DDL-инструкции, такие как [CREATE TABLE](../../yql/reference/syntax/create_table/index.md), [DROP TABLE](../../yql/reference/syntax/drop_table.md) и т.д.
+    * Операции [BATCH UPDATE](../../yql/reference/syntax/batch-update.md) и [BATCH DELETE](../../yql/reference/syntax/batch-delete.md)
+
+    {% note info %}
+
+    Так как данные операции не транзакционные и не могут быть отменены через `rollback()` драйвер не позволяет выполнять их в рамках открытой транзакции. Их следует выполнять либо в режиме автокоммита либо до выполнения каких либо других запросов к базе.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            try (Statement statement = connection.createStatement()) {
+                // Запрос автоматические будет выполнен в режиме ImplicitTx
+                statement.execute("CREATE TABLE test (id Int32, value Text, PRIMARY KEY (id))");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
+
+  {% endlist %}
 
 - Python
 
@@ -328,27 +355,57 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    JDBC-драйвер использует режим `Serializable` по умолчанию для выполнения всех не read-only запросов.
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(false);
+            connection.setReadOnly(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setString(2, "value-1");
+                ps.executeUpdate();
+
+                ps.setInt(1, 2);
+                ps.setString(2, "value-2");
+                ps.executeUpdate();
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
+
+  {% endlist %}
 
 - Python
 
@@ -638,27 +695,58 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    JDBC стандарт не поддерживает уровни транзакций кроме [стандартных](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). Однако JDBC драйвер позволяет задать этот режим с помощью задания [нестандартной константы 16](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L130).
+
+    {% note warning %}
+
+    Данный режим не поддерживает интерактивные транзакции.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(16); // 16 - нестандартное значение драйвера YDB для ONLINE_RO
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
+
+
+  {% endlist %}
 
 - Python
 
@@ -877,27 +965,57 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    JDBC стандарт не поддерживает уровни транзакций кроме [стандартных](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). Однако JDBC драйвер позволяет задать этот режим с помощью задания [нестандартной константы 32](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L142).
+
+    {% note warning %}
+
+    Данный режим не поддерживает интерактивные транзакции.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(32); // 32 - нестандартное значение драйвера YDB для STALE_RO
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
+
+  {% endlist %}
 
 - Python
 
@@ -1106,27 +1224,53 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    JDBC-драйвер использует режим `Snapshot Read-Only` для выполнения всех read-only запросов, при условии что используются стандартные режимы транзакций (TRANSACTION_SERIALIZABLE или REPEATABLE_READ).
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(false); 
+            connection.setReadOnly(true); // Будет использован  Snapshot Read-Only
+            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
+
+  {% endlist %}
 
 - Python
 
@@ -1338,27 +1482,65 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Для установки режима `Snapshot Read-Write` следует использовать стандартный режим REPEATABLE_READ.
+
+    {% note info %}
+
+    Данный режим поддерживается начиная с версии JDBC-драйвера 2.3.24 и требует явного включения через опцию `repeatableReadEnabled`.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+        Properties props = new Properties();
+        props.setProperty("repeatableReadEnabled", "true"); // Режим REPEATABLE_READ не доступен по умолчанию
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
+            connection.setAutoCommit(false); 
+            connection.setReadOnly(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
+            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setString(2, "value-1");
+                ps.executeUpdate();
+
+                ps.setInt(1, 2);
+                ps.setString(2, "value-2");
+                ps.executeUpdate();
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
+
+  {% endlist %}
 
 - Python
 

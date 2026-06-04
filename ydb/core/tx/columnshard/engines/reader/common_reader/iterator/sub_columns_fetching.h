@@ -17,7 +17,8 @@ private:
 public:
     TSubColumnChunkRestoreInfo(const TBlobRange& range, const ui32 columnIdx)
         : BlobRange(range)
-        , ColumnIdx(columnIdx) {
+        , ColumnIdx(columnIdx)
+    {
     }
 
     const std::optional<TBlobRange>& GetBlobRangeOptional() const {
@@ -133,7 +134,8 @@ public:
 
     TColumnChunkRestoreInfo(const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
         : ChunkExternalInfo(chunkExternalInfo)
-        , FullChunkRange(fullChunkRange) {
+        , FullChunkRange(fullChunkRange)
+    {
     }
 
     static TColumnChunkRestoreInfo BuildEmpty(const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo) {
@@ -167,6 +169,7 @@ private:
     std::vector<TColumnChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
     bool NeedToAddResource = false;
+
     virtual void DoOnDataCollected(TFetchingResultContext& context) override {
         if (NeedToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
@@ -180,8 +183,7 @@ private:
             for (auto&& i : ColumnChunks) {
                 const auto& appliedFilter = context.GetAccessors().GetAppliedFilter();
                 if (appliedFilter) {
-                    i.Finish(std::make_shared<NArrow::TColumnFilter>(appliedFilter->Slice(pos, i.GetRecordsCount())),
-                        context.GetSource());
+                    i.Finish(std::make_shared<NArrow::TColumnFilter>(appliedFilter->Slice(pos, i.GetRecordsCount())), context.GetSource());
                 } else {
                     i.Finish(nullptr, context.GetSource());
                 }
@@ -285,7 +287,8 @@ public:
     TSubColumnsFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source, const std::vector<TString>& subColumns)
         : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
         , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
-        , SubColumns(subColumns) {
+        , SubColumns(subColumns)
+    {
         const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
             "type", loader->GetAccessorConstructor()->GetType());
@@ -295,7 +298,8 @@ public:
         const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount, const std::vector<TString>& subColumns)
         : TBase(columnId, storages)
         , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount))
-        , SubColumns(subColumns) {
+        , SubColumns(subColumns)
+    {
         const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
         ("type", loader->GetAccessorConstructor()->GetType());

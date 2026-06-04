@@ -49,6 +49,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
+
     const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
@@ -251,7 +252,8 @@ public:
         }
 
         if (accessors.HasRemovedData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+                "error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
         }
 
         AFL_VERIFY(InFlightRequests);
@@ -294,10 +296,12 @@ private:
         Constructors.Clear();
         Accessors.Stop();
     }
+
     virtual void DoAbort() override {
         Constructors.Clear();
         Accessors.Stop();
     }
+
     virtual bool DoIsFinished() const override {
         return Constructors.IsEmpty();
     }
@@ -365,7 +369,8 @@ public:
     public:
         TObjectWithAccessor(TConstructor&& obj, std::shared_ptr<TPortionDataAccessor>&& acc)
             : Object(std::move(obj))
-            , Accessor(std::move(acc)) {
+            , Accessor(std::move(acc))
+        {
         }
 
         TConstructor& MutableObject() {
@@ -381,7 +386,8 @@ public:
     }
 
     TSourcesConstructorWithAccessors(const ERequestSorting sorting)
-        : Constructors(sorting) {
+        : Constructors(sorting)
+    {
     }
 
     void InitializeConstructors(std::deque<TConstructor>&& objects) {

@@ -1,24 +1,26 @@
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/base/blobstorage.h>
-#include <util/string/printf.h>
-#include <arrow/api.h>
-#include <arrow/ipc/reader.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
-#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
-#include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
+
 #include <ydb/library/actors/protos/unittests.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <arrow/api.h>
+#include <arrow/ipc/reader.h>
 #include <util/string/join.h>
+#include <util/string/printf.h>
 
 namespace NKikimr {
 
@@ -29,7 +31,6 @@ using namespace NTxUT;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
-
 
 Y_UNIT_TEST_SUITE(CopyTable) {
     Y_UNIT_TEST(EmptyTable) {
@@ -45,7 +46,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         ui64 txId = 10;
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, { planStep, txId });
     }
 
     Y_UNIT_TEST(WithUncommittedData) {
@@ -61,16 +62,17 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
-        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTable.Schema), testTable.Schema, true, &writeIds);
+        const bool ok =
+            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++txId);
         {
-            const bool ok =
-                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            const bool ok = WriteData(
+                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema, true, &writeIds);
             UNIT_ASSERT(ok);
         }
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, { planStep, txId });
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
@@ -83,7 +85,6 @@ Y_UNIT_TEST_SUITE(CopyTable) {
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
         }
-
     }
 
     Y_UNIT_TEST_DUO(WithCommitInProgress, Reboot) {
@@ -154,7 +155,6 @@ Y_UNIT_TEST_SUITE(CopyTable) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
-
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot{ copyTablePlanStep, copyTableTxId });
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
@@ -217,7 +217,6 @@ Y_UNIT_TEST_SUITE(CopyTable) {
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
         }
-
     }
 
     Y_UNIT_TEST(CopyAbsentTable_Negative) {
@@ -251,4 +250,4 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         ProposeSchemaTxFail(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, srcPathId, 1), ++txId);
     }
 }
-}// namespace NKikimr
+}   // namespace NKikimr

@@ -1,5 +1,5 @@
-#include "fetching_executor.h"
 #include "fetcher.h"
+#include "fetching_executor.h"
 
 namespace NKikimr::NOlap::NDataFetcher {
 

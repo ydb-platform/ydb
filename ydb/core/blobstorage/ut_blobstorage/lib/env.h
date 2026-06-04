@@ -563,6 +563,8 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
 
+                ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
+
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
                 ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);

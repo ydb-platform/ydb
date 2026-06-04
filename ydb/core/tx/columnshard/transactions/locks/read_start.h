@@ -1,7 +1,8 @@
 #pragma once
 #include "abstract.h"
-#include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 
@@ -24,8 +25,8 @@ private:
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override;
 
 public:
-    TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
-        const THashSet<ui64>& lockIdsForCheck)
+    TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow::Schema>& schema,
+        const std::shared_ptr<TPKRangesFilter>& filter, const THashSet<ui64>& lockIdsForCheck)
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter)
@@ -64,10 +65,13 @@ public:
     }
 
     TEvReadStart() = default;
-    TEvReadStart(const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
+
+    TEvReadStart(
+        const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
         : PathId(pathId)
         , Schema(schema)
-        , Filter(filter) {
+        , Filter(filter)
+    {
         AFL_VERIFY(PathId.IsValid());
         AFL_VERIFY(Schema);
         AFL_VERIFY(Filter);

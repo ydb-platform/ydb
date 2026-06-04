@@ -144,9 +144,9 @@ public:
     static TString ToString(const NACLibProto::TACE& ace);
     static void FromString(NACLibProto::TACE& ace, const TString& string);
 
-protected:
     static ui32 SpecialRightsFromString(const TString& string);
 
+protected:
     void SortACL();
 };
 

@@ -43,6 +43,8 @@ class EventKind(object):
     BATCH_UPDATE = 'batch_update'
     BATCH_DELETE = 'batch_delete'
 
+    COMPACT = 'compact_table'
+
     @classmethod
     def periodic_tasks_column(cls):
         return (
@@ -74,6 +76,7 @@ class EventKind(object):
         return (
             cls.ADD_COLUMN,
             cls.DROP_TABLE,
+            cls.COMPACT,
         )
 
     @classmethod
@@ -93,6 +96,8 @@ class EventKind(object):
 
             cls.BATCH_DELETE,
             cls.BATCH_UPDATE,
+
+            cls.COMPACT,
 
             cls.CREATE_TABLE
         )
@@ -420,6 +425,10 @@ class YdbQueue(object):
         )
 
         self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
+
+    def compact_table(self):
+        query = "ALTER TABLE `{}` COMPACT WITH (CASCADE = true)".format(self.table_name)
+        self.send_query(query, parameters=None, event_kind=EventKind.COMPACT)
 
     def drop_table(self):
         duplicates = set()

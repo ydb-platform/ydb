@@ -49,13 +49,19 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
+    void Init(
+        const TString& topicPath,
+        ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(),
+        ui64 timeoutBeforeStartSessionSec = TimeoutBeforeStartSessionSec,
+        const TDuration& compileResponseDelay = {},
+        ui64 batchCreationTimeoutMs = 100)
+        {
         TopicPath = topicPath;
-        Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
+        Config.SetTimeoutBeforeStartSessionSec(timeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(false);
-        Config.MutableJsonParser()->SetBatchCreationTimeoutMs(100);
+        Config.MutableJsonParser()->SetBatchCreationTimeoutMs(batchCreationTimeoutMs);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -68,7 +74,7 @@ public:
             nullptr);
 
         CompileNotifier = Runtime.AllocateEdgeActor();
-        const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
+        const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier, compileResponseDelay));
 
         if constexpr (MockTopicSession) {
             PqGatewayNotifier = Runtime.AllocateEdgeActor();
@@ -672,6 +678,31 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQWrite({ Json1, wrongJson, wrongJson, Json3 });
         ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(3) }, true, {0, 3});
         PassAway();
+    }
+
+    Y_UNIT_TEST_F(LongCompilation, TRealTopicFixture) {
+        const TString topicName = "long_compilation";
+        PQCreateStream(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), 5, TDuration::Seconds(2), 4000);
+        auto source = BuildSource();
+        const std::vector<TString> data = { Json1, Json2, Json3};
+        PQWrite(data);
+
+        StartSession(ReadActorId1, source, 1);
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(2), JsonMessage(3) }, false);
+
+        StartSession(ReadActorId2, source, 1);
+
+        const std::vector<TString> data2 = { Json4 };
+        PQWrite(data2);
+   
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(4) }, false);
+        ExpectMessageBatch(ReadActorId2, { JsonMessage(2), JsonMessage(3), JsonMessage(4)}, false);
+
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
     }
 }
 

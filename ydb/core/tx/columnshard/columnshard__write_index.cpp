@@ -31,7 +31,8 @@ public:
         : TBase(writeController->GetWriteVolume())
         , WriteController(writeController)
         , Changes(changes)
-        , TabletId(tabletId) {
+        , TabletId(tabletId)
+    {
     }
 };
 

@@ -1,4 +1,5 @@
 #include "dependencies.h"
+
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
@@ -45,4 +46,4 @@ bool TTxConflicts::RemoveOnExecute(NTabletFlatExecutor::TTransactionContext& txc
     return true;
 }
 
-}
+}   // namespace NKikimr::NOlap::NTxInteractions

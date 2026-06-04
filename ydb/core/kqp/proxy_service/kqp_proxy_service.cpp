@@ -34,6 +34,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/security/util.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
@@ -309,7 +310,8 @@ public:
         NYql::NDq::TDqChannelLimits limits = {
             .LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes(),
             .RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
-            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes()
+            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes(),
+            .ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount(),
         };
 
         ui32 channelPoolId = AppData()->UserPoolId;
@@ -973,7 +975,7 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            if (!WarmupStarted && TableServiceConfig.HasCompileCacheWarmupConfig()) {
+            if (!WarmupStarted && TableServiceConfig.GetEnableCompileCacheWarmup()) {
                 // Short polling interval until warmup starts
                 d = TDuration::Seconds(2);
             } else {
@@ -1032,7 +1034,7 @@ public:
             return;
         }
 
-        if (!TableServiceConfig.HasCompileCacheWarmupConfig()) {
+        if (!TableServiceConfig.GetEnableCompileCacheWarmup()) {
             return;
         }
 
@@ -1817,6 +1819,11 @@ private:
                     finished = true;
                     break;
                 }
+            }
+
+            if (NKikimr::IsQueryWithSensitiveInfo(sessionInfo->QueryText)) {
+                ++startIt;
+                continue;
             }
 
             auto* sessionProto = result->Record.AddSessions();

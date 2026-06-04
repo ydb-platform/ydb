@@ -2,12 +2,13 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxNotifyTxCompletion : public TTransactionBase<TColumnShard> {
+class TTxNotifyTxCompletion: public TTransactionBase<TColumnShard> {
 public:
     TTxNotifyTxCompletion(TColumnShard* self, TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev)
         : TBase(self)
         , Ev(ev)
-    {}
+    {
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_UNUSED(txc);
@@ -26,7 +27,7 @@ public:
             return true;
         }
 
-        // We need to fill in op result in this case because 
+        // We need to fill in op result in this case because
         // it can be an export or import tx and we need to propagate these fields anyway
         opResult.SetSuccess(false);
         opResult.SetExplain("Internal error. No information was found about the transaction");
@@ -39,7 +40,9 @@ public:
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_NOTIFY_TX_COMPLETION; }
+    TTxType GetTxType() const override {
+        return TXTYPE_NOTIFY_TX_COMPLETION;
+    }
 
 private:
     TEvColumnShard::TEvNotifyTxCompletion::TPtr Ev;
@@ -50,4 +53,4 @@ void TColumnShard::Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const
     Execute(new TTxNotifyTxCompletion(this, ev), ctx);
 }
 
-}
+}   // namespace NKikimr::NColumnShard

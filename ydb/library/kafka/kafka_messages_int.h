@@ -11,6 +11,7 @@
 #include <type_traits>
 
 #include "kafka_records.h"
+#include "kafka_consumer_protocol.h"
 #include "kafka_log_impl.h"
 
 namespace NKafka {
@@ -23,17 +24,6 @@ struct TWriteCollector {
 struct TSizeCollector {
     ui32 Size = 0;
     ui32 NumTaggedFields = 0;
-
-    void SetRecordBatchCompressionType(ECompressionType compressionType) {
-        RecordBatchCompressionType = compressionType;
-    }
-
-    ECompressionType GetRecordBatchCompressionType() const {
-        return RecordBatchCompressionType;
-    }
-
-private:
-    ECompressionType RecordBatchCompressionType = ECompressionType::NONE;
 };
 
 template<class T, typename U = std::make_unsigned_t<T>>
@@ -192,8 +182,7 @@ public:
         readable >> value;
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion /*version*/, const TValueType& /*value*/) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion /*version*/, const TValueType& /*value*/) {
         static_assert(TTypeDesc::FixedLength, "Unsupported type: serialization length must be constant");
         return sizeof(TValueType);
     }
@@ -241,8 +230,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValueType& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
         if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
             return SizeOfVarint(value);
         } else {
@@ -289,8 +277,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValueType& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
         if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
             return SizeOfUnsignedVarint(value);
         } else {
@@ -325,8 +312,7 @@ public:
         value.Read(readable, version);
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValueType& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
         return value.Size(version);
     }
 
@@ -384,8 +370,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TKafkaString& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaString& value) {
         if (value) {
             const auto& v = *value;
             if (v.length() > Max<i16>()) {
@@ -452,8 +437,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TKafkaBytes& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaBytes& value) {
         if (value) {
             const auto& v = *value;
             return v.size() + ArraySize<Meta>(version, v.size());
@@ -541,8 +525,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TKafkaRecords& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaRecords& value) {
         if (value) {
             const auto& v = *value;
             const auto size = v.Size(CURRENT_RECORD_VERSION);
@@ -605,133 +588,19 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const std::vector<TValueType>& value) {
+    inline static i64 DoSize(TKafkaVersion version, const std::vector<TValueType>& value) {
         TKafkaInt32 size = 0;
         if constexpr (Meta::TypeDesc::FixedLength) {
-            Y_UNUSED(collector);
             size = value.size() * sizeof(TValueType);
         } else {
             for(const auto& v : value) {
-                size += ItemStrategy::DoSize(collector, version, v);
+                size += ItemStrategy::DoSize(version, v);
             }
         }
         return size + ArraySize<Meta>(version, value.size());
     }
 
     inline static void DoLog(const std::vector<TValueType>& value) {
-        if constexpr (DEBUG_ENABLED) {
-            Cerr << "Was read field '" << Meta::Name << "' type Array. Size " <<  value.size() << Endl;
-        }
-    }
-};
-
-template<>
-class TypeStrategy<
-    TKafkaRecordBatch::RecordsMeta,
-    TKafkaRecordBatch::RecordsMeta::Type,
-    TKafkaArrayDesc
-> {
-    using Meta = TKafkaRecordBatch::RecordsMeta;
-    using TValueType = TKafkaRecord;
-    using TValue = std::vector<TValueType>;
-    using ItemStrategy = TypeStrategy<Meta, Meta::ItemType, Meta::ItemTypeDesc>;
-
-    static TString Compress(TStringBuf data, ECompressionType compressionType);
-    static TString Decompress(TStringBuf data, ECompressionType compressionType);
-
-    inline static void DoWriteImpl(TKafkaWritable& writable, TKafkaVersion version, const TValue& value) {
-        WriteArraySize<Meta>(writable, version, value.size());
-
-        for (const auto& v : value) {
-            ItemStrategy::DoWrite(writable, version, v);
-        }
-    }
-
-    inline static void DoReadImpl(TKafkaReadable& readable, TKafkaVersion version, TValue& value) {
-        TKafkaInt32 length = ReadArraySize<Meta>(readable, version);
-        if (length < 0) {
-            ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
-        }
-        value.resize(length);
-
-        for (int i = 0; i < length; ++i) {
-            ItemStrategy::DoRead(readable, version, value[i]);
-        }
-    }
-
-    inline static i64 DoSizeImpl(TSizeCollector& collector, TKafkaVersion version, const TValue& value) {
-        TKafkaInt32 size = 0;
-        for (const auto& v : value) {
-            size += ItemStrategy::DoSize(collector, version, v);
-        }
-        return size + ArraySize<Meta>(version, value.size());
-    }
-
-    inline static TString SerializeImpl(TKafkaVersion version, const TValue& value) {
-        TSizeCollector collector;
-        TWritableBuf buffer(DoSizeImpl(collector, version, value));
-        TKafkaWritable writable(buffer);
-        DoWriteImpl(writable, version, value);
-
-        TString result;
-        for (auto it = buffer.GetBuffersDeque().rbegin(); it != buffer.GetBuffersDeque().rend(); ++it) {
-            result.append(it->Data(), it->Size());
-        }
-        return result;
-    }
-
-    inline static TValue DeserializeImpl(TKafkaVersion version, TStringBuf data) {
-        TBuffer buffer(data.data(), data.size());
-        TKafkaReadable readable(buffer);
-
-        TValue value;
-        DoReadImpl(readable, version, value);
-        if (readable.left() != 0) {
-            ythrow yexception() << "unexpected extra bytes after Kafka records: " << readable.left();
-        }
-        return value;
-    }
-
-public:
-    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TValue& value) {
-        const auto compressionType = writable.GetRecordBatchCompressionType();
-        if (compressionType == ECompressionType::NONE) {
-            DoWriteImpl(writable, version, value);
-            return;
-        }
-
-        const TString compressed = Compress(SerializeImpl(version, value), compressionType);
-        writable.write(compressed.data(), compressed.size());
-    }
-
-    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TValue& value) {
-        DoWrite(writable, version, value);
-    }
-
-    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TValue& value) {
-        const auto compressionType = readable.GetRecordBatchCompressionType();
-        if (compressionType == ECompressionType::NONE) {
-            DoReadImpl(readable, version, value);
-            return;
-        }
-
-        const auto compressed = readable.Bytes(readable.left());
-        const TString decompressed = Decompress(
-            TStringBuf(compressed.data(), compressed.size()),
-            compressionType);
-        value = DeserializeImpl(version, decompressed);
-    }
-
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValue& value) {
-        const auto compressionType = collector.GetRecordBatchCompressionType();
-        if (compressionType == ECompressionType::NONE) {
-            return DoSizeImpl(collector, version, value);
-        }
-
-        return Compress(SerializeImpl(version, value), compressionType).size();
-    }
-
-    inline static void DoLog(const TValue& value) {
         if constexpr (DEBUG_ENABLED) {
             Cerr << "Was read field '" << Meta::Name << "' type Array. Size " <<  value.size() << Endl;
         }
@@ -783,14 +652,14 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
                 if (!IsDefaultValue<Meta>(value)) {
                     ++collector.NumTaggedFields;
 
-                    const i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+                    i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
                     collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size);
                     if constexpr (DEBUG_ENABLED) {
                         Cerr << "Size of field '" << Meta::Name << "' " << size << " + " << SizeOfUnsignedVarint(Meta::Tag) << " + " << SizeOfUnsignedVarint(size) << Endl;
                     }
                 }
             } else {
-                const i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+                i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
                 collector.Size += size;
                 if constexpr (DEBUG_ENABLED) {
                     Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;
@@ -799,7 +668,7 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
         }
     } else {
         if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
-            const i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+            i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
             collector.Size += size;
             if constexpr (DEBUG_ENABLED) {
                 Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;
@@ -815,8 +684,7 @@ inline void WriteTag(TKafkaWritable& writable, TKafkaInt16 version, const typena
             VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
             if (!IsDefaultValue<Meta>(value)) {
                 writable.writeUnsignedVarint(Meta::Tag);
-                TSizeCollector collector;
-                writable.writeUnsignedVarint(TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value));
+                writable.writeUnsignedVarint(TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value));
                 TypeStrategy<Meta, typename Meta::Type>::DoWriteTag(writable, version, value);
             }
         }

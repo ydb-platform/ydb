@@ -689,12 +689,17 @@ protected:
         responseHeader.CorrelationId = header->CorrelationId;
 
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
-        TKafkaWritable writable(BufferedWriter);
         SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);
         try {
+            TWritableBuf replyBuffer(size + sizeof(size));
+            TKafkaWritable writable(replyBuffer);
             writable << size;
             responseHeader.Write(writable, headerVersion);
             reply->Write(writable, version);
+
+            for (auto it = replyBuffer.GetBuffersDeque().rbegin(); it != replyBuffer.GetBuffersDeque().rend(); ++it) {
+                BufferedWriter.write(it->Data(), it->Size());
+            }
 
             ssize_t res = BufferedWriter.flush();
             // if we got EAGAIN or EWOULDBLOCK it means that socket is busy and we need to wait for PollerReady event to proceed

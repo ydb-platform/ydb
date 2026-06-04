@@ -183,12 +183,12 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         auto& record = recordsBatch.Records[recordIndex];
 
-        record.DataChunk = NKikimr::GetDeserializedData(result.GetData());
-        if (record.DataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
 
-        for (auto& metadata : record.DataChunk.GetMessageMeta()) {
+        for (auto& metadata : dataChunk.GetMessageMeta()) {
             if (metadata.key() == "__key") {
                 record.Key = metadata.value();
             } else {
@@ -203,7 +203,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         header.CodecKeyStr = "__codec";
         header.Key = header.CodecKeyStr;
 
-        NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(record.DataChunk.GetCodec() + 1);
+        NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(dataChunk.GetCodec() + 1);
         switch (codec) {
             case NYdb::NTopic::ECodec::RAW:
                 header.CodecValueStr = "RAW";
@@ -224,8 +224,8 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         header.Value = header.CodecValueStr;
         record.Headers.push_back(header);
 
-        if (record.DataChunk.HasData()) {
-            record.Value = record.DataChunk.GetData();
+        if (dataChunk.HasData()) {
+            record.Value = dataChunk.GetData();
         }
         record.OffsetDelta = lastOffset - baseOffset;
         record.TimestampDelta = lastTimestamp - baseTimestamp;

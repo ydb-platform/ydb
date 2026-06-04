@@ -4,7 +4,7 @@ This section of {{ ydb-short-name }} documentation contains a collection of arti
 
 The key articles to get started with this section:
 
-* [{#T}](initial-deployment.md)
+* [{#T}](initial-deployment/index.md)
 * [{#T}](preparing-vms-with-terraform.md)
 * [{#T}](restart.md)
 * Observability:

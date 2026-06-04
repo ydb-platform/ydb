@@ -69,7 +69,7 @@ The above describes the main mechanism for managing {{ ydb-short-name }} configu
 
 For cluster configuration during initial deployment, it is recommended to use instructions for the selected infrastructure management method:
 
-- [{#T}](../../deployment-options/ansible/initial-deployment.md);
+- [{#T}](../../deployment-options/ansible/initial-deployment/index.md);
 - [{#T}](../../deployment-options/kubernetes/initial-deployment.md);
 - [{#T}](../../deployment-options/manual/initial-deployment.md).
 

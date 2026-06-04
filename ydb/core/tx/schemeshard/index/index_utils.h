@@ -98,16 +98,14 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType,
-    bool isBuild);
+    const NKikimrSchemeOp::EIndexType indexType);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType,
-    bool isBuild);
+    const NKikimrSchemeOp::EIndexType indexType);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,

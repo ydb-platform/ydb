@@ -243,7 +243,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             auto implTableDesc = compact
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType, false)
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                     indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
@@ -263,7 +263,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             auto implTableDesc = compact
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType, false)
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                     indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);

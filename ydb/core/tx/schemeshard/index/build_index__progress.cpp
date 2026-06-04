@@ -387,7 +387,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     op = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         NKikimrSchemeOp::TTableDescription(),
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
-        buildInfo.IndexType, true);
+        buildInfo.IndexType);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
@@ -1205,14 +1205,6 @@ private:
         };
 
         bool compact = buildInfo.IsBuildFulltextCompact();
-        if (compact) {
-            // We just need unique __ydb_generations for the initial scan
-            const uint64_t perShard = UINT64_MAX / buildInfo.Shards.size();
-            const uint64_t shardIndex = buildInfo.Shards.at(shardIdx).Index;
-            ev->Record.SetMinGeneration(perShard*shardIndex);
-            ev->Record.SetMaxGeneration(perShard*shardIndex + perShard-1);
-        }
-
         if (buildInfo.TargetName.empty()) {
             TPath implTable = GetBuildPath(Self, buildInfo, TString(NTableIndex::ImplTable) + (compact ? NTableIndex::NKMeans::BuildSuffix0 : ""));
             buildInfo.TargetName = implTable.PathString();

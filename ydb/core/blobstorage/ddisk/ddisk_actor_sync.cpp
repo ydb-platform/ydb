@@ -134,7 +134,10 @@ namespace NKikimr::NDDisk {
         sync.Span = std::move(span);
 
         const auto& ddiskId = record.GetDDiskId();
-        const TQueryCredentials sourceCreds(creds.TabletId, creds.Generation, record.GetDDiskInstanceGuid(), true);
+        const TQueryCredentials sourceCreds = TQueryCredentials::ForInternal(
+            creds.TabletId,
+            creds.Generation,
+            std::make_optional(record.GetDDiskInstanceGuid()));
         const TActorId sourceDDiskId = TPolicy::MakeSourceActorId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
         std::optional<ui64> vChunkIndex;
 

@@ -58,7 +58,7 @@ def main():
         cmd = java_tmpdir.fix_tmpdir(cmd)
 
     if opts.error_prone:
-        cmd = java_error_prone.fix_cmd_line(opts.error_prone, cmd)
+        cmd = java_error_prone.add_error_prone_to_cmd(opts.error_prone, cmd)
 
     with open(opts.sources_list) as f:
         input_files = f.read().strip().split()

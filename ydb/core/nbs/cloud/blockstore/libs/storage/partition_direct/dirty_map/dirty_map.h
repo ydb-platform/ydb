@@ -15,7 +15,7 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-struct TVChunkConfig;
+class TVChunkConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -126,13 +126,21 @@ class TDDiskState
 public:
     enum class EState
     {
-        Operational,   // The ddisk is fully functional and can be read from
+        Disabled,   // There are no DDisks with data on the host and DDisk
+                    // cannot be used.
+
+        Operational,   // The DDisk is fully functional and can be read from
                        // anywhere.
         Fresh,   // The ddisk is only partially filled, and you can only read
                  // from the blocks below the OperationalBlockCount.
     };
 
+    // Enables the use of DDisk. If the operational blocks count less then total
+    // block count, then the DDisk is only partially filled (fresh).
     void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
+
+    // Completely disables DDisk usage.
+    void SwitchOffline();
 
     [[nodiscard]] EState GetState() const;
     [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
@@ -147,7 +155,7 @@ public:
 private:
     void UpdateState();
 
-    EState State = EState::Operational;
+    EState State = EState::Disabled;
 
     ui64 TotalBlockCount = 0;
 
@@ -201,10 +209,8 @@ public:
         ui64 blockCount);
     ~TBlocksDirtyMap() override;
 
-    void UpdateConfig(
-        THostMask desiredPBuffers,
-        THostMask desiredDDisks,
-        THostMask disabled);
+    // Note. Fresh watermarks are not applying for exists DDisks.
+    void UpdateConfig(const TVChunkConfig& vChunkConfig);
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
 

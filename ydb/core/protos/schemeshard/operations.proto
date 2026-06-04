@@ -217,5 +217,9 @@ enum EOperationType {
     ESchemeOpIncrementalRestoreLockTargets = 135;
     ESchemeOpIncrementalRestoreUnlockTargets = 136;
 
+    // Full Backup (trackable aggregator over BackupBackupCollection's CCT)
+    ESchemeOpCreateFullBackupOp = 137;
+
+
     // Some entries are grouped by semantics, so are out of order
 }

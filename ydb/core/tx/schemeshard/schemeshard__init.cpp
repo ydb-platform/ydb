@@ -31,6 +31,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
     TVector<TPathId> RestoreTablesToUnmark;
     TVector<ui64> IncrementalBackupsToResume;
+    TVector<ui64> FullBackupsToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -6032,6 +6033,81 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        {
+            {
+                auto rowset = db.Table<Schema::FullBackups>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::FullBackups::Id>();
+                    auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::FullBackups::DomainPathOwnerId>(selfId),
+                                                rowset.GetValue<Schema::FullBackups::DomainPathId>());
+
+                    TFullBackupInfo::TPtr backupInfo = new TFullBackupInfo(id, domainPathId);
+
+                    backupInfo->State = static_cast<TFullBackupInfo::EState>(rowset.GetValue<Schema::FullBackups::State>());
+
+                    backupInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::FullBackups::StartTime>());
+                    backupInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::FullBackups::EndTime>());
+                    if (rowset.HaveValue<Schema::FullBackups::UserSID>()) {
+                        backupInfo->UserSID = rowset.GetValue<Schema::FullBackups::UserSID>();
+                    }
+                    if (rowset.HaveValue<Schema::FullBackups::FinalIssues>()) {
+                        backupInfo->FinalIssues = rowset.GetValue<Schema::FullBackups::FinalIssues>();
+                    }
+                    backupInfo->BackupCollectionPathId = TPathId(
+                        rowset.GetValueOrDefault<Schema::FullBackups::BackupCollectionPathOwnerId>(selfId),
+                        rowset.GetValueOrDefault<Schema::FullBackups::BackupCollectionLocalPathId>());
+
+                    backupInfo->ExpectedItemCount =
+                        rowset.GetValueOrDefault<Schema::FullBackups::ExpectedItemCount>(0);
+
+                    Self->FullBackups[id] = backupInfo;
+
+                    if (!backupInfo->IsFinished()) {
+                        FullBackupsToResume.push_back(backupInfo->Id);
+                        // Only in-progress ops block concurrent backups on the same collection.
+                        if (backupInfo->BackupCollectionPathId) {
+                            Self->BCPathToFullBackup[backupInfo->BackupCollectionPathId] = backupInfo->Id;
+                        }
+                    }
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            {
+                auto rowset = db.Table<Schema::FullBackupItems>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::FullBackupItems::Id>();
+                    Y_VERIFY_S(Self->FullBackups.contains(id), "Full backup is not found"
+                               << ": id# " << id);
+
+                    TFullBackupInfo::TPtr info = Self->FullBackups.at(id);
+
+                    TPathId pathId = TPathId(rowset.GetValue<Schema::FullBackupItems::PathOwnerId>(),
+                                             rowset.GetValue<Schema::FullBackupItems::PathId>());
+
+                    auto& item = info->Items[pathId];
+
+                    item.State = static_cast<TFullBackupInfo::TItem::EState>(rowset.GetValue<Schema::FullBackupItems::State>());
+                    item.PathId = pathId;
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         { // Read secrets
             auto rowset = db.Table<Schema::Secrets>().Range().Select();
             if (!rowset.IsReady()) {
@@ -6347,6 +6423,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
             .IncrementalBackupIds = std::move(IncrementalBackupsToResume),
+            .FullBackupIds = std::move(FullBackupsToResume),
         });
 
         Self->ProcessForcedCompactionQueues();

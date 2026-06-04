@@ -592,6 +592,20 @@ class TRcBuf {
             return false;
         }
 
+        // Like UpdateCookiesBegin, but uses a strong compare-exchange so it never fails spuriously.
+        // Use this when the result is asserted (e.g. Y_ABORT_UNLESS), so a spurious weak failure can't crash.
+        bool UpdateCookiesBeginStrong(const char* curBegin, const char* contBegin) {
+            if (!Owner) {
+                return false;
+            }
+
+            TCookies* cookies = GetCookies();
+            if (cookies) {
+                return cookies->Begin.compare_exchange_strong(curBegin, contBegin);
+            }
+            return false;
+        }
+
         bool UpdateCookiesEnd(const char* curEnd, const char* contEnd) {
             if (!Owner) {
                 return false;
@@ -871,11 +885,25 @@ public:
         return TRcBuf(res, res.data() + headroom, size);
     }
 
-    static TRcBuf UninitializedPageAligned(size_t size, size_t tailroom = 0) {
-        const size_t pageSize = NSystemInfo::GetPageSize();
-        TRcBuf res = Uninitialized(size + pageSize - 1, 0, tailroom);
-        const size_t misalign = (pageSize - reinterpret_cast<uintptr_t>(res.data())) & (pageSize - 1);
+    // Allocates an uninitialized buffer of `size` bytes whose data pointer is aligned to `alignment`
+    // (which must be a power of 2). `tailroom` extra bytes are reserved after the data.
+    static TRcBuf UninitializedAligned(size_t size, size_t alignment, size_t tailroom = 0) {
+        if (alignment <= 1) {
+            return Uninitialized(size, 0, tailroom);
+        }
+        Y_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
+        if (size == 0) {
+            // A zero-length aligned piece can't be expressed as a Piece into a temporary buffer
+            // (the Piece ctor requires data to lie strictly inside the source), so short-circuit.
+            return Uninitialized(0, 0, tailroom);
+        }
+        TRcBuf res = Uninitialized(size + alignment - 1, 0, tailroom);
+        const size_t misalign = (alignment - reinterpret_cast<uintptr_t>(res.data())) & (alignment - 1);
         return TRcBuf(Piece, res.data() + misalign, size, res);
+    }
+
+    static TRcBuf UninitializedPageAligned(size_t size, size_t tailroom = 0) {
+        return UninitializedAligned(size, NSystemInfo::GetPageSize(), tailroom);
     }
 
     static TRcBuf Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
@@ -1102,6 +1130,33 @@ public:
             *this = std::move(newData);
             return EResizeResult::Alloc;
         }
+    }
+
+    // Returns a new owning TRcBuf that shares this buffer's backend but additionally covers `frontBytes` of the
+    // reserved headroom in front of the current data (no allocation, no copy). Unlike GrowFront, this leaves
+    // *this's own Begin/End untouched and works for backends without cookies (e.g. TRopeAlignedBuffer). It does,
+    // however, claim the headroom by moving the shared backend's front-edge cookie, which changes the observable
+    // Headroom()/CanGrowFront() of *this and any sibling view over the same backend. The safe Headroom() is used,
+    // so it only succeeds when this buffer privately owns (or, for cookie-bearing backends, currently owns the
+    // front edge of) that space.
+    TRcBuf ExpandFront(size_t frontBytes) const {
+        Y_ABORT_UNLESS(Headroom() >= frontBytes);
+        if (frontBytes == 0) {
+            // Nothing to claim: return a plain shared view without touching cookies. Doing the cookie
+            // bookkeeping here would abort for shared buffers whose front edge has already moved.
+            return TRcBuf(Backend, TContiguousSpan{Begin, GetSize()});
+        }
+        const bool isPrivate = IsPrivate();
+        TRcBuf result(Backend, TContiguousSpan{Begin - frontBytes, GetSize() + frontBytes});
+        if (result.Backend.GetCookies()) {
+            if (isPrivate) {
+                result.Backend.UpdateCookiesUnsafe(result.Begin, result.End);
+            } else {
+                // Strong CAS: the result is asserted, so a spurious weak failure must not crash.
+                Y_ABORT_UNLESS(result.Backend.UpdateCookiesBeginStrong(Begin, result.Begin));
+            }
+        }
+        return result;
     }
 
     EResizeResult GrowBack(size_t size, EResizeStrategy strategy = EResizeStrategy::KeepRooms) {

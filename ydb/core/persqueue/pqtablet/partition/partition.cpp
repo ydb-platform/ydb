@@ -1434,10 +1434,10 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
 {
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(*ev) < GetStepAndTxId(*PlanStep, *TxId)) {
-            LOG_D("Send TEvTxDone (commit)" <<
+            LOG_D("Stale TEvTxCommit: persist tx meta then TEvTxDone" <<
                      " Step " << ev->Step <<
                      ", TxId " << ev->TxId);
-            ctx.Send(TabletActorId, MakeTxDone(ev->Step, ev->TxId).Release());
+            EnqueueStaleTxMetaPersist(std::move(ev), ctx);
             return;
         }
     }
@@ -2665,6 +2665,8 @@ void TPartition::RunPersist() {
         PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     }
 
+    TryAppendStaleTxMetaWrites();
+
     if (ManageWriteTimestampEstimate) {
         WriteTimestampEstimate = now;
     }
@@ -2972,30 +2974,101 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
 
 void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 {
-    Y_ENSURE(!IsSupportive());
+    PQ_ENSURE(!IsSupportive());
 
     if (!tx.SerializedTx.Defined()) {
         return;
     }
 
-    PQ_ENSURE(PersistRequest);
-    TMaybe<ui64> txId = tx.GetTxId();
+    const TMaybe<ui64> txId = tx.GetTxId();
+    const TMaybe<ui64> step = tx.GetStep();
     PQ_ENSURE(txId.Defined());
+    PQ_ENSURE(step.Defined());
 
-    TString value;
-    PQ_ENSURE(tx.SerializedTx->SerializeToString(&value));
+    TStaleTxMetaEntry entry;
+    entry.Step = *step;
+    entry.TxId = *txId;
+    entry.SerializedTx = tx.SerializedTx;
+    entry.TabletConfig = tx.TabletConfig;
+    entry.BootstrapConfig = tx.BootstrapConfig;
+    entry.PartitionsData = tx.PartitionsData;
 
-    auto command = PersistRequest->Record.AddCmdWrite();
-    command->SetKey(GetTxKey(*txId, Partition.OriginalPartitionId));
-    command->SetValue(value);
-    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+    AddCmdWritePersistStaleTxMeta(entry);
+}
 
-    if (!tx.TabletConfig.Defined()) {
+void TPartition::EnqueueStaleTxMetaPersist(std::unique_ptr<TEvPQ::TEvTxCommit> ev, const TActorContext& ctx)
+{
+    if (!ev->SerializedTx.Defined()) {
+        ctx.Send(TabletActorId, MakeTxDone(ev->Step, ev->TxId).Release());
         return;
     }
 
+    TStaleTxMetaEntry entry;
+    entry.Step = ev->Step;
+    entry.TxId = ev->TxId;
+    entry.SerializedTx = std::move(ev->SerializedTx);
+    entry.TabletConfig = std::move(ev->TabletConfig);
+    entry.BootstrapConfig = std::move(ev->BootstrapConfig);
+    entry.PartitionsData = std::move(ev->PartitionsData);
+    StaleTxMetaPending[ev->TxId] = std::move(entry);
+
+    ProcessTxsAndUserActs(ctx);
+}
+
+void TPartition::TryAppendStaleTxMetaWrites()
+{
+    if (IsSupportive() || StaleTxMetaPending.empty()) {
+        return;
+    }
+
+    PQ_ENSURE(StaleTxMetaInFlight.empty())("StaleTxMetaInFlight", StaleTxMetaInFlight.size());
+
+    while (!StaleTxMetaPending.empty()) {
+        auto it = StaleTxMetaPending.begin();
+        const ui64 txId = it->first;
+        TStaleTxMetaEntry entry = std::move(it->second);
+        StaleTxMetaPending.erase(it);
+
+        AddCmdWritePersistStaleTxMeta(entry);
+        StaleTxMetaInFlight.emplace(txId, std::move(entry));
+    }
+}
+
+void TPartition::FlushStaleTxMetaDone(const TActorContext& ctx)
+{
+    for (const auto& [txId, entry] : StaleTxMetaInFlight) {
+        Y_UNUSED(txId);
+        ctx.Send(TabletActorId, MakeTxDone(entry.Step, entry.TxId).Release());
+    }
+    StaleTxMetaInFlight.clear();
+}
+
+void TPartition::AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry)
+{
+    PQ_ENSURE(!IsSupportive());
+
+    if (!entry.SerializedTx.Defined()) {
+        return;
+    }
+
+    PQ_ENSURE(PersistRequest);
+
+    TString value;
+    PQ_ENSURE(entry.SerializedTx->SerializeToString(&value));
+
+    auto command = PersistRequest->Record.AddCmdWrite();
+    command->SetKey(GetTxKey(entry.TxId, Partition.OriginalPartitionId));
+    command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+
+    if (!entry.TabletConfig.Defined()) {
+        return;
+    }
+
+    PQ_ENSURE(entry.BootstrapConfig.Defined() && entry.PartitionsData.Defined());
+
     value.clear();
-    PQ_ENSURE(tx.TabletConfig->SerializeToString(&value));
+    PQ_ENSURE(entry.TabletConfig->SerializeToString(&value));
 
     command = PersistRequest->Record.AddCmdWrite();
     command->SetKey("_config");
@@ -3004,9 +3077,9 @@ void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 
     const TActorContext& ctx = ActorContext();
 
-    const auto graph = MakePartitionGraph(*tx.TabletConfig);
-    for (const auto& partition : tx.TabletConfig->GetPartitions()) {
-        const auto explicitMessageGroups = CreateExplicitMessageGroups(*tx.BootstrapConfig, *tx.PartitionsData, graph, partition.GetPartitionId());
+    const auto graph = MakePartitionGraph(*entry.TabletConfig);
+    for (const auto& partition : entry.TabletConfig->GetPartitions()) {
+        const auto explicitMessageGroups = CreateExplicitMessageGroups(*entry.BootstrapConfig, *entry.PartitionsData, graph, partition.GetPartitionId());
 
         TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
         for (const auto& [id, mg] : *explicitMessageGroups) {

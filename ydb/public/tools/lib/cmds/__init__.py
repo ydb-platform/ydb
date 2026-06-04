@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
+import logging
 import shutil
 import signal
 import os
@@ -21,6 +22,8 @@ from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator
 from library.python.testing.recipe import set_env
+
+logger = logging.getLogger(__name__)
 
 
 class EmptyArguments(object):
@@ -319,6 +322,29 @@ def enable_pqcd(arguments):
     return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
+def same_config_path(left, right):
+    return os.path.realpath(left) == os.path.realpath(right)
+
+
+def should_preserve_existing_config(target_config):
+    """Return True when an existing non-empty config.yaml should be kept.
+
+    On the first deploy (before the recipe metafile exists), a non-empty
+    target config is preserved to support bind-mounted configs in Docker.
+    If the metafile is removed while the data directory is kept, the existing
+    config is also preserved instead of being regenerated.
+    """
+    return os.path.isfile(target_config) and os.path.getsize(target_config) > 0
+
+
+def resolve_deploy_config_action(config_path, target_config):
+    if config_path and not same_config_path(config_path, target_config):
+        return 'copy'
+    if should_preserve_existing_config(target_config):
+        return 'preserve'
+    return 'generate'
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -399,15 +425,25 @@ def deploy(arguments):
     )
 
     config_path = getattr(arguments, 'config_path', None)
-    if config_path:
-        def _write_proto_configs(self, configs_path):
-            # This override only triggers on the very first deploy before the recipe metafile exists.
-            # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
-            self.write_tls_data()
-            os.makedirs(configs_path, exist_ok=True)
-            shutil.copyfile(config_path, os.path.join(configs_path, "config.yaml"))
+    original_write_proto_configs = configuration.write_proto_configs
 
-        configuration.write_proto_configs = types.MethodType(_write_proto_configs, configuration)
+    def _write_proto_configs(self, configs_path):
+        # This override only triggers on the very first deploy before the recipe metafile exists.
+        # Subsequent deploy invocations reuse the saved config directory and skip calling this hook.
+        target_config = os.path.join(configs_path, "config.yaml")
+        action = resolve_deploy_config_action(config_path, target_config)
+        if action == 'copy':
+            self.write_tls_data()
+            shutil.copyfile(config_path, target_config)
+            return
+        if action == 'preserve':
+            logger.info('Preserving existing config at %s', target_config)
+            self.write_tls_data()
+            return
+
+        original_write_proto_configs(configs_path)
+
+    configuration.write_proto_configs = types.MethodType(_write_proto_configs, configuration)
 
     cluster = KiKiMR(configuration)
     cluster.start()

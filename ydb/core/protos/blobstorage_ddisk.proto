@@ -72,14 +72,21 @@ message TDDiskId {
     uint32 DDiskSlotId = 3;
 }
 
-// DDisk query credentials define who asks for an operation: tablet identifier, its generation (to prevent races with
-// obsolete instances) and DDiskInstanceGuid to identify cases when DDisk data was lost.
+// DDisk query credentials define who asks for an operation: tablet identifier, tablet generation and session sequence
+// number (to prevent races with obsolete instances), and DDiskInstanceGuid to identify cases when DDisk data was lost.
 
 message TQueryCredentials {
+    enum ERequestKind {
+        REQUEST_KIND_TO_DDISK = 0;
+        REQUEST_KIND_TO_PERSISTENT_BUFFER = 1;
+        REQUEST_KIND_INTERNAL = 2;
+    }
+
     uint64 TabletId = 1;
     uint32 Generation = 2;
     optional fixed64 DDiskInstanceGuid = 3;
-    bool FromPersistentBuffer = 4;
+    ERequestKind RequestKind = 4;
+    uint64 DDiskSessionSeqNo = 5;
 }
 
 // DDisk block selector defines the range of blocks we are operating at; it includes through-numbered vChunk index and

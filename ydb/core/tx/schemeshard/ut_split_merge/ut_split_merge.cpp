@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
@@ -2891,5 +2892,113 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
             SourceTabletId: 72075186233409546
             SourceTabletId: 72075186233409546
         )", {{NKikimrScheme::StatusInvalidParameter, "Duplicate SourceTabletId"}});
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeShardConsistencyCheckCounter) {
+    // COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS accumulates the wall-clock
+    // nanoseconds spent in TTableInfo::VerifyConsistency(), gated by the
+    // EnableTablePartitionsConsistencyCheck feature flag (default on).
+    static constexpr const char* CounterName = "SchemeShard/TablePartitionsConsistencyCheckTimeNs";
+
+    Y_UNIT_TEST(ZeroWhenFlagOff) {
+        // With the check disabled, VerifyConsistency() returns early and resets
+        // LastVerifyConsistencyTime to 0, so every report site increments by 0
+        // and the cumulative counter stays exactly 0.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsConsistencyCheck(false);
+
+        // Many partitions: a verify here would be measurable if it ran at all.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 200
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Exercise ApplySplitMerge as well (the first shard of a uniform table).
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 1 } } } }
+        )", TTestTxConfig::FakeHiveTablets + 0));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, CounterName), 0u);
+    }
+
+    Y_UNIT_TEST(ReportedWhenFlagOn) {
+        // With the check enabled (default), the cumulative counter accumulates a
+        // non-zero time across the partitioning report sites. A 200-partition
+        // verify reliably exceeds 1us, so create/copy/move alone guarantee > 0;
+        // split and merge additionally cover the ApplySplitMerge report sites and
+        // assert the verification invariants hold on real operation results.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsConsistencyCheck(true);
+
+        // Small table with explicit, predictable shard ids for split/merge.
+        // Partitions: (-inf,"A") -> F+0, ["A","B") -> F+1, ["B",+inf) -> F+2.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SplitMe"
+            Columns { Name: "key"   Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } } } }
+            PartitionConfig {
+                PartitioningPolicy { MinPartitionsCount: 1 SizeToSplit: 100500 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Split the first partition -> ApplySplitMerge (split).
+        TestSplitTable(runtime, ++txId, "/MyRoot/SplitMe", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "0" } } } }
+            )",
+            TTestTxConfig::FakeHiveTablets + 0
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        // Merge the two non-first partitions F+1, F+2 -> ApplySplitMerge (merge).
+        TestSplitTable(runtime, ++txId, "/MyRoot/SplitMe", Sprintf(R"(
+                SourceTabletId: %lu
+                SourceTabletId: %lu
+            )",
+            TTestTxConfig::FakeHiveTablets + 1,
+            TTestTxConfig::FakeHiveTablets + 2
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        // Big table to force a measurable verify time.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BigTable"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 200
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Copy -> SetPartitioning on the new table.
+        TestCopyTable(runtime, ++txId, "/MyRoot", "BigCopy", "/MyRoot/BigTable");
+        env.TestWaitNotification(runtime, txId);
+
+        // Move -> MovePartitioning + the move_table report site.
+        TestMoveTable(runtime, ++txId, "/MyRoot/BigTable", "/MyRoot/BigMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, CounterName), 0u);
     }
 }

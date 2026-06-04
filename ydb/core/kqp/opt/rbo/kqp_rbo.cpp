@@ -44,6 +44,36 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString s
     }
 }
 
+void CheckInputDependencies(TOpRoot& root, TRBOContext& ctx) {
+    for (const auto& it : root) {
+        TVector<TInfoUnit> inputIUs = it.Current->GetInputIUs();
+        TVector<TInfoUnit> usedIUs = it.Current->GetUsedIUs(root.PlanProps);
+
+        for (const auto& iu : usedIUs) {
+            auto usedIt = std::find(inputIUs.begin(), inputIUs.end(), iu);
+            if (usedIt == inputIUs.end()) {
+                TStringBuilder builder;
+                for(const auto& inputIU: inputIUs) {
+                    builder << inputIU.GetFullName() << ",";
+                }
+                YQL_CLOG(TRACE, CoreDq) << "Input IUs are: [" << builder << "]";
+                Y_ENSURE(false, TStringBuilder() << "Column reference " 
+                    << iu.GetFullName() << " not found in input to operator: " << it.Current->ToString(ctx.ExprCtx));
+            }
+            
+            for (const auto& depIU : iu.GetDependencies()) {
+                auto depIt = std::find(inputIUs.begin(), inputIUs.end(), depIU);
+                Y_ENSURE(depIt != inputIUs.end(), TStringBuilder() << "Dependent column reference " 
+                    << depIU.GetFullName() << " not found in input to operator: " << it.Current->ToString(ctx.ExprCtx));
+            }
+        }
+    }
+}
+
+void RunSanityChecks(TOpRoot& root, TRBOContext& ctx) {
+    CheckInputDependencies(root, ctx);
+}
+
 /**
  * Run a rule-based stage
  *
@@ -92,6 +122,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                         YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
+                    RunSanityChecks(root, ctx);
                     ComputeRequiredProps(root, Props | ERuleProperties::RequireTypes, ctx, StageName);
                     ++numMatches;
                     break;

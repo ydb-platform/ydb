@@ -649,6 +649,13 @@ TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
     return res;
 }
 
+TVector<TInfoUnit> TOpJoin::GetInputIUs() {
+    auto leftInputIUs = GetLeftInput()->GetOutputIUs();
+    auto rightInputIUs = GetRightInput()->GetOutputIUs();
+    leftInputIUs.insert(leftInputIUs.end(), rightInputIUs.begin(), rightInputIUs.end());
+    return leftInputIUs;
+}
+
 TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
     TVector<TInfoUnit> result;
@@ -795,6 +802,10 @@ TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOper
     : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput), Ordered(ordered) {}
 
 TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
+    return GetLeftInput()->GetOutputIUs();
+}
+
+TVector<TInfoUnit> TOpUnionAll::GetInputIUs() {
     return GetLeftInput()->GetOutputIUs();
 }
 

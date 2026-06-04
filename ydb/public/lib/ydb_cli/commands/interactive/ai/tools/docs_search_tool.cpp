@@ -597,6 +597,9 @@ Searches and retrieves YDB documentation pages from a bundled docs archive.
 Use this tool to look up authoritative information about YDB concepts, YQL syntax,
 configuration, deployment, and other topics described in the official documentation.
 
+The returned pages are raw Markdown/YAML. When you use their content in your reply, restate it as plain text:
+do not copy Markdown markup (such as **, #, backticks, code fences, or tables built from | and ---) through to the user.
+
 Supported actions:
 - "list": returns the catalog of all documentation pages. Each entry contains:
     * "path" — archive-relative path to the page (e.g., "core/concepts/architecture.md").

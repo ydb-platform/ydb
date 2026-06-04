@@ -148,13 +148,14 @@ public:
     void Exec(TActorSystem *actorSystem) override {
         Span.Event("PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
-        STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionChunkWrite::Exec",
-                (DiskId, PDiskId),
-                (ReqId, ReqId),
-                (Event, Event->ToString()),
-                (PriorityClass, (ui32)PriorityClass),
-                (timeMs, responseTimeMs),
-                (sizeBytes, SizeBytes));
+        YDB_LOG_CTX_COMP_DEBUG(*actorSystem, BS_PDISK, "TCompletionChunkWrite::Exec",
+            {"Marker", "BPD01"},
+            {"DiskId", PDiskId},
+            {"ReqId", ReqId},
+            {"Event", Event->ToString()},
+            {"PriorityClass", (ui32)PriorityClass},
+            {"timeMs", responseTimeMs},
+            {"sizeBytes", SizeBytes});
         if (Mon) {
             Mon->IncrementResponseTime(PriorityClass, responseTimeMs, SizeBytes);
         }

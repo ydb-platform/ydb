@@ -1,5 +1,7 @@
 #include "queue.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_QUEUE
+
 namespace NKikimr::NBsQueue {
 
 TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, TString& logPrefix,
@@ -170,23 +172,30 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             }
         };
 
-        QLOG_DEBUG_S("BSQ25", "sending"
-                << " T# " << getTypeName()
-                << " SequenceId# " << item.SequenceId
-                << " MsgId# " << item.MsgId
-                << " Cookie# " << item.QueueCookie
-                << " InFlightCost# " << InFlightCost
-                << " Cost# " << item.Cost
-                << " WindowSize# " << WindowSize
-                << " InFlightCount# " << InFlightCount()
-                << " Postpone# " << (postpone ? "true" : "false")
-                << " SendMeCostSettings# " << (sendMeCostSettings ? "true" : "false"));
+        YDB_LOG_CTX_DEBUG(ctx, "Marker# BSQ25 sending",
+            {"LogPrefix", LogPrefix},
+            {"func", __func__},
+            {"T", getTypeName()},
+            {"SequenceId", item.SequenceId},
+            {"MsgId", item.MsgId},
+            {"Cookie", item.QueueCookie},
+            {"InFlightCost", InFlightCost},
+            {"Cost", item.Cost},
+            {"WindowSize", WindowSize},
+            {"InFlightCount", InFlightCount()},
+            {"Postpone", (postpone ? "true" : "false")},
+            {"SendMeCostSettings", (sendMeCostSettings ? "true" : "false")});
 
         // check if window has enough space for such item
         if (postpone) {
             // can't send more items now
-            QLOG_DEBUG_S("BSQ26", "Queue overflow: InFlightCost# " << InFlightCost << " WindowSize# "
-                << WindowSize << " item.Cost# " << item.Cost << " InFlightCount# " << InFlightCount());
+            YDB_LOG_CTX_DEBUG(ctx, "Marker# BSQ26 Queue overflow:",
+                {"LogPrefix", LogPrefix},
+                {"func", __func__},
+                {"InFlightCost", InFlightCost},
+                {"WindowSize", WindowSize},
+                {"item.Cost", item.Cost},
+                {"InFlightCount", InFlightCount()});
             ++*QueueOverflow;
             break;
         }
@@ -235,11 +244,13 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
 void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason,
         const TActorContext& ctx) {
     const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed());
-    QLOG_INFO_S("BSQ03", "Reply error type# " << item.Event.GetType()
-        << " status# " << NKikimrProto::EReplyStatus_Name(status)
-        << " errorReason# " << '"' << EscapeC(errorReason) << '"'
-        << " cookie# " << item.Event.GetCookie()
-        << " processingTime# " << processingTime);
+    YDB_LOG_CTX_INFO(ctx, "Marker# BSQ03 Reply error errorReason#",
+        {"LogPrefix", LogPrefix},
+        {"func", __func__},
+        {"type", item.Event.GetType()},
+        {"status", NKikimrProto::EReplyStatus_Name(status)},
+        {"cookie", item.Event.GetCookie()},
+        {"processingTime", processingTime});
 
     if (item.Span) {
         item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);

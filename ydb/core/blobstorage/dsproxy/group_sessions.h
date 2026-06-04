@@ -189,8 +189,11 @@ namespace NKikimr {
                 ui64 cookie, NWilson::TTraceId traceId, const TVDiskID vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId) {
             auto& queues = FailDomains[topology.GetFailDomainOrderNumber(vdiskId)].VDisks[vdiskId.VDisk].Queues;
             TActorId queueActorId = queues.GetQueue(queueId).ActorId;
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Send to queueActorId# " << queueActorId
-                << " " << TypeName(*event) << "# " << event->ToString() << " cookie# " << cookie);
+            YDB_LOG_COMP_DEBUG(NKikimrServices::BS_PROXY, "Send",
+                {"to_queueActorId", queueActorId},
+                {"TypeName", TypeName(*event)},
+                {"event", event->ToString()},
+                {"cookie", cookie});
             TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,
                 std::move(traceId)));
         }

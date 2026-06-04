@@ -99,7 +99,7 @@ public:
                 TActorSetupCmd(dsproxy, TMailboxType::Simple, 0));
 
         ActorSystem.reset(new TActorSystem(setup, AppData.get(), logSettings));
-        LOG_NOTICE(*ActorSystem, NActorsServices::TEST, "Actor system created");
+        YDB_LOG_CTX_COMP_NOTICE(*ActorSystem, NActorsServices::TEST, "Actor system created");
         ActorSystem->Start();
     }
 

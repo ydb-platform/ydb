@@ -87,10 +87,14 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
                     correct = true;
                     break;
                 }
+                if (proto.HasMinMaxIndex() && proto.GetMinMaxIndex().GetColumnId() == column->GetId()) {
+                    correct = true;
+                    break;
+                }
             }
         }
         if (!correct) {
-            errors.AddError("Haven't MAX-index for TTL column and TTL column is not first column in primary key");
+            errors.AddError(Sprintf("TTL column %s must either 1) be first PK column 2) have MIN_MAX index 3) have MAX index. all three coditions are not satisfied, so %s can't be used as TTL column", colName.c_str(), colName.c_str()));
             return false;
         }
     }

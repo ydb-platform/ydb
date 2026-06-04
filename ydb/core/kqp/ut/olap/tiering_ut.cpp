@@ -14,6 +14,7 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/core/kqp/ut/olap/helpers/ttl_index_enum.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 
@@ -674,6 +675,90 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 }
             }
         }
+    }
+    Y_UNIT_TEST(TieringViaIndex, EIndexForTTLColumn) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        TString createTableQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(
+            CREATE TABLE `/Root/ColumnWithTTLAndMaxIndex` (
+                id Int32 NOT NULL,
+                ts Timestamp NOT NULL,
+                PRIMARY KEY(id)
+            ) PARTITION BY HASH (`id`)
+            WITH ( STORE = COLUMN );
+            ALTER OBJECT `/Root/ColumnWithTTLAndMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
+            )" 
+            :
+            R"(
+            CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+            id Int32 NOT NULL,
+            ts Timestamp NOT NULL,
+            PRIMARY KEY(id)
+            ) PARTITION BY HASH (`id`) 
+            WITH ( STORE = COLUMN );
+            ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{"column_name": "ts", "inherit_portion_storage": false}`);
+            )";
+            
+
+
+        auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(createTableQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::Dev::EStatus::SUCCESS, createStatus.GetIssues().ToString());
+
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        TString tablePath = Arg<0>() == EIndexForTTLColumn::MaxIndex ? "/Root/ColumnWithTTLAndMaxIndex" : "/Root/ColumnWithTTLAndMinMaxIndex";
+        testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, "ts");
+
+        TString upsertQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(
+            $prev_year = Unwrap(DateTime::MakeTimestamp(
+                DateTime::ShiftYears(DateTime::Split(CurrentUtcTimestamp()), -1)
+            ));
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/ColumnWithTTLAndMaxIndex` (`id`, `ts`)
+            SELECT CAST(item AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+            UPSERT INTO `/Root/ColumnWithTTLAndMaxIndex` (`id`, `ts`)
+            SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+
+            -- UPSERT INTO `/Root/ColumnWithTTLAndMaxIndex` (id, ts) VALUES  (1,$prev_year), (2,$prev_year), (3,$prev_year), (4,$prev_year);
+            )" 
+            :
+            R"(
+            $prev_year = Unwrap(DateTime::MakeTimestamp(
+                DateTime::ShiftYears(DateTime::Split(CurrentUtcTimestamp()), -1)
+            ));
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
+            SELECT CAST(item AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+            UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
+            SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+            )";
+
+
+        testHelper.ExecuteQuery(upsertQuery);
+        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitActualization(TDuration::Seconds(10));
+        tieringHelper.SetTablePath(tablePath);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto selectQuery = TStringBuilder();
+            selectQuery << R"(
+                SELECT TierName, SUM(ColumnRawBytes) as RawBytes, SUM(Rows) AS Rows
+                FROM `)" << tablePath << R"(/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName)";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
+        }
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 1500001);
+        }
+
     }
 
     Y_UNIT_TEST(TieringBoolToS3) {

@@ -222,6 +222,39 @@ Y_UNIT_TEST(QualifiedAsteriskStripsConfiguredSystemColumnPrefixes) {
     UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
 }
 
+Y_UNIT_TEST(TableHintsTableRef) {
+    ExpectFailWithError(
+        R"sql(
+            $input = SELECT 1 AS ts;
+            SELECT * FROM $input WITH XLOCK;
+        )sql",
+        "<main>:3:20: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("$input = SELECT 1 AS ts; SELECT * FROM $input WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(TableHintsSelect) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM (SELECT 1 AS ts) WITH XLOCK;
+        )sql",
+        "<main>:2:20: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("SELECT * FROM (SELECT 1 AS ts) WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
 Y_UNIT_TEST(TableHintsValues) {
     ExpectFailWithError(
         R"sql(
@@ -236,6 +269,33 @@ Y_UNIT_TEST(TableHintsValues) {
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(TableRefAnonymousTableHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            USE plato;
+            $input = SELECT 1 AS value;
+            SELECT * FROM @$input WITH XLOCK;
+        )sql",
+        "<main>:4:40: Error: Hints are not supported for anonymous tables\n");
+}
+
+Y_UNIT_TEST(TableRefSubqueryHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            $input = SELECT 1 AS value;
+            SELECT * FROM $input WITH XLOCK;
+        )sql",
+        "<main>:3:20: Error: Hint 'XLOCK' requires a table\n");
+}
+
+Y_UNIT_TEST(AsTableHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM AS_TABLE([<|value:1|>]) WITH XLOCK;
+        )sql",
+        "<main>:2:56: Error: Hint 'XLOCK' requires a table\n");
 }
 
 Y_UNIT_TEST(InNoHints) {
@@ -6204,8 +6264,8 @@ Y_UNIT_TEST(AsteriskWithSomethingBefore) {
 
 Y_UNIT_TEST(DuplicatedQualifiedAsterisk) {
     NYql::TAstParseResult res = SqlToYql("select in.*, key, in.* from plato.Input as in;");
-    UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same quialified asterisk. Invalid source: in\n");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same qualified asterisk. Invalid source: in\n");
 }
 
 Y_UNIT_TEST(BrokenLabel) {

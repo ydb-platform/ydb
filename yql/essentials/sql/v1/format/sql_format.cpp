@@ -2314,7 +2314,8 @@ private:
 
     void VisitFlattenSource(const TRule_flatten_source& msg) {
         const auto& namedSingleSource = msg.GetRule_named_single_source1();
-        bool indentBeforeSource = namedSingleSource.GetRule_single_source1().Alt_case() == TRule_single_source::kAltSingleSource1;
+        const auto& singleSource = namedSingleSource.GetRule_hinted_single_source1().GetRule_single_source1();
+        bool indentBeforeSource = singleSource.Alt_case() == TRule_single_source::kAltSingleSource1;
 
         if (indentBeforeSource) {
             NewLine();
@@ -2336,7 +2337,7 @@ private:
     }
 
     void VisitNamedSingleSource(const TRule_named_single_source& msg) {
-        Visit(msg.GetRule_single_source1());
+        Visit(msg.GetRule_hinted_single_source1());
         if (msg.HasBlock2()) {
             Visit(msg.GetBlock2());
         }
@@ -2368,6 +2369,15 @@ private:
         if (msg.HasBlock4()) {
             NewLine();
             Visit(msg.GetBlock4());
+        }
+    }
+
+    void VisitHintedSingleSource(const TRule_hinted_single_source& msg) {
+        Visit(msg.GetRule_single_source1());
+
+        if (msg.HasBlock2()) {
+            const auto hints = msg.GetBlock2().GetRule_table_hints1();
+            Visit(hints);
         }
     }
 
@@ -2547,10 +2557,6 @@ private:
             }
             default:
                 ythrow yexception() << "Alt is not supported";
-        }
-
-        if (msg.HasBlock4()) {
-            Visit(msg.GetBlock4());
         }
     }
 
@@ -3158,6 +3164,7 @@ TStaticData::TStaticData()
           {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
           {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
           {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},
+          {TRule_hinted_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitHintedSingleSource)},
           {TRule_table_hints::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableHints)},
           {TRule_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSimpleTableRef)},
           {TRule_into_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoSimpleTableRef)},

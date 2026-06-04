@@ -311,11 +311,10 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
             }
         }
 
-        auto firstsView = received | std::views::transform([](const auto& p) { return p.first; });
         UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
             << "expected #" << expectedMessages.size() << " messages ("
             << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ",  std::vector<std::string>(firstsView.begin(), firstsView.end())) << ")");
+            << JoinSeq(", ",  received) << ")");
 
         error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
         return false;
@@ -328,7 +327,7 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
 
     UNIT_ASSERT(received.size() == expectedMessages.size());
     for (size_t i = 0; i < received.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedMessages[i]);
+        UNIT_ASSERT_VALUES_EQUAL(received[i], expectedMessages[i]);
     }
 }
 

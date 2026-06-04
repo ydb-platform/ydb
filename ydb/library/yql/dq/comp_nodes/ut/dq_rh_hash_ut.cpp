@@ -91,7 +91,7 @@ void GenerateSamples(TKeyTypes& types, ui64 key, TArrayRef<TUnboxedValue> result
             next = TUnboxedValuePod(static_cast<double>(key));
             break;
         case EDataSlot::String:
-            next = TUnboxedValuePod(NYql::NUdf::TStringValue(Sprintf("%08d.%08d.%08d", key, key, key)));
+            next = TUnboxedValuePod(NYql::NUdf::TStringValue(Sprintf("%08" PRIu64 ".%08" PRIu64, key, key)));
             break;
         default:
             UNIT_FAIL(TStringBuilder() << "can't generate values of type " << type.first);

@@ -30,7 +30,7 @@ struct TDqRobinHoodBatchRequestItem {
     }
 
     // intermediate data
-    ui64 Hash;
+    ui32 Hash;
     char* InitialIterator;
 };
 

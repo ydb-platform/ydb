@@ -1007,50 +1007,52 @@ public:
         }
         auto source = node.Cast<TDqSource>();
         auto settings = source.Settings();
-        if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
-            TDqPqTopicSource topicSource = maybeTopicSource.Cast();
+        auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw());
 
-            NYql::NConnector::NApi::TPredicate predicateProto;
-            auto serializedProto = topicSource.FilterPredicate().Ref().Content();
-            YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
-            TString filterPredicateSql = NYql::FormatPredicate(predicateProto);
+        if (!maybeTopicSource) {
+            return false;
+        }
+        TDqPqTopicSource topicSource = maybeTopicSource.Cast();
 
-            NPq::NProto::TOffsetPredicate offsetPredicates;
-            auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();
-            YQL_ENSURE(offsetPredicates.ParseFromString(offsetSerialized));
+        NYql::NConnector::NApi::TPredicate predicateProto;
+        auto serializedProto = topicSource.FilterPredicate().Ref().Content();
+        YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
+        TString filterPredicateSql = NYql::FormatPredicate(predicateProto);
 
-            NPq::NProto::TWriteTimePredicate writeTimePredicate;
-            auto writeTimeSerialized = topicSource.WriteTimePredicate().Ref().Content();
-            YQL_ENSURE(writeTimePredicate.ParseFromString(writeTimeSerialized));
+        NPq::NProto::TOffsetPredicate offsetPredicates;
+        auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();
+        YQL_ENSURE(offsetPredicates.ParseFromString(offsetSerialized));
 
-            std::set<ui64> predicatePartitions;
-            bool hasPredicatePartitions = GetPartitions(*topicSource.Partitions().Ptr(), predicatePartitions);
+        NPq::NProto::TWriteTimePredicate writeTimePredicate;
+        auto writeTimeSerialized = topicSource.WriteTimePredicate().Ref().Content();
+        YQL_ENSURE(writeTimePredicate.ParseFromString(writeTimeSerialized));
 
-            if (!filterPredicateSql.empty()) {
-                properties["Filter (shared reading)"] = filterPredicateSql;
-            }
-            if (offsetPredicates.ItemSize() > 0) {
-                const auto& item = offsetPredicates.GetItem(0);
-                properties["Offsets"] = TStringBuilder() << "[" 
-                    << (item.HasBegin() ? ToString(item.GetBegin()) : "_") << ", " 
-                    << (item.HasEnd() ? ToString(item.GetEnd()) : "_") << ")";
-            }
-            if (writeTimePredicate.ItemSize() > 0) {
-                const auto& item = writeTimePredicate.GetItem(0);
-                properties["WriteTime"] = TStringBuilder() << "[" 
-                    << (item.HasBegin() ? ToString(TInstant::MicroSeconds(item.GetBegin())) : "_") << ", "
-                    << (item.HasEnd() ? ToString(TInstant::MicroSeconds(item.GetEnd())) : "_") << ")";
-            }
-            if (hasPredicatePartitions && !predicatePartitions.empty()) {
-                if (predicatePartitions.size() == 1) {
-                    properties["Partitions"] = TStringBuilder() << "[" << ToString(*predicatePartitions.begin()) << "]";
-                } else {
-                    properties["Partitions"] = TStringBuilder() << "["
-                        << ToString(*predicatePartitions.begin())
-                        << ((predicatePartitions.size() > 2) ? ", ..., " : ", ")
-                        << ToString(*predicatePartitions.rbegin()) << "]";
-                }
-            }
+        std::set<ui64> predicatePartitions;
+        bool hasPredicatePartitions = GetPartitions(*topicSource.Partitions().Ptr(), predicatePartitions);
+
+        if (!filterPredicateSql.empty()) {
+            properties["Filter (shared reading)"] = filterPredicateSql;
+        }
+        if (offsetPredicates.ItemSize() > 0) {
+            const auto& item = offsetPredicates.GetItem(0);
+            properties["Offsets"] = TStringBuilder() << "[" 
+                << (item.HasBegin() ? ToString(item.GetBegin()) : "_") << ", " 
+                << (item.HasEnd() ? ToString(item.GetEnd()) : "_") << ")";
+        }
+        if (writeTimePredicate.ItemSize() > 0) {
+            const auto& item = writeTimePredicate.GetItem(0);
+            properties["WriteTime"] = TStringBuilder() << "[" 
+                << (item.HasBegin() ? ToString(TInstant::MicroSeconds(item.GetBegin())) : "_") << ", "
+                << (item.HasEnd() ? ToString(TInstant::MicroSeconds(item.GetEnd())) : "_") << ")";
+        }
+        if (hasPredicatePartitions && !predicatePartitions.empty()) {
+            if (predicatePartitions.size() == 1) {
+                properties["Partitions"] = TStringBuilder() << "[" << ToString(*predicatePartitions.begin()) << "]";
+            } else {
+                properties["Partitions"] = TStringBuilder() << "["
+                    << ToString(*predicatePartitions.begin())
+                    << ((predicatePartitions.size() > 2) ? ", ..., " : ", ")
+                    << ToString(*predicatePartitions.rbegin()) << "]";
             }
         }
         return true;

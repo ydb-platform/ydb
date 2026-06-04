@@ -41,6 +41,7 @@ namespace NActors {
         bool MergePerPeerCounters = false;
         bool MergePerHostCounters = false;
         bool MergePerDataCenterCounters = false;
+        bool MergePerScopeClassCounters = false;
         ui32 TCPSocketBufferSize = 0;
         TDuration PingPeriod = TDuration::Seconds(3);
         TDuration ForceConfirmPeriod = TDuration::Seconds(1);

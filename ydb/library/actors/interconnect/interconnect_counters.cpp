@@ -44,6 +44,13 @@ namespace {
         TStringBuf FormatSubscriberActivityName(ui32 activityIndex) {
             return activityIndex == Max<ui32>() ? TStringBuf("manual") : GetActivityTypeName(activityIndex);
         }
+
+        TStringBuf GetScopeClassPeerLabel(const TScopeId& localScopeId, const TScopeId& peerScopeId) {
+            if (peerScopeId.first == 0) {
+                return peerScopeId.second ? TStringBuf("system") : TStringBuf("unknown");
+            }
+            return peerScopeId == localScopeId ? TStringBuf("same_tenant") : TStringBuf("other_tenant");
+        }
     }
 
     class TInterconnectCounters: public IInterconnectMetrics {
@@ -123,6 +130,7 @@ namespace {
         const TInterconnectProxyCommon::TPtr Common;
         const bool MergePerDataCenterCounters;
         const bool MergePerHostCounters;
+        const bool MergePerScopeClassCounters;
         const bool UseMetricsAggregation;
         const bool MergePerPeerCounters;
         const bool HasSessionCounters;
@@ -148,7 +156,8 @@ namespace {
             : Common(common)
             , MergePerDataCenterCounters(common->Settings.MergePerDataCenterCounters)
             , MergePerHostCounters(common->Settings.MergePerHostCounters)
-            , UseMetricsAggregation(MergePerHostCounters && common->MetricsAggregatorId)
+            , MergePerScopeClassCounters(common->Settings.MergePerScopeClassCounters)
+            , UseMetricsAggregation((MergePerHostCounters || MergePerScopeClassCounters) && common->MetricsAggregatorId)
             , MergePerPeerCounters(common->Settings.MergePerPeerCounters)
             , HasSessionCounters(!MergePerDataCenterCounters && !MergePerPeerCounters)
             , Counters(common->MonCounters)
@@ -383,6 +392,8 @@ namespace {
                 Events = AdaptiveCounters->GetCounter("Events", true);
                 ScopeErrors = AdaptiveCounters->GetCounter("ScopeErrors", true);
 
+                // Channel wrappers cache Traffic/Events pointers, which change with peer label.
+                OutputChannels.clear();
                 for (const auto& [id, name] : Common->ChannelName) {
                     OutputChannels.try_emplace(id, Counters->GetSubgroup("channel", name), Traffic, Events);
                 }
@@ -392,11 +403,14 @@ namespace {
             }
 
             if (updateAdaptive) {
+                // Activity gauges cache adaptive counter pointers, which change with peer label.
+                SubscribersByActivity.clear();
                 SessionDeaths = AdaptiveCounters->GetCounter("Session_Deaths", true);
                 HandshakeFails = AdaptiveCounters->GetCounter("Handshake_Fails", true);
                 InflyLimitReach = AdaptiveCounters->GetCounter("InflyLimitReach", true);
                 InflightDataAmount = AdaptiveCounters->GetCounter("Inflight_Data");
                 InflightRdmaDataAmount = AdaptiveCounters->GetCounter("InflightRdma_Data");
+                SubscribersCount = AdaptiveCounters->GetCounter("SubscribersCount");
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
                     "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
@@ -419,7 +433,6 @@ namespace {
                 UsefulReadWakeups = Counters->GetCounter("UsefulReadWakeups", true);
                 SpuriousWriteWakeups = Counters->GetCounter("SpuriousWriteWakeups", true);
                 UsefulWriteWakeups = Counters->GetCounter("UsefulWriteWakeups", true);
-                SubscribersCount = AdaptiveCounters->GetCounter("SubscribersCount");
                 TotalBytesWritten = Counters->GetCounter("TotalBytesWritten", true);
                 TotalBytesRead = Counters->GetCounter("TotalBytesRead", true);
 
@@ -445,6 +458,14 @@ namespace {
             }
 
             Initialized = true;
+        }
+
+        void SetPeerScopeId(const TScopeId& peerScopeId) override {
+            if (!MergePerScopeClassCounters || MergePerHostCounters || !HumanFriendlyPeerHostName || !DataCenterId) {
+                return;
+            }
+            SetPeerInfo(*HumanFriendlyPeerHostName, *DataCenterId,
+                TString(GetScopeClassPeerLabel(Common->LocalScopeId, peerScopeId)));
         }
 
         const TOutputChannel& GetOutputChannel(ui16 index) const {
@@ -597,7 +618,8 @@ namespace {
             : Common(common)
             , MergePerDataCenterMetrics_(common->Settings.MergePerDataCenterCounters)
             , MergePerHostMetrics_(common->Settings.MergePerHostCounters)
-            , UseMetricsAggregation_(MergePerHostMetrics_ && common->MetricsAggregatorId)
+            , MergePerScopeClassMetrics_(common->Settings.MergePerScopeClassCounters)
+            , UseMetricsAggregation_((MergePerHostMetrics_ || MergePerScopeClassMetrics_) && common->MetricsAggregatorId)
             , MergePerPeerMetrics_(common->Settings.MergePerPeerCounters)
             , Metrics_(common->Metrics)
             , AdaptiveMetrics_(MergePerDataCenterMetrics_
@@ -850,6 +872,8 @@ namespace {
                 Events_ = createRate(PerSessionMetrics_, "interconnect.events");
                 ScopeErrors_ = createRate(PerSessionMetrics_, "interconnect.scope_errors");
 
+                // Channel wrappers cache Traffic/Events pointers, which change with peer label.
+                OutputChannels_.clear();
                 for (const auto& [id, name] : Common->ChannelName) {
                     OutputChannels_.try_emplace(id, std::make_shared<NMonitoring::TMetricSubRegistry>(
                             NMonitoring::TLabels{{"channel", name}}, Metrics_), Traffic_, Events_);
@@ -861,11 +885,14 @@ namespace {
             }
 
             if (updateAdaptive) {
+                // Activity gauges cache adaptive metric pointers, which change with peer label.
+                SubscribersByActivity_.clear();
                 SessionDeaths_ = createRate(AdaptiveMetrics_, "interconnect.session_deaths");
                 HandshakeFails_ = createRate(AdaptiveMetrics_, "interconnect.handshake_fails");
                 InflyLimitReach_ = createRate(AdaptiveMetrics_, "interconnect.infly_limit_reach");
                 InflightDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_data");
                 InflightRdmaDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_rdma_data");
+                SubscribersCount_ = createIntGauge(AdaptiveMetrics_, "interconnect.subscribers_count");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
                 InterconnectQueueTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
@@ -885,7 +912,6 @@ namespace {
                 UsefulReadWakeups_ = createRate(Metrics_, "interconnect.useful_read_wakeups");
                 SpuriousWriteWakeups_ = createRate(Metrics_, "interconnect.spurious_write_wakeups");
                 UsefulWriteWakeups_ = createRate(Metrics_, "interconnect.useful_write_wakeups");
-                SubscribersCount_ = createIntGauge(AdaptiveMetrics_, "interconnect.subscribers_count");
                 TotalBytesWritten_ = createRate(Metrics_, "interconnect.total_bytes_written");
                 TotalBytesRead_ = createRate(Metrics_, "interconnect.total_bytes_read");
 
@@ -923,6 +949,14 @@ namespace {
             }
 
             Initialized_ = true;
+        }
+
+        void SetPeerScopeId(const TScopeId& peerScopeId) override {
+            if (!MergePerScopeClassMetrics_ || MergePerHostMetrics_ || !HumanFriendlyPeerHostName || !DataCenterId) {
+                return;
+            }
+            SetPeerInfo(*HumanFriendlyPeerHostName, *DataCenterId,
+                TString(GetScopeClassPeerLabel(Common->LocalScopeId, peerScopeId)));
         }
 
         const TOutputChannel& GetOutputChannel(ui16 index) const {
@@ -964,6 +998,7 @@ namespace {
         const TInterconnectProxyCommon::TPtr Common;
         const bool MergePerDataCenterMetrics_;
         const bool MergePerHostMetrics_;
+        const bool MergePerScopeClassMetrics_;
         const bool UseMetricsAggregation_;
         const bool MergePerPeerMetrics_;
         std::shared_ptr<NMonitoring::IMetricRegistry> Metrics_;

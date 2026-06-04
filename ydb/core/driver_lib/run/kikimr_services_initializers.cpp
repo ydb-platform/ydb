@@ -427,6 +427,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         case NKikimrConfig::TInterconnectConfig::PER_HOST:
             result.MergePerHostCounters = true;
             break;
+        case NKikimrConfig::TInterconnectConfig::PER_SCOPE_CLASS:
+            result.MergePerScopeClassCounters = true;
+            break;
         case NKikimrConfig::TInterconnectConfig::NO_MERGE:
             break;
     }
@@ -823,7 +826,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     NInterconnect::CreateInterconnectMonActor(icCommon), TMailboxType::ReadAsFilled, systemPoolId));
             }
 
-            if (settings.MergePerHostCounters) {
+            if (settings.MergePerHostCounters || settings.MergePerScopeClassCounters) {
                 icCommon->MetricsAggregatorId = NActors::NInterconnectMetricsAggregator::MakeInterconnectMetricsAggregatorId(NodeId);
                 setup->LocalServices.emplace_back(icCommon->MetricsAggregatorId, TActorSetupCmd(
                     NActors::NInterconnectMetricsAggregator::CreateInterconnectMetricsAggregatorActor(icCommon),

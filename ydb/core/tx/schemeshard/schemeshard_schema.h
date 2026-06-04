@@ -2400,7 +2400,7 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<OriginalOpId, ItemSeq>;
         using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId, SrcTablePathId>;
-    }
+    };
 
     // Alternative to TablePartitions/MigratedTablePartitions: keyed by path+shard identity so
     // that split/merge writes only O(k) rows (src+dst shards) instead of O(N) positional rows.
@@ -2707,20 +2707,11 @@ struct Schema : NIceDb::Schema {
         ForcedCompactions,
         WaitingForcedCompactionShards,
         SharedShards,
-<<<<<<< HEAD
         IncrementalRestoreItem,
-<<<<<<< HEAD
         TablePartitionsByShardIdx,
         TablePartitionStatsByShardIdx,
         FullBackups,
-        FullBackupItems,
-=======
-        SharedShards,
->>>>>>> 0bf47704816 (fix self issues)
-        SetColumnConstraintOperation
-=======
-        IncrementalRestoreItem
->>>>>>> 30b632dc51c (remove bad feature flag variable)
+        FullBackupItems
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

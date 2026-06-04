@@ -1237,6 +1237,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
         flag = NKikimrViewer::EFlag::Yellow;
         break;
     case NKikimrWhiteboard::TTabletStateInfo::Deleted:
+        break;
     case NKikimrWhiteboard::TTabletStateInfo::Active:
         flag = NKikimrViewer::EFlag::Green;
         break;
@@ -1264,20 +1265,6 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrHive::ETabletVolatileState st
         default:
             flag = NKikimrViewer::EFlag::Red;
             break;
-    }
-    return flag;
-}
-
-NKikimrViewer::EFlag GetFlagFromUsage(double usage) {
-    NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
-    if (usage >= 0.94) {
-        flag = NKikimrViewer::EFlag::Red;
-    } else if (usage >= 0.92) {
-        flag = NKikimrViewer::EFlag::Orange;
-    } else if (usage >= 0.85) {
-        flag = NKikimrViewer::EFlag::Yellow;
-    } else  {
-        flag = NKikimrViewer::EFlag::Green;
     }
     return flag;
 }
@@ -1425,8 +1412,9 @@ NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
         return NKikimrViewer::EFlag::Orange;
     case NKikimrWhiteboard::EFlag::Red:
         return NKikimrViewer::EFlag::Red;
+    default:
+        return NKikimrViewer::EFlag::Grey;
     }
-    return static_cast<NKikimrViewer::EFlag>((int)flag);
 }
 
 }

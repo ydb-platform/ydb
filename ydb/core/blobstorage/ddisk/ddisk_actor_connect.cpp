@@ -14,17 +14,21 @@ namespace NKikimr::NDDisk {
         TConnectionInfo& connection = it->second;
 
         if (!inserted) {
-            if (creds.Generation < connection.Generation) {
-                // this is definitely obsolete tablet trying to reach us, reject
+            const bool obsoleteSession =
+                creds.Generation < connection.Generation ||
+                (creds.RequiresDDiskSessionSeqNoCheck() &&
+                 creds.Generation == connection.Generation &&
+                 creds.DDiskSessionSeqNo < connection.DDiskSessionSeqNo);
+            if (obsoleteSession) {
+                // this is definitely obsolete tablet/session trying to reach us, reject
                 SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED));
                 return;
-            } else if (connection.Generation < creds.Generation) {
-                // drop connection with previous tablet
             }
         }
 
         connection.TabletId = creds.TabletId;
         connection.Generation = creds.Generation;
+        connection.DDiskSessionSeqNo = creds.DDiskSessionSeqNo;
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
@@ -52,15 +56,15 @@ namespace NKikimr::NDDisk {
     bool TDDiskActor::ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const {
         const auto it = Connections.find(creds.TabletId);
         if (it == Connections.end()) {
-            return creds.FromPersistentBuffer;
+            return creds.IsInternal();
         }
         const TConnectionInfo& connection = it->second;
         return connection.TabletId == creds.TabletId &&
             connection.Generation == creds.Generation &&
+            (!creds.RequiresDDiskSessionSeqNoCheck() || connection.DDiskSessionSeqNo == creds.DDiskSessionSeqNo) &&
             (!creds.DDiskInstanceGuid || creds.DDiskInstanceGuid == DDiskInstanceGuid) &&
-            (creds.FromPersistentBuffer || (
-            connection.NodeId == ev.Sender.NodeId() &&
-            connection.InterconnectSessionId == ev.InterconnectSession));
+            (!creds.RequiresSenderCheck() || connection.NodeId == ev.Sender.NodeId()) &&
+            (!creds.RequiresInterconnectSessionCheck() || connection.InterconnectSessionId == ev.InterconnectSession);
     }
 
     void TDDiskActor::SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) const {

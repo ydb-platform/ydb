@@ -22,7 +22,10 @@ items:
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }
 - { name: CREATE BACKUP COLLECTION,     href: create-backup-collection.md,   when: feature_backup_collections }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
-- { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md, when: feature_federated_queries }
+- name: CREATE EXTERNAL DATA SOURCE
+  href: create-external-data-source.md
+  include: { mode: link, path: create-external-data-source/toc_p.yaml }
+  when: feature_federated_queries
 - { name: CREATE STREAMING QUERY,       href: create-streaming-query.md,     when: feature_federated_queries }
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}

@@ -421,6 +421,7 @@ RECURSE(
 IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
+        actions/benchmarks
         concurrency/benchmarks
         bus/benchmarks
         ypath/benchmarks

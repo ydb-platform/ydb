@@ -134,10 +134,11 @@ enum ESimpleCounters : int;
     item(TxTruncateTable, 117) \
     item(TxReadOnlyCopyColumnTable, 118) \
     item(TxPrepareIndexValidation, 119) \
-    item(TxCreateLocalIndex, 120) \
-    item(TxDropLocalIndex, 121) \
-    item(TxAlterLocalIndex, 122) \
-    item(TxMoveLocalIndex, 123) \
+    item(TxCreateFullBackupOp, 120) \
+    item(TxCreateLocalIndex, 121) \
+    item(TxDropLocalIndex, 122) \
+    item(TxAlterLocalIndex, 123) \
+    item(TxMoveLocalIndex, 124) \
 
 // TX_STATE_TYPE_ENUM
 

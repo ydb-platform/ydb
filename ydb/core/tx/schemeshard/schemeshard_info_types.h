@@ -819,6 +819,12 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
+    // True when partition rows are stored in TablePartitionsByShardIdx (keyed by ShardIdx).
+    // False (default) when stored in TablePartitions/MigratedTablePartitions (keyed by position);
+    // both legacy tables are scheduled for removal once migration is complete, after which this
+    // flag and its branches can be deleted.
+    // Toggled during the first split/merge after EnableTablePartitionsFormatShardIdx changes.
+    bool PartitionsInShardIdxFormat = false;
     bool IsRestore = false;
     bool IsTemporary = false;
     TActorId OwnerActorId;
@@ -841,6 +847,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
     bool IsExternalBlobsEnabled = false;
+
+    mutable ui64 LastVerifyConsistencyTime = 0;
 
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
@@ -4237,6 +4245,97 @@ struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
             }
         }
         return true;
+    }
+};
+
+// Trackable full backup op (the aggregator over a BackupBackupCollection's
+// CCT). Mirrors TIncrementalBackupInfo with three changes:
+//   - Adds Failed terminal state (header + item).
+//   - Stores BackupCollectionPathId so reboot can rebuild
+//     Self->BCPathToFullBackup from non-terminal rows.
+//   - Stores FinalIssues for hard-fail diagnostics surfaced via GET.
+struct TFullBackupInfo : public TSimpleRefCount<TFullBackupInfo> {
+    using TPtr = TIntrusivePtr<TFullBackupInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        Transferring = 1,
+        Failed = 230,
+        Done = 240,
+    };
+
+    struct TItem {
+        enum class EState: ui8 {
+            Invalid = 0,
+            Transferring = 1,
+            Failed = 230,
+            Done = 240,
+        };
+
+        TPathId PathId;
+        EState State;
+
+        bool IsDone() const {
+            return State == EState::Done;
+        }
+    };
+
+    ui64 Id;
+    EState State;
+    TPathId DomainPathId;
+    TPathId BackupCollectionPathId;
+
+    // Planned number of items (base tables + non-omitted index impl tables).
+    // Advisory only (drives the progress percentage); the terminal state is
+    // decided by control op completion, not by this count.
+    ui32 ExpectedItemCount = 0;
+
+    THashMap<TPathId, TItem> Items;
+
+    TMaybe<TString> UserSID;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+    TString FinalIssues;
+
+    explicit TFullBackupInfo(
+            const ui64 id,
+            const TPathId domainPathId)
+        : Id(id)
+        , State(EState::Invalid)
+        , DomainPathId(domainPathId)
+    {}
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    bool IsFailed() const {
+        return State == EState::Failed;
+    }
+
+    bool IsFinished() const {
+        return IsDone() || IsFailed();
+    }
+
+    bool IsAllItemsDone() const {
+        for (const auto& item : Items) {
+            if (!item.second.IsDone()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // True if any observed item is in the Failed terminal state. Drives the
+    // Done-vs-Failed choice when operation completion finalizes the header
+    // (see FinalizeFullBackupOnOpComplete).
+    bool HasAnyFailed() const {
+        for (const auto& [_, item] : Items) {
+            if (item.State == TItem::EState::Failed) {
+                return true;
+            }
+        }
+        return false;
     }
 };
 

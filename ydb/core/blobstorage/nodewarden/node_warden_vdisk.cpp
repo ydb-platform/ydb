@@ -228,6 +228,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasMaxPendingEventsQueueSize()) {
                     pbufferFormat.MaxPendingEventsQueueSize = Cfg->PBufferConfig->GetMaxPendingEventsQueueSize();
                 }
+                if (Cfg->PBufferConfig->HasEnableFastErases()) {
+                    pbufferFormat.EnableFastErases = Cfg->PBufferConfig->GetEnableFastErases();
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));

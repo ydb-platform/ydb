@@ -276,6 +276,8 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.YqlSelect = *YqlSelect;
     }
 
+    settings.ValidateViewStatement = ValidateViewStatement;
+
     return settings;
 }
 

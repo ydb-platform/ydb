@@ -30,6 +30,7 @@ SRCS(
     distconf_statestorage_config_generator.cpp
     distconf_validate.cpp
     node_warden.h
+    node_warden_blob_depot_s3.cpp
     node_warden_cache.cpp
     node_warden_events.h
     node_warden_group.cpp
@@ -51,6 +52,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/openssl/crypto
     ydb/core/base
+    ydb/core/blob_depot
     ydb/core/blob_depot/agent
     ydb/core/blobstorage/bridge/proxy
     ydb/core/blobstorage/bridge/syncer

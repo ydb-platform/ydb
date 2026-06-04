@@ -172,7 +172,13 @@ PEERDIR(
     ydb/services/ext_index/common
 )
 
-IF (OS_LINUX)
+
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
     SRCS(
         rpc_nbs.cpp
         rpc_nbs_io.cpp
@@ -200,4 +206,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     grpc_request_check_actor_ut
+    grpc_request_tracing_ut
 )

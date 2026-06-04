@@ -1,24 +1,26 @@
 #pragma once
 
-#include "yql_pq_settings.h"
-
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_pos_handle.h>
 #include <yql/essentials/core/yql_data_provider.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
-#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_integration.h>
-#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_optimization.h>
+#include <util/generic/ptr.h>
 
 namespace NKikimr::NMiniKQL {
+
 class IFunctionRegistry;
+
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql {
+
+struct TPqConfiguration;
 
 struct TPqState : public TThrRefBase {
     using TPtr = TIntrusivePtr<TPqState>;
@@ -32,22 +34,14 @@ struct TPqState : public TThrRefBase {
     };
 
 public:
-    explicit TPqState(const TString& sessionId)
-        : SessionId(sessionId)
-    {
-    }
+    explicit TPqState(const TString& sessionId);
 
     const TTopicMeta* FindTopicMeta(const TString& cluster, const TString& topicPath) const;
     const TTopicMeta* FindTopicMeta(const NNodes::TPqTopic& topic) const {
         return FindTopicMeta(topic.Cluster().StringValue(), topic.Path().StringValue());
     }
 
-    bool IsRtmrMode() const {
-        if (!SupportRtmrMode) {
-            return false;
-        }
-        return Configuration->PqReadByRtmrCluster_.Get() != "dq";
-    }
+    bool IsRtmrMode() const;
 
 public:
     bool SupportRtmrMode = false;
@@ -57,11 +51,12 @@ public:
     bool StreamingTopicsReadByDefault = true;
     bool UseYtflowEngine = false;
     bool EnableTopicsPredicatePushdown = false;
+    bool EnablePqConstraintsTransformer = false;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 
     TTypeAnnotationContext* Types = nullptr;
-    TPqConfiguration::TPtr Configuration = MakeIntrusive<TPqConfiguration>();
+    TIntrusivePtr<TPqConfiguration> Configuration;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     IPqGateway::TPtr Gateway;
     THolder<IDqIntegration> DqIntegration;

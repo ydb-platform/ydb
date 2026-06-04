@@ -2672,12 +2672,7 @@ TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
-    if (std::stoi(TString(pgSyntax->Content()))) {
-        node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
-    } else {
-        node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
-    }
+    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
 
     return TStatus::Ok;
 }
@@ -2859,6 +2854,28 @@ TStatus AnnotateOpProject(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto structType = input->ChildPtr(TKqpOpReplaceAlias::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes;
+    auto typeItems = structType->GetItems();
+
+    for (const auto& item: typeItems) {
+        auto columnName = TString(item->GetName());
+        if (auto it = columnName.find("."); it != TString::npos) {
+            columnName = columnName.substr(it+1);
+        }
+
+        auto alias = TString(input->ChildPtr(TKqpOpReplaceAlias::idx_Alias)->Content());
+        columnName = alias + "." + columnName;
+        structItemTypes.push_back(ctx.MakeType<TItemExprType>(columnName, item->GetItemType()));
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+    input->SetTypeAnn(resultAnn);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpFilter::idx_Input)->GetTypeAnn();
@@ -3007,6 +3024,8 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opAggregate = TKqpOpAggregate(input);
+    const bool scalarAggregation = opAggregate.KeyColumns().Empty();
+    auto pos = input->Pos();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
@@ -3027,17 +3046,20 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
         const auto resultColName = TString(traits.ResultColName());
         auto it = aggTraitsMap.find(originalColName);
         Y_ENSURE(it != aggTraitsMap.end());
-        const auto *aggFieldType = it->second;
-        TPositionHandle dummyPos;
+        auto aggFieldType = it->second;
 
         if (aggFunction == "count") {
             aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         } else if (aggFunction == "sum") {
-            Y_ENSURE(GetSumResultType(dummyPos, *it->second, aggFieldType, ctx),
-                        "Unsupported type for sum aggregation function");
+            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for sum aggregation function");
         } else if (aggFunction == "avg") {
-            Y_ENSURE(GetAvgResultType(dummyPos, *it->second, aggFieldType, ctx),
-                        "Unsupported type for avg aggregation function");
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for avg aggregation function");
+        }
+
+        // Special case for scalar aggregation (aka aggregation with empty keys).
+        if (scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg")) {
+            aggFieldType = ctx.MakeType<TOptionalExprType>(aggFieldType);
         }
 
         newItemTypes.push_back(ctx.MakeType<TItemExprType>(resultColName, aggFieldType));
@@ -3173,6 +3195,7 @@ public:
         AddHandler({TKqpOpLimit::CallableName()}, Hndl(&AnnotateOpLimit));
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));
+        AddHandler({TKqpOpReplaceAlias::CallableName()}, Hndl(&AnnotateOpReplaceAlias));
         AddHandler({TKqpOpAggregate::CallableName()}, Hndl(&AnnotateOpAggregate));
         AddHandler({TKqpOpRoot::CallableName()}, Hndl(&AnnotateOpRoot));
     }

@@ -18,8 +18,9 @@ def _add_work_directory(parser):
 
 def _patch_parser(module):
     parser, actions, expected_config, prefer_launcher = parser_factory.build_parser([module])
-    return mock.patch(
-        "ydb.tools.mnc.cli.parser_factory.build_parser",
+    return mock.patch.object(
+        main.parser_factory,
+        "build_parser",
         return_value=(parser, actions, expected_config, prefer_launcher),
     )
 
@@ -39,7 +40,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             return False
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.fail",
+            __name__="fail",
             expected_config=None,
             add_arguments=lambda parser: None,
             do=do,
@@ -62,7 +63,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             return command_result
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.fail_result",
+            __name__="fail_result",
             expected_config=None,
             add_arguments=lambda parser: None,
             do=do,
@@ -81,7 +82,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             return True
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.test",
+            __name__="test",
             expected_config=None,
             add_arguments=lambda parser: None,
             do=do,
@@ -97,7 +98,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             return True
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.test",
+            __name__="test",
             expected_config={"test": "scheme"},
             add_arguments=_add_work_directory,
             do=do,
@@ -106,8 +107,8 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
         # Mock scheme.apply_scheme to return validation errors
         with _patch_parser(module), \
              mock.patch("sys.argv", ["mnc", "test"]), \
-             mock.patch("ydb.tools.mnc.scheme.apply_scheme") as mock_apply, \
-             mock.patch("ydb.tools.mnc.lib.config.get_config", return_value={}):
+             mock.patch.object(main.scheme, "apply_scheme") as mock_apply, \
+             mock.patch.object(main.config, "get_config", return_value={}):
 
             mock_apply.return_value = (None, ["error1", "error2"])
 
@@ -125,7 +126,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError("boom")
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.boom",
+            __name__="boom",
             expected_config=None,
             add_arguments=lambda parser: None,
             do=do,
@@ -133,8 +134,8 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
 
         with _patch_parser(module), \
              mock.patch("sys.argv", ["mnc", "boom"]), \
-             mock.patch("ydb.tools.mnc.lib.config.get_mnc_config", return_value={}), \
-             mock.patch("ydb.tools.mnc.lib.deploy_ctx.apply_cfg_mnc"):
+             mock.patch.object(main.config, "get_mnc_config", return_value={}), \
+             mock.patch.object(main.deploy_ctx, "apply_cfg_mnc"):
             with self.assertRaises(SystemExit) as context:
                 main.main()
 
@@ -147,7 +148,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             return None
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.none",
+            __name__="none",
             expected_config=None,
             add_arguments=lambda parser: None,
             do=do,
@@ -165,7 +166,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             return 0
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.zero",
+            __name__="zero",
             expected_config=None,
             add_arguments=lambda parser: None,
             do=do,
@@ -183,7 +184,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             return []
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.empty",
+            __name__="empty",
             expected_config=None,
             add_arguments=lambda parser: None,
             do=do,
@@ -203,7 +204,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             parser.add_argument("--host", required=True)
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.cached",
+            __name__="cached",
             expected_config=None,
             add_arguments=add_arguments,
             do=do,
@@ -231,7 +232,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
             parser.add_argument("--host", required=True)
 
         module = types.SimpleNamespace(
-            __name__="ydb.tools.mnc.cli.commands.cached",
+            __name__="cached",
             expected_config=None,
             add_arguments=add_arguments,
             do=do,
@@ -243,7 +244,7 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
 
                 with _patch_parser(module), \
                      mock.patch("sys.argv", ["mnc", "--tui", "cached"]), \
-                     mock.patch("ydb.tools.mnc.cli.tui.app.TuiApp.run_async", side_effect=run_tui_action):
+                     mock.patch.object(main.TuiApp, "run_async", side_effect=run_tui_action):
                     await main.async_main()
 
         self.assertEqual(seen["host"], "cached-host")

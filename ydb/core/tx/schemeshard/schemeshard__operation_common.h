@@ -55,6 +55,8 @@ TSet<ui32> AllIncomingEvents();
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
 void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext& context);
 
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);
+
 void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentPath, TOperationContext& context, bool isBackup = false);

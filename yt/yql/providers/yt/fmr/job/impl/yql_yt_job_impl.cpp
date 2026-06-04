@@ -384,6 +384,26 @@ public:
         return HandleFmrJob(reduceFunc, ETaskType::Reduce);
     }
 
+    std::variant<TFmrError, TStatistics> Fill(
+        const TFillTaskParams& params,
+        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        const TMaybe<TString>& jobEnvironmentDir,
+        const std::vector<TFileInfo>& jobFiles,
+        const std::vector<TYtResourceInfo>& jobYtResources,
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+    ) override {
+        auto fillJobFunc = [&, this] () {
+            TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
+            TFmrUserJob fillJob;
+            TStringStream serializedJobStateStream(params.SerializedFillJobState);
+            fillJob.Load(serializedJobStateStream);
+            FillFillFmrJob(fillJob, params, Discovery_, VanillaInfo_, userJobSettings, YtJobService_);
+            fillJob.SetTvmSettings(TvmSettings_);
+            return JobLauncher_->LaunchJob(fillJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+        };
+        return HandleFmrJob(fillJobFunc, ETaskType::Fill);
+    }
+
     std::variant<TFmrError, TString> Pull(
         const TPullTaskParams& params,
         std::shared_ptr<std::atomic<bool>> cancelFlag
@@ -502,6 +522,8 @@ TJobResult RunJob(
             return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TReduceTaskParams>) {
             return job->Reduce(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
+        } else if constexpr (std::is_same_v<T, TFillTaskParams>) {
+            return job->Fill(taskParams, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
         } else if constexpr (std::is_same_v<T, TPullTaskParams>) {
             auto pullResult = job->Pull(taskParams, cancelFlag);
             if (auto* err = std::get_if<TFmrError>(&pullResult)) {
@@ -565,6 +587,25 @@ void FillReduceFmrJob(
     reduceJob.SetYtJobService(jobService);
     reduceJob.SetFmrJobType(EFmrJobType::Reduce);
     reduceJob.SetReduceOperationSpec(reduceTaskParams.ReduceOperationSpec);
+}
+
+void FillFillFmrJob(
+    TFmrUserJob& fillJob,
+    const TFillTaskParams& fillTaskParams,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+) {
+    fillJob.SetSettings(userJobSettings);
+    if (vanillaInfo.Defined()) {
+        fillJob.SetVanillaInfo(*vanillaInfo);
+    }
+    fillJob.SetTableDataServiceDiscovery(std::move(discovery));
+    // Fill has no input tables — leave InputTables_ empty so the queue is immediately finished.
+    fillJob.SetTaskFmrOutputTables(fillTaskParams.Output);
+    fillJob.SetYtJobService(jobService);
+    fillJob.SetFmrJobType(EFmrJobType::Map);
 }
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {

@@ -1,5 +1,16 @@
 /*
  * An implementation of Roaring Bitmaps in C.
+ *
+ * This is the main public header for the 32-bit CRoaring API. A Roaring bitmap
+ * represents a set of unsigned 32-bit integers by partitioning the value space
+ * into 16-bit chunks and storing each chunk in a container chosen to match the
+ * local data density. Sparse chunks are typically kept as sorted arrays,
+ * denser chunks as bitsets, and long consecutive runs as run containers.
+ *
+ * This hybrid representation aims to keep bitmaps compact while still
+ * supporting fast membership tests, iteration, rank/select queries,
+ * serialization, and set operations such as union, intersection, difference,
+ * and symmetric difference.
  */
 
 #ifndef ROARING_H
@@ -680,7 +691,16 @@ size_t roaring_bitmap_size_in_bytes(const roaring_bitmap_t *r);
  *
  * This function is unsafe in the sense that if there is no valid serialized
  * bitmap at the pointer, then many bytes could be read, possibly causing a
- * buffer overflow.  See also roaring_bitmap_portable_deserialize_safe().
+ * buffer overflow. In other words, this routine assumes that `buf` points to a
+ * complete, correctly formatted serialized bitmap and does not take a buffer
+ * length argument that would let it enforce a read bound.
+ *
+ * Use this function only when the input buffer is already trusted, for example
+ * because it comes from memory that was previously filled by
+ * `roaring_bitmap_portable_serialize()` and whose size is known by some other
+ * means. If the source is untrusted, truncated, or otherwise not guaranteed to
+ * contain a valid serialized bitmap, prefer
+ * `roaring_bitmap_portable_deserialize_safe()`.
  *
  * This is meant to be compatible with the Java and Go versions:
  * https://github.com/RoaringBitmap/RoaringFormatSpec
@@ -1238,6 +1258,23 @@ CROARING_DEPRECATED static inline uint32_t roaring_read_uint32_iterator(
 }
 
 /**
+ * Reads previous ${count} values from iterator into user-supplied ${buf}.
+ * Returns the number of read elements.
+ * This number can be smaller than ${count}, which means that iterator is
+ * drained.
+ *
+ * Values are written in descending order: buf[0] is the highest (current)
+ * value, buf[ret-1] is the lowest value read.
+ *
+ * This function satisfies semantics of reverse iteration and can be used
+ * together with other iterator functions.
+ *  - first value is copied from ${it}->current_value
+ *  - after function returns, iterator is positioned at the previous element
+ */
+uint32_t roaring_uint32_iterator_read_backward(roaring_uint32_iterator_t *it,
+                                               uint32_t *buf, uint32_t count);
+
+/**
  * Skip the next ${count} values from iterator.
  * Returns the number of values actually skipped.
  * The number can be smaller than ${count}, which means that iterator is
@@ -1260,6 +1297,60 @@ uint32_t roaring_uint32_iterator_skip(roaring_uint32_iterator_t *it,
  */
 uint32_t roaring_uint32_iterator_skip_backward(roaring_uint32_iterator_t *it,
                                                uint32_t count);
+
+typedef struct roaring_uint32_range_closed_s {
+    uint32_t min;
+    uint32_t max;
+} roaring_uint32_range_closed_t;
+
+/**
+ * Reads next ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * This function satisfies the semantics of iteration and can be used together
+ * with other iterator functions.
+ *  - first range will start with ${it}->current_value
+ *  - after the function returns, the iterator is positioned at the next element
+ *    after the end of the last returned range, or ${it}->has_value is false if
+ *    the bitmap is exhausted.
+ */
+size_t roaring_uint32_iterator_read_ranges(roaring_uint32_iterator_t *it,
+                                           roaring_uint32_range_closed_t *buf,
+                                           size_t count);
+
+/**
+ * Reads previous ${count} ranges from iterator into user-supplied ${buf}.
+ * A range is defined as a maximal interval of consecutive values.
+ * For example, the set {1,2,3,5,6} contains two ranges: [1..3] and [5..6].
+ * Each range is represented as a struct {min,max}, both endpoints included.
+ * Consecutive values that span internal container boundaries are merged into
+ * a single range.
+ *
+ * Returns the number of read ranges.
+ * This number can be smaller than ${count}, which means that the iterator is
+ * drained.
+ *
+ * Ranges are returned in reverse order, e.g. the first range returned is the
+ * highest range (ending at the current value)
+ *
+ * This function satisfies the semantics of reverse iteration and can be used
+ * together with other iterator functions.
+ *  - first range will end with ${it}->current_value
+ *  - after the function returns, the iterator is positioned at the element
+ *    before the beginning of the last returned range, or ${it}->has_value is
+ *    false if the bitmap is exhausted.
+ */
+size_t roaring_uint32_iterator_read_prev_ranges(
+    roaring_uint32_iterator_t *it, roaring_uint32_range_closed_t *buf,
+    size_t count);
 
 #ifdef __cplusplus
 }

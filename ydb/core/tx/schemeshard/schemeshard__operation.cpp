@@ -1313,6 +1313,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateLongIncrementalBackupOp:
         return CreateLongIncrementalBackupOp(NextPartId(), txState);
 
+    case TTxState::ETxType::TxCreateFullBackupOp:
+        return CreateNewFullBackupOp(NextPartId(), txState);
+
     // Secret
     case TTxState::ETxType::TxCreateSecret:
         return CreateNewSecret(NextPartId(), txState);
@@ -1649,6 +1652,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
+        // Internal control op only - not valid for direct user submission via TModifyScheme.
+        return {CreateNewFullBackupOp(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:

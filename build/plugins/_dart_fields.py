@@ -681,7 +681,9 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        default_configs_path = spec_args.get('DEFAULT_CONFIGS')[0]
+        if not (default_configs_path := spec_args.get('DEFAULT_CONFIGS')):
+            return
+        default_configs_path = default_configs_path[0]
         assert_file_exists(unit, default_configs_path)
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:

@@ -745,8 +745,7 @@ bool TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
 
     if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
-        // FIXME: handle version change correctly, instead of always sending on first update
-        if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version || !subscription->FirstUpdateSent) {
+        if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
             subscription->DatabaseYamlConfigVersion = it->second.Version;
             request->Record.SetDatabaseYamlConfig(it->second.Config);
         } else {

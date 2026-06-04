@@ -14,4 +14,8 @@ PEERDIR(
     ydb/core/testlib/actors
 )
 
+DATA(
+    arcadia/ydb/mvp/meta/examples
+)
+
 END()

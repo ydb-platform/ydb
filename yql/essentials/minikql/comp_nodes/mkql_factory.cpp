@@ -64,6 +64,7 @@
 #include "mkql_length.h"
 #include "mkql_linear.h"
 #include "mkql_listfromrange.h"
+#include "mkql_list_join.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
 #include "mkql_map.h"
@@ -246,6 +247,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
+        {"ListJoinCore", &WrapListJoinCore},
         {"CombineCore", &WrapCombineCore},
         {"GroupingCore", &WrapGroupingCore},
         {"HoppingCore", &WrapHoppingCore},
@@ -361,6 +363,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideTop", &WrapWideTop},
         {"WideTopSort", &WrapWideTopSort},
         {"WideSort", &WrapWideSort},
+        {"WideSortWithSpilling", &WrapWideSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},

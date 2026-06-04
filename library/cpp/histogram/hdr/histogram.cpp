@@ -51,8 +51,14 @@ namespace NHdr {
     }
 
     THistogram& THistogram::operator=(THistogram&& rhs) noexcept {
-        Data_ = std::move(rhs.Data_);
-        Allocator_ = rhs.Allocator_;
+        if (this != &rhs) {
+            if (Data_) {
+                size_t size = GetMemorySize();
+                Allocator_->Release({Data_.Release(), size});
+            }
+            Data_ = std::move(rhs.Data_);
+            Allocator_ = rhs.Allocator_;
+        }
         return *this;
     }
 

@@ -217,6 +217,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                     return fail("Local bloom filter index support is disabled");
                 }
                 olapIndex->SetClassName("BLOOM_FILTER");
+                olapIndex->SetInheritPortionStorage(true);
                 auto* bloom = olapIndex->MutableBloomFilter();
                 const auto& bloomSettings = index.local_bloom_filter_index();
                 if (bloomSettings.has_false_positive_probability()) {
@@ -230,6 +231,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                     return fail("Local bloom ngram filter index support is disabled");
                 }
                 olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
+                olapIndex->SetInheritPortionStorage(true);
                 auto* ngram = olapIndex->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
                 FillLocalBloomNgramProto(ngram, ngramSettings);
@@ -1509,6 +1511,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 }
 
                 upsert->SetClassName("BLOOM_FILTER");
+                upsert->SetInheritPortionStorage(true);
                 auto* bloom = upsert->MutableBloomFilter();
                 const auto& bloomSettings = index.local_bloom_filter_index();
                 if (bloomSettings.has_false_positive_probability()) {
@@ -1531,6 +1534,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 }
 
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
+                upsert->SetInheritPortionStorage(true);
                 auto* ngram = upsert->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
                 if (ngramSettings.ngram_size()) {
@@ -1570,7 +1574,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 status = Ydb::StatusIds::BAD_REQUEST;
                 const google::protobuf::Reflection* reflection = index.GetReflection();
                 const google::protobuf::Descriptor* descriptor = index.GetDescriptor();
-                error = TStringBuilder() << "Only local_bloom_filter_index, local_bloom_ngram_filter_index and local_min_max_index oneof variants are supported for column tables, got " 
+                error = TStringBuilder() << "Only local_bloom_filter_index, local_bloom_ngram_filter_index and local_min_max_index oneof variants are supported for column tables, got "
                         << reflection->GetOneofFieldDescriptor(index, descriptor->FindOneofByName("type"))->full_name();
                 return false;
         }

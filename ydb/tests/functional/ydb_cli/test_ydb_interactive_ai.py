@@ -415,7 +415,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             child.expect("Mock OpenAI response", timeout=15)
             self._wait_for_ai_prompt(child)
 
-            assert self.mock_server.last_request["body"]["max_completion_tokens"] == 1024
+            assert self.mock_server.last_request["body"]["max_completion_tokens"] == 8192
 
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
@@ -739,7 +739,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
 
             body = self.mock_server.last_request["body"]
-            assert body["max_tokens"] == 1024
+            assert body["max_tokens"] == 8192
             assert "max_completion_tokens" not in body
 
             self._send_query(child, "exit")

@@ -215,6 +215,24 @@ namespace NKikimr {
                 PerformActions(ctx);
             }
 
+            void Handle(TEvSyncLogDiskOutOfSpace::TPtr &ev, const TActorContext &ctx) {
+                auto *msg = ev->Get();
+                LOG_NOTICE(ctx, BS_SYNCLOG,
+                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                                "KEEPER: TEvSyncLogDiskOutOfSpace: disposing disk sync log;"
+                                " allocatedChunks# %s", FormatList(msg->AllocatedChunks).data()));
+
+                Sublog.Log() << ToStringLocalTimeUpToSeconds(ctx.Now())
+                    << " Disk sync log disposed due to OUT_OF_SPACE\n";
+
+                // committer aborted the commit
+                CommitterId = TActorId();
+                KeepState.DisposeDiskSyncLog(std::move(msg->AllocatedChunks));
+
+                // start the disposal commit (and any other delayed actions)
+                PerformActions(ctx);
+            }
+
             void Handle(TEvSyncLogSnapshot::TPtr &ev, const TActorContext &ctx) {
                 ++SlCtx->IFaceMonGroup.SyncLogGetSnapshot();
                 auto snap = KeepState.GetSyncLogSnapshot();
@@ -283,11 +301,11 @@ namespace NKikimr {
 
             void Handle(TEvPhantomFlagStorageCommitData::TPtr ev) {
                 KeepState.UpdatePhantomFlagStorageData(std::move(ev->Get()->Data));
+                KeepState.RetireExtractedChunks(ev->Get()->RetiredChunks);
             }
 
             void UpdateCounters() {
                 KeepState.UpdateMetrics();
-                KeepState.FlushPhantomFlagStorageWriteBufferIfNeeded();
                 Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
             }
 
@@ -297,6 +315,7 @@ namespace NKikimr {
                 HFunc(TEvSyncLogTrim, Handle)
                 HFunc(TEvSyncLogFreeChunk, Handle)
                 HFunc(TEvSyncLogCommitDone, Handle)
+                HFunc(TEvSyncLogDiskOutOfSpace, Handle)
                 HFunc(TEvSyncLogSnapshot, Handle)
                 HFunc(TEvSyncLogLocalStatus, Handle)
                 HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)

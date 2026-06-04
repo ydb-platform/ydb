@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/containers/absl_flat_hash
     library/cpp/histogram/hdr
     library/cpp/monlib/dynamic_counters/percentile
     library/cpp/monlib/service/pages

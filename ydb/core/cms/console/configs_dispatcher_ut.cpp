@@ -1559,18 +1559,40 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
     // The dispatcher computes unknown/deprecated fields for the *resolved* config it
     // receives from the console and exposes them in its mon JSON ("unknown_fields").
     Y_UNIT_TEST(TestMonJsonReportsResolvedUnknownFields) {
+        // The dispatcher (re)computes unknown/deprecated fields in ParseYamlProtoConfig,
+        // which only runs when it receives a config-subscription notification carrying a
+        // changed YAML body. That notification is only produced once the dispatcher has a
+        // subscriber, so we must: replace the YAML on the console (allowing the unknown
+        // field), then add a subscriber and wait for it to be notified -- by which point
+        // the dispatcher has resolved the config and filled ResolvedConfigUnknownFields.
+        NKikimrConfig::TAppConfig bootstrapConfig;
+        auto *label = bootstrapConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
         const TString yamlWithUnknown = R"(
 ---
 metadata:
   cluster: ""
   version: 0
+
 config:
   log_config:
     cluster_name: cluster1
+  yaml_config_enabled: true
   unknown_field_for_test: 42
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
 )";
 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), bootstrapConfig);
+        TAutoPtr<IEventHandle> handle;
         const TActorId dispatcherId = InitConfigsDispatcher(runtime);
 
         {
@@ -1579,16 +1601,13 @@ config:
             event->Record.MutableRequest()->set_allow_unknown_fields(true);
             runtime.SendToConsole(event);
 
-            TAutoPtr<IEventHandle> handle;
             runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceYamlConfigResponse>(handle);
         }
 
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(
-                TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
-            runtime.DispatchEvents(options);
-        }
+        // Subscribing drives the dispatcher to fetch & resolve the YAML config; grabbing the
+        // subscriber's notification guarantees ParseYamlProtoConfig has already run.
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
 
         const TActorId edge = runtime.AllocateEdgeActor();
         auto request = MakeHolder<THttpRequest>(HTTP_METHOD_GET);
@@ -1596,7 +1615,6 @@ config:
         NMonitoring::TMonService2HttpRequest monReq(nullptr, request.Get(), nullptr, nullptr, "", nullptr);
         runtime.Send(new IEventHandle(dispatcherId, edge, new NMon::TEvHttpInfo(monReq)));
 
-        TAutoPtr<IEventHandle> handle;
         const auto* response = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
         const TString& answer = response->Answer;
 

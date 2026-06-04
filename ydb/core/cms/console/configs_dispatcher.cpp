@@ -26,6 +26,7 @@
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
+#include <util/string/subst.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
 #error log macro definition clash
@@ -597,16 +598,33 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                 str << "{'nodeName':'" << node.Host << "'}, ";
             }
 
-            str << "];" << Endl
-                << "var unknownFields = [";
+            str << "];" << Endl;
 
-            for (const auto& f : ResolvedConfigUnknownFields.GetFields()) {
-                str << "{'path':'" << f.GetPath() << "','name':'" << f.GetName()
-                    << "','proto':'" << f.GetProto() << "','deprecated':" << (f.GetDeprecated() ? "true" : "false") << "}, ";
+            // Build the unknown-fields array as proper JSON: path/name/proto come from
+            // user-uploaded YAML keys, so emitting them raw into a JS string literal would
+            // allow breaking out of the string (a quote/backslash) or injecting script. JSON
+            // encoding escapes those; we additionally escape "</" so a value can't terminate
+            // the surrounding <script> block prematurely.
+            {
+                NJson::TJsonValue unknownFieldsJson;
+                unknownFieldsJson.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& f : ResolvedConfigUnknownFields.GetFields()) {
+                    NJson::TJsonValue item;
+                    item.SetType(NJson::EJsonValueType::JSON_MAP);
+                    item.InsertValue("path", f.GetPath());
+                    item.InsertValue("name", f.GetName());
+                    item.InsertValue("proto", f.GetProto());
+                    item.InsertValue("deprecated", f.GetDeprecated());
+                    unknownFieldsJson.AppendValue(std::move(item));
+                }
+                TStringStream unknownFieldsStream;
+                NJson::WriteJson(&unknownFieldsStream, &unknownFieldsJson, {});
+                TString unknownFieldsStr = unknownFieldsStream.Str();
+                SubstGlobal(unknownFieldsStr, "</", "<\\/");
+                str << "var unknownFields = " << unknownFieldsStr << ";" << Endl;
             }
 
-            str << "];" << Endl
-                << "</script>" << Endl
+            str << "</script>" << Endl
                 << "<script src='../cms/ext/fuse.min.js'></script>" << Endl
                 << "<script src='../cms/common.js'></script>" << Endl
                 << "<script src='../cms/ext/fuzzycomplete.min.js'></script>" << Endl

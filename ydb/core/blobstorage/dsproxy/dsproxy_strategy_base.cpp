@@ -158,12 +158,53 @@ std::optional<EStrategyOutcome> TStrategyBase::SetAbsentForUnrecoverableAltruist
     return std::nullopt;
 }
 
-std::optional<EStrategyOutcome> TStrategyBase::ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState,
+void TStrategyBase::LogDisintegrated(TLogContext &logCtx, const char *marker, const char *context,
+        const TBlobState &state, const TBlobStorageGroupInfo &info, const TIntrusivePtr<TGroupQueues> &groupQueues) {
+    if (!groupQueues) {
+        return;
+    }
+    TStringStream msg;
+    msg << "Group is disintegrated during " << context
+        << " GroupId# " << info.GroupID
+        << " Generation# " << info.GroupGeneration
+        << " BlobId# " << state.Id
+        << " VDisks# [";
+    const ui32 totalVDisks = info.GetTotalVDisksNum();
+    for (ui32 orderNumber = 0; orderNumber < totalVDisks; ++orderNumber) {
+        const TVDiskID vdiskId = info.GetVDiskId(orderNumber);
+        const TActorId actorId = info.GetActorId(orderNumber);
+        msg << " { VDiskId# " << vdiskId.ToString()
+            << " NodeId# " << actorId.NodeId()
+            << " Queues# ";
+        groupQueues->DisksByOrderNumber[orderNumber]->Queues.ForEachQueue([&](const auto& q) {
+            msg << (q.IsConnected ? '+' : '0');
+        });
+        for (const auto& disk : state.Disks) {
+            if (disk.OrderNumber == orderNumber) {
+                msg << " Parts# ";
+                for (const auto& part : disk.DiskParts) {
+                    msg << TBlobState::SituationToShortString(part.Situation);
+                    if (part.ErrorReason) {
+                        msg << "(\"" << part.ErrorReason << "\")";
+                    }
+                }
+                break;
+            }
+        }
+        msg << " }";
+    }
+    msg << " ]";
+    DSP_LOG_ERROR_SX(logCtx, marker, msg.Str());
+}
+
+std::optional<EStrategyOutcome> TStrategyBase::ProcessOptimistic(TLogContext &logCtx,
+        TBlobStorageGroupInfo::EBlobState altruisticState,
         TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state,
-        const TBlobStorageGroupInfo& info) {
+        const TBlobStorageGroupInfo& info, const TIntrusivePtr<TGroupQueues>& groupQueues) {
     switch (optimisticState) {
         case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
             if (!isDryRun) {
+                LogDisintegrated(logCtx, "BPG73", "GET", state, info, groupQueues);
                 return EStrategyOutcome::Error(TStringBuilder() << "TStrategyBase saw optimisticState# "
                     << TBlobStorageGroupInfo::BlobStateToString(optimisticState)
                     << " GroupId# " << info.GroupID

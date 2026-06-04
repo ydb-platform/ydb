@@ -2014,9 +2014,6 @@ message TEvBuildFulltextIndexRequest {
     optional EFulltextIndexType IndexType = 14;
 
     optional NKikimrTx.TKeyRange KeyRange = 15;
-
-    optional uint64 MinGeneration = 16;
-    optional uint64 MaxGeneration = 17;
 }
 
 message TEvBuildFulltextIndexResponse {

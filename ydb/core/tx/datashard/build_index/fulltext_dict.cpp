@@ -160,7 +160,7 @@ public:
             addType(uploadTypes, MaxIdColumn);
             {
                 Ydb::Type type;
-                type.set_type_id(Ydb::Type::UINT32);
+                type.set_type_id(NTableIndex::NFulltext::GenType);
                 uploadTypes->emplace_back(GenColumn, type);
             }
             addType(uploadTypes, AddedColumn);

@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         ui64 docId;
         ui32 freq;
         auto check = [&](ui64 expectedDoc) {
-            rdr.Read(docId, freq);
+            UNIT_ASSERT(rdr.Read(docId, freq));
             Cerr << "Read: " << docId << " == " << expectedDoc << "\n";
             UNIT_ASSERT_VALUES_EQUAL(docId, expectedDoc);
             UNIT_ASSERT_VALUES_EQUAL(freq, 1);

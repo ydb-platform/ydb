@@ -249,8 +249,8 @@ __ydb_token = red, __ydb_freq = 2
         server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
-        CreateFulltextCompactTable(server, sender, "table-index", keyType, true);
-        CreateFulltextCompactTable(server, sender, "table-compact", keyType, false);
+        CreateFulltextCompactTable(server, sender, "table-index", keyType);
+        CreateFulltextCompactTable(server, sender, "table-compact", keyType);
         if (WithRelevance) {
             CreateDictTable(server, sender);
         }

@@ -225,10 +225,6 @@ namespace NKikimr {
             }, "{ <main>: Error: Empty index documents table name }");
 
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-                request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
-            }, "{ <main>: Error: Compact index build scan requires an allocated Min/MaxGeneration range }");
-
-            DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.MutableSettings()->mutable_columns()->at(0).set_column("some");
             }, "{ <main>: Error: Unknown key column: some }");
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
@@ -852,8 +848,18 @@ key = 4, data = (empty maybe), __ydb_length = 2
             InitRoot(server, sender);
 
             CreateMainTable(server, sender, keyType);
-            FillMainTable(server, sender);
-            CreateFulltextCompactTable(server, sender, "table-index", keyType, true);
+            if (keyType[0] == 'U') {
+                FillMainTable(server, sender);
+            } else {
+                ExecSQL(server, sender, R"(
+                    UPSERT INTO `/Root/table-main` (key, text, data) VALUES
+                    (-2, "green apple", "one"),
+                    (-1, "red apple and blue apple", "two"),
+                    (3, "yellow apple", "three"),
+                    (4, "red car", "four")
+                )");
+            }
+            CreateFulltextCompactTable(server, sender, "table-index", keyType);
             if (WithRelevance) {
                 CreateDocsTable(server, sender, keyType);
             }
@@ -864,8 +870,6 @@ key = 4, data = (empty maybe), __ydb_length = 2
                 } else {
                     request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompact);
                 }
-                request.SetMinGeneration(1000);
-                request.SetMaxGeneration(2000);
             });
 
             auto index = ReadShardedTable(server, kIndexTable);
@@ -873,51 +877,56 @@ key = 4, data = (empty maybe), __ydb_length = 2
             Cerr << index << Endl;
 
             if (WithRelevance) {
-                if (keyType[0] == 'U') {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x01\x41\x02\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x03\n\
-");
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x41\x02\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x08\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x06\n\
-");
-                }
                 auto docs = ReadShardedTable(server, kDocsTable);
                 Cerr << "Docs:" << Endl;
                 Cerr << docs << Endl;
-                UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = 1, data = (empty maybe), __ydb_length = 2
+                if (keyType[0] == 'U') {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x41\x02\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+");
+                    UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = 1, data = (empty maybe), __ydb_length = 2
 key = 2, data = (empty maybe), __ydb_length = 5
 key = 3, data = (empty maybe), __ydb_length = 2
 key = 4, data = (empty maybe), __ydb_length = 2
 )");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\x41\x02\x04\n\
+__ydb_token = blue, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = -2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x05\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
+");
+                    UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = -2, data = (empty maybe), __ydb_length = 2
+key = -1, data = (empty maybe), __ydb_length = 5
+key = 3, data = (empty maybe), __ydb_length = 2
+key = 4, data = (empty maybe), __ydb_length = 2
+)");
+                }
             } else {
                 if (keyType[0] == 'U') {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x03\n\
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
 ");
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x08\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x04\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 1000, __ydb_added = 1, __ydb_segment = \x06\n\
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\x01\x04\n\
+__ydb_token = blue, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = -2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x05\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
 ");
                 }
             }

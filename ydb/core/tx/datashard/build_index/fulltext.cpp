@@ -34,7 +34,7 @@ using namespace NKikimr::NFulltext;
  * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, <data columns>
  * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, __ydb_freq
  * Destination columns with a FulltextCompact/FulltextCompactRelevance/JsonCompact index:
- *   __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added (always true), __ydb_segment
+ *   __ydb_token, __ydb_max_id, __ydb_generation (always max), __ydb_added (always true), __ydb_segment
  *
  * Request:
  * - The client sends TEvBuildFulltextIndexRequest with:
@@ -52,7 +52,6 @@ using namespace NKikimr::NFulltext;
 
 struct TTokenState {
     TString Token;
-    ui64 Gen;
     TDeltaWriter Segment;
 };
 
@@ -92,8 +91,6 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     ui64 EmptyTokenBytes = 0;
 
     ui64 MaxBatchBytes = 0;
-    ui64 Generation = 0;
-    ui64 MaxGeneration = 0;
     ui64 MaxSegmentDocuments = 0;
 
     TVector<NScheme::TTypeInfo> KeyTypes;
@@ -121,8 +118,6 @@ public:
         , BuildId{request.GetId()}
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , MaxBatchBytes(request.GetScanSettings().GetMaxBatchBytes())
-        , Generation(request.GetMinGeneration())
-        , MaxGeneration(request.GetMaxGeneration())
         , KeyTypes(table.KeyColumnTypes)
         , KeyTypeId(table.KeyColumnTypes[0].GetTypeId())
         , TableRange(table.Range)
@@ -134,9 +129,6 @@ public:
             RequestedRange.Load(Request.GetKeyRange());
         } else {
             RequestedRange = TableRange;
-        }
-        if (!Generation) {
-            Generation = 1;
         }
 
         LOG_I("Create " << Debug());
@@ -216,7 +208,7 @@ public:
             }
             {
                 Ydb::Type type;
-                type.set_type_id(Ydb::Type::UINT64);
+                type.set_type_id(NTableIndex::NFulltext::GenType);
                 uploadTypes->emplace_back(GenColumn, type);
             }
             {
@@ -335,6 +327,8 @@ public:
             ui64 docId;
             if (KeyTypeId == NScheme::NTypeIds::Uint64 || KeyTypeId == NScheme::NTypeIds::Int64) {
                 docId = key[0].AsValue<ui64>();
+            } else if (KeyTypeId == NScheme::NTypeIds::Int32) {
+                docId = (ui64)(i64)key[0].AsValue<i32>(); // sign-extend
             } else {
                 docId = key[0].AsValue<ui32>();
             }
@@ -348,7 +342,6 @@ public:
                 auto& state = TokenBuf[tokens[i]];
                 if (state.Token.empty()) {
                     state.Token = tokens[i];
-                    state.Gen = Generation;
                     state.Segment.Reset(WithRelevance, Signed);
                     BufferedBytes += tokens[i].size(); // count token sizes
                 } else if (!state.Segment.GetCount()) {
@@ -362,9 +355,7 @@ public:
                 TokensBySize.insert(&state);
                 freq = 1;
                 if (state.Segment.GetCount() >= MaxSegmentDocuments) {
-                    if (!FlushToken(state)) {
-                        return EScan::Final;
-                    }
+                    FlushToken(state);
                 }
             }
             if (BufferedBytes >= MaxBatchBytes) {
@@ -375,15 +366,11 @@ public:
                     if (!(*mostFreqIt)->Segment.GetCount()) {
                         break;
                     }
-                    if (!FlushToken(TokenBuf.at((*mostFreqIt)->Token))) {
-                        return EScan::Final;
-                    }
+                    FlushToken(TokenBuf.at((*mostFreqIt)->Token));
                 }
             }
             if (EmptyTokenBytes >= MaxBatchBytes/3) {
-                if (!FlushAllTokens()) {
-                    return EScan::Final;
-                }
+                FlushAllTokens();
             }
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
                 UploadDocRow(key, row, tokens.size());
@@ -469,14 +456,10 @@ public:
         }
     }
 
-    bool FlushToken(TTokenState& state)
+    void FlushToken(TTokenState& state)
     {
         if (!state.Segment.GetCount()) {
-            return true;
-        }
-        if (state.Gen > MaxGeneration) {
-            Finish(std::runtime_error("MaxGeneration exceeded"));
-            return false;
+            return;
         }
         auto segment = state.Segment.GetBuf();
         TVector<TCell> uploadKey(::Reserve(3));
@@ -486,7 +469,7 @@ public:
         } else {
             uploadKey.push_back(TCell::Make((ui32)state.Segment.GetMaxId()));
         }
-        uploadKey.push_back(TCell::Make(state.Gen));
+        uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
         TVector<TCell> uploadValue(::Reserve(2));
         uploadValue.push_back(TCell::Make(true));
         uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
@@ -495,29 +478,21 @@ public:
         BufferedBytes -= state.Segment.GetBuf().size();
         EmptyTokenBytes += state.Token.size();
         state.Segment = TDeltaWriter();
-        state.Gen++;
         TokensBySize.insert(&state);
-        return true;
     }
 
-    bool FlushAllTokens()
+    void FlushAllTokens()
     {
         if (!TokenBuf.size()) {
-            return true;
+            return;
         }
         for (auto& [token, state] : TokenBuf) {
-            if (!FlushToken(state)) {
-                return false;
-            }
-            if (Generation < state.Gen) {
-                Generation = state.Gen;
-            }
+            FlushToken(state);
         }
         BufferedBytes = 0;
         EmptyTokenBytes = 0;
         TokenBuf.clear();
         TokensBySize.clear();
-        return true;
     }
 
     EScan PageFault() final
@@ -528,9 +503,7 @@ public:
 
     EScan Exhausted() final
     {
-        if (!FlushAllTokens()) {
-            return EScan::Final;
-        }
+        FlushAllTokens();
 
         if (JsonErrors > 0) {
             LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
@@ -787,9 +760,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
                     keyTypeId != NScheme::NTypeIds::Int32) {
                     badRequest(TStringBuilder() << "Source table must have a single uint64/uint32/int64/int32 key column");
                 }
-            }
-            if (request.GetMaxGeneration() <= request.GetMinGeneration()) {
-                badRequest(TStringBuilder() << "Compact index build scan requires an allocated Min/MaxGeneration range");
             }
         }
 

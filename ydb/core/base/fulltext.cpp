@@ -569,7 +569,7 @@ void TDeltaWriter::Reset(bool withFreq, bool sign) {
 
 void TDeltaWriter::Add(ui64 DocId, ui32 Freq) {
     ui64 diff = DocId-MaxId;
-    Y_ENSURE(DocId != MaxId && diff < 0x8000000000000000 || !Count);
+    Y_ENSURE(!Count || (Sign ? ((i64)DocId > (i64)MaxId) : (DocId > MaxId)));
     if (!Count && Sign) {
         // Encode first item as zigzag, same as in protobuf
         i64 sdiff = (i64)diff;

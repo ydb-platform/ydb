@@ -322,4 +322,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
     Y_UNIT_TEST(InstantFinish1n) {
         LoadTest(100, true, TWorkerSettings{ .MessageCount = 10 }, TWorkerSettings{ .MessageCount = 0, .EarlyFinish = true });
     }
+
+    Y_UNIT_TEST(MissedData) {
+        LoadTest(100, false, TWorkerSettings{ .MessageCount = 100 }, TWorkerSettings{ .MessageCount = 100 }, TFailureSettings{ .Data = 10 });
+    }
 }

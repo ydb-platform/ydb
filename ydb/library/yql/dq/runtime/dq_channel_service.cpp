@@ -1735,13 +1735,15 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
-        if (!finishing)
+        if (!finishing) // it's OK to miss update to confirm
         {
-            // it's OK to miss update to confirm
-            LOG_W(LogPrefix << "UPDATE IGNORED/LOST, ChannelId=" << info.ChannelId
-                << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
-                << ", EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes
-                << ", Finishing=" << finishing);
+            if (LastLostInfo != info) {
+                LOG_W(LogPrefix << "UPDATE IGNORED/LOST, ChannelId=" << info.ChannelId
+                    << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                    << ", EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes
+                    << ", Finishing=" << finishing << ", Log=" << GetReconciliationLog());
+                LastLostInfo = info;
+            }
         }
         return;
     }

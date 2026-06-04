@@ -2,9 +2,11 @@
 
 #include "events.h"
 #include "grafana_dashboard_common.h"
+#include "grafana_dashboard_probe.h"
 #include "source_common.h"
 
 #include <ydb/mvp/core/appdata.h>
+#include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/source.h>
 
@@ -16,6 +18,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
@@ -42,12 +45,8 @@ public:
     {}
 
     void Bootstrap() {
-        const TString authHeaderValue = GetAuthorizationHeaderValue();
-        NHttp::THttpOutgoingRequestPtr request = NHttp::THttpOutgoingRequest::CreateRequestGet(BuildSearchUrl());
-        request->Set("Authorization", authHeaderValue);
-
-        auto event = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request);
-        Send(HttpProxyId, event.Release());
+        AuthorizationHeaderValue = GetAuthorizationHeaderValue();
+        SendGrafanaGetRequest(BuildSearchUrl(), "search dashboards");
         Become(&TGrafanaDashboardSearchActor::StateWork);
     }
 
@@ -68,8 +67,21 @@ private:
     size_t Place = 0;
     TVector<TResolvedLink> Links;
     TVector<TSupportError> Errors;
+    TString AuthorizationHeaderValue;
+    TVector<TGrafanaDashboardCandidate> DashboardCandidates;
+    size_t CurrentDashboardIndex = 0;
+    TVector<TGrafanaProbeGroup> CurrentProbeGroups;
+    size_t CurrentProbeGroupIndex = 0;
 
-    TString GetAuthorizationHeaderValue() {
+    enum class ERequestKind {
+        Search,
+        DashboardModel,
+        Probe,
+    };
+
+    ERequestKind RequestKind = ERequestKind::Search;
+
+    TString GetAuthorizationHeaderValue() const {
         auto* appData = MVPAppData();
         if (!appData || !appData->Tokenator) {
             return {};
@@ -93,21 +105,57 @@ private:
         return url;
     }
 
+    void SendGrafanaGetRequest(TString url, TStringBuf purpose) {
+        BLOG_D("Support links Grafana request: purpose=" << purpose << " method=GET url=" << url);
+
+        NHttp::THttpOutgoingRequestPtr request = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
+        if (!AuthorizationHeaderValue.empty()) {
+            request->Set("Authorization", AuthorizationHeaderValue);
+        }
+
+        auto event = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request);
+        Send(HttpProxyId, event.Release());
+    }
+
+    static TString DescribeHttpFailure(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response) {
+        if (!response.Error.empty()) {
+            return response.Error;
+        }
+        if (response.Response) {
+            return TStringBuilder() << response.Response->Status << ' ' << response.Response->Message;
+        }
+        return "Unknown Grafana request error";
+    }
+
+    static bool IsSuccessfulResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response) {
+        return response.Error.empty() && response.Response && response.Response->Status == "200";
+    }
+
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-        if (!event->Get()->Error.empty() || !event->Get()->Response || event->Get()->Response->Status != "200") {
+        switch (RequestKind) {
+            case ERequestKind::Search:
+                HandleSearchResponse(event);
+                return;
+            case ERequestKind::DashboardModel:
+                HandleDashboardModelResponse(event);
+                return;
+            case ERequestKind::Probe:
+                HandleProbeResponse(event);
+                return;
+        }
+    }
+
+    void HandleSearchResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+        if (!IsSuccessfulResponse(*event->Get())) {
             TSupportError error;
             error.Source = Config.GetSource();
-            if (!event->Get()->Error.empty()) {
-                error.Message = event->Get()->Error;
-            } else if (event->Get()->Response) {
+            error.Message = DescribeHttpFailure(*event->Get());
+            if (event->Get()->Response) {
                 ui32 status = 0;
                 if (TryFromString<ui32>(event->Get()->Response->Status, status)) {
                     error.Status = status;
                 }
                 error.Reason = TString(event->Get()->Response->Message);
-                error.Message = TStringBuilder() << event->Get()->Response->Status << " " << event->Get()->Response->Message;
-            } else {
-                error.Message = "Unknown Grafana request error";
             }
             Errors.push_back(std::move(error));
             ReplyAndDie();
@@ -115,7 +163,13 @@ private:
         }
 
         ParseSearchResponse(event->Get()->Response->Body);
-        ReplyAndDie();
+        if (!Errors.empty() || DashboardCandidates.empty()) {
+            ReplyAndDie();
+            return;
+        }
+
+        CurrentDashboardIndex = 0;
+        RequestDashboardModel();
     }
 
     void ParseSearchResponse(TStringBuf body) {
@@ -137,33 +191,117 @@ private:
                 continue;
             }
 
-            TString title;
-            TString dashboardUrl;
-            if (item.Has("title") && item["title"].GetType() == NJson::JSON_STRING) {
-                title = item["title"].GetString();
-            }
-            if (item.Has("url") && item["url"].GetType() == NJson::JSON_STRING) {
-                dashboardUrl = item["url"].GetString();
-            } else if (item.Has("uri") && item["uri"].GetType() == NJson::JSON_STRING) {
-                dashboardUrl = item["uri"].GetString();
-            }
-
-            if (dashboardUrl.empty()) {
-                continue;
-            }
-
-            const TString resolvedUrl = BuildGrafanaDashboardUrl(
-                GrafanaEndpoint,
-                dashboardUrl,
-                ClusterInfo,
-                RequestQueryParameters);
-            if (!resolvedUrl.empty()) {
-                Links.emplace_back(TResolvedLink{
-                    .Title = std::move(title),
-                    .Url = resolvedUrl,
-                });
+            TGrafanaDashboardCandidate candidate;
+            if (TryBuildGrafanaDashboardCandidate(
+                    item,
+                    GrafanaEndpoint,
+                    ClusterInfo,
+                    RequestQueryParameters,
+                    candidate))
+            {
+                DashboardCandidates.push_back(std::move(candidate));
+            } else {
+                BLOG_D("Support links Grafana skip dashboard without resolvable probe metadata");
             }
         }
+    }
+
+    void RequestDashboardModel() {
+        if (CurrentDashboardIndex >= DashboardCandidates.size()) {
+            ReplyAndDie();
+            return;
+        }
+
+        RequestKind = ERequestKind::DashboardModel;
+        const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
+        SendGrafanaGetRequest(candidate.DashboardApiUrl, "fetch dashboard model");
+    }
+
+    void HandleDashboardModelResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+        const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
+        if (!IsSuccessfulResponse(*event->Get())) {
+            BLOG_W("Support links Grafana dashboard model fetch failed: title=" << candidate.Title
+                << " url=" << candidate.DashboardApiUrl
+                << " error=" << DescribeHttpFailure(*event->Get()));
+            AdvanceToNextDashboard();
+            return;
+        }
+
+        NJson::TJsonValue responseJson;
+        NJson::TJsonReaderConfig jsonReaderConfig;
+        if (!NJson::ReadJsonTree(event->Get()->Response->Body, &jsonReaderConfig, &responseJson) || responseJson.GetType() != NJson::JSON_MAP) {
+            BLOG_W("Support links Grafana dashboard model has invalid JSON: title=" << candidate.Title
+                << " url=" << candidate.DashboardApiUrl);
+            AdvanceToNextDashboard();
+            return;
+        }
+
+        const NJson::TJsonValue* dashboard = &responseJson;
+        if (responseJson.Has("dashboard") && responseJson["dashboard"].GetType() == NJson::JSON_MAP) {
+            dashboard = &responseJson["dashboard"];
+        }
+
+        CurrentProbeGroups = BuildGrafanaDashboardProbeGroups(*dashboard, candidate.QueryParameters);
+        CurrentProbeGroupIndex = 0;
+        if (CurrentProbeGroups.empty()) {
+            BLOG_D("Support links Grafana dashboard has no probeable buckets: title=" << candidate.Title
+                << " url=" << candidate.ResolvedUrl);
+            AdvanceToNextDashboard();
+            return;
+        }
+
+        RequestProbe();
+    }
+
+    void RequestProbe() {
+        if (CurrentProbeGroupIndex >= CurrentProbeGroups.size()) {
+            AdvanceToNextDashboard();
+            return;
+        }
+
+        const auto& probeGroup = CurrentProbeGroups[CurrentProbeGroupIndex];
+        TString url = JoinUrl(
+            GrafanaEndpoint,
+            TStringBuilder() << "/api/datasources/proxy/uid/" << probeGroup.DatasourceUid << "/api/v1/query");
+        url = AppendQueryParam(url, "query", probeGroup.Query);
+
+        RequestKind = ERequestKind::Probe;
+        SendGrafanaGetRequest(url, "probe dashboard signal");
+    }
+
+    void HandleProbeResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+        const auto& candidate = DashboardCandidates[CurrentDashboardIndex];
+        const auto& probeGroup = CurrentProbeGroups[CurrentProbeGroupIndex];
+        if (!IsSuccessfulResponse(*event->Get())) {
+            BLOG_W("Support links Grafana probe request failed: title=" << candidate.Title
+                << " datasource=" << probeGroup.DatasourceUid
+                << " error=" << DescribeHttpFailure(*event->Get()));
+            AdvanceToNextProbeGroup();
+            return;
+        }
+
+        if (HasGrafanaDashboardProbeSignal(event->Get()->Response->Body)) {
+            Links.emplace_back(TResolvedLink{
+                .Title = candidate.Title,
+                .Url = candidate.ResolvedUrl,
+            });
+            AdvanceToNextDashboard();
+            return;
+        }
+
+        AdvanceToNextProbeGroup();
+    }
+
+    void AdvanceToNextProbeGroup() {
+        ++CurrentProbeGroupIndex;
+        RequestProbe();
+    }
+
+    void AdvanceToNextDashboard() {
+        CurrentProbeGroups.clear();
+        CurrentProbeGroupIndex = 0;
+        ++CurrentDashboardIndex;
+        RequestDashboardModel();
     }
 
     static bool IsDashboardItem(const NJson::TJsonValue& item) {

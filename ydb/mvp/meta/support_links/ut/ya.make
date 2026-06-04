@@ -13,4 +13,8 @@ PEERDIR(
     ydb/core/testlib/actors
 )
 
+DATA(
+    arcadia/ydb/mvp/meta/support_links/ut/grafana_dashboard_probe_fixture.json
+)
+
 END()

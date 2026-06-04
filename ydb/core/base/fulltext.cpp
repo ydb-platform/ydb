@@ -487,12 +487,13 @@ ui64 ReadVarint(TConstArrayRef<ui8> buf, size_t& pos) {
     ui64 r = 0;
     ui32 o = 0;
     while (pos < buf.size()) {
-        ui8 c = buf[pos++];
+        ui64 c = buf[pos++];
         r |= ((c & 0x7F) << o);
         if (!(c & 0x80)) {
             break;
         }
         o += 7;
+        Y_ENSURE(o < 64);
     }
     return r;
 }
@@ -600,6 +601,7 @@ TConstArrayRef<ui8> TDeltaWriter::GetBuf() const {
 
 void TMultiDeltaReader::Reset(bool withFreq, bool sign) {
     Readers.clear();
+    OwnedReaders.clear();
     Items.clear();
     WithFreq = withFreq;
     Sign = sign;
@@ -630,7 +632,9 @@ void TMultiDeltaReader::Start() {
         for (size_t i = 0; i < Readers.size(); i++) {
             Consume(i+1, Readers[i]);
         }
-        SelectNext();
+        if (Items.size() > 0) {
+            SelectNext();
+        }
     }
 }
 
@@ -656,9 +660,9 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
     if (OneLeft) {
         if (!Readers[0].Added) {
             // Single deleted segment = should not happen, but empty
-            ui64 docId = 0;
-            ui32 freq = 1;
-            while (Readers[0].Reader->Read(docId, freq)) {
+            ui64 unusedDoc = 0;
+            ui32 unusedFreq = 1;
+            while (Readers[0].Reader->Read(unusedDoc, unusedFreq)) {
             }
         }
         return Readers[0].Reader->Read(docId, freq);

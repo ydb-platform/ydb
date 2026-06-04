@@ -31,8 +31,8 @@ using namespace NKikimr::NFulltext;
  * This scan takes the main table and writes output to indexImplTable.
  *
  * Source columns: <PK columns>, <text column>, <data columns>
- * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, __ydb_freq
- * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, <data columns>
+ * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, <data columns>
+ * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, __ydb_freq
  * Destination columns with a FulltextCompact/FulltextCompactRelevance/JsonCompact index:
  *   __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added (always true), __ydb_segment
  *
@@ -375,14 +375,15 @@ public:
                     if (!(*mostFreqIt)->Segment.GetCount()) {
                         break;
                     }
-                    FlushToken(TokenBuf.at((*mostFreqIt)->Token));
+                    if (!FlushToken(TokenBuf.at((*mostFreqIt)->Token))) {
+                        return EScan::Final;
+                    }
                 }
             }
             if (EmptyTokenBytes >= MaxBatchBytes/3) {
                 if (!FlushAllTokens()) {
                     return EScan::Final;
                 }
-                LastProcessedKey = TSerializedCellVec(key);
             }
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
                 UploadDocRow(key, row, tokens.size());
@@ -786,6 +787,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
                     keyTypeId != NScheme::NTypeIds::Int32) {
                     badRequest(TStringBuilder() << "Source table must have a single uint64/uint32/int64/int32 key column");
                 }
+            }
+            if (request.GetMaxGeneration() <= request.GetMinGeneration()) {
+                badRequest(TStringBuilder() << "Compact index build scan requires an allocated Min/MaxGeneration range");
             }
         }
 

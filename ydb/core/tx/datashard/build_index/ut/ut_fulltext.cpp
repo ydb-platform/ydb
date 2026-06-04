@@ -225,6 +225,10 @@ namespace NKikimr {
             }, "{ <main>: Error: Empty index documents table name }");
 
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+                request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
+            }, "{ <main>: Error: Compact index build scan requires an allocated Min/MaxGeneration range }");
+
+            DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.MutableSettings()->mutable_columns()->at(0).set_column("some");
             }, "{ <main>: Error: Unknown key column: some }");
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {

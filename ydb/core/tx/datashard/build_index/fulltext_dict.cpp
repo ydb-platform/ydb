@@ -46,8 +46,7 @@ using namespace NKikimr::NFulltext;
  *   - Name of the target dictionary table
  *   - Name of the target compacted posting table
  *   - Index type
- *   - SkipFirstToken, SkipLastToken (should be false for compact index formats because
- *     compact index posting tables shouldn't be split in the middle of a token)
+ *   - SkipFirstToken, SkipLastToken
  *
  * Execution Flow:
  * - TBuildFulltextDictScan scans the whole input shard
@@ -80,7 +79,6 @@ protected:
     TBatchRowsUploader Uploader;
     bool KeyIs32 = false;
     bool Signed = false;
-    ui64 MaxKey = UINT64_MAX;
 
     TBufferData* DictBuf = nullptr;
     TBufferData* PostingBuf = nullptr;
@@ -131,7 +129,6 @@ public:
         auto keyTypeId = table.KeyColumnTypes.at(1).GetTypeId();
         KeyIs32 = (keyTypeId == NScheme::NTypeIds::Uint32 || keyTypeId == NScheme::NTypeIds::Int32);
         Signed = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
-        MaxKey = (KeyIs32 ? (Signed ? INT32_MAX : UINT32_MAX) : (Signed ? INT64_MAX : UINT64_MAX));
 
         auto types = GetAllTypes(table);
         auto addType = [&](auto& uploadTypes, const auto& column) {
@@ -356,7 +353,7 @@ protected:
             ui32 freq = 0;
             while (rdr.Read(docId, freq)) {
                 if (Delta.GetCount() >= MaxSegmentDocuments) {
-                    UploadSegment(false);
+                    UploadSegment();
                 }
                 LastTokenRows++;
                 Delta.Add(docId, freq);
@@ -364,14 +361,14 @@ protected:
         }
     }
 
-    void UploadSegment(bool isLast)
+    void UploadSegment()
     {
         auto buf = Delta.GetBuf();
         if (buf.size()) {
             auto maxId = Delta.GetMaxId();
             TVector<TCell> uploadKey = {
                 TCell(LastToken),
-                KeyIs32 ? TCell::Make((ui32)(isLast ? MaxKey : maxId)) : TCell::Make(isLast ? MaxKey : maxId),
+                KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId),
                 TCell::Make(UINT64_MAX),
             };
             TVector<TCell> uploadValue = {
@@ -385,7 +382,7 @@ protected:
 
     void FinishToken(bool last)
     {
-        UploadSegment(true);
+        UploadSegment();
         if (last && SkipLastToken) {
             return;
         }

@@ -97,7 +97,9 @@ public:
         GroupsAllowedToScan.Erase(groupId);
 
         for (ui32 lockedNodeId : it->second.UsedNodes) {
-            TFastLookupUniqueList<TGroupId>& lockQueue = NodeLockQueues[lockedNodeId];
+            auto it = NodeLockQueues.find(lockedNodeId);
+            Y_ABORT_UNLESS(it != NodeLockQueues.end());
+            TFastLookupUniqueList<TGroupId>& lockQueue = it->second;
             Y_ABORT_UNLESS(!lockQueue.IsEmpty());
             const TGroupId lockingGroupId = lockQueue.Front();
             lockQueue.Erase(groupId);
@@ -135,7 +137,8 @@ public:
 
     void SetPeriodicity(TDuration newPeriodicity) {
         Periodicity = newPeriodicity;
-        TimeWasted = std::max(TimeWasted, Periodicity);
+        // reset accumulated time wasted
+        TimeWasted = 0;
     }
 
     TMonotonic GetNextAllowedCheckTimestamp(TMonotonic now) {
@@ -143,9 +146,9 @@ public:
         if (LastPlannedTimestamp + delay < now) {
             // last planned request was too long ago, allow next scan right now
             // and accelerate further requests to compensate wasted time
-            TDuration wasted = now - (LastPlannedTimestamp + delay);
             if (LastPlannedTimestamp != TMonotonic::Zero()) {
-                TimeWasted = std::max(Periodicity, TimeWasted + wasted);
+                TDuration wasted = now - (LastPlannedTimestamp + delay);
+                TimeWasted += wasted;
             }
             LastPlannedTimestamp = now;
         } else {
@@ -173,7 +176,7 @@ public:
         }
 
         TDuration targetDelay = GetTargetDelay();
-        float accelerationRatio = (TimeWasted / Periodicity) + 1;
+        double accelerationRatio = (TimeWasted / Periodicity) + 1;
         TDuration adjustedDelay = targetDelay / accelerationRatio;
         return std::pair<TDuration, TDuration>(adjustedDelay, targetDelay - adjustedDelay);
     }
@@ -188,7 +191,7 @@ public:
 
 private:
     struct TLockInfo {
-        ui32 LockedNodeCount;
+        ui32 LockedNodeCount = 0;
         std::unordered_set<ui32> UsedNodes;
 
         TLockInfo() {

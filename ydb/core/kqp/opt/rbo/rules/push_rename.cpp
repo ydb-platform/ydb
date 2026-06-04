@@ -16,33 +16,6 @@ const TInfoUnitSet& EmptyInfoUnitSet() {
     return empty;
 }
 
-bool HasDuplicateOutputs(const TVector<TInfoUnit>& outputIUs) {
-    TInfoUnitSet seen;
-    for (const auto& iu : outputIUs) {
-        if (!AddInfoUnitLocal(seen, iu)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool SatisfiesNameConstraintsAtOutput(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props) {
-    if (HasDuplicateOutputs(outputIUs)) {
-        return false;
-    }
-
-    for (const auto& [parent, childIdx] : op->Parents) {
-        const auto& forbidden = props.NameConstraints.GetForbiddenOut(parent, childIdx, op.get());
-        for (const auto& iu : outputIUs) {
-            if (forbidden.contains(iu)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 bool ContainsInfoUnit(const TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
     return std::find(ius.begin(), ius.end(), iu) != ius.end();
 }
@@ -316,7 +289,7 @@ bool TryPushRename(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const 
     }
 
     const auto topOutputAfterPush = SimulateTopMapOutputAfterPush(topMap, renameIdx, from, to);
-    if (!SatisfiesNameConstraintsAtOutput(topMap, topOutputAfterPush, props)) {
+    if (!CanExposeOutput(topMap, topOutputAfterPush, props)) {
         return false;
     }
 
@@ -350,7 +323,7 @@ bool TPushRenameRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext
             continue;
         }
 
-        if (topMap->MapElements.empty() && SatisfiesNameConstraintsAtOutput(topMap, topMap->GetInput()->GetOutputIUs(), props)) {
+        if (topMap->MapElements.empty() && CanReplaceInParents(topMap, topMap->GetInput(), props)) {
             input = topMap->GetInput();
         }
         return true;

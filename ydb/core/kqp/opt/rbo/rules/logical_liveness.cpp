@@ -291,33 +291,6 @@ private:
     TPlanProps& Props;
 };
 
-bool HasDuplicateOutputs(const TVector<TInfoUnit>& outputIUs) {
-    TInfoUnitSet seen;
-    for (const auto& iu : outputIUs) {
-        if (!AddLiveColumn(seen, iu)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool SatisfiesNameConstraintsAtOutput(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props) {
-    if (HasDuplicateOutputs(outputIUs)) {
-        return false;
-    }
-
-    for (const auto& [parent, childIdx] : op->Parents) {
-        const auto& forbidden = props.NameConstraints.GetForbiddenOut(parent, childIdx, op.get());
-        for (const auto& iu : outputIUs) {
-            if (forbidden.contains(iu)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TPlanProps& props) {
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
@@ -558,14 +531,14 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     if (newElements.empty()) {
-        if (!SatisfiesNameConstraintsAtOutput(map, map->GetInput()->GetOutputIUs(), props)) {
+        if (!CanReplaceInParents(map, map->GetInput(), props)) {
             return false;
         }
         input = map->GetInput();
     } else {
         auto oldElements = std::move(map->MapElements);
         map->MapElements = std::move(newElements);
-        if (!SatisfiesNameConstraintsAtOutput(map, map->GetOutputIUs(), props)) {
+        if (!CanExposeToParents(map.get(), props)) {
             map->MapElements = std::move(oldElements);
             return false;
         }

@@ -13,17 +13,6 @@ enum class EPushTarget {
     Right
 };
 
-bool HasDuplicateOutputs(const TIntrusivePtr<IOperator>& op) {
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
-    for (const auto& iu : op->GetOutputIUs()) {
-        if (seen.contains(iu)) {
-            return true;
-        }
-        seen.insert(iu);
-    }
-    return false;
-}
-
 bool DependenciesAvailable(const TMapElement& mapElement, const TVector<TInfoUnit>& outputIUs) {
     const auto usedIUs = mapElement.GetExpression().GetInputIUs(false, true);
     return IUSetDiff(usedIUs, outputIUs).empty();
@@ -91,13 +80,18 @@ EPushTarget SelectJoinPushTarget(
     return EPushTarget::Top;
 }
 
-bool TryPushElementToMap(const TIntrusivePtr<TOpMap>& bottomMap, const TMapElement& mapElement, const TVector<TInfoUnit>& bottomInputIUs) {
+bool TryPushElementToMap(
+    const TIntrusivePtr<TOpMap>& bottomMap,
+    const TMapElement& mapElement,
+    const TVector<TInfoUnit>& bottomInputIUs,
+    const TPlanProps& props)
+{
     if (!DependenciesAvailable(mapElement, bottomInputIUs)) {
         return false;
     }
 
     bottomMap->MapElements.push_back(mapElement);
-    if (HasDuplicateOutputs(bottomMap)) {
+    if (!CanExposeOutput(bottomMap, bottomMap->GetOutputIUs(), props)) {
         bottomMap->MapElements.pop_back();
         return false;
     }
@@ -105,7 +99,12 @@ bool TryPushElementToMap(const TIntrusivePtr<TOpMap>& bottomMap, const TMapEleme
     return true;
 }
 
-bool TryComposeAliasAndPushToMap(const TIntrusivePtr<TOpMap>& bottomMap, const TMapElement& mapElement, const TVector<TInfoUnit>& bottomInputIUs) {
+bool TryComposeAliasAndPushToMap(
+    const TIntrusivePtr<TOpMap>& bottomMap,
+    const TMapElement& mapElement,
+    const TVector<TInfoUnit>& bottomInputIUs,
+    const TPlanProps& props)
+{
     if (!mapElement.IsColumnAccess()) {
         return false;
     }
@@ -122,7 +121,7 @@ bool TryComposeAliasAndPushToMap(const TIntrusivePtr<TOpMap>& bottomMap, const T
     }
 
     bottomMap->MapElements.push_back(composedElement);
-    if (HasDuplicateOutputs(bottomMap)) {
+    if (!CanExposeOutput(bottomMap, bottomMap->GetOutputIUs(), props)) {
         bottomMap->MapElements.pop_back();
         return false;
     }
@@ -130,10 +129,11 @@ bool TryComposeAliasAndPushToMap(const TIntrusivePtr<TOpMap>& bottomMap, const T
     return true;
 }
 
-TIntrusivePtr<IOperator> PushAppendElementsIntoMap(const TIntrusivePtr<TOpMap>& map) {
+TIntrusivePtr<IOperator> PushAppendElementsIntoMap(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
     auto bottomMap = CastOperator<TOpMap>(map->GetInput());
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
     const auto blockedOutputs = GetRenameSources(map);
+    auto originalBottomElements = bottomMap->MapElements;
 
     TVector<TMapElement> topElements;
     bool pushed = false;
@@ -144,8 +144,8 @@ TIntrusivePtr<IOperator> PushAppendElementsIntoMap(const TIntrusivePtr<TOpMap>& 
             continue;
         }
 
-        if (TryPushElementToMap(bottomMap, mapElement, bottomInputIUs) ||
-            TryComposeAliasAndPushToMap(bottomMap, mapElement, bottomInputIUs)) {
+        if (TryPushElementToMap(bottomMap, mapElement, bottomInputIUs, props) ||
+            TryComposeAliasAndPushToMap(bottomMap, mapElement, bottomInputIUs, props)) {
             pushed = true;
         } else {
             topElements.push_back(mapElement);
@@ -157,15 +157,21 @@ TIntrusivePtr<IOperator> PushAppendElementsIntoMap(const TIntrusivePtr<TOpMap>& 
     }
 
     if (topElements.empty()) {
+        if (!CanReplaceInParents(map, bottomMap, props)) {
+            bottomMap->MapElements = std::move(originalBottomElements);
+            return map;
+        }
         return bottomMap;
     }
 
     return MakeIntrusive<TOpMap>(bottomMap, map->Pos, topElements, map->Ordered);
 }
 
-TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMap>& map) {
+TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
     auto join = CastOperator<TOpJoin>(map->GetInput());
     const auto blockedOutputs = GetRenameSources(map);
+    const auto originalLeftInput = join->GetLeftInput();
+    const auto originalRightInput = join->GetRightInput();
 
     // Make sure the join and its inputs are single consumer.
     // FIXME: join inputs don't have to be single consumer, but this used to break due to multiple consumer problem.
@@ -201,7 +207,7 @@ TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMa
     bool pushLeft = !leftMapElements.empty();
     if (!leftMapElements.empty()) {
         leftMap = MakeIntrusive<TOpMap>(join->GetLeftInput(), map->Pos, leftMapElements);
-        if (HasDuplicateOutputs(leftMap)) {
+        if (HasOutputConflicts(leftMap->GetOutputIUs())) {
             pushLeft = false;
             leftMap = nullptr;
         }
@@ -211,7 +217,7 @@ TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMa
     bool pushRight = !rightMapElements.empty();
     if (!rightMapElements.empty()) {
         rightMap = MakeIntrusive<TOpMap>(join->GetRightInput(), map->Pos, rightMapElements);
-        if (HasDuplicateOutputs(rightMap)) {
+        if (HasOutputConflicts(rightMap->GetOutputIUs())) {
             pushRight = false;
             rightMap = nullptr;
         }
@@ -229,6 +235,12 @@ TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMa
         join->SetRightInput(rightMap);
     }
 
+    if (HasOutputConflicts(join->GetOutputIUs())) {
+        join->SetLeftInput(originalLeftInput);
+        join->SetRightInput(originalRightInput);
+        return map;
+    }
+
     TVector<TMapElement> topMapElements;
     for (const auto& [mapElement, target] : classifiedElements) {
         if (target == EPushTarget::Top ||
@@ -239,6 +251,11 @@ TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMa
     }
 
     if (topMapElements.empty()) {
+        if (!CanReplaceInParents(map, join, props)) {
+            join->SetLeftInput(originalLeftInput);
+            join->SetRightInput(originalRightInput);
+            return map;
+        }
         return join;
     }
 
@@ -261,11 +278,11 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
     auto map = CastOperator<TOpMap>(input);
 
     if (map->GetInput()->Kind == EOperator::Map && map->GetInput()->IsSingleConsumer()) {
-        return PushAppendElementsIntoMap(map);
+        return PushAppendElementsIntoMap(map, props);
     }
 
     if (map->GetInput()->Kind == EOperator::Join) {
-        return PushAppendElementsThroughJoin(map);
+        return PushAppendElementsThroughJoin(map, props);
     }
 
     return input;

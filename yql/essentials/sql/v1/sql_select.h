@@ -38,7 +38,8 @@ private:
     template <typename TRule>
     bool ColumnList(TVector<TNodePtr>& keys, const TRule& node);
     bool NamedColumn(TVector<TNodePtr>& columnList, const TRule_named_column& node);
-    TSourcePtr SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery);
+    TSourcePtr SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString& provider, bool& isAnonymous);
+    TSourcePtr HintedSingleSource(const TRule_hinted_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery);
     TSourcePtr NamedSingleSource(const TRule_named_single_source& node, bool unorderedSubquery);
     bool FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& flattenByColumns, TVector<TNodePtr>& flattenByExprs, const TRule_flatten_by_arg& node);
     TSourcePtr FlattenSource(const TRule_flatten_source& node);

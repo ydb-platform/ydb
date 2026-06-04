@@ -19489,9 +19489,9 @@
     ],
     "test_sql_negative.test[expr-as_table_hints-]": [
         {
-            "checksum": "d69f3c1b7fb70dfd048aaf6b2369863d",
-            "size": 129,
-            "uri": "https://{canondata_backend}/1924537/c7a75d88255019fa5cdd3450d7e30c52905fc710/resource.tar.gz#test_sql_negative.test_expr-as_table_hints-_/err_file.out"
+            "checksum": "f81a1ff89354ba88539117e7b6f7bb38",
+            "size": 313,
+            "uri": "https://{canondata_backend}/942278/fcc4e6ebe7339f808d92ba9932e158c613c11abd/resource.tar.gz#test_sql_negative.test_expr-as_table_hints-_/err_file.out"
         }
     ],
     "test_sql_negative.test[expr-as_table_subquery-]": [

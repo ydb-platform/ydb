@@ -1556,7 +1556,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(StreamingConstraintsValidation, TStreamingTestFixture) {
-        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         constexpr char input1[] = "streamingConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingConstraintsValidationSecondInputTopic";
@@ -1702,7 +1704,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(StreamingJoinConstraintsValidation, TStreamingTestFixture) {
-        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         constexpr char input1[] = "streamingJoinConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingJoinConstraintsValidationSecondInputTopic";
@@ -1896,7 +1900,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(StreamingQueryJoinTypes, TStreamingTestFixture) {
         LogSettings.Freeze = true;
-        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         auto pqGateway = SetupMockPqGateway();
 
         const std::vector<TString> tableData = {"X", "TT", "X"};

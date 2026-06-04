@@ -1794,7 +1794,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     Text String,
                     Stamp Timestamp,
                     INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2),
+                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),
                     PRIMARY KEY (Key)
                 ) WITH (
                     TTL = Interval("PT1H") ON Stamp
@@ -1802,7 +1802,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
         }
     }
 
@@ -1817,7 +1817,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     Text String,
                     Stamp Timestamp,
                     INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2),
+                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),
                     PRIMARY KEY (Key)
                 );
             )";
@@ -1832,7 +1832,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
         }
     }
 
@@ -1859,11 +1859,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const std::string query = R"(
                 ALTER TABLE TestTable ADD INDEX vector_idx
                     GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2);
+                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
         }
     }
 
@@ -1896,11 +1896,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const std::string query = R"(
                 ALTER TABLE TestTable ADD INDEX vector_idx
                     GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2);
+                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
         }
     }
 
@@ -1925,7 +1925,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const std::string query = R"(
                 ALTER TABLE TestTable ADD INDEX vector_idx
                     GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2);
+                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1937,7 +1937,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )";
             auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalVectorKmeansTree index");
         }
     }
 }

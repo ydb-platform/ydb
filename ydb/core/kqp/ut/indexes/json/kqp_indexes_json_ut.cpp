@@ -2453,7 +2453,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalJson index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalJson index");
         }
     }
 
@@ -2482,7 +2482,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalJson index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalJson index");
         }
     }
 
@@ -2512,7 +2512,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalJson index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalJson index");
         }
     }
 
@@ -2548,7 +2548,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalJson index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalJson index");
         }
     }
 
@@ -2584,7 +2584,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalJson index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalJson index");
         }
     }
 }

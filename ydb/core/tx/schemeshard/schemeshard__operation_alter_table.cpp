@@ -159,7 +159,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
-    if (copyAlter.HasTTLSettings()) {
+    if (copyAlter.HasTTLSettings() && copyAlter.GetTTLSettings().HasEnabled()) {
         for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
             if (!context.SS->PathsById.contains(childPathId)) {
                 continue;
@@ -174,7 +174,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
 
             if (!DoesIndexSupportTTL(indexInfo->Type)) {
-                errStr = TStringBuilder() << indexInfo->Type << " index doesn't support TTL";
+                errStr = "TTL is not supported for tables with " << indexInfo->Type << " index";
                 status = NKikimrScheme::StatusInvalidParameter;
                 return nullptr;
             }

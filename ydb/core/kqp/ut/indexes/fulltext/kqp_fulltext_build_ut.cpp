@@ -3401,9 +3401,9 @@ Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtl, IsRelevance) {
         UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
 
         if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextRelevance index");
         } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextPlain index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextPlain index");
         }
     }
 }
@@ -3436,9 +3436,9 @@ Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndex, IsRelevance) {
         UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
 
         if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextRelevance index");
         } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextPlain index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextPlain index");
         }
     }
 }
@@ -3477,9 +3477,9 @@ Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtlIndex, IsRelevance) {
         UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
 
         if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextRelevance index");
         } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextPlain index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextPlain index");
         }
     }
 }
@@ -3518,9 +3518,9 @@ Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndexTtl, IsRelevance) {
         UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
 
         if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextRelevance index");
         } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EIndexTypeGlobalFulltextPlain index doesn't support TTL");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TTL is not supported for tables with EIndexTypeGlobalFulltextPlain index");
         }
     }
 }

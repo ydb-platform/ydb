@@ -324,8 +324,11 @@ SELECT -- these expressions are always true for any time zones: the time zone do
     AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDatetime(), "America/New_York");
 ```
+
 It is important to understand that when converting between `TzDate` and `TzDatetime` or `TzTimestamp`, the date corresponds not to midnight local time in the timezone, but to midnight UTC for the date in UTC.
+
 ## Casting of primitive data types {#cast}
+
 ### Explicit casting {#explicit-cast}
 
 Explicit casting using [CAST](../syntax/expressions.md#cast):
@@ -361,6 +364,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Datetime64** | No | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes | Yes | Yes | No |
 | **Timestamp64** | No | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes | Yes | No |
 | **Interval64** | No | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup> | Yes | Yes | No |
+
 <sup>1</sup> `True` is converted to `1`, `False` is converted to `0`.
 <sup>2</sup> Any value other than `0` is converted to `True`, `0` is converted to `False`.
 <sup>3</sup> Only possible if the value is non-negative.
@@ -430,6 +434,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Datetime64** | Yes | Yes | Yes | Yes | No | No | No |
 | **Timestamp64** | Yes | Yes | Yes | Yes | No | No | No |
 | **Interval64** | Yes | Yes | Yes | Yes | No | No | No |
+
 <sup>1</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 
 ##### Examples

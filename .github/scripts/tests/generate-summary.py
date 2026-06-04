@@ -4,6 +4,7 @@ import dataclasses
 import json
 import math
 import os
+import re
 import sys
 import traceback
 from enum import Enum
@@ -608,11 +609,6 @@ def _failure_row_pairs_for_summary_tests(tests):
     return pairs
 
 
-<<<<<<< HEAD
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
-    summary = TestSummary(is_retry=is_retry)
-    stderr_fetch_cache = {}
-=======
 # Did dmesg show ANY OOM-killer event during this try?
 _OOM_DMESG_EVIDENCE_RE = re.compile(
     r'\b(?:Out of memory:\s+Killed process|invoked oom-killer|Memory cgroup out of memory)\b',

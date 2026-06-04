@@ -17,3 +17,5 @@ items:
       mode: link
   - name: Спиллинг
     href: spilling.md
+  - name: Топики (работа через SQL)
+    href: topics.md

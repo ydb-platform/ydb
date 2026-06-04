@@ -113,6 +113,7 @@ Due to the added redundancy, `JsonDocument` is less efficient in terms of storag
 The Double type is used to store numbers (JSON Number) in JsonDocument and for arithmetic operations on them in the [JSON API](../builtins/json.md). Loss of precision is possible when using non-standard number representations in the original JSON document.
 
 {% endnote %}
+
 ## Date and time {#datetime}
 
 #|
@@ -288,6 +289,7 @@ from 00:00 January 1, 144169 BC to 00:00 January 1, 148107 AD
 |#
 
 <sup>1</sup> Midnight is understood as the moment when all _time_ components are equal to zero.
+
 ### Interval type behavior and limitations {#interval-type-behavior-and-limitations}
 
 The `Interval` type uses syntax based on the [ISO 8601 standard](https://en.wikipedia.org/wiki/ISO_8601), with several specifics:
@@ -299,12 +301,14 @@ The `Interval` type uses syntax based on the [ISO 8601 standard](https://en.wiki
 * microseconds can be specified as a fractional part of a second.
 
 #### Interval data examples {#interval-data-examples}
+
 ```yql
 SELECT
     Interval("P1W2DT2H3M4.567890S"), -- interval 1 week 2 days 2 hours 3 minutes 4.567890 seconds
     Interval("P1W"),                 -- interval 1 week (7 days)
     Interval("-P1D");                -- interval in the past 1 day (24 hours)
 ```
+
 ### Time zone label support features
 
 The time zone label for the `TzDate`, `TzDatetime`, `TzTimestamp` types is an attribute that is used:
@@ -327,6 +331,7 @@ It is important to understand that when converting between `TzDate` and `TzDatet
 Explicit casting using [CAST](../syntax/expressions.md#cast):
 
 #### Casting to numeric types
+
 | Type | Bool | Int8 | Int16 | Int32 | Int64 | Uint8 | Uint16 | Uint32 | Uint64 | Float | Double | Decimal |
 | --------------- | -------------- | -------------- | -------------- | -------------- | -------------- | ---------------- | ---------------- | ---------------- | ---------------- | -------------- | -------------- | ------- |
 | **Bool** | — | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | No |
@@ -363,6 +368,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 <sup>5</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 
 #### Casting to date and time data types
+
 | Type             | Date | Datetime | Timestamp | Interval | Date32 | Datetime64 | Timestamp64 | Interval64 |
 | --------------- | ---- | -------- | --------- | -------- | ------ | ---------- | ----------- | ---------- |
 | **Bool**        | No   | No       | No       | No       | No     | No        | No         | No        |
@@ -392,7 +398,9 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Datetime64**  | Yes  | Yes      | Yes      | No       | Yes    | —         | Yes        | No       |
 | **Timestamp64** | Yes  | Yes      | Yes      | No       | Yes    | Yes       | —         | No       |
 | **Interval64**  | No   | No      | No       | Yes     | No     | No        | No         | —        |
+
 #### Casting to other data types
+
 | Type | String | Bytes | Utf8 | Text | Json | Yson | Uuid |
 | --------------- | -------------- | -------------- | ---- | ---- | ---- | ---- | ---- |
 | **Bool** | Yes | Yes | No | No | No | No | No |
@@ -427,6 +435,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 ##### Examples
 
 {% include [x](../_includes/cast_examples.md) %}
+
 ### Implicit casting {#implicit-cast}
 
 Implicit type casting that occurs in basic operations (`+`, `-`, `*`, `/`, `%`) between different data types. The table cells indicate the result type of the operation if it is possible:
@@ -446,7 +455,9 @@ If the numeric types do not match, a [BITCAST](../syntax/expressions.md#bitcast)
 | **Uint64** | `Uint64` | `Uint64` | `Uint64` | `Int64` | `Uint64` | `Uint64` | `Uint64` | — | `Float` | `Double` |
 | **Float** | `Float` | `Float` | `Float` | `Float` | `Float` | `Float` | `Float` | `Float` | — | `Double` |
 | **Double** | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | — |
+
 #### Date and time types
+
 | Type | Date | Datetime | Timestamp | Interval | TzDate | TzDatetime | TzTimestamp | Date32 | Datetime64 | Timestamp64 | Interval64 | TzDate32 | TzDatetime64 | TzTimestamp64 |
 | ----------------- | ---- | ---------- | ----------- | -------- | -------- | ------------ | ------------- | -------- | ------------ | ------------- | ---------- | ---------- | -------------- | --------------- |
 | **Date** | — | `DateTime` | `Timestamp` | — | `TzDate` | `TzDatetime` | `TzTimestamp` | `Date32` | `DateTime64` | `Timestamp64` | — | `TzDate32` | `TzDatetime64` | `TzTimestamp64` |

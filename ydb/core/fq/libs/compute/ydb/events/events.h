@@ -227,12 +227,14 @@ struct TEvYdbCompute {
                                  const TString& scope,
                                  const TString& basePath,
                                  const TString& path,
-                                 const NFq::NConfig::TYdbStorageConfig& executionConnection)
+                                 const NFq::NConfig::TYdbStorageConfig& executionConnection,
+                                 const TString& sharedFolderId = {})
             : CloudId(cloudId)
             , Scope(scope)
             , BasePath(basePath)
             , Path(path)
             , ExecutionConnection(executionConnection)
+            , SharedFolderId(sharedFolderId)
         {}
 
         TString CloudId;
@@ -240,6 +242,7 @@ struct TEvYdbCompute {
         TString BasePath;
         TString Path;
         NFq::NConfig::TYdbStorageConfig ExecutionConnection;
+        TString SharedFolderId;
     };
 
     struct TEvCreateDatabaseResponse : public NActors::TEventLocal<TEvCreateDatabaseResponse, EvCreateDatabaseResponse> {

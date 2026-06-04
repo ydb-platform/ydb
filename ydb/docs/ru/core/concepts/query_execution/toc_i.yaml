@@ -17,5 +17,5 @@ items:
       mode: link
   - name: Спиллинг
     href: spilling.md
-  - name: Топики (работа через SQL)
+  - name: SQL-синтаксис над топиками
     href: topics.md

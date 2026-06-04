@@ -13,6 +13,8 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
+#include <contrib/libs/ftxui/include/ftxui/dom/table.hpp>
+
 #include <library/cpp/json/json_writer.h>
 
 #include <util/string/printf.h>
@@ -187,51 +189,113 @@ TString StripInlineMarkdown(TStringBuf line) {
     return result;
 }
 
-// Turn a Markdown table row "| a | b |" into "a | b": drop the outer pipes and clean the cells.
-// Column alignment is impossible anyway, since the terminal renderer collapses repeated spaces.
-TString StripTableRow(TStringBuf trimmed) {
+// Split a Markdown table row "| a | b |" into trimmed, Markdown-stripped cells.
+std::vector<std::string> SplitTableRow(TStringBuf trimmed) {
     if (trimmed.StartsWith('|')) {
         trimmed.Skip(1);
     }
     if (trimmed.EndsWith('|')) {
         trimmed.Chop(1);
     }
-    return StripInlineMarkdown(TrimSpaces(trimmed));
+
+    std::vector<std::string> cells;
+    for (const TStringBuf cell : StringSplitter(trimmed).Split('|')) {
+        cells.emplace_back(StripInlineMarkdown(TrimSpaces(cell)));
+    }
+    return cells;
 }
 
-// The model is instructed to answer in plain text, but it still tends to emit Markdown.
-// Our output is printed verbatim to the terminal (it is not rendered), so convert the most
-// common Markdown markup to plain text before displaying it. This affects only what the user
+// Render collected Markdown table rows (the first row is the header) as a bordered FTXUI table.
+ftxui::Element BuildTable(std::vector<std::vector<std::string>> rows) {
+    ftxui::Table table(std::move(rows));
+    table.SelectAll().Border(ftxui::LIGHT);
+    table.SelectAll().SeparatorVertical(ftxui::LIGHT);
+    table.SelectAll().SeparatorHorizontal(ftxui::LIGHT);
+    table.SelectRow(0).Decorate(ftxui::bold);
+    return table.Render();
+}
+
+// The model is instructed to answer in plain text, but it still tends to emit Markdown. Our
+// output is printed to the terminal, so convert Markdown to a presentable form before showing it:
+// inline markup (headings, bold/italic, inline code, blockquotes, code fences) is reduced to plain
+// text, while Markdown tables are rendered as real bordered tables. This affects only what the user
 // sees: the model's own conversation history and the audit log keep the original text.
-TString MarkdownToPlainText(TStringBuf text) {
-    TStringBuilder result;
-    bool inCodeFence = false;
-    bool first = true;
+ftxui::Element MarkdownToElement(TStringBuf text) {
+    std::vector<TStringBuf> lines;
     for (const TStringBuf line : StringSplitter(text).Split('\n')) {
-        const TStringBuf trimmed = TrimSpaces(line);
+        lines.push_back(line);
+    }
+
+    std::vector<ftxui::Element> blocks;
+    TStringBuilder textRun;
+
+    auto flushText = [&]() {
+        TString block = textRun;
+        textRun.clear();
+        while (!block.empty()) {
+            const char c = block.back();
+            if (c != '\n' && c != '\r' && c != ' ' && c != '\t') {
+                break;
+            }
+            block.pop_back();
+        }
+        if (!block.empty()) {
+            blocks.push_back(ftxui::paragraph(std::string(block)));
+        }
+    };
+
+    bool inCodeFence = false;
+    for (size_t i = 0; i < lines.size();) {
+        const TStringBuf trimmed = TrimSpaces(lines[i]);
+
         if (trimmed.StartsWith("```")) {
-            inCodeFence = !inCodeFence; // drop the ``` fence line itself, keep its content
+            inCodeFence = !inCodeFence; // drop the ``` fence line, keep its content as plain text
+            ++i;
+            continue;
+        }
+        if (inCodeFence) {
+            if (!textRun.empty()) {
+                textRun << '\n';
+            }
+            textRun << lines[i];
+            ++i;
             continue;
         }
 
-        TString converted;
-        if (inCodeFence) {
-            converted = TString(line); // keep code content verbatim
-        } else if (IsTableSeparatorLine(trimmed)) {
-            continue; // drop Markdown table separators / horizontal rules
-        } else if (trimmed.StartsWith('|')) {
-            converted = StripTableRow(trimmed);
-        } else {
-            converted = StripInlineMarkdown(line);
+        // A run of consecutive "| ... |" lines is a Markdown table: render it as a real table.
+        if (!IsTableSeparatorLine(trimmed) && trimmed.StartsWith('|')) {
+            flushText();
+            std::vector<std::vector<std::string>> rows;
+            for (; i < lines.size(); ++i) {
+                const TStringBuf row = TrimSpaces(lines[i]);
+                if (row.StartsWith("```") || (!IsTableSeparatorLine(row) && !row.StartsWith('|'))) {
+                    break;
+                }
+                if (!IsTableSeparatorLine(row)) {
+                    rows.push_back(SplitTableRow(row));
+                }
+            }
+            if (!rows.empty()) {
+                blocks.push_back(BuildTable(std::move(rows)));
+            }
+            continue;
         }
 
-        if (!first) {
-            result << '\n';
+        if (!textRun.empty()) {
+            textRun << '\n';
         }
-        first = false;
-        result << converted;
+        textRun << StripInlineMarkdown(lines[i]);
+        ++i;
     }
-    return result;
+    flushText();
+
+    if (blocks.empty()) {
+        return ftxui::text("");
+    }
+    if (blocks.size() == 1) {
+        return std::move(blocks.front());
+    }
+    return ftxui::vbox(std::move(blocks));
 }
 
 TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
@@ -311,7 +375,7 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                     title += Sprintf(" (after %.2fs)", elapsed);
                 }
             }
-            ::NYdb::NConsoleClient::PrintFtxuiMessage(MarkdownToPlainText(StripStringRight(output.Text)), title);
+            ::NYdb::NConsoleClient::PrintFtxuiMessage(MarkdownToElement(StripStringRight(output.Text)), title);
 
             if (AuditEnabled) {
                 NJson::TJsonValue auditInfo;

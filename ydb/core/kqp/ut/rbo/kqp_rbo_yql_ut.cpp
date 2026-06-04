@@ -952,6 +952,109 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(leftMap.get(), 0).contains(TInfoUnit("a")));
     }
 
+    Y_UNIT_TEST(ReplaceAliasSubqueryDoesNotDuplicateVisibleColumns) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/test` (
+                D Utf8 NOT NULL,
+                S Utf8 NOT NULL,
+                V Utf8,
+                PRIMARY KEY(D, S)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(R"(
+            PRAGMA YqlSelect = 'force';
+
+            SELECT t1.S AS result
+            FROM (
+                SELECT D, S, V
+                FROM `/Root/test`
+            ) AS t1
+            WHERE t1.D = 'd'
+            ORDER BY result;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+            .ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DistinctAllTypeMatchesLogicalOutputColumns) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/dups` (
+                id Int64 NOT NULL,
+                k Int64 NOT NULL,
+                v Int64 NOT NULL,
+                PRIMARY KEY(id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(1)
+            .AddMember("k").Int64(10)
+            .AddMember("v").Int64(100)
+            .EndStruct();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(2)
+            .AddMember("k").Int64(10)
+            .AddMember("v").Int64(100)
+            .EndStruct();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(3)
+            .AddMember("k").Int64(20)
+            .AddMember("v").Int64(200)
+            .EndStruct();
+        rows.EndList();
+
+        auto upsertResult = tableClient.BulkUpsert("/Root/dups", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(R"(
+            PRAGMA YqlSelect = 'force';
+
+            SELECT DISTINCT k AS k, v AS v
+            FROM `/Root/dups`
+            ORDER BY k, v;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings())
+            .ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[10;100];[20;200]])");
+    }
+
     bool HasParam(const std::string& ast, const std::string& param) {
         auto txPos = ast.find("KqpPhysicalTx");
         if (txPos == std::string::npos) {
@@ -2709,6 +2812,71 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(plan.Contains("Join"), plan);
         UNIT_ASSERT_C(!plan.Contains("__kqp_rbo_ignore_arg_"), plan);
         AssertProjectionMapRulesApplied(simplifiedPlan, plan);
+    }
+
+    Y_UNIT_TEST(ProjectionNormalizationYqlSemanticRenameAndDeadSortKey) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[EBenchType::TPCH], BenchmarkSchemaPath[EBenchType::TPCH], /*useColumnStore*/ true);
+
+        const TString query = R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            $cte = (
+                SELECT a1.id2 AS id2, a1.join_id AS join_id
+                FROM (
+                    SELECT c.c_custkey AS id2, c.c_nationkey AS join_id
+                    FROM `/Root/customer` AS c
+                ) AS a1
+            );
+
+            $joined = (
+                SELECT X1.id2 AS left_id, X2.id2 AS right_id, X1.id2 + X2.id2 AS sort_key
+                FROM
+                   (
+                       SELECT cte.id2 AS id2
+                       FROM `/Root/supplier` AS supplier, $cte AS cte
+                       WHERE supplier.s_nationkey == cte.join_id
+                   ) AS X1,
+                   (
+                       SELECT cte.id2 AS id2
+                       FROM `/Root/nation` AS nation, $cte AS cte
+                       WHERE nation.n_nationkey == cte.join_id
+                   ) AS X2
+            );
+
+            SELECT left_id, right_id
+            FROM $joined
+            ORDER BY sort_key
+            LIMIT 10;
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan");
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TopSort") || FindOperatorByStringField(simplifiedPlan, "Name", "Sort"), plan);
+        UNIT_ASSERT_C(plan.Contains("Join"), plan);
+        AssertProjectionMapRulesApplied(simplifiedPlan, plan);
+        AssertRuleApplied(simplifiedPlan, "Push semantic rename", plan);
     }
 
     Y_UNIT_TEST(ProjectionNormalizationFocusedMapRules) {

@@ -44,7 +44,7 @@ struct TSchemaResponse {
 };
 
 struct TEvSchemaResponse: public NActors::TEventLocal<TEvSchemaResponse, EEv::EvSchemaResponse>
-                             , public TSchemaResponse {
+                        , public TSchemaResponse {
     TEvSchemaResponse(
         const TString& path,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,

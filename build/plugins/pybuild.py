@@ -792,7 +792,7 @@ def onpy_constructor(unit, arg):
     if ':' not in arg:
         arg = arg + '=init'
     else:
-        arg[arg.index(':')] = '='
+        arg = arg.replace(':', '=', 1)
     unit.onresource(['DONT_COMPRESS', '-', 'py/constructors/{}'.format(arg)])
 
 

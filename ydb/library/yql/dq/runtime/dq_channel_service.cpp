@@ -1153,8 +1153,11 @@ void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMa
     for (auto& [info, descriptor] : InputDescriptors) {
         if (!descriptor->IsFinished() && descriptor->PeerGenMajor) {
             if (descriptor->PeerActorId != peerActorId || descriptor->PeerGenMajor != peerGenMajor) {
-                descriptor->AbortChannel(TStringBuilder() << "PeerActorId=" << descriptor->PeerActorId << ", PeerGenMajor=" << descriptor->PeerGenMajor
-                    << " DO NOT MATCH peerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor);
+                descriptor->AbortChannel(
+                    TStringBuilder() << "PeerActorId=" << descriptor->PeerActorId << ", PeerGenMajor=" << descriptor->PeerGenMajor
+                    << " DO NOT MATCH peerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor
+                    << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog()
+                );
                 failedBuffers.push_back(info);
                 LOG_T(LogPrefix << "ID ERASE/FAIL, ChannelId=" << descriptor->Info.ChannelId
                     << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -1181,7 +1184,10 @@ void TNodeState::FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenM
     }
 
     for (auto& [info, descriptor] : OutputDescriptors) {
-        descriptor->AbortChannel(TStringBuilder() << "PeerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor);
+        descriptor->AbortChannel(
+            TStringBuilder() << "PeerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor
+            << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog()
+        );
     }
 
     *OutputBufferCount -= OutputDescriptors.size();

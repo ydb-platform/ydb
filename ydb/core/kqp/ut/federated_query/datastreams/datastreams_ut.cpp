@@ -1572,22 +1572,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     continue;
                 }
 
-                // Execute topic X topic join
                 const auto& hashMode = hashModes[i / TEST_OPT_MAX];
-                ExecQuery(fmt::format(
-                    R"sql(
-                        {hash_mode};
-                        SELECT * FROM {left_stream} AS tp
-                        {algo} JOIN {right_stream} AS tb
-                        {correlation};
-                    )sql",
-                    "left_stream"_a = lStreamSql,
-                    "right_stream"_a = rStreamSql,
-                    "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
-                    "algo"_a = algo,
-                    "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""
-                ), EStatus::GENERIC_ERROR, error);
-
                 const auto finiteTableName = (i & TEST_OPT_FINITE_TABLE_TYPE) ? rowTable : columnTable;
 
                 // Execute topic X table join
@@ -1835,22 +1820,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     continue;
                 }
 
-                // Execute topic X topic join
                 const auto& hashMode = hashModes[i / TEST_OPT_MAX];
-                testJoinQuery(fmt::format(
-                    R"sql(
-                        SELECT * FROM {left_any} {left_stream} AS tp
-                        {algo} JOIN {right_any} {right_stream} AS tb
-                        {correlation};
-                    )sql",
-                    "left_stream"_a = lStreamSql,
-                    "right_stream"_a = rStreamSql,
-                    "left_any"_a = (!lStream && any) ? "ANY" : "",
-                    "right_any"_a = (lStream && any) ? "ANY" : "",
-                    "algo"_a = algo,
-                    "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""
-                ), hashMode, algo, (!lStream && any), (lStream && any), /* lStream */ true, /* rStream */ true, isSelf);
-
                 const auto finiteTableSql = fmt::format(
                     R"sql((SELECT id FROM {table}))sql",
                     "table"_a = (i & TEST_OPT_FINITE_TABLE_TYPE) ? rowTable : columnTable

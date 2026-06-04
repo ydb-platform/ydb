@@ -39,7 +39,8 @@ TExprBase KqpRewriteWriteConstraint(const TExprBase& node, TExprContext& ctx) {
     .Done();
 
     auto structToCheck = structArg.Ptr();
-    if (input->GetTypeAnn()) {
+    AFL_ENSURE(input->GetTypeAnn());
+    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
         const auto* structType = input->GetTypeAnn()->Cast<TStructExprType>();
         if (IsTwoRowStruct(structType)) {
             structToCheck = Build<TCoMember>(ctx, node.Pos())

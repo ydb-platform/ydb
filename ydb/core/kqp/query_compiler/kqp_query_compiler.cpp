@@ -1871,6 +1871,11 @@ private:
                                     })) {
                                         affectedIndexes.push_back(index);
                                 }
+                                if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
+                                        return columnsSet.contains(column) && !mainKeyColumnsSet.contains(column);
+                                    })) {
+                                        affectedKeysIndexes.insert(index);
+                                }
                             } else {
                                 affectedIndexes.push_back(index);
                                 affectedKeysIndexes.insert(index);
@@ -1984,6 +1989,9 @@ private:
                     indexSettings->SetIndexName(indexDescription.Name);
                     FillTableId(*implTable, *indexSettings->MutableTable());
 
+                    Cerr << "TEST >> INDEX :: " << (indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique)
+                        << " -- " << settings.Mode().StringValue()
+                        << " -- " << affectedKeysIndexes.contains(index) << Endl;
                     indexSettings->SetIsUniq(
                         indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
                         && settings.Mode().StringValue() != "delete"
@@ -2141,7 +2149,6 @@ private:
         }
 
         if (const auto isIndexImplTable = settings.IsIndexImplTable(); isIndexImplTable.StringValue() == "true") {
-            AFL_ENSURE(!Config->GetEnableIndexStreamWrite());
             settingsProto.SetIsIndexImplTable(true);
         }
     }

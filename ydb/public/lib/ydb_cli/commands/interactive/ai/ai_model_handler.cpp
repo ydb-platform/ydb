@@ -15,8 +15,10 @@
 
 #include <library/cpp/json/json_writer.h>
 
-#include <util/string/strip.h>
 #include <util/string/printf.h>
+#include <util/string/split.h>
+#include <util/string/strip.h>
+#include <util/string/subst.h>
 #include <util/system/env.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -76,6 +78,161 @@ INTERACTION GUIDELINES:
 
 REMINDER: answer in plain terminal text only, with no Markdown — this applies especially when you summarize documentation or tool output.
 )";
+
+TStringBuf TrimSpaces(TStringBuf s) {
+    while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) {
+        s.Skip(1);
+    }
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) {
+        s.Chop(1);
+    }
+    return s;
+}
+
+// ASCII alphanumerics, '_' and any UTF-8 lead/continuation byte (>= 0x80, e.g. Cyrillic) count
+// as "word" bytes, so emphasis markers glued to a word are not mistaken for formatting.
+bool IsWordByte(unsigned char c) {
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c == '_' || c >= 0x80;
+}
+
+// A line made only of '|', '-', ':' and spaces (with at least one '-') is a Markdown table
+// separator or a horizontal rule. Such lines carry no information and only add noise.
+bool IsTableSeparatorLine(TStringBuf trimmed) {
+    if (trimmed.empty()) {
+        return false;
+    }
+    bool hasDash = false;
+    for (const char c : trimmed) {
+        if (c == '-') {
+            hasDash = true;
+        } else if (c != '|' && c != ':' && c != ' ') {
+            return false;
+        }
+    }
+    return hasDash;
+}
+
+// Remove paired single-char emphasis markers ('*' or '_') while keeping markers that are part of
+// the text: "SELECT *" (marker followed by a space) or "snake_case" (marker glued to a word on
+// both sides). Only a marker that opens right before non-space text and closes right after
+// non-space text, on a word boundary, is treated as emphasis and dropped.
+void RemovePairedEmphasis(TString& s, char marker) {
+    TString out;
+    out.reserve(s.size());
+    const size_t n = s.size();
+    for (size_t i = 0; i < n;) {
+        if (s[i] == marker) {
+            const char prevOut = out.empty() ? '\0' : out.back();
+            const char next = (i + 1 < n) ? s[i + 1] : '\0';
+            const bool canOpen = !IsWordByte(prevOut) && prevOut != marker
+                && next != '\0' && next != ' ' && next != '\t' && next != marker;
+            if (canOpen) {
+                size_t close = TString::npos;
+                for (size_t j = i + 1; j < n; ++j) {
+                    if (s[j] != marker) {
+                        continue;
+                    }
+                    const char cprev = s[j - 1];
+                    const char cnext = (j + 1 < n) ? s[j + 1] : '\0';
+                    if (cprev != ' ' && cprev != '\t' && cprev != marker && !IsWordByte(cnext) && cnext != marker) {
+                        close = j;
+                        break;
+                    }
+                }
+                if (close != TString::npos) {
+                    for (size_t k = i + 1; k < close; ++k) {
+                        out.push_back(s[k]);
+                    }
+                    i = close + 1;
+                    continue;
+                }
+            }
+        }
+        out.push_back(s[i++]);
+    }
+    s = std::move(out);
+}
+
+TString StripInlineMarkdown(TStringBuf line) {
+    size_t start = 0;
+    while (start < line.size() && line[start] == ' ') {
+        ++start;
+    }
+
+    bool strippedBlock = false;
+    // Blockquote markers: '>' optionally followed by a space, possibly repeated for nesting.
+    while (start < line.size() && line[start] == '>') {
+        ++start;
+        if (start < line.size() && line[start] == ' ') {
+            ++start;
+        }
+        strippedBlock = true;
+    }
+    // Heading markers: 1-6 '#' followed by a space.
+    size_t hashes = 0;
+    while (start + hashes < line.size() && line[start + hashes] == '#') {
+        ++hashes;
+    }
+    if (1 <= hashes && hashes <= 6 && start + hashes < line.size() && line[start + hashes] == ' ') {
+        start += hashes + 1;
+        strippedBlock = true;
+    }
+
+    // Keep the original leading spaces unless a block marker was stripped.
+    TString result(strippedBlock ? line.substr(start) : line);
+    SubstGlobal(result, "**", "");     // bold
+    RemovePairedEmphasis(result, '*'); // italic; keeps "SELECT *" intact
+    RemovePairedEmphasis(result, '_'); // italic; keeps snake_case identifiers intact
+    SubstGlobal(result, "`", "");      // inline code
+    return result;
+}
+
+// Turn a Markdown table row "| a | b |" into "a | b": drop the outer pipes and clean the cells.
+// Column alignment is impossible anyway, since the terminal renderer collapses repeated spaces.
+TString StripTableRow(TStringBuf trimmed) {
+    if (trimmed.StartsWith('|')) {
+        trimmed.Skip(1);
+    }
+    if (trimmed.EndsWith('|')) {
+        trimmed.Chop(1);
+    }
+    return StripInlineMarkdown(TrimSpaces(trimmed));
+}
+
+// The model is instructed to answer in plain text, but it still tends to emit Markdown.
+// Our output is printed verbatim to the terminal (it is not rendered), so convert the most
+// common Markdown markup to plain text before displaying it. This affects only what the user
+// sees: the model's own conversation history and the audit log keep the original text.
+TString MarkdownToPlainText(TStringBuf text) {
+    TStringBuilder result;
+    bool inCodeFence = false;
+    bool first = true;
+    for (const TStringBuf line : StringSplitter(text).Split('\n')) {
+        const TStringBuf trimmed = TrimSpaces(line);
+        if (trimmed.StartsWith("```")) {
+            inCodeFence = !inCodeFence; // drop the ``` fence line itself, keep its content
+            continue;
+        }
+
+        TString converted;
+        if (inCodeFence) {
+            converted = TString(line); // keep code content verbatim
+        } else if (IsTableSeparatorLine(trimmed)) {
+            continue; // drop Markdown table separators / horizontal rules
+        } else if (trimmed.StartsWith('|')) {
+            converted = StripTableRow(trimmed);
+        } else {
+            converted = StripInlineMarkdown(line);
+        }
+
+        if (!first) {
+            result << '\n';
+        }
+        first = false;
+        result << converted;
+    }
+    return result;
+}
 
 TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
     TStringBuilder builder;
@@ -154,7 +311,7 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                     title += Sprintf(" (after %.2fs)", elapsed);
                 }
             }
-            ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
+            ::NYdb::NConsoleClient::PrintFtxuiMessage(MarkdownToPlainText(StripStringRight(output.Text)), title);
 
             if (AuditEnabled) {
                 NJson::TJsonValue auditInfo;

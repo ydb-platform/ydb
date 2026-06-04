@@ -275,16 +275,11 @@
   #include <opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_options.h>
   #include <opentelemetry/logs/provider.h>
   #include <opentelemetry/sdk/logs/batch_log_record_processor_factory.h>
-  #include <opentelemetry/sdk/logs/batch_log_record_processor_options.h>
   #include <opentelemetry/sdk/logs/logger_provider_factory.h>
   #include <opentelemetry/sdk/resource/resource.h>
   #include <library/cpp/logger/backend.h>
   #include <library/cpp/logger/record.h>
-  #include <cstdlib>
-  #include <iostream>
   #include <memory>
-  #include <string>
-  #include <string_view>
   
   namespace otlp     = opentelemetry::exporter::otlp;
   namespace logs_sdk = opentelemetry::sdk::logs;
@@ -293,42 +288,6 @@
   
   namespace {
   
-  std::string GetEnv(const char* name, const char* defaultValue) {
-    if (const char* v = std::getenv(name); v && *v) {
-        return v;
-    }
-    return defaultValue;
-  }
-  
-  // grpc://host:port/database -> endpoint host:port, database /database
-  bool ParseYdbConnectionString(std::string_view cs, std::string& endpoint, std::string& database) {
-    constexpr std::string_view prefix = "grpc://";
-    if (!cs.starts_with(prefix)) {
-        return false;
-    }
-    cs.remove_prefix(prefix.size());
-    const auto slash = cs.find('/');
-    if (slash == std::string_view::npos) {
-        return false;
-    }
-    endpoint = std::string(cs.substr(0, slash));
-    database = std::string(cs.substr(slash));
-    if (database.empty()) {
-        database = "/local";
-    }
-    return !endpoint.empty();
-  }
-
-  std::string OtlpGrpcEndpointFromEnv() {
-    std::string ep = GetEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317");
-    if (ep.rfind("http://", 0) == 0) {
-        ep.erase(0, 7);
-    } else if (ep.rfind("https://", 0) == 0) {
-        ep.erase(0, 8);
-    }
-    return ep;
-  }
-
   class TOtelLogBackend final : public TLogBackend {
   public:
     explicit TOtelLogBackend(opentelemetry::nostd::shared_ptr<logs_api::Logger> logger)
@@ -361,50 +320,28 @@
   } // namespace
   
   int main() {
-    std::string ydbEndpoint = "localhost:2136";
-    std::string ydbDatabase = "/local";
-    if (const std::string cs = GetEnv("YDB_CONNECTION_STRING", ""); !cs.empty()) {
-        if (!ParseYdbConnectionString(cs, ydbEndpoint, ydbDatabase)) {
-            std::cerr << "Invalid YDB_CONNECTION_STRING: " << cs << '\n';
-            return 1;
-        }
-    } else {
-        ydbEndpoint = GetEnv("YDB_ENDPOINT", ydbEndpoint.c_str());
-        ydbDatabase = GetEnv("YDB_DATABASE", ydbDatabase.c_str());
-    }
-    const std::string serviceName =
-        GetEnv("OTEL_SERVICE_NAME", "ydb-cpp-sdk-otel-logs-sample");
-    const std::string otlpEndpoint = OtlpGrpcEndpointFromEnv();
-    std::cout << "YDB endpoint=" << ydbEndpoint << " database=" << ydbDatabase << '\n'
-              << "OTLP gRPC endpoint=" << otlpEndpoint << " service=" << serviceName << '\n';
+    // 1. Настраиваем провайдер логов OTel с OTLP-экспортёром
     otlp::OtlpGrpcLogRecordExporterOptions exporterOpts;
-    exporterOpts.endpoint = otlpEndpoint;
-    exporterOpts.use_ssl_credentials = false;
-    auto exporter = otlp::OtlpGrpcLogRecordExporterFactory::Create(exporterOpts);
-    auto processor = logs_sdk::BatchLogRecordProcessorFactory::Create(
-        std::move(exporter), logs_sdk::BatchLogRecordProcessorOptions{});
-    auto res = resource::Resource::Create({{"service.name", serviceName}});
+    exporterOpts.endpoint = "localhost:4317";
+    auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(exporterOpts);
+    auto processor = logs_sdk::BatchLogRecordProcessorFactory::Create(std::move(exporter));
+    auto res       = resource::Resource::Create({{"service.name", "ydb-cpp-sdk-otel-logs-sample"}});
+
     std::shared_ptr<logs_api::LoggerProvider> provider(
         logs_sdk::LoggerProviderFactory::Create(std::move(processor), res));
     logs_api::Provider::SetLoggerProvider(provider);
+
     auto logger = provider->GetLogger("ydb-cpp-sdk");
-    {
-        TOtelLogBackend startupLog(logger);
-        const char msg[] = "ydb-cpp-sdk otel logs sample started";
-        startupLog.WriteData(TLogRecord(TLOG_INFO, msg, sizeof(msg) - 1));
-    }
+
+    // 2. Передаём мост в драйвер YDB
     auto config = NYdb::TDriverConfig()
-                      .SetEndpoint(ydbEndpoint)
-                      .SetDatabase(ydbDatabase)
-                      .SetLog(std::make_unique<TOtelLogBackend>(logger));
+        .SetEndpoint("localhost:2136")
+        .SetDatabase("/local")
+        .SetLog(std::make_unique<TOtelLogBackend>(logger));
 
     NYdb::TDriver driver(config);
+    // ... используйте driver ...
     driver.Stop(true);
-    auto* sdkProvider = static_cast<logs_sdk::LoggerProvider*>(provider.get());
-    sdkProvider->ForceFlush();
-    sdkProvider->Shutdown();
-    std::cout << "logs-app finished; logs exported to the OpenTelemetry collector\n";
-    return 0;
   }
   ```
 

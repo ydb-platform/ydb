@@ -13,12 +13,12 @@ on:
             required: true
             type: number
         base_branch:
-            description: 'Branch for YDB scripts and create_issues --branch'
+            description: 'Branch for YDB scripts and create_issues --branch (PR runs use the merged PR base ref)'
             required: false
             type: string
             default: main
         build_type:
-            description: 'Optional single build type override (empty = profiles from mute_issue_and_digest_config.json)'
+            description: 'Optional single build type override (empty = use build types from mute_issue_and_digest_config.json)'
             required: false
             type: string
             default: ''
@@ -114,14 +114,12 @@ jobs:
         run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR
-        if: steps.create_issues.outputs.had_activity == 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
 
       - name: Comment PR
-        if: steps.create_issues.outputs.had_activity == 'true'
         uses: actions/github-script@v8
         with:
           github-token: ${{ env.GH_TOKEN }}
@@ -149,6 +147,9 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }}
 
+      # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)
+
+  # Fast-unmute on all merged mute-unmute PRs (including asan/msan without mute-create-issues).
   sync-manual-fast-unmute:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |

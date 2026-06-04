@@ -1052,9 +1052,11 @@ def create_mute_issues(
     manual_fast_unmute_issue_by_test = map_tests_to_manual_fast_unmute_issue_url(issues_index)
     prepared_tests_by_suite = {}
     temp_tests_by_suite = {}
-
+    
+    # Create set of muted tests for faster lookup
     muted_tests_set = {test['full_name'] for test in tests_from_file}
-
+    
+    # Check and close issues if needed
     closed_issues = []
     partially_unmuted_issues = []
     if close_issues:
@@ -1299,8 +1301,6 @@ def create_mute_issues(
             
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
             gh_out.write(f"created_issues_file={file_path}\n")
-            had_activity = bool(results or closed_issues or partially_unmuted_issues)
-            gh_out.write(f"had_activity={'true' if had_activity else 'false'}\n")
 
         print(f"Result saved to env variable GITHUB_OUTPUT by key created_issues_file")
 

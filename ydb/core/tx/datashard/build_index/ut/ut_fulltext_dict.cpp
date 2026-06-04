@@ -249,8 +249,8 @@ __ydb_token = red, __ydb_freq = 2
         server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
-        CreateFulltextCompactTable(server, sender, "table-index", keyType);
-        CreateFulltextCompactTable(server, sender, "table-compact", keyType);
+        CreateFulltextCompactTable(server, sender, "table-index", keyType, true);
+        CreateFulltextCompactTable(server, sender, "table-compact", keyType, false);
         if (WithRelevance) {
             CreateDictTable(server, sender);
         }
@@ -322,50 +322,50 @@ __ydb_token = red, __ydb_freq = 2
         TString expected;
         if (WithRelevance) {
             if (keyType[0] == 'U') {
-                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x41\x02\x04\x01\n\
-__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x07\x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x41\x04\x01\n\
-__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x41\x10\n\
-__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x03\n\
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x41\x02\x04\x01\n\
+__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x07\x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x41\x04\x01\n\
+__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x41\x10\n\
+__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
 ";
             } else {
-                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x42\x02\x04\x01\n\
-__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x0E\x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\x41\x04\x01\n\
-__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x08\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x08\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x42\x10\n\
-__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x06\n\
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x42\x02\x04\x01\n\
+__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x0E\x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x41\x04\x01\n\
+__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x42\x10\n\
+__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
 ";
             }
         } else {
             if (keyType[0] == 'U') {
-                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x04\x01\n\
-__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x07\x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
-__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\n\
-__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x01\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x03\n\
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x04\x01\n\
+__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x07\x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
+__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
 ";
             } else {
-                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\x04\x01\n\
-__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x0E\x04\n\
-__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\x01\x01\n\
-__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x08\x01\x01\n\
-__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x04\n\
-__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x08\n\
-__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\n\
-__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x02\x02\n\
-__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = 1, __ydb_segment = \x06\n\
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x04\x01\n\
+__ydb_token = and, __ydb_max_id = 11, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x0E\x04\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x01\x01\n\
+__ydb_token = apple, __ydb_max_id = 6, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
 ";
             }
         }

@@ -3,6 +3,7 @@
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -1151,7 +1152,7 @@ public:
         // Fixed column order: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
         TVector<TCell> cells(5);
         cells[1] = TCell::Make((TDocId)0);
-        cells[2] = TCell::Make((ui64)0);
+        cells[2] = TCell::Make((NTableIndex::NFulltext::TGen)0);
         cells[3] = TCell::Make(Added);
         // indexImplDictTable columns: __ydb_token, __ydb_freq
         TVector<TCell> dictCells(2);

@@ -853,7 +853,7 @@ key = 4, data = (empty maybe), __ydb_length = 2
 
             CreateMainTable(server, sender, keyType);
             FillMainTable(server, sender);
-            CreateFulltextCompactTable(server, sender, "table-index", keyType);
+            CreateFulltextCompactTable(server, sender, "table-index", keyType, true);
             if (WithRelevance) {
                 CreateDocsTable(server, sender, keyType);
             }

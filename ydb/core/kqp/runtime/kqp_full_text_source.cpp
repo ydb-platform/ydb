@@ -888,11 +888,11 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
             // row = { max_id, gen, added, segment }
             auto row = Results[ResultIdx]->GetCells(RowIdx);
             RowIdx++;
-            ui64 gen = row[1].AsValue<ui64>();
+            NTableIndex::NFulltext::TGen gen = row[1].AsValue<NTableIndex::NFulltext::TGen>();
             bool added = row[2].AsValue<bool>();
             TConstArrayRef<ui8> buf((const ui8*)row[3].Data(), row[3].Size());
             Reader.Add(added, buf);
-            if (gen == UINT64_MAX) {
+            if (gen == std::numeric_limits<NTableIndex::NFulltext::TGen>::max()) {
                 // This is the last segment, we can start reading
                 Started = true;
                 Reader.Start();

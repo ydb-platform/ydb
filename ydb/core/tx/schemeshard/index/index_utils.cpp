@@ -427,7 +427,8 @@ auto CalcFulltextCompactImplTableDescImpl(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType)
+    const NKikimrSchemeOp::EIndexType indexType,
+    bool isBuild)
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns;
@@ -474,8 +475,8 @@ auto CalcFulltextCompactImplTableDescImpl(
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::GenColumn);
-        col->SetType("Uint64");
-        col->SetTypeId(Ydb::Type::UINT64);
+        col->SetType(isBuild ? "Uint64" : NScheme::TypeName(NFulltext::GenType));
+        col->SetTypeId(isBuild ? Ydb::Type::UINT64 : NFulltext::GenType);
         col->SetNotNull(true);
         implTableDesc.AddKeyColumnNames(NFulltext::GenColumn);
     }
@@ -810,9 +811,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType)
+    const NKikimrSchemeOp::EIndexType indexType,
+    bool isBuild)
 {
-    return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
+    return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, isBuild);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
@@ -820,9 +822,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType)
+    const NKikimrSchemeOp::EIndexType indexType,
+    bool isBuild)
 {
-    return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
+    return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, isBuild);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(

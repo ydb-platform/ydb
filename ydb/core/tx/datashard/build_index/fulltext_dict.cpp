@@ -37,7 +37,7 @@ using namespace NKikimr::NFulltext;
  * - Source columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
  * - Destination columns: __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment
  * - All source segments are expected to be unique, but with random __ydb_generation
- * - Output __ydb_generation is always UINT64_MAX
+ * - Output __ydb_generation is always UINT32_MAX
  * For both:
  * - indexImplDictTable destination columns: __ydb_token, __ydb_freq
  *
@@ -158,7 +158,11 @@ public:
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
             addType(uploadTypes, TokenColumn);
             addType(uploadTypes, MaxIdColumn);
-            addType(uploadTypes, GenColumn);
+            {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::UINT32);
+                uploadTypes->emplace_back(GenColumn, type);
+            }
             addType(uploadTypes, AddedColumn);
             addType(uploadTypes, SegmentColumn);
             PostingBuf = Uploader.AddDestination(request.GetPostingTableName(), std::move(uploadTypes));
@@ -369,7 +373,7 @@ protected:
             TVector<TCell> uploadKey = {
                 TCell(LastToken),
                 KeyIs32 ? TCell::Make((ui32)maxId) : TCell::Make(maxId),
-                TCell::Make(UINT64_MAX),
+                TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()),
             };
             TVector<TCell> uploadValue = {
                 TCell::Make(true),

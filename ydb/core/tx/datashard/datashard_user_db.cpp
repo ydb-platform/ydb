@@ -9,6 +9,8 @@
 
 namespace NKikimr::NDataShard {
 
+using NTableIndex::NFulltext::TGen;
+
 TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& mvccVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
     : Self(self)
     , Db(db)
@@ -306,25 +308,26 @@ void TDataShardUserDb::InsertFulltext(
         key[0].ToStringBuf() == rangeFrom[0].AsBuf()) {
         isPartitionBegin = true;
         beginMaxId = asKey(rangeFrom[1]);
-        ui64 beginGen = rangeFrom[2].AsValue<ui64>();
-        if (!userTable.Range.FromInclusive && beginGen == UINT64_MAX && beginMaxId == keyTypeMax) {
+        TGen beginGen = rangeFrom[2].AsValue<TGen>();
+        if (!userTable.Range.FromInclusive && beginGen == std::numeric_limits<TGen>::max() &&
+            beginMaxId == keyTypeMax) {
             isPartitionBegin = false;
         }
     }
 
     ui64 endMaxId = keyTypeMax;
-    ui64 endGen = UINT64_MAX;
+    TGen endGen = std::numeric_limits<TGen>::max();
     if (rangeTo.size() == 3 &&
         rangeTo[2].Size() > 0 &&
         key[0].ToStringBuf() == rangeTo[0].AsBuf()) {
         // Adding segments into the first part of token lists is allowed when split between two shards
         // But in that case, we have to limit lists by maxid/gen from the partitioning key instead of UINT64_MAX/UINT64_MAX
         endMaxId = asKey(rangeTo[1]);
-        endGen = rangeTo[2].AsValue<ui64>();
+        endGen = rangeTo[2].AsValue<TGen>();
         if (!userTable.Range.ToInclusive) {
             if (!endGen) {
                 endMaxId--;
-                endGen = UINT64_MAX;
+                endGen = std::numeric_limits<TGen>::max();
             } else {
                 endGen--;
             }
@@ -357,8 +360,8 @@ void TDataShardUserDb::InsertFulltext(
 
     NFulltext::TDeltaReader reader(rowSegment, withRelevance, keySigned);
 
-    ui64 maxGen = UINT64_MAX;
-    auto insertSegments = [&](bool unlimited, ui64 lastMaxId, ui64 lastGen, bool added, NFulltext::IDeltaReader& reader) {
+    TGen maxGen = std::numeric_limits<TGen>::max();
+    auto insertSegments = [&](bool unlimited, ui64 lastMaxId, TGen lastGen, bool added, NFulltext::IDeltaReader& reader) {
         ui64 docId = 0;
         ui32 freq = 0;
         if (!reader.Read(docId, freq)) {
@@ -379,7 +382,7 @@ void TDataShardUserDb::InsertFulltext(
                 }
             }
             ui64 maxId = last ? lastMaxId : docId-1;
-            ui64 gen = last ? lastGen : UINT64_MAX;
+            TGen gen = last ? lastGen : std::numeric_limits<TGen>::max();
             // Adding segments into the second part of token lists is forbidden when split between two shards
             // I.e. first shard: maxid=100 gen=10 second shard: maxid=100 gen=20
             // We can only insert into the first shard
@@ -388,7 +391,7 @@ void TDataShardUserDb::InsertFulltext(
             TVector<TRawTypeValue> newKey;
             newKey.push_back(key[0]);
             newKey.emplace_back(&maxId, keySize, keyTypeId);
-            newKey.emplace_back(&gen, sizeof(gen), NScheme::NTypeIds::Uint64);
+            newKey.emplace_back(&gen, sizeof(gen), NTableIndex::NFulltext::GenType);
             TVector<const NIceDb::TUpdateOp> newOps;
             newOps.emplace_back(addedTag, NTable::ECellOp::Set, TRawTypeValue(&added, 1, NScheme::NTypeIds::Bool));
             newOps.emplace_back(segmentTag, NTable::ECellOp::Set, TRawTypeValue(newSegment.data(), newSegment.size(), NScheme::NTypeIds::String));
@@ -399,7 +402,7 @@ void TDataShardUserDb::InsertFulltext(
         return true;
     };
 
-    auto findMaxId = [&](TConstArrayRef<const TRawTypeValue> minKey, ui64& maxId, ui64& gen) {
+    auto findMaxId = [&](TConstArrayRef<const TRawTypeValue> minKey, ui64& maxId, TGen& gen) {
         auto iter = Db.IterateRange(localTableId, NTable::TKeyRange{minKey, {}, true, false}, {}, version, txMap, txObserver);
         auto ready = iter->Next(NTable::ENext::Data);
         if (LockMode == ELockMode::Optimistic && InvisibleRowSkips > 0) {
@@ -416,7 +419,7 @@ void TDataShardUserDb::InsertFulltext(
             auto existingKey = iter->GetKey().Cells();
             if (existingKey[0].AsBuf() == key[0].ToStringBuf()) {
                 maxId = asKey(existingKey[1]);
-                gen = existingKey[2].AsValue<ui64>();
+                gen = existingKey[2].AsValue<TGen>();
             }
             IncreaseSelectCounters(existingKey);
             break;
@@ -471,11 +474,12 @@ void TDataShardUserDb::InsertFulltext(
     ui64 zero = 0;
     reader.Save();
     while (reader.Read(docId, freq)) {
-        ui64 maxId = 0, gen = 0;
+        ui64 maxId = 0;
+        TGen gen = 0;
         auto minKey = TVector<const TRawTypeValue>{
             key[0],
             TRawTypeValue(&docId, keySize, keyTypeId),
-            TRawTypeValue(&zero, sizeof(zero), NScheme::NTypeIds::Uint64),
+            TRawTypeValue(&zero, sizeof(TGen), NTableIndex::NFulltext::GenType),
         };
         if (!findMaxId(minKey, maxId, gen)) {
             return;
@@ -483,13 +487,13 @@ void TDataShardUserDb::InsertFulltext(
         if (!gen) {
             // Copy the rest of reader to new segment(s)
             // The last new segment should have maxid == endMaxId and gen = endGen
-            // Previous new segments should have maxid < endMaxId and gen == UINT64_MAX
+            // Previous new segments should have maxid < endMaxId and gen == MAX
             reader.Restore();
             insertSegments(false, endMaxId, endGen, rowAdded, reader);
             reader.Save();
             continue;
         }
-        maxGen = (maxId == endMaxId ? endGen : UINT64_MAX);
+        maxGen = (maxId == endMaxId ? endGen : std::numeric_limits<TGen>::max());
         // Count new documents in the segment to assign the new 'gen'
         ui32 count = 1;
         while (reader.Read(docId, freq) && docId <= maxId) {
@@ -510,7 +514,7 @@ void TDataShardUserDb::InsertFulltext(
             }
             // Copy from merger to new segment(s)
             // Last new segment should have maxid == maxId and maxGen
-            // All previous new segments should have maxid < maxId and gen == UINT64_MAX
+            // All previous new segments should have maxid < maxId and gen == MAX
             merger.Start();
             insertSegments(false, maxId, maxGen, true, merger);
         } else {

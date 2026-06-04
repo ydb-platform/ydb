@@ -771,16 +771,31 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPtr node) {
-    auto opReplaceAlias = TKqpOpReplaceAlias(node);
-    const auto input = ExprNodeToOperator(opReplaceAlias.Input().Ptr());
-    auto alias = TString(opReplaceAlias.Alias());
+    const auto input = ExprNodeToOperator(TKqpOpReplaceAlias(node).Input().Ptr());
+    const auto inputIUs = input->GetOutputIUs();
+    const auto* outputStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     TVector<TMapElement> mapElements;
-    for (const auto& iu: input->GetOutputIUs()) {
-        mapElements.push_back(TMapElement(TInfoUnit(alias, iu.GetColumnName()), iu, input->Pos, &Ctx));
+    TInfoUnitSet renamedSources;
+    THashSet<TString> outputColumnNames;
+
+    for (const auto& item : outputStructType->GetItems()) {
+        const auto output = TInfoUnit(TString(item->GetName()));
+        const auto source = ResolveVisibleIUByColumnName(inputIUs, TInfoUnit(output.GetColumnName()));
+        Y_ENSURE(source, "Cannot resolve source column " << output.GetColumnName() << " for ReplaceAlias");
+
+        mapElements.emplace_back(output, *source, node->Pos(), &Ctx, &PlanProps);
+        renamedSources.insert(*source);
+        outputColumnNames.insert(output.GetColumnName());
     }
 
-    return MakeIntrusive<TOpMap>(input, input->Pos, mapElements, true);
+    for (const auto& iu : inputIUs) {
+        if (outputColumnNames.contains(iu.GetColumnName()) && !renamedSources.contains(iu)) {
+            mapElements.emplace_back(MakeIgnoreIU(PlanProps), iu, node->Pos(), &Ctx, &PlanProps);
+        }
+    }
+
+    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, true);
 }
 
 } // namespace NKikimr::Nkqp

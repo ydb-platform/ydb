@@ -74,7 +74,7 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
          ...
      }
 
-    ````
+    ```
 
   - database/sql
 

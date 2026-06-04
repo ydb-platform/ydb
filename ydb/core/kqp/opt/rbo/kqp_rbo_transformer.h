@@ -63,7 +63,7 @@ public:
     NYql::IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
     NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode& input) final;
     TStatus DoApplyAsyncChanges(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
-    void AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan);
+    void AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan, const THashMap<TString, ui64>& appliedRules);
 
     void Rewind() override;
 

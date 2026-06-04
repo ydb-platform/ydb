@@ -7,19 +7,30 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <util/system/env.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <algorithm>
 #include <ctime>
@@ -258,6 +269,119 @@ NJson::TJsonValue GetSimplifiedPlan(const TString& plan) {
     const auto simplifiedPlan = planMap.find("SimplifiedPlan");
     UNIT_ASSERT_C(simplifiedPlan != planMap.end(), plan);
     return simplifiedPlan->second;
+}
+
+ui64 GetRuleApplicationCount(const NJson::TJsonValue& simplifiedPlan, const TString& ruleName) {
+    const auto& planMap = simplifiedPlan.GetMapSafe();
+    const auto optimizerStats = planMap.find("OptimizerStats");
+    if (optimizerStats == planMap.end()) {
+        return 0;
+    }
+
+    const auto& statsMap = optimizerStats->second.GetMapSafe();
+    const auto ruleApplications = statsMap.find("RuleApplications");
+    if (ruleApplications == statsMap.end()) {
+        return 0;
+    }
+
+    const auto& rulesMap = ruleApplications->second.GetMapSafe();
+    const auto ruleIt = rulesMap.find(ruleName);
+    return ruleIt == rulesMap.end() ? 0 : ruleIt->second.GetUIntegerSafe();
+}
+
+void AssertRuleApplied(const NJson::TJsonValue& simplifiedPlan, const TString& ruleName, const TString& plan) {
+    const ui64 count = GetRuleApplicationCount(simplifiedPlan, ruleName);
+    UNIT_ASSERT_C(count > 0, "Expected rule to apply: " << ruleName << "\nPlan:\n" << plan);
+}
+
+void AssertProjectionMapRulesApplied(const NJson::TJsonValue& simplifiedPlan, const TString& plan) {
+    const TVector<TString> mapRuleNames = {
+        "Remove identity map",
+        "Prune dead map elements",
+        "Push append map elements",
+    };
+
+    for (const auto& ruleName : mapRuleNames) {
+        AssertRuleApplied(simplifiedPlan, ruleName, plan);
+    }
+}
+
+TIntrusivePtr<TOpRead> MakeTestRead(const TVector<TInfoUnit>& outputIUs, TPositionHandle pos) {
+    TVector<TString> columns;
+    columns.reserve(outputIUs.size());
+    for (const auto& iu : outputIUs) {
+        columns.push_back(iu.GetColumnName());
+    }
+
+    return MakeIntrusive<TOpRead>(
+        "",
+        columns,
+        outputIUs,
+        NYql::EStorageType::RowStorage,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        std::nullopt,
+        ESortDir::None,
+        TPhysicalOpProps{},
+        pos
+    );
+}
+
+TMapElement MakeTestRename(const TString& to, const TString& from, TPositionHandle pos, NYql::TExprContext& exprCtx, TPlanProps& planProps) {
+    return TMapElement(TInfoUnit(to), TInfoUnit(from), pos, &exprCtx, &planProps);
+}
+
+TMapElement MakeTestAppend(const TString& to, const TString& from, TPositionHandle pos, NYql::TExprContext& exprCtx, TPlanProps& planProps) {
+    return TMapElement(TInfoUnit(to), MakeColumnAccess(TInfoUnit(from), pos, &exprCtx, &planProps), false);
+}
+
+TMapElement MakeTestConstantAppend(const TString& to, TPositionHandle pos, NYql::TExprContext& exprCtx) {
+    return TMapElement(TInfoUnit(to), MakeConstant("Int32", "1", pos, &exprCtx), false);
+}
+
+void ComputeLogicalTestProps(TOpRoot& root) {
+    root.ComputeParents();
+    ComputePlanLiveness(root);
+    ComputePlanNameConstraints(root);
+    ComputePlanAliases(root);
+}
+
+struct TMapRuleTestContext {
+    TMapRuleTestContext()
+        : FuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
+        , Config(MakeIntrusive<NYql::TKikimrConfiguration>())
+        , QueryCtx(MakeIntrusive<NYql::TKikimrQueryContext>(FuncRegistry.Get(), CreateDefaultTimeProvider(), CreateDefaultRandomProvider()))
+        , Tables(MakeIntrusive<NYql::TKikimrTablesData>())
+        , UserRequestContext(MakeIntrusive<TUserRequestContext>())
+        , KqpCtx("ut", Config, QueryCtx, Tables, UserRequestContext)
+        , RboCtx(KqpCtx, ExprCtx, TypeCtx, TypeAnnTransformer, *FuncRegistry)
+    {
+    }
+
+    NYql::TExprContext ExprCtx;
+    NYql::TTypeAnnotationContext TypeCtx;
+    NYql::TNullTransformer TypeAnnTransformer;
+    TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FuncRegistry;
+    TIntrusivePtr<NYql::TKikimrConfiguration> Config;
+    TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
+    TIntrusivePtr<NYql::TKikimrTablesData> Tables;
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
+    NOpt::TKqpOptimizeContext KqpCtx;
+    TRBOContext RboCtx;
+};
+
+TVector<std::unique_ptr<IRule>> MakeProjectionMapRulesForTest() {
+    TVector<std::unique_ptr<IRule>> rules;
+    rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+    rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+    rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+    rules.emplace_back(std::make_unique<TPushAppendRule>());
+    rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+    rules.emplace_back(std::make_unique<TPushRenameRule>());
+    rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    return rules;
 }
 
 }
@@ -775,6 +899,57 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(filters[0].IsString(), joinJson.GetStringRobust());
         const auto joinFilter = filters[0].GetStringSafe();
         UNIT_ASSERT_C(joinFilter.Contains("t1.b < t2.c"), joinFilter);
+    }
+
+    Y_UNIT_TEST(NameConstraintsPropagateThroughUnary) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto filter = MakeIntrusive<TOpFilter>(leftRead, pos, MakeColumnAccess(TInfoUnit("a"), pos, &exprCtx, &planProps));
+        auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(filter, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, {"a"});
+
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
+        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(filter.get(), 0).contains(TInfoUnit("a")));
+    }
+
+    Y_UNIT_TEST(NameConstraintsMapRenameHidesForbiddenSource) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto leftMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{MakeTestRename("b", "a", pos, exprCtx, planProps)});
+        auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, {"a"});
+
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
+        UNIT_ASSERT(!root.PlanProps.NameConstraints.GetForbiddenOut(leftMap.get(), 0).contains(TInfoUnit("a")));
+    }
+
+    Y_UNIT_TEST(NameConstraintsMapAppendDoesNotHideForbiddenSource) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto leftMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{MakeTestAppend("b", "a", pos, exprCtx, planProps)});
+        auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, {"a"});
+
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
+        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(leftMap.get(), 0).contains(TInfoUnit("a")));
     }
 
     bool HasParam(const std::string& ast, const std::string& param) {
@@ -2185,6 +2360,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    std::set<ui32> MakeTPC_YqlSingleQuerySkipList(const EBenchType type, const ui32 queryId) {
+        std::set<ui32> skipList;
+        for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
+            if (qId != queryId) {
+                skipList.insert(qId);
+            }
+        }
+        return skipList;
+    }
+
+    void RunTPCH_YqlSingleQueryTest(const ui32 queryId, const bool expectedSuccess = true) {
+        std::set<ui32> expectedSuccessQueries;
+        if (expectedSuccess) {
+            expectedSuccessQueries.insert(queryId);
+        } else {
+            // An empty queriesStatus set means all non-skipped queries are expected to succeed.
+            expectedSuccessQueries.insert(BenchmarkQueryCount[EBenchType::TPCH] + 1);
+        }
+
+        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, std::move(expectedSuccessQueries),
+                            MakeTPC_YqlSingleQuerySkipList(EBenchType::TPCH, queryId),
+                            /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
+    }
+
     void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
@@ -2390,11 +2589,571 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(ProjectionNormalizationComplexPropagation) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[EBenchType::TPCH], BenchmarkSchemaPath[EBenchType::TPCH], /*useColumnStore*/ true);
+
+        const TString query = R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            $zero_i32 = cast(0 as Int32);
+            $zero_i64 = cast(0 as Int64);
+            $one_i64 = cast(1 as Int64);
+            $two_i64 = cast(2 as Int64);
+
+            $c0 = (
+                SELECT
+                    c.c_custkey AS c_k,
+                    c.c_nationkey AS c_nkey,
+                    c.c_custkey AS c_amount,
+                    c.c_custkey + $one_i64 AS c_metric
+                FROM `/Root/customer` AS c
+                WHERE c.c_custkey > $zero_i64
+                ORDER BY c.c_custkey
+                LIMIT 1000
+            );
+
+            $s0 = (
+                SELECT
+                    s.s_suppkey AS s_k,
+                    s.s_nationkey AS s_nkey,
+                    s.s_suppkey AS s_amount,
+                    s.s_suppkey + $two_i64 AS s_metric
+                FROM `/Root/supplier` AS s
+                WHERE EXISTS (
+                    SELECT *
+                    FROM `/Root/nation` AS n
+                    WHERE n.n_nationkey == s.s_nationkey
+                        AND n.n_name IS NOT NULL
+                )
+            );
+
+            $inner_j = (
+                SELECT
+                    c_k AS k,
+                    s_k AS supplier_key,
+                    c_nkey AS nkey,
+                    c_amount + s_amount AS amount,
+                    c_metric + s_metric AS metric
+                FROM $c0, $s0
+                WHERE c_nkey == s_nkey
+            );
+
+            $left_j = (
+                SELECT
+                    k,
+                    nkey,
+                    amount,
+                    metric + cast(coalesce(ps_availqty, $zero_i32) as Int64) AS metric2
+                FROM $inner_j
+                LEFT JOIN `/Root/partsupp` AS partsupp
+                    ON supplier_key == partsupp.ps_suppkey
+            );
+
+            $agg = (
+                SELECT
+                    nkey AS k,
+                    MAX(metric2 + amount) AS sort_metric
+                FROM $left_j
+                GROUP BY nkey
+            );
+
+            $unioned = (
+                SELECT k, sort_metric
+                FROM $agg
+
+                UNION ALL
+
+                SELECT
+                    cast(n.n_nationkey as Int32?) AS k,
+                    cast(n.n_nationkey as Int64) AS sort_metric
+                FROM `/Root/nation` AS n
+            );
+
+            SELECT
+                k AS result_key,
+                k + $one_i64 AS result_amount
+            FROM $unioned
+            ORDER BY sort_metric DESC
+            LIMIT 10;
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan");
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner"), plan);
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "JoinKind", "Left"), plan);
+        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedPlan, "Aggregation", ": max("), plan);
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "UnionAll"), plan);
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TopSort") || FindOperatorByStringField(simplifiedPlan, "Name", "Sort"), plan);
+        UNIT_ASSERT_C(plan.Contains("Join"), plan);
+        UNIT_ASSERT_C(!plan.Contains("__kqp_rbo_ignore_arg_"), plan);
+        AssertProjectionMapRulesApplied(simplifiedPlan, plan);
+    }
+
+    Y_UNIT_TEST(ProjectionNormalizationFocusedMapRules) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto identityAndDeadMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{
+            MakeTestRename("a", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("dead_payload", "payload", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto semanticRenameMap = MakeIntrusive<TOpMap>(identityAndDeadMap, pos, TVector<TMapElement>{
+            MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+
+        auto rightRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("right_payload")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            semanticRenameMap,
+            rightRead,
+            pos,
+            "Inner",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("l_a"), TInfoUnit("a")}}
+        );
+
+        auto bothSidesExpression = MakeBinaryPredicate(
+            "+",
+            MakeColumnAccess(TInfoUnit("l_a"), pos, &testContext.ExprCtx, &expressionProps),
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto topMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
+            MakeTestRename("alias_payload", "payload", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("left_calc", "l_a", pos, testContext.ExprCtx, expressionProps),
+            TMapElement(TInfoUnit("both_calc"), bothSidesExpression, false),
+        });
+
+        auto filter = MakeIntrusive<TOpFilter>(
+            topMap,
+            pos,
+            MakeColumnAccess(TInfoUnit("l_a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        TOpRoot root(filter, pos, {"alias_payload", "left_calc", "both_calc"});
+
+        TRuleBasedStage mapRules("Focused map rules", MakeProjectionMapRulesForTest());
+        ComputeLogicalTestProps(root);
+        mapRules.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        for (const auto& ruleName : {
+            "Remove identity map",
+            "Prune dead map elements",
+            "Convert safe renames to appends",
+            "Push append map elements",
+            "Push semantic rename",
+            "Push filter under map",
+        }) {
+            auto ruleIt = appliedRules.find(ruleName);
+            UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected rule to apply: " << ruleName);
+        }
+    }
+
+    Y_UNIT_TEST(PruneDeadReadColumnsRule) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("dead_payload")}, pos);
+        TOpRoot root(read, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        TRuleBasedStage pruneRead("Focused read pruning", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pruneRead.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Prune dead read columns");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Prune dead read columns to apply");
+
+        UNIT_ASSERT_VALUES_EQUAL(read->Columns.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(read->OutputIUs.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(read->Columns.front(), "a");
+        UNIT_ASSERT(read->OutputIUs.front() == TInfoUnit("a"));
+    }
+
+    Y_UNIT_TEST(NarrowByLivenessPrunesReadColumnsAfterDeadAggregateTraits) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("value"), TInfoUnit("dead_value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+                TOpAggregationTraits(TInfoUnit("dead_value"), "sum", TInfoUnit("dead_sum")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        TOpRoot root(aggregate, pos, {"key", "sum_value"});
+
+        ComputeLogicalTestProps(root);
+        TNarrowByLivenessStage narrowByLiveness;
+        narrowByLiveness.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
+
+        const auto readOutput = read->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(readOutput.size(), 2);
+        UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("key")) != readOutput.end());
+        UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("value")) != readOutput.end());
+        UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("dead_value")) == readOutput.end());
+    }
+
+    Y_UNIT_TEST(PruneDeadAggregateTraitsEnablesReadColumnPruning) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("value"), TInfoUnit("dead_value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+                TOpAggregationTraits(TInfoUnit("dead_value"), "sum", TInfoUnit("dead_sum")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        TOpRoot root(aggregate, pos, {"key", "sum_value"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        TRuleBasedStage pruneAggregateAndRead("Focused aggregate/read pruning", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pruneAggregateAndRead.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto aggregateRuleIt = appliedRules.find("Prune dead aggregate traits");
+        UNIT_ASSERT_C(aggregateRuleIt != appliedRules.end() && aggregateRuleIt->second > 0, "Expected Prune dead aggregate traits to apply");
+        auto readRuleIt = appliedRules.find("Prune dead read columns");
+        UNIT_ASSERT_C(readRuleIt != appliedRules.end() && readRuleIt->second > 0, "Expected Prune dead read columns to apply");
+
+        UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
+
+        const auto readOutput = read->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(readOutput.size(), 2);
+        UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("key")) != readOutput.end());
+        UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("value")) != readOutput.end());
+        UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("dead_value")) == readOutput.end());
+    }
+
+    Y_UNIT_TEST(PushRenameTreatsDeadAppendAliasAsRename) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto filter = MakeIntrusive<TOpFilter>(
+            read,
+            pos,
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        TRuleBasedStage pushRename("Focused push rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushRename.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push semantic rename");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
+        auto rewrittenRead = CastOperator<TOpRead>(rewrittenFilter->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenRead->Columns.front(), "a");
+        UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("l_a"));
+
+        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("l_a")) != filterInputs.end());
+        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) == filterInputs.end());
+    }
+
+    Y_UNIT_TEST(PushRenameTreatsDeadAppendAliasAsRenameThroughJoin) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("b"), TInfoUnit("right_payload")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            leftRead,
+            rightRead,
+            pos,
+            "Inner",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a", "right_payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        TRuleBasedStage pushRename("Focused push rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushRename.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push semantic rename");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
+        auto rewrittenLeftRead = CastOperator<TOpRead>(rewrittenJoin->GetLeftInput());
+        auto rewrittenRightRead = CastOperator<TOpRead>(rewrittenJoin->GetRightInput());
+
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenLeftRead->Columns.front(), "a");
+        UNIT_ASSERT(rewrittenLeftRead->OutputIUs.front() == TInfoUnit("l_a"));
+        UNIT_ASSERT(rewrittenRightRead->OutputIUs.front() == TInfoUnit("b"));
+
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("l_a"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().second == TInfoUnit("b"));
+
+        const auto joinOutput = rewrittenJoin->GetOutputIUs();
+        UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("l_a")) != joinOutput.end());
+        UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("a")) == joinOutput.end());
+    }
+
+    Y_UNIT_TEST(RewriteFilterToPreferredAliasEnablesRenamePush) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto filter = MakeIntrusive<TOpFilter>(
+            aliasMap,
+            pos,
+            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        TOpRoot root(filter, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        TRuleBasedStage aliasRules("Focused alias rewrite", std::move(rules));
+        ComputeLogicalTestProps(root);
+        aliasRules.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto rewriteIt = appliedRules.find("Rewrite expressions to preferred aliases");
+        UNIT_ASSERT_C(rewriteIt != appliedRules.end() && rewriteIt->second > 0, "Expected preferred-alias rewrite to apply");
+        auto renameIt = appliedRules.find("Push semantic rename");
+        UNIT_ASSERT_C(renameIt != appliedRules.end() && renameIt->second > 0, "Expected Push semantic rename to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
+        UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenRead = CastOperator<TOpRead>(rewrittenFilter->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenRead->Columns.front(), "b");
+        UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("a"));
+
+        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) != filterInputs.end());
+        UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("b")) == filterInputs.end());
+    }
+
+    Y_UNIT_TEST(PushAppendConstantChoosesPreservedJoinSide) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("b")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            leftRead,
+            rightRead,
+            pos,
+            "Right",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+        );
+        auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("one", pos, testContext.ExprCtx),
+        });
+        TOpRoot root(appendMap, pos, {"a", "b", "one"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push append map elements");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append map elements to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
+        UNIT_ASSERT_C(rewrittenJoin->GetLeftInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+
+        auto rightMap = CastOperator<TOpMap>(rewrittenJoin->GetRightInput());
+        UNIT_ASSERT_VALUES_EQUAL(rightMap->MapElements.size(), 1);
+        UNIT_ASSERT(rightMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+    }
+
+    Y_UNIT_TEST(PushAppendConstantStaysAboveFullJoin) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("b")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            leftRead,
+            rightRead,
+            pos,
+            "Full",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+        );
+        auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("one", pos, testContext.ExprCtx),
+        });
+        TOpRoot root(appendMap, pos, {"a", "b", "one"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto topMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
+        UNIT_ASSERT(topMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT(!testContext.RboCtx.AppliedRules.contains("Push append map elements"));
+    }
+
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
-        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
+        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q1) {
+        RunTPCH_YqlSingleQueryTest(1);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q2) {
+        RunTPCH_YqlSingleQueryTest(2);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q3) {
+        RunTPCH_YqlSingleQueryTest(3);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q4) {
+        RunTPCH_YqlSingleQueryTest(4);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q5) {
+        RunTPCH_YqlSingleQueryTest(5);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q6) {
+        RunTPCH_YqlSingleQueryTest(6);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q7) {
+        RunTPCH_YqlSingleQueryTest(7);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q8) {
+        RunTPCH_YqlSingleQueryTest(8);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q9) {
+        RunTPCH_YqlSingleQueryTest(9);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q10) {
+        RunTPCH_YqlSingleQueryTest(10);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q11) {
+        RunTPCH_YqlSingleQueryTest(11, /*expectedSuccess=*/false);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q12) {
+        RunTPCH_YqlSingleQueryTest(12);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q13) {
+        RunTPCH_YqlSingleQueryTest(13);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q14) {
+        RunTPCH_YqlSingleQueryTest(14);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q15) {
+        RunTPCH_YqlSingleQueryTest(15);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q16) {
+        RunTPCH_YqlSingleQueryTest(16);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q17) {
+        RunTPCH_YqlSingleQueryTest(17);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q18) {
+        RunTPCH_YqlSingleQueryTest(18);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q19) {
+        RunTPCH_YqlSingleQueryTest(19);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q20) {
+        RunTPCH_YqlSingleQueryTest(20);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q21) {
+        RunTPCH_YqlSingleQueryTest(21);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_Q22) {
+        RunTPCH_YqlSingleQueryTest(22);
     }
 
     Y_UNIT_TEST(TPCDS_YQL) {
@@ -4187,6 +4946,9 @@ PRAGMA ydb.OptShuffleElimination = "true";
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         const auto plan = TString{*result.GetStats()->GetPlan()};
+        NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, false, Cout, 0);
+        queryPlanPrinter.Print(plan);
+
         const auto hashShuffles = CollectHashShuffleDescriptions(plan);
 
         const bool hasCustomerCompositeShuffle = std::any_of(

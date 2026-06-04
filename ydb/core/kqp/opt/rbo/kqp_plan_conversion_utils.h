@@ -14,7 +14,7 @@ struct TIOperatorSharedPtrHash {
     size_t operator()(const TIntrusivePtr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
 };
 
-void NormalizePlanOutputIUs(TOpRoot& root, TExprContext& ctx);
+void RepairPlanOutputIUs(TOpRoot& root, TExprContext& ctx);
 
 class PlanConverter {
   public:

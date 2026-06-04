@@ -6,6 +6,8 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <optional>
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
 
 namespace NYql {
 
@@ -34,6 +36,7 @@ public:
     NYql::IGraphTransformer& TypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     NOpt::TKqpProviderContext CBOCtx;
+    THashMap<TString, ui64> AppliedRules;
     std::optional<NJson::TJsonValue> ExecutionJson;
     std::optional<NJson::TJsonValue> ExplainJson;
 };

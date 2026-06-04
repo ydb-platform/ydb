@@ -8,6 +8,8 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -17,12 +19,26 @@ using namespace NYql::NDq;
 
 namespace {
 
-NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
+NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx, const THashMap<TString, ui64>& appliedRules) {
     const auto& cboStats = kqpCtx.CBOStats;
 
     NJson::TJsonValue optimizerStats(NJson::EJsonValueType::JSON_MAP);
     optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;
     optimizerStats["CBOTreesOptimized"] = cboStats.TreesOptimized;
+
+    NJson::TJsonValue ruleApplications(NJson::EJsonValueType::JSON_MAP);
+    TVector<TString> ruleNames;
+    ruleNames.reserve(appliedRules.size());
+    for (const auto& ruleApplication : appliedRules) {
+        ruleNames.push_back(ruleApplication.first);
+    }
+    std::sort(ruleNames.begin(), ruleNames.end());
+
+    for (const auto& ruleName : ruleNames) {
+        ruleApplications[ruleName] = appliedRules.at(ruleName);
+    }
+    optimizerStats["RuleApplications"] = ruleApplications;
+
     return optimizerStats;
 }
 
@@ -251,7 +267,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 auto output = RBO.Optimize(*OpRoot, rboCtx);
-                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson, rboCtx.AppliedRules);
                 return output;
             } else {
                 return node;
@@ -281,7 +297,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode:
 }
 
 //FIXME: We currently support only a single plan, throw an exception if that's not the case
-void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan) {
+void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan, const THashMap<TString, ui64>& appliedRules) {
     if (!execPlan.has_value() || !explainPlan.has_value()) {
         Y_ENSURE(false, "Explain plan wasn't computed in the optimizer");
     }
@@ -293,7 +309,7 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
     plans.AppendValue(execPlan.value());
     planJson["Plans"] = plans;
     planJson["SimplifiedPlan"] = explainPlan.value();
-    planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx);
+    planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx, appliedRules);
 
     TransformCtx->PlanJson = planJson;
 }
@@ -334,6 +350,21 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 }
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
+    auto addEarlyProjectionCleanupRules = [](TVector<std::unique_ptr<IRule>>& rules) {
+        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+    };
+
+    auto addProjectionNormalizationRules = [](TVector<std::unique_ptr<IRule>>& rules) {
+        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        rules.emplace_back(std::make_unique<TPushRenameRule>());
+    };
+
     // Initial stages.
     // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
     TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
@@ -351,16 +382,19 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineScalarSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
-    RBO.AddStage(std::make_unique<TRenameStage>());
     RBO.AddStage(std::make_unique<TConstantFoldingStage>());
+
+    // Clean up aliases and trivial projection maps before the broader logical rewrites start.
+    TVector<std::unique_ptr<IRule>> projectionNormalizationRules;
+    addEarlyProjectionCleanupRules(projectionNormalizationRules);
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize projection names", std::move(projectionNormalizationRules)));
 
     // Logical stage.
     TVector<std::unique_ptr<IRule>> logicalStageRules;
+    addProjectionNormalizationRules(logicalStageRules);
     logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
-    logicalStageRules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
-    logicalStageRules.emplace_back(std::make_unique<TPushMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());

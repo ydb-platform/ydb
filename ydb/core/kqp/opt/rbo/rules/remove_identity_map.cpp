@@ -3,8 +3,16 @@
 namespace NKikimr {
 namespace NKqp {
 
-// Remove extra maps that arrise during translation
-// Identity map can be removed when it only renames every visible column to itself.
+namespace {
+
+bool IsIdentityRename(const TMapElement& mapElement) {
+    return mapElement.IsRename() && mapElement.GetRename() == mapElement.GetElementName();
+}
+
+} // anonymous namespace
+
+// Remove extra maps that arrise during translation.
+// Identity renames carry no semantic rename and should not block map rewrites.
 
 TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
@@ -16,21 +24,26 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
 
     auto map = CastOperator<TOpMap>(input);
 
-    if (map->GetOutputIUs() != map->GetInput()->GetOutputIUs()) {
+    TVector<TMapElement> newElements;
+    newElements.reserve(map->MapElements.size());
+    bool removed = false;
+    for (const auto& mapElement : map->MapElements) {
+        if (IsIdentityRename(mapElement)) {
+            removed = true;
+            continue;
+        }
+        newElements.push_back(mapElement);
+    }
+
+    if (!removed) {
         return input;
     }
 
-    for (const auto& mapElement : map->MapElements) {
-        if (!mapElement.IsRename()) {
-            return input;
-        }
-        auto fromColumn = mapElement.GetRename();
-        if (fromColumn != mapElement.GetElementName()) {
-            return input;
-        }
+    if (newElements.empty()) {
+        return map->GetInput();
     }
 
-    return map->GetInput();
+    return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, newElements, map->IsOrdered());
 }
 
 }

@@ -91,6 +91,8 @@ bool CanPropagateOverConnection(const ui32 prevStageId, const ui32 currentStageI
 
 TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TExprContext& ctx,
                                                              TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+
     const auto prevStageId = *(input->Props.StageId);
     const auto currentStageId = *(sort->Props.StageId);
     if (!CanPropagateOverConnection(prevStageId, currentStageId, planProps)) {
@@ -108,13 +110,9 @@ TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSo
     if (!IsLastOpInStage(sort)) {
         return newSort;
     }
-    TVector<TMapElement> mapElements;
-    for (const auto& outputName : sort->GetOutputIUs()) {
-        mapElements.emplace_back(outputName, outputName, sort->Pos, &ctx, &planProps);
-    }
     auto props = sort->Props;
     props.StageId = currentStageId;
-    return MakeIntrusive<TOpMap>(newSort, sort->Pos, props, mapElements);
+    return MakeIntrusive<TOpMap>(newSort, sort->Pos, props, TVector<TMapElement>{});
 }
 
 void MaybeUpdateSortElements(TVector<TSortElement>& sortElements, const TVector<TMapElement>& mapElements) {

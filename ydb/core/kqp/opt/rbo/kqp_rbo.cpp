@@ -1,5 +1,4 @@
 #include "kqp_rbo.h"
-#include "kqp_plan_conversion_utils.h"
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -8,11 +7,9 @@ namespace NKqp {
 
 namespace {
 
-bool CanNormalizeAfterStage(const TString& stageName) {
-    return stageName != "Assign physical stages"
-        && stageName != "Optimize physical stages"
-        && stageName != "Narrow by liveness"
-        && stageName != "Hash function propagation";
+const TInfoUnitSet& EmptyInfoUnitSet() {
+    static const TInfoUnitSet empty;
+    return empty;
 }
 
 void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
@@ -26,6 +23,57 @@ void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
 }
 
 } // anonymous namespace
+
+void TPlanNameConstraints::Clear() {
+    ForbiddenOut.clear();
+}
+
+bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnit& iu) {
+    Y_ENSURE(child);
+    return ForbiddenOut[TPlanEdgeKey{parent, childIdx, child}].insert(iu).second;
+}
+
+bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnitSet& ius) {
+    bool changed = false;
+    for (const auto& iu : ius) {
+        changed |= AddForbiddenOut(parent, childIdx, child, iu);
+    }
+    return changed;
+}
+
+const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child) const {
+    const auto it = ForbiddenOut.find(TPlanEdgeKey{parent, childIdx, child});
+    return it == ForbiddenOut.end() ? EmptyInfoUnitSet() : it->second;
+}
+
+const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOut(IOperator* parent, ui32 childIdx) const {
+    Y_ENSURE(parent);
+    Y_ENSURE(childIdx < parent->Children.size());
+    return GetForbiddenOut(parent, childIdx, parent->Children[childIdx].get());
+}
+
+const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOutForSingleConsumer(IOperator* op) const {
+    if (!op || op->Parents.size() != 1) {
+        return EmptyInfoUnitSet();
+    }
+
+    const auto& [parent, childIdx] = op->Parents.front();
+    return GetForbiddenOut(parent, childIdx, op);
+}
+
+bool TPlanNameConstraints::IsForbiddenAtOutput(IOperator* op, const TInfoUnit& iu) const {
+    if (!op) {
+        return false;
+    }
+
+    for (const auto& [parent, childIdx] : op->Parents) {
+        if (GetForbiddenOut(parent, childIdx, op).contains(iu)) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
@@ -66,6 +114,12 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString s
     if (props & ERuleProperties::RequireLiveness) {
         ComputePlanLiveness(root);
     }
+    if (props & ERuleProperties::RequireNameConstraints) {
+        ComputePlanNameConstraints(root);
+    }
+    if (props & ERuleProperties::RequireAliases) {
+        ComputePlanAliases(root);
+    }
 }
 
 /**
@@ -95,6 +149,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                 if (rule->MatchAndApply(op, ctx, root.PlanProps)) {
                     fired = true;
 
+                    ++ctx.AppliedRules[rule->RuleName];
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
                     // If the original operator had parents, update all parents
@@ -146,10 +201,6 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
         }
         stage->RunStage(root, rboCtx);
-        if (CanNormalizeAfterStage(stage->StageName)) {
-            NormalizePlanOutputIUs(root, ctx);
-            root.ComputeParents();
-        }
         ValidateNoDuplicateOutputIUs(root);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);

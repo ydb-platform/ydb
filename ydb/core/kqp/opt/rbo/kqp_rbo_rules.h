@@ -88,11 +88,44 @@ class TFuseFiltersRule : public ISimplifiedRule {
  * Push append-only map elements closer to sources through maps and joins.
  * If only part of a map can move safely, leave the rest above.
  */
-class TPushMapRule : public ISimplifiedRule {
+class TPushAppendRule : public ISimplifiedRule {
   public:
-    TPushMapRule() : ISimplifiedRule("Push map operator", ERuleProperties::RequireParents) {}
+    TPushAppendRule() : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Convert semantic renames to append aliases when the original name may stay visible.
+ */
+class TRenameToAppendRule : public IRule {
+  public:
+    TRenameToAppendRule()
+        : IRule("Convert safe renames to appends", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Push semantic renames through transparent operators into their producers.
+ */
+class TPushRenameRule : public IRule {
+  public:
+    TPushRenameRule()
+        : IRule("Push semantic rename", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Rewrites local expressions to the alias already preferred by liveness.
+ */
+class TRewriteExpressionsToPreferredAliasesRule : public IRule {
+  public:
+    TRewriteExpressionsToPreferredAliasesRule()
+        : IRule("Rewrite expressions to preferred aliases", ERuleProperties::RequireLiveness | ERuleProperties::RequireAliases) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**
@@ -227,15 +260,6 @@ class TAssignStagesRule : public IRule {
 };
 
 /**
- * Separate global stage to remove extra renames
- */
-class TRenameStage : public IRBOStage {
-  public:
-    TRenameStage();
-    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
-};
-
-/**
  * Separate global constant folding stage
  */
 class TConstantFoldingStage : public IRBOStage {
@@ -249,13 +273,36 @@ class TConstantFoldingStage : public IRBOStage {
  */
 class TPruneDeadMapElementsRule : public IRule {
   public:
-    TPruneDeadMapElementsRule() : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness) {}
+    TPruneDeadMapElementsRule()
+        : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**
- * Narrow physical payload schemas using final liveness.
+ * Remove read columns whose output IUs are not live.
+ */
+class TPruneDeadReadColumnsRule : public IRule {
+  public:
+    TPruneDeadReadColumnsRule()
+        : IRule("Prune dead read columns", ERuleProperties::RequireLiveness) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Remove aggregate result traits whose output IUs are not live.
+ */
+class TPruneDeadAggregateTraitsRule : public IRule {
+  public:
+    TPruneDeadAggregateTraitsRule()
+        : IRule("Prune dead aggregate traits", ERuleProperties::RequireLiveness) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Narrow visible output schemas using final liveness.
  */
 class TNarrowByLivenessStage : public IRBOStage {
   public:

@@ -14,7 +14,9 @@ enum ERuleProperties: ui32 {
     RequireTypes = 0x02,
     RequireMetadata = 0x04,
     RequireStatistics = 0x08,
-    RequireLiveness = 0x10
+    RequireLiveness = 0x10,
+    RequireNameConstraints = 0x20,
+    RequireAliases = 0x40
   };
 
 /**
@@ -107,6 +109,8 @@ public:
  */
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
 void ComputePlanLiveness(TOpRoot& root);
+void ComputePlanNameConstraints(TOpRoot& root);
+void ComputePlanAliases(TOpRoot& root);
 
 TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");

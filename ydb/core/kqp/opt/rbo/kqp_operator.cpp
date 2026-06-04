@@ -422,20 +422,15 @@ void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
     for (const auto& mapElement : MapElements) {
         if (mapElement.IsRename()) {
             renameSources.insert(mapElement.GetRename());
-            // Renames are not pruned in this stage, so their source must stay available.
-            ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
         }
+        // Keep dependencies of every current map expression live so local pruning
+        // cannot remove producer columns before the dead consumer expression is gone.
+        ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
     }
 
     for (const auto& iu : input->GetOutputIUs()) {
         if (!renameSources.contains(iu) && liveOut.contains(iu)) {
             AddInfoUnit(inputLive, iu);
-        }
-    }
-
-    for (const auto& mapElement : MapElements) {
-        if (!mapElement.IsRename() && liveOut.contains(mapElement.GetElementName())) {
-            ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
         }
     }
 

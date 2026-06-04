@@ -7,6 +7,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <algorithm>
+#include <optional>
 
 namespace NKikimr::NKqp {
 
@@ -21,6 +22,62 @@ constexpr TStringBuf IgnoreArgPrefix = "__kqp_rbo_ignore_arg_";
 
 bool ContainsIU(const TVector<TInfoUnit>& units, const TInfoUnit& unit) {
     return std::find(units.begin(), units.end(), unit) != units.end();
+}
+
+std::optional<TInfoUnit> ResolveVisibleIUByColumnName(const TVector<TInfoUnit>& visibleIUs, const TInfoUnit& iu) {
+    if (ContainsIU(visibleIUs, iu)) {
+        return iu;
+    }
+
+    std::optional<TInfoUnit> candidate;
+    for (const auto& visible : visibleIUs) {
+        if (visible.GetColumnName() != iu.GetColumnName()) {
+            continue;
+        }
+        if (candidate) {
+            return std::nullopt;
+        }
+        candidate = visible;
+    }
+    return candidate;
+}
+
+void AddInputReferenceRepair(
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap,
+    const TVector<TInfoUnit>& visibleIUs,
+    const TInfoUnit& iu)
+{
+    if (ContainsIU(visibleIUs, iu) || renameMap.contains(iu)) {
+        return;
+    }
+
+    if (auto resolved = ResolveVisibleIUByColumnName(visibleIUs, iu)) {
+        renameMap.emplace(iu, *resolved);
+    }
+}
+
+THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> BuildInputReferenceRepairMap(
+    const TVector<TInfoUnit>& visibleIUs,
+    const TVector<TInfoUnit>& usedIUs)
+{
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
+    for (const auto& iu : usedIUs) {
+        AddInputReferenceRepair(renameMap, visibleIUs, iu);
+    }
+    return renameMap;
+}
+
+void RepairExpressionInputReferences(TExpression& expr, const TVector<TInfoUnit>& visibleIUs) {
+    const auto renameMap = BuildInputReferenceRepairMap(visibleIUs, expr.GetInputIUs(false, true));
+    if (!renameMap.empty()) {
+        expr = expr.ApplyRenames(renameMap);
+    }
+}
+
+void RepairInfoUnitReference(TInfoUnit& iu, const TVector<TInfoUnit>& visibleIUs) {
+    if (auto resolved = ResolveVisibleIUByColumnName(visibleIUs, iu)) {
+        iu = *resolved;
+    }
 }
 
 TInfoUnit MakeIgnoreIU(TPlanProps& props) {
@@ -72,34 +129,13 @@ void RenameJoinSideReferences(TOpJoin& join, const TInfoUnit& from, const TInfoU
     }
 }
 
-std::optional<TInfoUnit> TryPromoteAppendToRename(const TIntrusivePtr<IOperator>& input, const TInfoUnit& source,
-                                                  const TVector<TInfoUnit>& forbiddenOutputs) {
-    if (input->Kind != EOperator::Map) {
-        return std::nullopt;
-    }
-
-    auto map = CastOperator<TOpMap>(input);
-    for (auto& mapElement : map->MapElements) {
-        if (mapElement.IsRename() || !mapElement.IsColumnAccess() || mapElement.GetElementName() == source) {
-            continue;
-        }
-        if (mapElement.GetColumnAccess() != source) {
-            continue;
-        }
-        if (ContainsIU(forbiddenOutputs, mapElement.GetElementName())) {
-            continue;
-        }
-
-        mapElement.SetIsRename(true);
-        return mapElement.GetElementName();
-    }
-
-    return std::nullopt;
-}
-
-void NormalizeMap(const TIntrusivePtr<TOpMap>& map, TExprContext& ctx, TPlanProps& props) {
+void RepairMapOutputIUs(const TIntrusivePtr<TOpMap>& map, TExprContext& ctx, TPlanProps& props) {
     const auto inputIUs = map->GetInput()->GetOutputIUs();
     THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
+
+    for (auto& mapElement : map->MapElements) {
+        RepairExpressionInputReferences(mapElement.GetExpressionRef(), inputIUs);
+    }
 
     for (const auto& mapElement : map->MapElements) {
         if (mapElement.IsRename()) {
@@ -129,7 +165,21 @@ void NormalizeMap(const TIntrusivePtr<TOpMap>& map, TExprContext& ctx, TPlanProp
     ValidateUniqueOutputIUs(map, ctx);
 }
 
-void NormalizeJoin(const TIntrusivePtr<TOpJoin>& join, TExprContext& ctx, TPlanProps& props) {
+void RepairJoinOutputIUs(const TIntrusivePtr<TOpJoin>& join, TExprContext& ctx, TPlanProps& props) {
+    const auto leftOutput = join->GetLeftInput()->GetOutputIUs();
+    const auto rightOutput = join->GetRightInput()->GetOutputIUs();
+
+    for (auto& [leftKey, rightKey] : join->JoinKeys) {
+        RepairInfoUnitReference(leftKey, leftOutput);
+        RepairInfoUnitReference(rightKey, rightOutput);
+    }
+
+    TVector<TInfoUnit> joinedOutput = leftOutput;
+    joinedOutput.insert(joinedOutput.end(), rightOutput.begin(), rightOutput.end());
+    for (auto& filter : join->JoinFilters) {
+        RepairExpressionInputReferences(filter, joinedOutput);
+    }
+
     const bool leftVisible = join->JoinKind != "RightOnly" && join->JoinKind != "RightSemi";
     const bool rightVisible = join->JoinKind != "LeftOnly" && join->JoinKind != "LeftSemi";
     if (!leftVisible || !rightVisible) {
@@ -137,27 +187,60 @@ void NormalizeJoin(const TIntrusivePtr<TOpJoin>& join, TExprContext& ctx, TPlanP
         return;
     }
 
-    auto leftOutput = join->GetLeftInput()->GetOutputIUs();
-    auto rightOutput = join->GetRightInput()->GetOutputIUs();
     const auto conflicts = IUSetIntersect(leftOutput, rightOutput);
 
     for (const auto& conflict : conflicts) {
-        TInfoUnit replacement;
-        if (auto promoted = TryPromoteAppendToRename(join->GetRightInput(), conflict, leftOutput)) {
-            replacement = *promoted;
-        } else {
-            replacement = AddIgnoreRename(join->GetRightInput(), conflict, join->Pos, ctx, props);
-        }
-
+        const auto replacement = AddIgnoreRename(join->GetRightInput(), conflict, join->Pos, ctx, props);
         RenameJoinSideReferences(*join, conflict, replacement, true);
-        rightOutput = join->GetRightInput()->GetOutputIUs();
-        leftOutput = join->GetLeftInput()->GetOutputIUs();
     }
 
     ValidateUniqueOutputIUs(join, ctx);
 }
 
-void NormalizeUnionAll(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprContext& ctx, TPlanProps& props) {
+void RepairFilterOutputIUs(const TIntrusivePtr<TOpFilter>& filter, TExprContext& ctx) {
+    RepairExpressionInputReferences(filter->FilterExpr, filter->GetInput()->GetOutputIUs());
+    ValidateUniqueOutputIUs(filter, ctx);
+}
+
+void RepairLimitOutputIUs(const TIntrusivePtr<TOpLimit>& limit, TExprContext& ctx) {
+    const auto inputIUs = limit->GetInput()->GetOutputIUs();
+    auto renameMap = BuildInputReferenceRepairMap(inputIUs, limit->LimitCond.GetInputIUs(false, true));
+    if (!renameMap.empty()) {
+        limit->RenameIUs(renameMap, ctx);
+    }
+    ValidateUniqueOutputIUs(limit, ctx);
+}
+
+void RepairSortOutputIUs(const TIntrusivePtr<TOpSort>& sort, TExprContext& ctx) {
+    const auto inputIUs = sort->GetInput()->GetOutputIUs();
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
+    for (const auto& sortElement : sort->SortElements) {
+        AddInputReferenceRepair(renameMap, inputIUs, sortElement.SortColumn);
+    }
+    if (sort->LimitCond) {
+        const auto usedIUs = sort->LimitCond->GetInputIUs(false, true);
+        for (const auto& iu : usedIUs) {
+            AddInputReferenceRepair(renameMap, inputIUs, iu);
+        }
+    }
+    if (!renameMap.empty()) {
+        sort->RenameIUs(renameMap, ctx);
+    }
+    ValidateUniqueOutputIUs(sort, ctx);
+}
+
+void RepairAggregateOutputIUs(const TIntrusivePtr<TOpAggregate>& aggregate, TExprContext& ctx) {
+    const auto inputIUs = aggregate->GetInput()->GetOutputIUs();
+    for (auto& keyColumn : aggregate->KeyColumns) {
+        RepairInfoUnitReference(keyColumn, inputIUs);
+    }
+    for (auto& traits : aggregate->AggregationTraitsList) {
+        RepairInfoUnitReference(traits.OriginalColName, inputIUs);
+    }
+    ValidateUniqueOutputIUs(aggregate, ctx);
+}
+
+void RepairUnionAllOutputIUs(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprContext& ctx, TPlanProps& props) {
     const auto leftOutput = unionAll->GetLeftInput()->GetOutputIUs();
     const auto rightOutput = unionAll->GetRightInput()->GetOutputIUs();
 
@@ -292,14 +375,22 @@ bool GetOrdered(const TKqpOpMap& map) {
 
 } // anonymous namespace
 
-void NormalizePlanOutputIUs(TOpRoot& root, TExprContext& ctx) {
+void RepairPlanOutputIUs(TOpRoot& root, TExprContext& ctx) {
     for (auto iter : root) {
         if (iter.Current->Kind == EOperator::Map) {
-            NormalizeMap(CastOperator<TOpMap>(iter.Current), ctx, root.PlanProps);
+            RepairMapOutputIUs(CastOperator<TOpMap>(iter.Current), ctx, root.PlanProps);
+        } else if (iter.Current->Kind == EOperator::Filter) {
+            RepairFilterOutputIUs(CastOperator<TOpFilter>(iter.Current), ctx);
         } else if (iter.Current->Kind == EOperator::Join) {
-            NormalizeJoin(CastOperator<TOpJoin>(iter.Current), ctx, root.PlanProps);
+            RepairJoinOutputIUs(CastOperator<TOpJoin>(iter.Current), ctx, root.PlanProps);
         } else if (iter.Current->Kind == EOperator::UnionAll) {
-            NormalizeUnionAll(CastOperator<TOpUnionAll>(iter.Current), ctx, root.PlanProps);
+            RepairUnionAllOutputIUs(CastOperator<TOpUnionAll>(iter.Current), ctx, root.PlanProps);
+        } else if (iter.Current->Kind == EOperator::Limit) {
+            RepairLimitOutputIUs(CastOperator<TOpLimit>(iter.Current), ctx);
+        } else if (iter.Current->Kind == EOperator::Sort) {
+            RepairSortOutputIUs(CastOperator<TOpSort>(iter.Current), ctx);
+        } else if (iter.Current->Kind == EOperator::Aggregate) {
+            RepairAggregateOutputIUs(CastOperator<TOpAggregate>(iter.Current), ctx);
         } else {
             ValidateUniqueOutputIUs(iter.Current, ctx);
         }
@@ -409,7 +500,7 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     }
 
     opRoot->ComputeParents();
-    NormalizePlanOutputIUs(*opRoot, Ctx);
+    RepairPlanOutputIUs(*opRoot, Ctx);
     opRoot->ComputeParents();
 
     // For subplans, we need to compute dependent variables correctly

@@ -1043,13 +1043,14 @@ public:
             }
             if (hasPredicatePartitions && !predicatePartitions.empty()) {
                 if (predicatePartitions.size() == 1) {
-                    auto str = ToString(*predicatePartitions.begin());
-                    properties["Partitions"] = TStringBuilder() << "[" << str << "]";
-                } else if (predicatePartitions.size() > 1) {
-                    properties["Predicate_partitions"] = TStringBuilder() << "["
-                        << ToString(*predicatePartitions.begin()) << ((predicatePartitions.size() > 2) ? "..." : ", ")
-                        << ToString(*predicatePartitions.rbegin())<< "]";
+                    properties["Partitions"] = TStringBuilder() << "[" << ToString(*predicatePartitions.begin()) << "]";
+                } else {
+                    properties["Partitions"] = TStringBuilder() << "["
+                        << ToString(*predicatePartitions.begin())
+                        << ((predicatePartitions.size() > 2) ? ", ..., " : ", ")
+                        << ToString(*predicatePartitions.rbegin()) << "]";
                 }
+            }
             }
         }
         return true;

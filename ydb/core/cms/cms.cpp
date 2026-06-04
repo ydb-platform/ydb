@@ -484,12 +484,11 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         const size_t from = processedActions;
 
         mutableActions->Reserve(mutableActions->size() + (allActions.size() - from));
-        std::for_each(allActions.begin() + from, allActions.end(),
-                      [mutableActions](const auto& action) {
-                          auto* scheduledAction = mutableActions->Add();
-                          scheduledAction->CopyFrom(action);
-                          scheduledAction->ClearIssue();
-                      });
+        std::for_each(allActions.begin() + from, allActions.end(), [mutableActions](const auto& action) {
+            auto* scheduledAction = mutableActions->Add();
+            scheduledAction->CopyFrom(action);
+            scheduledAction->ClearIssue();
+        });
         processedActions = allActions.size();
     }
 

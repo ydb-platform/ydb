@@ -6,6 +6,8 @@ import pytest
 import logging
 import time
 import json
+import random
+import string
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -1363,3 +1365,25 @@ class TestPqRowDispatcher(TestYdsBase):
             self.write_stream(['{"time": 101, "data": "Relativitätstheorie"}'], topic_path=None, partition_key=str(i))
         assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)
+
+    @yq_v1
+    def test_big_text_query_size(self, kikimr, client):
+        self.init(client, "test_big_text_query_size")
+
+        text_size = 1000000
+        element_size = 100
+        filter = " OR ".join([ 'data = "' + ''.join(random.choices(string.ascii_uppercase, k=element_size - 13)) + '"' for c in range(int(text_size / element_size))])
+
+        sql = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                    SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` 
+                    WITH (format=raw, SCHEMA (data String NOT NULL))
+                    WHERE data like "%time%" OR {filter};'''
+
+        logging.debug(f"query text size: {str(len(sql))}")
+        query_id = start_yds_query(kikimr, client, sql)
+        data = ['{"time" = 100;}', '{"time" = 101;}']
+
+        self.write_stream(data)
+        assert self.read_stream(len(data), topic_path=self.output_topic) == data
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        stop_yds_query(client, query_id)

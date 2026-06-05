@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/public.h>
 
+#include <string_view>
+
 namespace NYT::NFlow {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,10 +41,11 @@ YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const std::string PipelineFormatVersionAttribute("pipeline_format_version");
-inline const std::string LeaderControllerAddressAttribute("leader_controller_address");
-inline const std::string MonitoringProjectAttribute("monitoring_project");
-inline const std::string MonitoringClusterAttribute("monitoring_cluster");
+constexpr std::string_view PipelineFormatVersionAttribute = "pipeline_format_version";
+constexpr std::string_view LeaderControllerAddressAttribute = "leader_controller_address";
+constexpr std::string_view MonitoringProjectAttribute = "monitoring_project";
+constexpr std::string_view MonitoringClusterAttribute = "monitoring_cluster";
+constexpr std::string_view IdAttribute = "id";
 
 constexpr int CurrentPipelineFormatVersion = 1;
 

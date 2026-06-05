@@ -2718,6 +2718,145 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(ChangeSchema_DropColumn) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, "Json", /* withIndex */ true);
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestTable` DROP COLUMN Text
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Impossible drop column because table has an index with that column");
+        }
+    }
+
+    Y_UNIT_TEST(ChangeSchema_SetDefault) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, "Json", /* withIndex */ true);
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ALTER COLUMN Text SET DEFAULT Json('{"default": true}')
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Data) VALUES (1, "data1");
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Text FROM `/Root/TestTable` WHERE Key = 1;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS(yson, "default");
+        }
+    }
+
+    Y_UNIT_TEST(ChangeSchema_DropDefault) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Text Json DEFAULT Json('{"default": true}'),
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ALTER COLUMN Text DROP DEFAULT
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Data) VALUES (1, "data1");
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Text FROM `/Root/TestTable` WHERE Key = 1;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS(yson, "#");
+        }
+    }
+
+    Y_UNIT_TEST(ChangeSchema_DropNotNull) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Text Json NOT NULL,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ALTER COLUMN Text DROP NOT NULL
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Data, Text) VALUES (1, "data1", NULL);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Text FROM `/Root/TestTable` WHERE Key = 1;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS(yson, "#");
+        }
+    }
 }
 
 }  // namespace NKikimr::NKqp

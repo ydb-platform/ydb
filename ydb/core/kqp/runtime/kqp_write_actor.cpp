@@ -3060,7 +3060,7 @@ public:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
-                hFunc(TEvDataShard::TEvOverloadReady, HandlePrepare);
+                hFunc(TEvDataShard::TEvOverloadReady, Handle);
                 hFunc(TEvColumnShard::TEvOverloadReady, HandlePrepare);
 
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
@@ -3085,6 +3085,7 @@ public:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleCommit);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleCommit);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleCommit);
+                hFunc(TEvDataShard::TEvOverloadReady, Handle);
 
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandleCommit);
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
@@ -4657,6 +4658,13 @@ public:
             ProcessWriteCompletedShard(ev);
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
+            if (ev->Get()->Record.HasOverloadSubscribed()) {
+                CA_LOG_D("Shard " << ev->Get()->Record.GetOrigin() << " is overloaded. Waiting.");
+                return;
+            }
+        }
         default:
             if (HandleDeferredLocksBrokenOnCommit(ev->Get()->Record)) return;
             HandleError(ev);
@@ -4691,7 +4699,7 @@ public:
         }
     }
 
-    void HandlePrepare(TEvDataShard::TEvOverloadReady::TPtr& ev) {
+    void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev) {
         auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletID();
         const ui64 seqNo = record.GetSeqNo();

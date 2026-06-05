@@ -23,7 +23,7 @@
 
 - Go
 
-  Для {{ ydb-short-name }} Go SDK есть готовый адаптер [ydb-go-sdk-otel](https://github.com/ydb-platform/ydb-go-sdk-otel), который превращает события SDK в сигналы OpenTelemetry: трассы (`WithTracer`), метрики (`WithMetrics`) и логи (`WithLogger`). Адаптер не настраивает экспортёры сам — вы создаёте `LoggerProvider` с OTLP-экспортёром логов, делаете его глобальным, а затем передаёте опцию `ydbOtel.WithLogger` в `ydb.Open`. Каждая внутренняя запись лога SDK (инициализация драйвера, пул сессий, выполнение запросов, ретраи и т.д.) при этом отправляется в коллектор как OTLP log record.
+  Для {{ ydb-short-name }} Go SDK есть готовый адаптер [ydb-go-sdk-otel](https://github.com/ydb-platform/ydb-go-sdk-otel), который превращает события SDK в сигналы OpenTelemetry: трассы (`WithTracer`), метрики (`WithMetrics`) и логи (`WithLogger`). Адаптер не настраивает экспортёры сам — вы создаёте `LoggerProvider` с OTLP-экспортёром логов, получаете из него логгер и передаёте его в опцию `ydbOtel.WithLogger` при вызове `ydb.Open`. Каждая внутренняя запись лога SDK (инициализация драйвера, пул сессий, выполнение запросов, ретраи и т.д.) при этом отправляется в коллектор как OTLP log record.
 
   ```bash
   go get github.com/ydb-platform/ydb-go-sdk-otel

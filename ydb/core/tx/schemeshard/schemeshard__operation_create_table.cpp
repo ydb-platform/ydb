@@ -24,7 +24,6 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription& schema) {
 
 bool CheckColumnTypesConstraints(NKikimrSchemeOp::TTableDescription& desc, TString& errMsg) {
     THashSet<TString> keyColumns(desc.GetKeyColumnNames().begin(), desc.GetKeyColumnNames().end());
-    Y_ENSURE(false, "FAILURE UPON TABLE CREATION");
     for (const auto& column : desc.GetColumns()) {
         const auto& type = column.GetType();
         if (type == "Uuid") {

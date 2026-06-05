@@ -10,6 +10,7 @@
 #include <util/string/split.h>
 #include <util/string/subst.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -64,9 +65,25 @@ bool IsHeading(TStringBuf trimmed) {
 // both sides). Only a marker that opens right before non-space text and closes right after
 // non-space text, on a word boundary, is treated as emphasis and dropped.
 void RemovePairedEmphasis(TString& s, char marker) {
-    TString out;
-    out.reserve(s.size());
     const size_t n = s.size();
+
+    // For every position, precompute the nearest valid closing marker at or after it. A marker can
+    // close a span when it sticks to text on its left and to a boundary on its right. Computing this
+    // once keeps the whole pass linear instead of re-scanning for a closer per opener (was O(n^2)).
+    std::vector<size_t> nextCloser(n + 1, TString::npos);
+    for (size_t j = n; j-- > 0;) {
+        nextCloser[j] = nextCloser[j + 1];
+        if (s[j] == marker) {
+            const char cprev = (j > 0) ? s[j - 1] : '\0';
+            const char cnext = (j + 1 < n) ? s[j + 1] : '\0';
+            if (cprev != ' ' && cprev != '\t' && cprev != marker && !IsWordByte(cnext) && cnext != marker) {
+                nextCloser[j] = j;
+            }
+        }
+    }
+
+    TString out;
+    out.reserve(n);
     for (size_t i = 0; i < n;) {
         if (s[i] == marker) {
             const char prevOut = out.empty() ? '\0' : out.back();
@@ -74,22 +91,9 @@ void RemovePairedEmphasis(TString& s, char marker) {
             const bool canOpen = !IsWordByte(prevOut) && prevOut != marker
                 && next != '\0' && next != ' ' && next != '\t' && next != marker;
             if (canOpen) {
-                size_t close = TString::npos;
-                for (size_t j = i + 1; j < n; ++j) {
-                    if (s[j] != marker) {
-                        continue;
-                    }
-                    const char cprev = s[j - 1];
-                    const char cnext = (j + 1 < n) ? s[j + 1] : '\0';
-                    if (cprev != ' ' && cprev != '\t' && cprev != marker && !IsWordByte(cnext) && cnext != marker) {
-                        close = j;
-                        break;
-                    }
-                }
+                const size_t close = nextCloser[i + 1];
                 if (close != TString::npos) {
-                    for (size_t k = i + 1; k < close; ++k) {
-                        out.push_back(s[k]);
-                    }
+                    out.append(s.data() + i + 1, close - (i + 1)); // inner text, markers dropped
                     i = close + 1;
                     continue;
                 }
@@ -176,14 +180,18 @@ ftxui::Element BuildCodeBlockBar(TStringBuf language) {
         return ftxui::separator() | ftxui::color(ftxui::Color::Grey42);
     }
 
-    int languageWidth = 0;
-    for (size_t i = 0; i < language.size(); i += UTF8RuneLen(language[i])) {
-        ++languageWidth;
+    // Display width of the tag in terminal cells. Fall back to the byte count if the model emitted
+    // a broken (non-UTF-8) info string, so a stray byte can never spin the fill loop forever.
+    size_t languageWidth = 0;
+    if (!GetNumberOfUTF8Chars(language.data(), language.size(), languageWidth)) {
+        languageWidth = language.size();
     }
 
-    std::string fill;
     const int screenWidth = ftxui::Terminal::Size().dimx;
-    for (int i = 0; i < screenWidth - languageWidth - 4; ++i) { // 4 = "──" + a space on each side
+    const int fillWidth = std::max(0, screenWidth - static_cast<int>(languageWidth) - 4); // 4 = "──" + a space each side
+    std::string fill;
+    fill.reserve(fillWidth * 3); // "─" is 3 UTF-8 bytes
+    for (int i = 0; i < fillWidth; ++i) {
         fill += "─";
     }
 

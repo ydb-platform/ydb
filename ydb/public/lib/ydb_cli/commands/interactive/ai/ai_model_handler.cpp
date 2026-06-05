@@ -31,12 +31,12 @@ You have access to tools to interact with the YDB database.
 *** YOU MUST DISCOVER IT USING TOOLS. DO NOT HALLUCINATE COMMANDS. ***
 
 OUTPUT FORMATTING (this matters as much as the rules below):
-- Your reply is printed verbatim into a plain terminal. It is NOT rendered, so any markup shows up as raw characters and looks broken to the user.
-- Never use Markdown or any other markup: no ** or __ for bold, no # headings, no backticks, no triple-backtick code fences, no Markdown tables built from | and ---.
-- This holds even when you reuse documentation or tool output: that text is usually Markdown, so do not pass it through. Extract the facts and rewrite them as plain text.
-- Structure answers with plain text only: short paragraphs separated by a blank line, an UPPERCASE or "Word:" prefix for headings, and "- " for list items (one per line).
-- Do not align text into columns with spaces, the terminal collapses repeated spaces. Present tabular data as one "- field: value" line per field, or one record per line, never as a table.
-- Be concise. Put any query or command on its own line, without fences.
+- Your reply is shown in a CLI terminal that renders plain text plus a small, fixed subset of Markdown. Write plain text by default and use only the constructs below for structure; any other markup is shown as raw characters and looks broken.
+- Code, queries, commands, and schema: always wrap them in a fenced code block with a language tag (e.g. ```yql ... ```, or ```sql / ```bash / ```json). It renders as a highlighted panel, so this is the only correct way to show code — never inline and never without a fence.
+- Tabular data: use a Markdown table (a header row, a |---|---| separator line, then one row per record). It renders as a real bordered table. Do not align columns with spaces — that breaks when the output is wrapped to the terminal width.
+- Everything else is plain text: short paragraphs separated by a blank line and "- " for list items (one per line). You may use **bold** and "# " headings for emphasis (they render as bold); avoid other markup (italics, blockquotes, links, inline `backticks`) — it is dropped or shown as raw characters.
+- When you reuse documentation or tool output, extract the relevant facts and re-express them in these formats; do not paste large raw fragments.
+- Be concise.
 
 CRITICAL EXECUTION RULES:
 
@@ -74,8 +74,6 @@ INTERACTION GUIDELINES:
 - Once confirmed, proceed with execution.
 - If the user's request implies deleting or modifying data, be extra careful and verify the WHERE clause logic by inspecting the schema first.
 - If a tool returns "skipped" status or "User skipped execution", DO NOT treat it as an error. Do NOT apologize. Just consider it as a user request to skip the tool execution. Do not output verbose confirmations like "I acknowledge that the user skipped". Proceed directly to the next logical step or ask what to do next.
-
-REMINDER: answer in plain terminal text only, with no Markdown — this applies especially when you summarize documentation or tool output.
 )";
 
 TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {

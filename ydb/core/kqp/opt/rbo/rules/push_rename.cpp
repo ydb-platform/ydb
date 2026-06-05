@@ -54,6 +54,10 @@ bool ProducesAggregateResult(const TIntrusivePtr<TOpAggregate>& aggregate, const
     });
 }
 
+bool ProducesAggregateKey(const TIntrusivePtr<TOpAggregate>& aggregate, const TInfoUnit& iu) {
+    return ContainsInfoUnit(aggregate->KeyColumns, iu);
+}
+
 TIntrusivePtr<IOperator> SelectJoinInputForRename(const TIntrusivePtr<TOpJoin>& join, const TInfoUnit& from) {
     const bool leftHas = ContainsInfoUnit(join->GetLeftInput()->GetOutputIUs(), from);
     const bool rightHas = ContainsInfoUnit(join->GetRightInput()->GetOutputIUs(), from);
@@ -101,6 +105,11 @@ bool BuildRenamePath(const TIntrusivePtr<TOpMap>& topMap, const TInfoUnit& from,
             if (ProducesAggregateResult(aggregate, from)) {
                 path.Producer = current;
                 return true;
+            }
+            if (ProducesAggregateKey(aggregate, from)) {
+                path.TransparentOps.push_back(current);
+                current = aggregate->GetInput();
+                continue;
             }
             return false;
         }

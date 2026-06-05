@@ -3204,7 +3204,66 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());
     }
 
-    Y_UNIT_TEST(PushRenameDoesNotPushAggregateKeyRename) {
+    Y_UNIT_TEST(PushRenamePushesAggregateKeyAppendAliasThroughSort) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestAppend("alias_key", "key", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto sort = MakeIntrusive<TOpSort>(
+            aliasMap,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("alias_key"), true, true)},
+            std::nullopt
+        );
+        TOpRoot root(sort, pos, {"alias_key", "sum_value"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        TRuleBasedStage pushRename("Focused push rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushRename.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push semantic rename");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenSort->SortElements.size(), 1);
+        UNIT_ASSERT(rewrittenSort->SortElements.front().SortColumn == TInfoUnit("alias_key"));
+
+        UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenAggregate = CastOperator<TOpAggregate>(rewrittenSort->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList.front().OriginalColName == TInfoUnit("value"));
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
+        UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("alias_key"));
+
+        auto rewrittenRead = CastOperator<TOpRead>(rewrittenAggregate->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenRead->Columns.front(), "key");
+        UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("alias_key"));
+
+        const auto aggregateOutput = rewrittenAggregate->GetOutputIUs();
+        UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("alias_key")) != aggregateOutput.end());
+        UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("key")) == aggregateOutput.end());
+    }
+
+    Y_UNIT_TEST(PushRenamePushesAggregateKeySemanticRename) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -3232,13 +3291,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         pushRename.RunStage(root, testContext.RboCtx);
 
         const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        UNIT_ASSERT_C(!appliedRules.contains("Push semantic rename"), root.PlanToString(testContext.ExprCtx));
+        auto ruleIt = appliedRules.find("Push semantic rename");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
 
-        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
-        UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
-        UNIT_ASSERT_VALUES_EQUAL(aggregate->KeyColumns.size(), 1);
-        UNIT_ASSERT(aggregate->KeyColumns.front() == TInfoUnit("key"));
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenAggregate = CastOperator<TOpAggregate>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
+        UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("alias_key"));
+
+        auto rewrittenRead = CastOperator<TOpRead>(rewrittenAggregate->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenRead->Columns.front(), "key");
+        UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("alias_key"));
     }
 
     Y_UNIT_TEST(PushRenameUpdatesPendingSubplanTuple) {

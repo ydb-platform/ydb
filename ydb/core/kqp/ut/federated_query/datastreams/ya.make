@@ -14,6 +14,7 @@ ENDIF()
 SRCS(
     common.cpp
     datastreams_ut.cpp
+    datastreams_table_mode_ut.cpp
     streaming_ddl_ut.cpp
     streaming_sys_view_ut.cpp
 )
@@ -35,6 +36,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    yql/essentials/udfs/common/yson2
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

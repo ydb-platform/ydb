@@ -137,7 +137,9 @@ public:
     // DDisk, specified in the parameter destination. If InvalidHostIndex is
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
-    [[nodiscard]] THostIndex RequestFlush(THostIndex destination);
+    [[nodiscard]] THostIndex RequestFlush(
+        THostIndex destination,
+        THostMask disabledHosts);
     void ConfirmFlush(THostRoute route);
     void FlushFailed(THostRoute route);
     [[nodiscard]] THostMask GetRequestedFlushes() const;

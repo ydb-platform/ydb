@@ -28,13 +28,13 @@ from .prettytable import (  # noqa: F401
     from_html,
     from_html_one,
     from_json,
+    from_mediawiki,
 )
 
 __all__ = [
     "ALL",
     "DEFAULT",
     "DOUBLE_BORDER",
-    "SINGLE_BORDER",
     "FRAME",
     "HEADER",
     "MARKDOWN",
@@ -43,18 +43,20 @@ __all__ = [
     "ORGMODE",
     "PLAIN_COLUMNS",
     "RANDOM",
+    "SINGLE_BORDER",
     "HRuleStyle",
     "PrettyTable",
     "RowType",
     "TableHandler",
     "TableStyle",
     "VRuleStyle",
+    "__version__",
     "from_csv",
     "from_db_cursor",
     "from_html",
     "from_html_one",
     "from_json",
-    "__version__",
+    "from_mediawiki",
 ]
 
 

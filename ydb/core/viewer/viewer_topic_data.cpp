@@ -216,6 +216,7 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
         }
         messageProto->SetProducerId(decodedSrcId);
         messageProto->SetSeqNo(r.GetSeqNo());
+        messageProto->SetIp(dataChunk.GetIp());
 
         if (dataChunk.MessageMetaSize() > 0) {
             for (const auto& metadata : dataChunk.GetMessageMeta()) {

@@ -11,7 +11,8 @@
 
 namespace NKikimr::NDDisk {
 
-    constexpr size_t DataAlignment = 4096;
+    constexpr size_t MinSectorSize = 4096;
+    constexpr size_t DataAlignment = MinSectorSize;
 
     struct TEv {
         enum {
@@ -47,26 +48,101 @@ namespace NKikimr::NDDisk {
     };
 
     struct TQueryCredentials {
+        using ERequestKind = NKikimrBlobStorage::NDDisk::TQueryCredentials::ERequestKind;
+
         ui64 TabletId;
         ui32 Generation;
         std::optional<ui64> DDiskInstanceGuid;
-        bool FromPersistentBuffer = false;
+        ui64 DDiskSessionSeqNo = 0;
+        ERequestKind RequestKind = NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK;
 
         TQueryCredentials() = default;
 
-        TQueryCredentials(ui64 tabletId, ui32 generation, std::optional<ui64> ddiskInstanceGuid, bool fromPersistentBuffer = false)
+        TQueryCredentials(
+                ui64 tabletId,
+                ui32 generation,
+                ui64 ddiskSessionSeqNo,
+                std::optional<ui64> ddiskInstanceGuid,
+                ERequestKind requestKind)
             : TabletId(tabletId)
             , Generation(generation)
             , DDiskInstanceGuid(ddiskInstanceGuid)
-            , FromPersistentBuffer(fromPersistentBuffer)
+            , DDiskSessionSeqNo(ddiskSessionSeqNo)
+            , RequestKind(requestKind)
         {}
+
+        // Tablet-originated request sent to a DDisk actor.
+        // Validation requires a registered tablet connection with matching generation and DDiskSessionSeqNo,
+        // matching DDiskInstanceGuid when it is set, and matching sender IC session.
+        static TQueryCredentials ToDDisk(
+                ui64 tabletId,
+                ui32 generation,
+                ui64 ddiskSessionSeqNo,
+                std::optional<ui64> ddiskInstanceGuid) {
+            return TQueryCredentials(
+                tabletId,
+                generation,
+                ddiskSessionSeqNo,
+                ddiskInstanceGuid,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK);
+        }
+
+        // Tablet-originated request sent to a PersistentBuffer actor.
+        // Validation still requires a registered tablet connection, matching generation,
+        // matching DDiskInstanceGuid when it is set, and matching sender node. Interconnect session
+        // and DDiskSessionSeqNo are skipped because persistent buffers are not bound to a particular
+        // DDisk session.
+        static TQueryCredentials ToPersistentBuffer(
+                ui64 tabletId,
+                ui32 generation,
+                std::optional<ui64> ddiskInstanceGuid) {
+            return TQueryCredentials(
+                tabletId,
+                generation,
+                0,
+                ddiskInstanceGuid,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_PERSISTENT_BUFFER);
+        }
+
+        // Internal DDisk/PersistentBuffer forwarding.
+        // Validation allows the request to bypass sender IC session checks and to pass without a registered
+        // tablet connection on the receiver. DDiskSessionSeqNo is not checked: each DDisk has its own session
+        // sequence number, so a forwarding actor cannot know the right value for every target.
+        static TQueryCredentials ForInternal(
+                ui64 tabletId,
+                ui32 generation,
+                std::optional<ui64> ddiskInstanceGuid) {
+            return TQueryCredentials(
+                tabletId,
+                generation,
+                0,
+                ddiskInstanceGuid,
+                NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_INTERNAL);
+        }
 
         TQueryCredentials(const NKikimrBlobStorage::NDDisk::TQueryCredentials& pb)
             : TabletId(pb.GetTabletId())
             , Generation(pb.GetGeneration())
             , DDiskInstanceGuid(pb.HasDDiskInstanceGuid() ? std::make_optional(pb.GetDDiskInstanceGuid()) : std::nullopt)
-            , FromPersistentBuffer(pb.GetFromPersistentBuffer())
+            , DDiskSessionSeqNo(pb.GetDDiskSessionSeqNo())
+            , RequestKind(pb.GetRequestKind())
         {}
+
+        bool IsInternal() const {
+            return RequestKind == NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_INTERNAL;
+        }
+
+        bool RequiresDDiskSessionSeqNoCheck() const {
+            return RequestKind == NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK;
+        }
+
+        bool RequiresSenderCheck() const {
+            return !IsInternal();
+        }
+
+        bool RequiresInterconnectSessionCheck() const {
+            return RequestKind == NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK;
+        }
 
         void Serialize(NKikimrBlobStorage::NDDisk::TQueryCredentials *pb) const {
             pb->SetTabletId(TabletId);
@@ -74,8 +150,11 @@ namespace NKikimr::NDDisk {
             if (DDiskInstanceGuid) {
                 pb->SetDDiskInstanceGuid(*DDiskInstanceGuid);
             }
-            if (FromPersistentBuffer) {
-                pb->SetFromPersistentBuffer(FromPersistentBuffer);
+            if (DDiskSessionSeqNo) {
+                pb->SetDDiskSessionSeqNo(DDiskSessionSeqNo);
+            }
+            if (RequestKind != NKikimrBlobStorage::NDDisk::TQueryCredentials::REQUEST_KIND_TO_DDISK) {
+                pb->SetRequestKind(RequestKind);
             }
         }
     };
@@ -177,7 +256,7 @@ struct TPersistentBufferFormat {
     ui32 MaxChunkRestoreInflight = 8;
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
     ui64 PerTabletStorageLimit = 4096_MB;
-    ui32 MaxBarriersLimit = 64;
+    ui32 MaxBarriersLimit = 128;
     ui32 MaxPendingEventsQueueSize = 1024;
     bool EnableFastErases = true;
 };
@@ -267,7 +346,7 @@ struct TPersistentBufferFormat {
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
     };
@@ -325,8 +404,12 @@ struct TPersistentBufferFormat {
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
+        }
+
+        static constexpr size_t GetPayloadHeaderSize() {
+            return MinSectorSize;
         }
     };
 
@@ -405,7 +488,7 @@ struct TPersistentBufferFormat {
             }
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
     };

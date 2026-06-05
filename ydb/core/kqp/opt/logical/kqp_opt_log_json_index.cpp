@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -85,6 +86,47 @@ TExprBase UnwrapPredicate(TExprBase node) {
     return node;
 }
 
+// Returns true if a cast/convert from `from` to `to` is allowed for JSON index predicate extraction
+bool IsAllowedCastForJsonIndex(EDataSlot from, EDataSlot to) {
+    static const THashSet<EDataSlot> allowedStringTypes = {EDataSlot::String, EDataSlot::Utf8};
+    if (allowedStringTypes.contains(from) && allowedStringTypes.contains(to)) {
+        return true;
+    }
+
+    if (IsDataTypeFloat(from) && IsDataTypeFloat(to)) {
+        return true;
+    }
+
+    if (IsDataTypeIntegral(from) && (IsDataTypeIntegral(to) || IsDataTypeFloat(to))) {
+        return true;
+    }
+
+    return false;
+}
+
+std::optional<EDataSlot> GetBaseDataSlot(const TExprBase& node) {
+    auto ann = node.Ref().GetTypeAnn();
+    if (!ann) {
+        return std::nullopt;
+    }
+
+    while (ann->GetKind() == ETypeAnnotationKind::Optional) {
+        ann = ann->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    if (ann->GetKind() != ETypeAnnotationKind::Data) {
+        return std::nullopt;
+    }
+
+    return ann->Cast<TDataExprType>()->GetSlot();
+}
+
+bool IsSupportedCast(const TExprBase& from, const TExprBase& to) {
+    const auto fromSlot = GetBaseDataSlot(from);
+    const auto toSlot   = GetBaseDataSlot(to);
+    return fromSlot.has_value() && toSlot.has_value() && IsAllowedCastForJsonIndex(*fromSlot, *toSlot);
+}
+
 TExprBase UnwrapValue(TExprBase node) {
     while (true) {
         if (const auto just = node.Maybe<TCoJust>()) {
@@ -92,7 +134,23 @@ TExprBase UnwrapValue(TExprBase node) {
         } else if (const auto unwrap = node.Maybe<TCoUnwrap>()) {
             node = unwrap.Cast().Optional();
         } else if (const auto cast = node.Maybe<TCoSafeCast>()) {
-            node = cast.Cast().Value();
+            const auto castNode = cast.Cast();
+            if (!IsSupportedCast(castNode.Value(), castNode)) {
+                break;
+            }
+            node = castNode.Value();
+        } else if (const auto strictCast = node.Maybe<TCoStrictCast>()) {
+            const auto strictCastNode = strictCast.Cast();
+            if (!IsSupportedCast(strictCastNode.Value(), strictCastNode)) {
+                break;
+            }
+            node = strictCastNode.Value();
+        } else if (const auto convert = node.Maybe<TCoConvert>()) {
+            const auto convertNode = convert.Cast();
+            if (!IsSupportedCast(convertNode.Input(), convertNode)) {
+                break;
+            }
+            node = convertNode.Input();
         } else {
             break;
         }
@@ -568,8 +626,8 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
                 return MakeCollectError(ctx, param.Pos(), "List parameter item type is not supported for JSON index");
             }
         } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Tuple) {
-            const auto* tupleType = paramTypeAnn->Cast<TTupleExprType>();
-            for (const auto* itemType : tupleType->GetItems()) {
+            const auto& items = paramTypeAnn->Cast<TTupleExprType>()->GetItems();
+            for (const auto* itemType : items) {
                 if (!IsSupportedJsonParamType(itemType)) {
                     return MakeCollectError(ctx, param.Pos(),
                         "Tuple parameter item type is not supported for JSON index");

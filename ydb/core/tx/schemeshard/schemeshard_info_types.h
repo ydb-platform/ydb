@@ -819,6 +819,12 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
+    // True when partition rows are stored in TablePartitionsByShardIdx (keyed by ShardIdx).
+    // False (default) when stored in TablePartitions/MigratedTablePartitions (keyed by position);
+    // both legacy tables are scheduled for removal once migration is complete, after which this
+    // flag and its branches can be deleted.
+    // Toggled during the first split/merge after EnableTablePartitionsFormatShardIdx changes.
+    bool PartitionsInShardIdxFormat = false;
     bool IsRestore = false;
     bool IsTemporary = false;
     TActorId OwnerActorId;
@@ -841,6 +847,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
     bool IsExternalBlobsEnabled = false;
+
+    mutable ui64 LastVerifyConsistencyTime = 0;
 
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
@@ -933,8 +941,13 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TTLColumnId;
     }
 
+    static constexpr ui32 InvalidColumnId = Max<ui32>();
+    // TODO(flown4qqqq):: rework this into a fast way.
+    ui32 GetColumnIdByNameSlow(const TString& columnName) const;
+
 private:
     using TPartitionsVec = TVector<TTableShardInfo*>;
+    void CalculateColumnIdByName() const;
 
     // Stable-address store: THashMap uses separate chaining, so element references
     // survive insert.  Also serves as the O(1) ShardIdx lookup index.
@@ -988,7 +1001,6 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
-        bool EnableSetColumnConstraint = false; // This flag is used in alter table operation only
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -3005,6 +3017,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -3023,8 +3036,21 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
-            default:
-                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(type));
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TBloomFilter>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TBloomNGrammFilter>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 break;
         }
     }
@@ -3059,8 +3085,14 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return new TTableIndexInfo(0, type, EState::EIndexStateInvalid, {});
     }
 
+    static bool IsLocalIndex(EType type) {
+        return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax;
+    }
+
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
-        if (!config.KeyColumnNamesSize()) {
+        if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
             errMsg += TStringBuilder() << "no key columns in index creation config";
             return nullptr;
         }
@@ -3069,7 +3101,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         TPtr alterData = result->CreateNextVersion();
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
-        Y_ENSURE(!alterData->IndexKeys.empty());
+        if (!IsLocalIndex(config.GetType())) {
+            Y_ENSURE(!alterData->IndexKeys.empty());
+        }
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
@@ -3079,6 +3113,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
@@ -3088,8 +3123,53 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
                 break;
-            default:
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 errMsg += InvalidIndexType(config.GetType());
+                return nullptr;
+        }
+
+        return result;
+    }
+
+    static TPtr Create(const NKikimrSchemeOp::TIndexAlteringConfig& config, TString& errMsg) {
+        if (!config.HasType() || !IsLocalIndex(config.GetType())) {
+            errMsg += TStringBuilder() << "TIndexAlteringConfig requires a valid local index type to be set";
+            return nullptr;
+        }
+
+        if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
+            errMsg += TStringBuilder() << "no key columns in index altering config";
+            return nullptr;
+        }
+
+        TPtr result = NotExistedYet(config.GetType());
+
+        TPtr alterData = result->CreateNextVersion();
+        alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
+        if (!IsLocalIndex(config.GetType())) {
+            Y_ENSURE(!alterData->IndexKeys.empty());
+        }
+
+        alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+        switch (GetIndexType(config)) {
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                alterData->SpecializedIndexDescription = std::monostate{};
+                break;
+            default:
+                errMsg += TStringBuilder() << "TIndexAlteringConfig only supports local index types, got: " << NKikimrSchemeOp::EIndexType_Name(config.GetType());
                 return nullptr;
         }
 
@@ -3107,7 +3187,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
-        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
+        NKikimrSchemeOp::TFulltextIndexDescription,
+        NKikimrSchemeOp::TBloomFilter,
+        NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;
 };
 
 struct TCdcStreamSettings {
@@ -4167,6 +4249,97 @@ struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
             }
         }
         return true;
+    }
+};
+
+// Trackable full backup op (the aggregator over a BackupBackupCollection's
+// CCT). Mirrors TIncrementalBackupInfo with three changes:
+//   - Adds Failed terminal state (header + item).
+//   - Stores BackupCollectionPathId so reboot can rebuild
+//     Self->BCPathToFullBackup from non-terminal rows.
+//   - Stores FinalIssues for hard-fail diagnostics surfaced via GET.
+struct TFullBackupInfo : public TSimpleRefCount<TFullBackupInfo> {
+    using TPtr = TIntrusivePtr<TFullBackupInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        Transferring = 1,
+        Failed = 230,
+        Done = 240,
+    };
+
+    struct TItem {
+        enum class EState: ui8 {
+            Invalid = 0,
+            Transferring = 1,
+            Failed = 230,
+            Done = 240,
+        };
+
+        TPathId PathId;
+        EState State;
+
+        bool IsDone() const {
+            return State == EState::Done;
+        }
+    };
+
+    ui64 Id;
+    EState State;
+    TPathId DomainPathId;
+    TPathId BackupCollectionPathId;
+
+    // Planned number of items (base tables + non-omitted index impl tables).
+    // Advisory only (drives the progress percentage); the terminal state is
+    // decided by control op completion, not by this count.
+    ui32 ExpectedItemCount = 0;
+
+    THashMap<TPathId, TItem> Items;
+
+    TMaybe<TString> UserSID;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+    TString FinalIssues;
+
+    explicit TFullBackupInfo(
+            const ui64 id,
+            const TPathId domainPathId)
+        : Id(id)
+        , State(EState::Invalid)
+        , DomainPathId(domainPathId)
+    {}
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    bool IsFailed() const {
+        return State == EState::Failed;
+    }
+
+    bool IsFinished() const {
+        return IsDone() || IsFailed();
+    }
+
+    bool IsAllItemsDone() const {
+        for (const auto& item : Items) {
+            if (!item.second.IsDone()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // True if any observed item is in the Failed terminal state. Drives the
+    // Done-vs-Failed choice when operation completion finalizes the header
+    // (see FinalizeFullBackupOnOpComplete).
+    bool HasAnyFailed() const {
+        for (const auto& [_, item] : Items) {
+            if (item.State == TItem::EState::Failed) {
+                return true;
+            }
+        }
+        return false;
     }
 };
 

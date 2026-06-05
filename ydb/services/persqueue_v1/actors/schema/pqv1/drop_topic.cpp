@@ -26,7 +26,7 @@ public:
         Become(&TDropTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
-            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
             .Path = GetProtoRequest()->path(),
             .UserToken = GetUserToken()

@@ -426,12 +426,13 @@ runs:
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
 
           set +e
+          # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
+          # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
           (sudo -n -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
-             --uid=$(id -u) --gid=$(id -g) \
-             -- \
+             -- sudo -n -E -u "$(id -un)" -- \
              "${YA_MAKE_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e

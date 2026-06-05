@@ -62,7 +62,7 @@ std::shared_ptr<arrow::Schema> GetTestPKSchema() {
 
 std::shared_ptr<arrow::RecordBatch> MakePKBatch(const std::vector<ui64>& keys) {
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues(keys).ok());
+    AFL_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(keys.data()), static_cast<int64_t>(keys.size())).ok());
     auto array = builder.Finish().ValueOrDie();
     return arrow::RecordBatch::Make(GetTestPKSchema(), keys.size(), { array });
 }
@@ -173,7 +173,7 @@ public:
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> MakeUInt64Column(const std::vector<ui64>& values) {
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues(values).ok());
+    AFL_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(values.data()), static_cast<int64_t>(values.size())).ok());
     return std::make_shared<NArrow::NAccessor::TTrivialArray>(builder.Finish().ValueOrDie());
 }
 

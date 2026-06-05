@@ -1473,12 +1473,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select sum(t1.c) as sum0, sum(t1.a + 3) as sum1 from `/Root/t1` as t1 group by t1.b + 1 order by sum0;
             )",
-            /*
-            R"(
-                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
-                select sum(t1.c) as sum0, t1.b + 1, t1.c + 2 from `/Root/t1` as t1 group by t1.b + 1, t1.c + 2 order by sum0;
-            )",
-            */
             R"(
                 PRAGMA YqlSelectAllowUnnamedGroupByExpr;
                 select sum(t1.c + 2) as sum0 from `/Root/t1` as t1 group by t1.b + t1.a order by sum0;
@@ -1493,21 +1487,37 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                             then 1
                             else 0 end) + 1, sum(t1.a) as r, t1.b + 2 as group_key from `/Root/t1` as t1 group by t1.b + 2 order by r;
             )",
+            R"(
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+                select sum(t1.c) as sum0, t1.b + 1, t1.c + 2 from `/Root/t1` as t1 group by t1.b + 1, t1.c + 2 order by sum0;
+            )",
+            R"(
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+                select sum(t1.c) as sum0, t1.b, t1.c from `/Root/t1` as t1 group by t1.b, t1.c order by sum0;
+            )",
+            R"(
+                pragma YqlSelect = "force";
+                select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b, t1.b from `/Root/t1` as t1 group by t1.b order by sum_c;
+            )",
+            R"(
+                pragma YqlSelect = "force";
+                select distinct min(t1.a) as min_a, max(t1.a) as max_a, t1.b from `/Root/t1` as t1 group by t1.b order by min_a;
+            )",
+            R"(
+                pragma YqlSelect = "force";
+                select distinct (t1.a + t1.b) as res from `/Root/t1` as t1 order by res;
+            )",
+            R"(
+                pragma YqlSelect = "force";
+                select distinct (t1.b + 1) as res from `/Root/t1` as t1 order by res;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a, t1.b;
+            )",
             /*
             R"(
-                select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b from `/Root/t1` as t1 group by t1.b order by sum_c;
-            )",
-            R"(
-                select distinct min(t1.a) as min_a, max(t1.a) as max_a from `/Root/t1` as t1 group by t1.b order by min_a;
-            )",
-
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select distinct t1.b from `/Root/t1` as t1 order by t1.b;
+                select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
             )",
             */
         };
@@ -1544,9 +1554,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[0];[1];[2];[3];[4]])",
                                             R"([[2u];[3u]])",
                                             R"([[[4];10];[[6];15]])",
-                                            //R"([[[4];[2];[4]];[[6];[3];[4]]])"
                                             R"([[[4]];[[8]];[[8]]])",
-                                            R"([[3;4;[3]];[3;6;[4]]])"
+                                            R"([[3;4;[3]];[3;6;[4]]])",
+                                            R"([[[4];[2];[4]];[[6];[3];[4]]])",
+                                            R"([[[4];[1];[2]];[[6];[2];[2]]])",
+                                            R"([[[4];4;[1]];[[6];6;[2]]])",
+                                            R"([[0;4;[2]];[1;3;[1]]])",
+                                            R"([[[2]];[[4]];[[6]]])",
+                                            R"([[[2]];[[3]]])",
+                                            R"([[0;[2]];[1;[1]];[2;[2]];[3;[1]];[4;[2]]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -2108,6 +2124,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan for query: " << qId);
                 AssertNewRBOCboOptimizedAllTrees(type, qId, TString{*result.GetStats()->GetPlan()});
             }
+
         }
 
         if (printStatus) {
@@ -2131,8 +2148,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
+        kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+
+        TKikimrRunner kikimr(kikimrSettings);
+        
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
@@ -2141,8 +2163,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
             const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
             const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
 
-            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
+            q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
 
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -2155,14 +2178,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
-        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
+        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
     }
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 7, 11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
-                                                                     50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 76, 78, 79, 81, 82, 83, 84, 85, 90, 91, 92, 96, 99},
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 6, 7, 11, 13, 15, 18, 19, 21, 22, 24, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
+                                                                      50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82, 83,
+                                                                      84, 85, 88, 90, 91, 92, 93, 96, 99},
                            /*rbo never finish*/{5}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
@@ -4256,8 +4280,6 @@ PRAGMA ydb.OptShuffleElimination = "true";
                 JoinType(e f g Shuffle)
                 JoinType(e f g h Shuffle)
                 JoinType(a b c i d e f g h Shuffle)
-                Rows(a b c i d # 10000000)
-                Bytes(a b c i d # 10000000)
                 JoinOrder(((((a b) c) i) d) (((e f) g) h))
             ';
 
@@ -4955,6 +4977,11 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
                 group by rollup(t1.a, t1.c)
                 order by a, c;
             )",
+            R"(
+                SELECT count(t1.a + 1) + 2, t1.b as b FROM `/Root/t1` as t1
+                group by rollup(t1.b)
+                order by b;
+            )",
         };
 
         const std::vector<std::string> results = {
@@ -4964,6 +4991,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             R"([[4u;#;#;#];[1u;[1];#;#];[1u;[1];[2];#];[1u;[1];[2];[3]];[1u;[2];#;#];[1u;[2];[3];#];[1u;[2];[3];[4]];[1u;[3];#;#];[1u;[3];[4];#];[1u;[3];[4];[5]];[1u;[4];#;#];[1u;[4];[5];#];[1u;[4];[5];[6]]])",
             R"([[4u;#;#;#;#];[1u;[1];#;#;#];[1u;[1];[2];#;#];[1u;[1];[2];[3];#];[1u;[1];[2];[3];[4]];[1u;[2];#;#;#];[1u;[2];[3];#;#];[1u;[2];[3];[4];#];[1u;[2];[3];[4];[5]];[1u;[3];#;#;#];[1u;[3];[4];#;#];[1u;[3];[4];[5];#];[1u;[3];[4];[5];[6]];[1u;[4];#;#;#];[1u;[4];[5];#;#];[1u;[4];[5];[6];#];[1u;[4];[5];[6];[7]]])",
             R"([[[10];[1];[4];[2.5];#;#];[[1];[1];[1];[1.];[0];#];[[1];[1];[1];[1.];[0];[2]];[[2];[2];[2];[2.];[1];#];[[2];[2];[2];[2.];[1];[3]];[[3];[3];[3];[3.];[2];#];[[3];[3];[3];[3.];[2];[4]];[[4];[4];[4];[4.];[3];#];[[4];[4];[4];[4.];[3];[5]]])",
+            R"([[6u;#];[3u;[1]];[3u;[2]];[3u;[3]];[3u;[4]]])",
         };
 
         auto queryClient = kikimr.GetQueryClient();

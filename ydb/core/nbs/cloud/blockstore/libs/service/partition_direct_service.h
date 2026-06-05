@@ -10,11 +10,13 @@
 #include <util/datetime/base.h>
 #include <util/system/types.h>
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-struct TVChunkConfig;
-}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
-
 namespace NYdb::NBS::NBlockStore {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NStorage::NPartitionDirect {
+class TVChunkConfig;
+}   // namespace NStorage::NPartitionDirect
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -843,12 +843,12 @@ public:
         Y_ENSURE(keyItems.size() == KeyColumns_.size());
         for (size_t i = 0; i < KeyColumns_.size(); i++) {
             auto indexItem = blockStorage.GetItem(entry, KeyColumns_[i]);
-            if (blockStorage.GetItemComparators()[KeyColumns_[i]]->Equals(indexItem, keyItems[i])) {
-                return true;
+            if (!blockStorage.GetItemComparators()[KeyColumns_[i]]->Equals(indexItem, keyItems[i])) {
+                return false;
             }
         }
 
-        return false;
+        return true;
     }
 
     const NUdf::TUnboxedValue& GetBlockStorage() const {

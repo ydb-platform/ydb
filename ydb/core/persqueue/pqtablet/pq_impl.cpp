@@ -2,6 +2,7 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 #include "fix_transaction_states.h"
+#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -56,7 +57,6 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
-
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
         : Actor(actor)
@@ -1866,6 +1866,28 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NW
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
+void TPersQueue::FillBatchInfo(
+    const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+    TEvPQ::TEvWrite::TMsg& msg) const
+{
+    if (cmd.HasMaxSeqNo()) {
+        msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
+    }
+    msg.MessageCount = static_cast<ui32>(cmd.GetMessageCount());
+    msg.MessageFormat = FromProtoMessageFormat(cmd.GetMessageFormat());
+    if (cmd.GetPartNo() > 0) {
+        return;
+    }
+
+    msg.PartitionKeys.reserve(cmd.PartitionKeysSize());
+    for (ui32 i = 0; i < cmd.PartitionKeysSize(); ++i) {
+        const auto& partitionKey = cmd.GetPartitionKeys(i);
+        msg.PartitionKeys.emplace_back(
+            partitionKey.GetKey(),
+            partitionKey.HasSize() ? static_cast<ui64>(partitionKey.GetSize()) : 0);
+    }
+}
+
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -1945,6 +1967,12 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "too long partition key";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
+        } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
+            errorStr = "MaxSeqNo must be >= 0";
+        } else if (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT) {
+            errorStr = TStringBuilder() << "MessageCount must be >= 1 and <= " << MAX_MESSAGE_COUNT;
+        } else if (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS)) {
+            errorStr = TStringBuilder() << "MessageFormat must be >= 0 and < " << (1 << MESSAGE_FORMAT_BITS);
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {
@@ -2056,8 +2084,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .HeartbeatVersion = heartbeatVersion,
                     .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                     .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                    .MessageDeduplicationId = deduplicationId
+                    .MessageDeduplicationId = deduplicationId,
                 });
+                FillBatchInfo(cmd, msgs.back());
 
                 partNo++;
                 uncompressedSize = 0;
@@ -2106,8 +2135,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .HeartbeatVersion = heartbeatVersion,
                 .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                 .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                .MessageDeduplicationId = std::move(deduplicationId)
+                .MessageDeduplicationId = std::move(deduplicationId),
             });
+            FillBatchInfo(cmd, msgs.back());
         }
         PQ_LOG_D("got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
                  " partition: " << req.GetPartition() <<

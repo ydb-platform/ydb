@@ -1,5 +1,3 @@
-from typing import Optional
-
 from sqlalchemy import and_, true
 from sqlalchemy.sql.base import Immutable
 from sqlalchemy.sql.selectable import FromClause, Join
@@ -17,7 +15,7 @@ def _normalize_array_columns(array_column, alias):
         elif isinstance(alias, (list, tuple)):
             aliases = list(alias)
             if len(aliases) != len(columns):
-                raise ValueError(f"Length of alias list ({len(aliases)}) must match " f"length of array_column list ({len(columns)})")
+                raise ValueError(f"Length of alias list ({len(aliases)}) must match length of array_column list ({len(columns)})")
         else:
             raise ValueError("alias must be a list when array_column is a list")
     else:
@@ -29,7 +27,6 @@ def _normalize_array_columns(array_column, alias):
     return list(zip(columns, aliases))
 
 
-# pylint: disable=protected-access,too-many-ancestors,abstract-method,unused-argument
 class ArrayJoin(Immutable, FromClause):
     """Represents ClickHouse ARRAY JOIN clause.
 
@@ -91,6 +88,7 @@ class ArrayJoin(Immutable, FromClause):
         This ensures that when queries are cloned (e.g., for subqueries, unions, or CTEs),
         the left FromClause and array column references are properly deep-cloned.
         """
+
         def _default_clone(elem, **kwargs):
             return elem
 
@@ -98,10 +96,7 @@ class ArrayJoin(Immutable, FromClause):
             clone = _default_clone
 
         self.left = clone(self.left, **kw)
-        self.array_columns = [
-            (clone(col, **kw), alias)
-            for col, alias in self.array_columns
-        ]
+        self.array_columns = [(clone(col, **kw), alias) for col, alias in self.array_columns]
 
 
 def array_join(left, array_column, alias=None, is_left=False):
@@ -195,7 +190,6 @@ def _build_using_onclause(left, right, using):
     return and_(*conditions) if len(conditions) > 1 else conditions[0]
 
 
-# pylint: disable=too-many-ancestors,abstract-method
 class ClickHouseJoin(Join):
     """A SQLAlchemy Join subclass that supports ClickHouse-specific join features.
 
@@ -231,8 +225,18 @@ class ClickHouseJoin(Join):
         ("using_columns", InternalTraversal.dp_string_list),
     ]
 
-    def __init__(self, left, right, onclause=None, isouter=False, full=False,
-                 strictness=None, distribution=None, _is_cross=False, using=None):
+    def __init__(
+        self,
+        left,
+        right,
+        onclause=None,
+        isouter=False,
+        full=False,
+        strictness=None,
+        distribution=None,
+        _is_cross=False,
+        using=None,
+    ):
         if strictness is not None:
             strictness = strictness.upper()
         if distribution is not None:
@@ -257,8 +261,8 @@ def ch_join(
     full=False,
     cross=False,
     using=None,
-    strictness: Optional[str] = None,
-    distribution: Optional[str] = None,
+    strictness: str | None = None,
+    distribution: str | None = None,
 ):
     """Create a ClickHouse JOIN with optional strictness, distribution, and USING support.
 
@@ -286,5 +290,14 @@ def ch_join(
         if using is not None:
             raise ValueError("cross=True conflicts with using")
         onclause = true()
-    return ClickHouseJoin(left, right, onclause, isouter, full,
-                          strictness, distribution, _is_cross=cross, using=using)
+    return ClickHouseJoin(
+        left,
+        right,
+        onclause,
+        isouter,
+        full,
+        strictness,
+        distribution,
+        _is_cross=cross,
+        using=using,
+    )

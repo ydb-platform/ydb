@@ -40,6 +40,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -152,7 +153,7 @@ namespace NKikimr::NSqsTopic::V1 {
             } else {
                 result.set_body(Base64Encode(message.Data));
 
-                auto codecName = [](Ydb::Topic::Codec codec) {
+                auto codecName = [](Ydb::Topic::Codec codec) -> TString {
                     switch (codec) {
                         case Ydb::Topic::CODEC_GZIP:
                             return "gzip";
@@ -161,7 +162,7 @@ namespace NKikimr::NSqsTopic::V1 {
                         case Ydb::Topic::CODEC_ZSTD:
                             return "zstd";
                         default:
-                            return "";
+                            return TStringBuilder() << static_cast<int>(codec);
                     }
                 };
                 result.mutable_attributes()->emplace("BodyEncoding", codecName(message.Codec));

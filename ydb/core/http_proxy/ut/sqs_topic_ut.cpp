@@ -10,6 +10,8 @@
 
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -176,6 +178,21 @@ namespace {
                             .Decompress(true);
         auto messages = ReadMessagesSync(topicClient.CreateReadSession(settings), commit, count, timeout);
         return messages;
+    }
+
+    void WriteMessageViaTopicSdk(
+        NYdb::TDriver& driver,
+        const TString& topicPath,
+        const TString& messageBody,
+        NYdb::NTopic::ECodec codec = NYdb::NTopic::ECodec::RAW)
+    {
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto writeSettings = NYdb::NTopic::TWriteSessionSettings()
+            .Path(topicPath)
+            .Codec(codec);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
+        UNIT_ASSERT(writer->Write(messageBody));
+        writer->Close();
     }
 } // namespace
 
@@ -607,7 +624,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }
         }
 
-         Y_UNIT_TEST_F(TestReceiveMessage, TFixture) {
+        Y_UNIT_TEST_F(TestReceiveMessage, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;
             bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
@@ -625,6 +642,27 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             // Second call during visibility timeout
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageZstdCompressed, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            const TString messageBody = "MessageBody-0";
+            WriteMessageViaTopicSdk(driver, path.TopicPath, messageBody, NYdb::NTopic::ECodec::ZSTD);
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+
+            const auto& message = jsonReceived["Messages"][0];
+            UNIT_ASSERT_VALUES_EQUAL(message["Attributes"]["BodyEncoding"].GetString(), "zstd");
+
+            const NYdb::NTopic::ICodec* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(
+                static_cast<uint32_t>(NYdb::NTopic::ECodec::ZSTD));
+            const TString decompressed = codec->Decompress(Base64Decode(message["Body"].GetString()));
+            UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageReturnToQueue, TFixture) {
@@ -2078,4 +2116,5 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         json = DeleteQueue({{"QueueUrl", queueUrl}}, 400);
         UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
     }
+
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

@@ -107,7 +107,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 
-    const auto maybeFinalStage = phyStages.back();
+    // The root stage is last in the topologically sorted StageIds. It is usually also phyStages.back(),
+    // but a lone row-source stage is built into Stages without being appended to phyStages (see above),
+    // so deriving the final stage from finalizedStages is correct even when phyStages is empty.
+    Y_ENSURE(!stageIds.empty());
+    const auto maybeFinalStage = finalizedStages.at(stageIds.back());
     const auto finalStage = GetFinalStage(maybeFinalStage);
     if (finalStage.Get() != maybeFinalStage.Get()) {
         phyStages.push_back(finalStage);

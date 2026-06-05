@@ -30,10 +30,14 @@ class TJsonQuery : public TViewerPipeClient {
     int TotalRows = 0;
     bool CollectDiagnostics = true;
     bool Long = false;
+    bool Forget = false;
+    bool QueryForgotten = false;
     TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
+    TDuration ForgetAfter = TDuration::Seconds(1);
     TInstant LastSendTime;
     TInstant QueryStartTime;
+    TInstant QueryRequestStartTime;
     TInstant Deadline;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
 
@@ -87,6 +91,13 @@ private:
         if (!ExecutionId.empty()) {
             jsonResponse["execution_id"] = ExecutionId;
         }
+    }
+
+    TDuration GetWakeupPeriod() const {
+        if (Forget && QueryRequestStartTime) {
+            return Min(WakeupPeriod, ForgetAfter);
+        }
+        return WakeupPeriod;
     }
 
     void CreateStandardErrorResponse(NJson::TJsonValue& jsonResponse, const TString& message) {
@@ -294,6 +305,7 @@ public:
             Action = params.Get("action");
         }
         Long = Action == "execute-long-query";
+        Forget = Action == "execute-query-and-forget";
         if (params.Has("schema")) {
             Schema = StringToSchemaType(params.Get("schema"));
             if (Params.Get("schema") == "multipart") {
@@ -342,6 +354,9 @@ public:
         InternalCall = FromStringWithDefault<bool>(params.Get("internal_call"), InternalCall);
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
+        }
+        if (params.Has("forget-after")) {
+            ForgetAfter = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("forget-after"), ForgetAfter.MilliSeconds()));
         }
         if (Streaming == EStreamingType::None || params.Has("timeout")) {
             Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
@@ -397,15 +412,15 @@ public:
         }
         SendKpqProxyRequest();
         Become(&TThis::StateWork);
-        if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
-            Schedule(WakeupPeriod, new TEvents::TEvWakeup());
+        if (Timeout || KeepAlive || Long || Action == "fetch-long-query" || Forget) {
+            Schedule(GetWakeupPeriod(), new TEvents::TEvWakeup());
         }
         QueryStartTime = TActivationContext::Now();
         LastSendTime = TActivationContext::Now();
     }
 
     void CancelQuery() {
-        if (SessionId) {
+        if (SessionId && !QueryForgotten) {
             auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
@@ -416,7 +431,7 @@ public:
     }
 
     void CloseSession() {
-        if (SessionId) {
+        if (SessionId && !QueryForgotten) {
             if (QueryResponse && !QueryResponse.IsDone()) {
                 CancelQuery();
             }
@@ -563,7 +578,7 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
             request.SetKeepSession(false);
-        } else if (Action.empty() || Action == "execute-query" || Action == "execute") {
+        } else if (Action.empty() || Action == "execute-query" || Action == "execute" || Forget) {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(ConcurrentResults ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetKeepSession(false);
@@ -630,6 +645,9 @@ public:
         }
         request.SetIsInternalCall(InternalCall);
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
+        if (Forget) {
+            QueryRequestStartTime = TActivationContext::Now();
+        }
         return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
     }
 
@@ -648,7 +666,9 @@ public:
         }
 
         SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
-        PingSession();
+        if (!Forget) {
+            PingSession();
+        }
 
         if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
@@ -660,6 +680,9 @@ public:
             StreamJsonResponse("SessionCreated", std::move(json));
         }
         QueryResponse = MakeQueryRequest<NKqp::TEvKqp::TEvQueryRequest, NKqp::TEvKqp::TEvQueryResponse>();
+        if (Forget) {
+            Schedule(GetWakeupPeriod(), new TEvents::TEvWakeup());
+        }
     }
 
 private:
@@ -1213,6 +1236,19 @@ private:
         ReplyWithJsonAndPassAway("Error", std::move(json), error);
     }
 
+    void ReplyAndForgetQuery() {
+        QueryForgotten = true;
+        if (QueryResponse && !QueryResponse.IsDone()) {
+            QueryResponse.Error("QueryForgotten");
+        }
+
+        NJson::TJsonValue json;
+        InitJsonResponse(json);
+        json["status"] = Ydb::StatusIds_StatusCode_Name(Ydb::StatusIds::SUCCESS);
+        json["message"] = "Query is running in background";
+        ReplyWithJsonAndPassAway("QueryForgotten", std::move(json));
+    }
+
     void CheckOperationStatus() {
         if (!GetOperationResponse.has_value() || GetOperationResponse->IsDone()) {
             GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId, GetUserSID()));
@@ -1221,6 +1257,9 @@ private:
 
     void HandleWakeup() {
         auto now = TActivationContext::Now();
+        if (Forget && QueryRequestStartTime && (now - QueryRequestStartTime >= ForgetAfter)) {
+            return ReplyAndForgetQuery();
+        }
         if (Timeout && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
@@ -1230,7 +1269,7 @@ private:
         if (OperationId && (!GetOperationResponse.has_value() || GetOperationResponse->IsDone())) {
             CheckOperationStatus();
         }
-        Schedule(WakeupPeriod, new TEvents::TEvWakeup());
+        Schedule(GetWakeupPeriod(), new TEvents::TEvWakeup());
     }
 
 private:
@@ -1421,11 +1460,12 @@ public:
               - name: action
                 in: query
                 type: string
-                enum: [execute-scan, execute-script, execute-query, execute-data, execute-long-query, fetch-long-query, explain-ast, explain-scan, explain-script, explain-query, explain-data, cancel-query]
+                enum: [execute-scan, execute-script, execute-query, execute-query-and-forget, execute-data, execute-long-query, fetch-long-query, explain-ast, explain-scan, explain-script, explain-query, explain-data, cancel-query]
                 required: true
                 description: >
                     execute method:
                       * `execute-query` - execute query (QueryService)
+                      * `execute-query-and-forget` - execute query (QueryService), wait up to forget-after for an immediate response, then leave it running in background
                       * `execute-data` - execute data query (DataQuery)
                       * `execute-scan` - execute scan query (ScanQuery)
                       * `execute-script` - execute script query (ScriptingService)
@@ -1533,6 +1573,12 @@ public:
                 description: timeout in ms, for synchronous queries it's 60s by default, for streaming queries it's off by default
                 type: integer
                 required: false
+              - name: forget-after
+                in: query
+                description: wait timeout in ms for execute-query-and-forget before returning success and leaving query running in background
+                type: integer
+                required: false
+                default: 1000
               - name: ui64
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding

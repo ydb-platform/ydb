@@ -14,6 +14,9 @@
 #include <library/cpp/resource/resource.h>
 #include <yql/essentials/utils/fp_bits.h>
 
+#include <contrib/libs/lz4/lz4.h>
+
+#include <util/stream/str.h>
 #include <util/system/yassert.h>
 #include <util/system/sanitizers.h>
 
@@ -1408,83 +1411,105 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 }
 
 template <bool Fast>
+void TValuePackerTransport<Fast>::UnpackSingleBlockBatch(TChunkedBuffer&& batchBuf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
+    TChunkedInputBuffer chunked(std::move(batchBuf));
+
+    const ui64 len = UnpackData<false, ui64>(chunked);
+    if (len == 0) {
+        return;
+    }
+
+    const auto metadataFlags = TBlockTransportFlags(UnpackData<false, ui64>(chunked));
+    MKQL_ENSURE(metadataFlags.HasFlag(TBlockTransportFlags::EFlag::ScalarsArePresentFlag),
+                "Scalars are present flag must be set.");
+    if (IsOffsetExplicitStored(ValuePackerVersion_)) {
+        MKQL_ENSURE(metadataFlags.HasFlag(TBlockTransportFlags::EFlag::StoreOffsetsForEachChildData),
+                    "Offsets must be explicitly stored.");
+    }
+
+    const ui32 width = BlockDeserializers_.size();
+    MKQL_ENSURE(width > 0, "Invalid width");
+    TVector<ui64> offsets(width);
+    if (!IsOffsetExplicitStored(ValuePackerVersion_)) {
+        for (ui32 i = 0; i < width; ++i) {
+            if (BlockDeserializers_[i]) {
+                offsets[i] = UnpackData<false, ui8>(chunked);
+                MKQL_ENSURE(offsets[i] < 8, "Unexpected offset value. Actual offset is: " << offsets[i]);
+            }
+        }
+    }
+
+    ui32 metaCount = UnpackData<false, ui32>(chunked);
+    for (ui32 i = 0; i < width; ++i) {
+        if (BlockDeserializers_[i]) {
+            BlockDeserializers_[i]->LoadMetadata([&]() -> ui64 {
+                MKQL_ENSURE(metaCount > 0, "No more metadata available");
+                --metaCount;
+                return UnpackData<false, ui64>(chunked);
+            });
+        }
+    }
+    MKQL_ENSURE(metaCount == 0, "Partial buffers read");
+    TChunkedBuffer ropeTail = chunked.ReleaseRope();
+
+    auto producer = [&](ui32 i) {
+        MKQL_ENSURE(i < width, "Unexpected row index");
+        if (i != BlockLenIndex_) {
+            MKQL_ENSURE(BlockDeserializers_[i], "Missing deserializer");
+            const bool isScalar = BlockReaders_[i] != nullptr;
+            TMaybe<size_t> offset = IsOffsetExplicitStored(ValuePackerVersion_) ? Nothing() : TMaybe<size_t>(offsets[i]);
+            auto array = BlockDeserializers_[i]->LoadArray(ropeTail, isScalar ? 1 : len, offset);
+            if (isScalar) {
+                TBlockItem item = BlockReaders_[i]->GetItem(*array, 0);
+                const TType* itemType = IsLegacyBlock_ ? static_cast<const TStructType*>(Type_)->GetMemberType(i) : static_cast<const TMultiType*>(Type_)->GetElementType(i);
+                return holderFactory.CreateArrowBlock(
+                    ConvertScalar(
+                        static_cast<const TBlockType*>(itemType)->GetItemType(), item, ArrowPool_));
+            }
+            return holderFactory.CreateArrowBlock(array);
+        }
+        return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)));
+    };
+
+    if (IsLegacyBlock_) {
+        NYql::NUdf::TUnboxedValue* valueItems;
+        auto structValue = holderFactory.CreateDirectArrayHolder(width, valueItems);
+        for (ui32 i = 0; i < width; ++i) {
+            valueItems[i] = producer(i);
+        }
+        result.emplace_back(std::move(structValue));
+    } else {
+        result.PushRow(producer);
+    }
+}
+
+template <bool Fast>
 void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
     while (!buf.Empty()) {
         TChunkedInputBuffer chunked(std::move(buf));
         buf = {};
 
-        // unpack block length
-        const ui64 len = UnpackData<false, ui64>(chunked);
-        if (len == 0) {
-            continue;
-        }
+        ui32 uncompressedSize = 0;
+        ui32 compressedSize = 0;
+        chunked.CopyTo(reinterpret_cast<char*>(&uncompressedSize), sizeof(ui32));
+        chunked.CopyTo(reinterpret_cast<char*>(&compressedSize), sizeof(ui32));
 
-        // unpack flags
-        const auto metadataFlags = TBlockTransportFlags(UnpackData<false, ui64>(chunked));
-        MKQL_ENSURE(metadataFlags.HasFlag(TBlockTransportFlags::EFlag::ScalarsArePresentFlag),
-                    "Scalars are present flag must be set.");
-        if (IsOffsetExplicitStored(ValuePackerVersion_)) {
-            MKQL_ENSURE(metadataFlags.HasFlag(TBlockTransportFlags::EFlag::StoreOffsetsForEachChildData),
-                        "Offsets must be explicitly stored.");
-        }
-        // unpack array offsets
-        const ui32 width = BlockDeserializers_.size();
-        MKQL_ENSURE(width > 0, "Invalid width");
-        TVector<ui64> offsets(width);
-        if (!IsOffsetExplicitStored(ValuePackerVersion_)) {
-            for (ui32 i = 0; i < width; ++i) {
-                if (BlockDeserializers_[i]) {
-                    offsets[i] = UnpackData<false, ui8>(chunked);
-                    MKQL_ENSURE(offsets[i] < 8, "Unexpected offset value. Actual offset is: " << offsets[i]);
-                }
-            }
-        }
+        TString compressedData;
+        compressedData.resize(compressedSize);
+        chunked.CopyTo(compressedData.Detach(), compressedSize);
 
-        // unpack metadata
-        ui32 metaCount = UnpackData<false, ui32>(chunked);
-        for (ui32 i = 0; i < width; ++i) {
-            if (BlockDeserializers_[i]) {
-                BlockDeserializers_[i]->LoadMetadata([&]() -> ui64 {
-                    MKQL_ENSURE(metaCount > 0, "No more metadata available");
-                    --metaCount;
-                    return UnpackData<false, ui64>(chunked);
-                });
-            }
-        }
-        MKQL_ENSURE(metaCount == 0, "Partial buffers read");
-        TChunkedBuffer ropeTail = chunked.ReleaseRope();
-        // unpack buffers
+        buf = chunked.ReleaseRope();
 
-        auto producer = [&](ui32 i) {
-            MKQL_ENSURE(i < width, "Unexpected row index");
-            if (i != BlockLenIndex_) {
-                MKQL_ENSURE(BlockDeserializers_[i], "Missing deserializer");
-                const bool isScalar = BlockReaders_[i] != nullptr;
-                TMaybe<size_t> offset = IsOffsetExplicitStored(ValuePackerVersion_) ? Nothing() : TMaybe<size_t>(offsets[i]);
-                auto array = BlockDeserializers_[i]->LoadArray(ropeTail, isScalar ? 1 : len, offset);
-                if (isScalar) {
-                    TBlockItem item = BlockReaders_[i]->GetItem(*array, 0);
-                    const TType* itemType = IsLegacyBlock_ ? static_cast<const TStructType*>(Type_)->GetMemberType(i) : static_cast<const TMultiType*>(Type_)->GetElementType(i);
-                    return holderFactory.CreateArrowBlock(
-                        ConvertScalar(
-                            static_cast<const TBlockType*>(itemType)->GetItemType(), item, ArrowPool_));
-                }
-                return holderFactory.CreateArrowBlock(array);
-            }
-            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)));
-        };
+        TString decompressed;
+        decompressed.resize(uncompressedSize);
+        const int rc = LZ4_decompress_safe(
+            compressedData.data(), decompressed.Detach(),
+            compressedSize, uncompressedSize);
+        MKQL_ENSURE(rc == static_cast<int>(uncompressedSize),
+            "LZ4 decompression failed: expected " << uncompressedSize << " bytes, got " << rc);
 
-        if (IsLegacyBlock_) {
-            NYql::NUdf::TUnboxedValue* valueItems;
-            auto structValue = holderFactory.CreateDirectArrayHolder(width, valueItems);
-            for (ui32 i = 0; i < width; ++i) {
-                valueItems[i] = producer(i);
-            }
-            result.emplace_back(std::move(structValue));
-        } else {
-            result.PushRow(producer);
-        }
-        buf = std::move(ropeTail);
+        TChunkedBuffer decompressedBuf(std::move(decompressed));
+        UnpackSingleBlockBatch(std::move(decompressedBuf), holderFactory, result);
     }
 }
 
@@ -1518,9 +1543,42 @@ TChunkedBuffer TValuePackerTransport<Fast>::Finish() {
 
 template <bool Fast>
 TChunkedBuffer TValuePackerTransport<Fast>::FinishBlocks() {
-    TChunkedBuffer result = std::move(BlockBuffer_);
+    const size_t uncompressedSize = BlockBuffer_.Size();
+    if (uncompressedSize == 0) {
+        TChunkedBuffer result = std::move(BlockBuffer_);
+        Clear();
+        return result;
+    }
+
+    TString linearized;
+    linearized.reserve(uncompressedSize);
+    {
+        TStringOutput out(linearized);
+        BlockBuffer_.CopyTo(out);
+    }
+
+    const int maxCompressedSize = LZ4_compressBound(linearized.size());
+    static constexpr size_t HeaderSize = sizeof(ui32) + sizeof(ui32);
+    TString compressed;
+    compressed.resize(HeaderSize + maxCompressedSize);
+
+    char* dst = compressed.Detach();
+
+    const ui32 uncompressedSizeU32 = static_cast<ui32>(uncompressedSize);
+    std::memcpy(dst, &uncompressedSizeU32, sizeof(ui32));
+
+    const int compressedBytes = LZ4_compress_default(
+        linearized.data(), dst + HeaderSize,
+        linearized.size(), maxCompressedSize);
+    MKQL_ENSURE(compressedBytes > 0, "LZ4 compression failed");
+
+    const ui32 compressedSizeU32 = static_cast<ui32>(compressedBytes);
+    std::memcpy(dst + sizeof(ui32), &compressedSizeU32, sizeof(ui32));
+
+    compressed.resize(HeaderSize + compressedBytes);
+
     Clear();
-    return result;
+    return TChunkedBuffer(std::move(compressed));
 }
 
 template <bool Fast>

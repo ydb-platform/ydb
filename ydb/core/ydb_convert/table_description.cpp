@@ -153,9 +153,11 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
     }
 
     THashMap<TString, ui32> nameToId;
-    ui32 nextColumnId = 1;
+    ui32 nextEntityId = 1;
     for (const auto& col : tableDesc.GetSchema().GetColumns()) {
-        nameToId[col.GetName()] = nextColumnId++;
+        const ui32 columnId = col.HasId() ? col.GetId() : nextEntityId++;
+        nameToId.emplace(col.GetName(), columnId);
+        nextEntityId = Max(nextEntityId, columnId + 1);
     }
 
     auto fail = [&status, &error](const TString& msg) -> bool {
@@ -164,7 +166,6 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         return false;
     };
 
-    ui32 nextIndexId = 1;
     for (const auto& index : in.indexes()) {
         if (index.name().empty()) {
             return fail("Index must have a name");
@@ -187,7 +188,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         const ui32 columnId = idIt->second;
 
         auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
-        olapIndex->SetId(nextIndexId++);
+        olapIndex->SetId(nextEntityId++);
         olapIndex->SetName(index.name());
 
         switch (index.type_case()) {

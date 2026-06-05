@@ -508,18 +508,21 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
     const TVector<TIndexDescription>& indexes, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     THashMap<TString, ui32> columnIdsByName;
-    for (auto&& column : tableDesc.GetSchema().GetColumns()) {
-        if (column.HasId()) {
-            columnIdsByName.emplace(column.GetName(), column.GetId());
+    ui32 nextEntityId = 1;
+    for (const auto& column : tableDesc.GetSchema().GetColumns()) {
+        if (!column.HasId()) {
+            continue;
         }
+        const ui32 columnId = column.GetId();
+        columnIdsByName.emplace(column.GetName(), columnId);
+        nextEntityId = Max(nextEntityId, columnId + 1);
     }
 
-    ui32 nextIndexId = 1;
     for (auto&& index : indexes) {
         switch (index.Type) {
             case TIndexDescription::EType::LocalBloomFilter: {
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-                upsert->SetId(nextIndexId++);
+                upsert->SetId(nextEntityId++);
                 upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
@@ -546,7 +549,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-                upsert->SetId(nextIndexId++);
+                upsert->SetId(nextEntityId++);
                 upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
@@ -579,6 +582,36 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
 
                 break;
             }
+<<<<<<< HEAD
+=======
+            case TIndexDescription::EType::LocalMinMax: {
+                if (index.KeyColumns.size() != 1) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.KeyColumns);
+                    return false;
+                }
+                if (!index.DataColumns.empty()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
+                    return false;
+                }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
+                if (columnIdIt == columnIdsByName.end()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    return false;
+                }
+
+                auto* upsert = tableDesc.MutableSchema()->AddIndexes();
+                upsert->SetId(nextEntityId++);
+                upsert->SetName(index.Name);
+                upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                auto* minmax = upsert->MutableMinMaxIndex();
+                minmax->SetColumnId(columnIdIt->second);
+
+                break;
+            }
+>>>>>>> 334a2e3109b (Fix indexes ids (#41824))
             default:
                 break;
         }

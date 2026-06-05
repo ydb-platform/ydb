@@ -244,7 +244,9 @@ Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
     UNIT_ASSERT_C(foundFailure, "expected failure completed for broken_syntax at WARN");
 }
 
-// Extra fields appear only in part=1; at TRACE the SQL is not truncated.
+// At TRACE successful queries are emitted as a multi-part envelope tagged
+// TRACE (not DEBUG), the SQL is not truncated, and the per-query extra
+// fields appear only in part=1.
 Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
     TStringStream logStream;
     size_t logStart = 0;
@@ -255,10 +257,11 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
 
         auto db = kikimr.GetQueryClient();
 
-        // SQL longer than SQL_TEXT_MAX_SIZE (4000), padded inside a comment.
+        // SQL longer than SQL_TEXT_MAX_SIZE (10240), padded inside a comment,
+        // so the TRACE path produces at least two chunks.
         TStringBuilder sb;
         sb << "/*";
-        for (size_t i = 0; i < 5000; ++i) {
+        for (size_t i = 0; i < 15000; ++i) {
             sb << 'x';
         }
         sb << "*/ SELECT 1 AS x";
@@ -279,6 +282,8 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
         }
         if (e.Total > 1) {
             sawMulti = true;
+            UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "TRACE",
+                TStringBuilder() << "multi-part SUCCESS envelopes must be emitted at TRACE: " << e.RawLine);
             const auto& req = e.Json["request"];
             if (e.Part == 1) {
                 UNIT_ASSERT_C(req.Has("status"), "part=1 must have extra fields");
@@ -297,9 +302,10 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
     UNIT_ASSERT_C(sawMulti, "long SQL must produce a multi-part envelope");
 }
 
-// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (10240) bytes; the
-// original length is preserved in `query_len` and the cut is flagged by
-// `data_truncated: true` in part=1.
+// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (10240) bytes and
+// emitted as a single envelope (`total=1`) — operators of the always-on
+// stream consume "one record per query". The original length is preserved
+// in `query_len` and the cut is flagged by `data_truncated: true`.
 Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
     constexpr size_t QUERY_TEXT_LIMIT = 10240;
 
@@ -342,8 +348,11 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
         UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "DEBUG", e.RawLine);
         UNIT_ASSERT_C(req.Has("data_truncated"), e.RawLine);
         UNIT_ASSERT_VALUES_EQUAL_C(req["data_truncated"].GetBooleanSafe(false), true, e.RawLine);
-        UNIT_ASSERT_C(e.Total <= 3,
-            TStringBuilder() << "truncated SQL must produce <= 3 chunks, got " << e.Total);
+        UNIT_ASSERT_VALUES_EQUAL_C(e.Total, 1,
+            TStringBuilder() << "truncated SQL at DEBUG must be a single envelope, got total=" << e.Total);
+        const auto data = req["data"].GetStringSafe("");
+        UNIT_ASSERT_C(data.size() <= QUERY_TEXT_LIMIT,
+            TStringBuilder() << "DEBUG envelope data must be capped at QUERY_TEXT_LIMIT, got " << data.size());
         sawTruncated = true;
     }
     UNIT_ASSERT_C(sawTruncated, "expected a truncated completed envelope at DEBUG");
@@ -410,6 +419,53 @@ Y_UNIT_TEST(UiExcludedSuccessSilentButFailureLogged) {
         "assertion below would pass trivially via the priority gate");
     UNIT_ASSERT_C(!excludedSuccessSeen, "UI-excluded successful query must not log completed");
     UNIT_ASSERT_C(excludedFailureSeen, "UI-excluded failure must log completed at WARN");
+}
+
+Y_UNIT_TEST(StreamingBigResultReportsResultsSize) {
+    TStringStream logStream;
+    size_t logStart = 0;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
+        logStart = logStream.Size();
+
+        auto db = kikimr.GetQueryClient();
+        auto it = db.StreamExecuteQuery(R"(
+            SELECT a.Key AS k_marker_big, a.Text AS t1, b.Text AS t2, c.Text AS t3
+            FROM `EightShard` AS a
+            CROSS JOIN `EightShard` AS b
+            CROSS JOIN `EightShard` AS c
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_C(streamPart.IsSuccess(), streamPart.GetIssues().ToString());
+    }
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    DumpEntries("StreamingBigResultReportsResultsSize", entries, fullLog);
+
+    bool found = false;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        const auto data = req["data"].GetStringSafe("");
+        if (!data.Contains("k_marker_big")) {
+            continue;
+        }
+        const auto status = req["status"].GetStringSafe("");
+        const auto durationUs = req["duration_us"].GetUIntegerSafe(0);
+        const auto resultsSize = req["results_size"].GetUIntegerSafe(0);
+        Cerr << "EightShard^3 cross-join: status=" << status
+             << " duration_us=" << durationUs
+             << " results_size=" << resultsSize << Endl;
+        UNIT_ASSERT_C(resultsSize > 0,
+            TStringBuilder() << "results_size must be > 0, got " << resultsSize);
+        found = true;
+    }
+    UNIT_ASSERT_C(found, "completed envelope for big cross-join must be present");
 }
 
 } // Y_UNIT_TEST_SUITE

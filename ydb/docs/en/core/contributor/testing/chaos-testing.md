@@ -53,7 +53,7 @@ Chaos testing is typically run in conjunction with stress testing workloads from
 
 ## How Verification Works
 
-While failures are being injected, the system continuously checks two [properties](https://en.wikipedia.org/wiki/Safety_and_liveness_properties):
+While failures are being injected, the system checks two [properties](https://en.wikipedia.org/wiki/Safety_and_liveness_properties) on demand:
 
 - **Liveness** — the cluster remains available and continues to process requests
 - **Safety** — no signs of data correctness violations or internal system invariant breaches appear in cluster logs and metrics
@@ -84,7 +84,39 @@ nemesis install \
     --database-config-location /path/to/databases.yaml
 ```
 
-The first host in the cluster configuration becomes the orchestrator; all other hosts become agents. Services are deployed as systemd units and started automatically. Upon successful installation, the console output prints the URL of the Nemesis web UI (served by the orchestrator), which can be used to monitor active faults, schedules, execution history, and health check results.
+The first host in the cluster configuration becomes the orchestrator; all other hosts become agents. Services are deployed as systemd units and started automatically.
+
+The primary way to observe a Nemesis run and inspect its results is the web UI served by the orchestrator. Open the URL printed at the end of `nemesis install` in a browser; by default it is available at:
+
+```
+http://<orchestrator_host>:31434/static/index.html
+```
+
+The UI displays:
+
+- **Active faults** — currently injected faults and their execution logs, grouped by category (network, node, tablet, disk, datacenter, pile)
+- **Schedules** — fault types registered for automatic injection, their configured intervals, and the next scheduled run
+- **Manual controls** — buttons to inject individual faults on demand
+- **Execution history** — past fault injections with timestamps and target hosts
+- **Liveness checks** — cluster-wide health checks run by the orchestrator
+- **Safety checks** — violation detectors over the local logs for the last 24 hours
+
+The same data is available via the HTTP API on the orchestrator if you need to scrape it programmatically.
+
+
+### Interpreting Results
+
+A Nemesis run is judged against two [properties](https://en.wikipedia.org/wiki/Safety_and_liveness_properties): **liveness** and **safety**. The pass/fail criteria are:
+
+- **Pass** — throughout the run, all liveness checks report the cluster as healthy and all safety wardens return empty violation lists
+- **Fail** — at least one liveness check reported the cluster as unavailable (cluster did not recover after a fault within the expected window), **or** at least one safety warden returned a non-empty list of violations (for example, errors or assertions in cluster logs, schemeshard inconsistencies, datashard invariant breaches)
+
+In the UI, healthy checks appear in the violations list; failed checks display the violation messages produced by the corresponding warden.
+
+To investigate a problem, open the failing check in the UI and read the listed violation messages.
+
+For the meaning of individual checks and the exact patterns each warden looks for, see the [Nemesis README](https://github.com/ydb-platform/ydb/blob/main/ydb/tests/stability/nemesis/README.md).
+
 
 ### Stopping Services
 

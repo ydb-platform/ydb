@@ -1962,6 +1962,14 @@ void TTableInfo::ApplySplitMerge(
 }
 
 void TTableInfo::VerifyConsistency() const {
+    // AppData is absent in lowlevel unit tests
+    if (HasAppData() && !AppData()->FeatureFlags.GetEnableTablePartitionsConsistencyCheck()) {
+        LastVerifyConsistencyTime = 0;
+        return;
+    }
+
+    THPTimer cpuTimer;
+
     Y_ABORT_UNLESS(PartitionStore.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.PartitionStats.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.Aggregated.PartCount == Partitions.size());
@@ -1992,6 +2000,8 @@ void TTableInfo::VerifyConsistency() const {
         Y_ABORT_UNLESS(CondEraseSchedule.Empty());
         Y_ABORT_UNLESS(InFlightCondErase.empty());
     }
+
+    LastVerifyConsistencyTime = ui64(1e9 * cpuTimer.PassedReset());
 }
 
 void TTableAggregatedStats::RemoveShardStats(const TVector<TShardIdx>& keys, TInstant now) {

@@ -1186,6 +1186,11 @@ void TNodeState::FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenM
     for (auto& [info, descriptor] : OutputDescriptors) {
         descriptor->AbortChannel(
             TStringBuilder() << "PeerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor
+            << ", EF=" << descriptor->EarlyFinished.load()
+            << ", FP=" << descriptor->FinishPushed.load()
+            << ", F=" << descriptor->Finished.load()
+            << ", T=" << descriptor->Terminated.load()
+            << ", A=" << descriptor->Aborted.load()
             << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog()
         );
     }
@@ -2076,7 +2081,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
 
     InflightBytes -= delta;
 
-    SendDiscovery(PeerActorId ? PeerActorId : MakeChannelServiceActorID(NodeId), seqNo);
+    SendDiscovery(MakeChannelServiceActorID(NodeId), seqNo);
     ActorSystem->Schedule(reconciliationTimeout,
         new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
 }

@@ -100,31 +100,13 @@ void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionL
     DoRequest(setup, txId, scheme);
 }
 
-void AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond) {
-    const TString topicPath = setup.GetFullTopicPath(TEST_TOPIC);
-    const auto describeResult = setup.GetServer().AnnoyingClient->Describe(&setup.GetRuntime(), topicPath);
-    UNIT_ASSERT_C(describeResult.GetStatus() == NKikimrScheme::StatusSuccess,
-        "Describe topic for alter (partition write speed in messages/sec): "
-            << NKikimrScheme::EStatus_Name(describeResult.GetStatus()));
-
-    NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-    scheme.CopyFrom(describeResult.GetPathDescription().GetPersQueueGroup());
-    scheme.ClearSplit();
-    scheme.ClearMerge();
-    scheme.ClearPartitions();
-    scheme.ClearPartitionsToAdd();
-    scheme.ClearPartitionsToDelete();
-    scheme.ClearRootPartitionBoundaries();
-    scheme.ClearBalancerTabletID();
-    scheme.ClearPathId();
-    scheme.ClearAllocate();
-
-    auto* partConfig = scheme.MutablePQTabletConfig()->MutablePartitionConfig();
-    partConfig->SetWriteSpeedInMessagesPerSecond(writeSpeedInMessagesPerSecond);
-    partConfig->SetBurstSizeInMessages(writeSpeedInMessagesPerSecond);
-
-    static ui64 txId = 9000;
-    DoRequest(setup.GetRuntime(), txId, setup.GetDatabase(), scheme);
+void AlterTopicMessageWriteSpeed(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond) {
+    auto client = setup.MakeClient();
+    TAlterTopicSettings settings;
+    settings.SetPartitionWriteSpeedMessagesPerSecond(writeSpeedInMessagesPerSecond);
+    settings.SetPartitionWriteBurstMessages(writeSpeedInMessagesPerSecond);
+    auto result = client.AlterTopic(TEST_TOPIC, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 TWriteMessage Msg(const TString& data, ui64 seqNo) {

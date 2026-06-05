@@ -9,6 +9,8 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/ticket_parser.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
@@ -75,8 +77,8 @@ public:
 
         // Don't print security token.
         Request.ClearSecurityToken();
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Forwarding console request: %s",
-                  Request.ShortDebugString().data());
+        YDB_LOG_CTX_DEBUG(ctx, "Forwarding console request ",
+            {"request", Request.ShortDebugString().data()});
 
         if (Request.HasCreateTenantRequest()) {
             auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();

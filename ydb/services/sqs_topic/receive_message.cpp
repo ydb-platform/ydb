@@ -126,7 +126,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 .WaitTime = waitTime,
                 .ProcessingTimeout = visibilityTimeout,
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
-                .UncompressMessages = true,
                 .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;

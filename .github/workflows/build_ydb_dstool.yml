@@ -79,7 +79,7 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ inputs.commit_sha }}
 
@@ -99,7 +99,7 @@ jobs:
       run: ./ya make ydb/apps/dstool -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
 
     - name: Upload binary to artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ matrix.os }}-binary
         path: ydb/apps/dstool/${{ matrix.binary }}
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.commit_sha }}
       - name: Get YDB DSTool version from ydb/apps/dstool/version.txt
@@ -139,31 +139,31 @@ jobs:
 
       - name: Copy linux-amd binary
         if: ${{ inputs.build-linux-amd }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: linux-amd-binary
           path: ${{ steps.getver.outputs.dstool_version }}/linux/amd64/
       - name: Copy linux-arm binary
         if: ${{ inputs.build-linux-arm }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: linux-arm-binary
           path: ${{ steps.getver.outputs.dstool_version }}/linux/arm64/
       - name: Copy darwin amd64 binary
         if: ${{ inputs.build-darwin-amd }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: darwin-amd-binary
           path: ${{ steps.getver.outputs.dstool_version }}/darwin/amd64/
       - name: Copy darwin arm64 binary
         if: ${{ inputs.build-darwin-arm }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: darwin-arm-binary
           path: ${{ steps.getver.outputs.dstool_version }}/darwin/arm64/
       - name: Copy windows-amd binary (unsigned)
         if: ${{ inputs.build-windows-amd }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: windows-amd-binary
           path: ${{ steps.getver.outputs.dstool_version }}/windows/amd64/unsigned/

@@ -33,4 +33,23 @@ std::expected<std::vector<TDirectBlockGroup>, TString> ParseAllocateResult(
     const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& rec,
     const TEvLoadTestRequest::TNbsDbgLikeLoad::TAllocConfig& cfg);
 
+// Address routing parameters derived from a TConfigureTablet run config.
+// Shared by the proxy tablet (to route requests) and the per-DBG worker (to
+// decode addresses) so they cannot drift apart.
+struct TRoutingParams {
+    ui32 ActiveDbgs = 0;
+    ui32 IoSizeBytes = 0;
+    ui64 BytesPerDbg = 0;
+    bool IoValid = false;  // true iff the requested IoSizeBytes is usable
+};
+
+// Computes routing params from the run config. ActiveDbgs clamps
+// NumDirectBlockGroupsToUse to [1, numDbgs] (0 means "all"). IoValid is true
+// only when IoSizeBytes is non-zero, does not exceed VChunkSizeBytes, and
+// evenly divides it; when valid, IoSizeBytes and BytesPerDbg are populated.
+TRoutingParams ComputeRoutingParams(
+    const TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet& cfg,
+    const TEvLoadTestRequest::TNbsDbgLikeLoad::TAllocConfig& allocConfig,
+    ui32 numDbgs);
+
 } // namespace NKikimr::NNbsDbgLike

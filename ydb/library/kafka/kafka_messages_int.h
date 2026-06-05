@@ -669,7 +669,7 @@ class TypeStrategy<
 
     inline static TString SerializeImpl(TKafkaVersion version, const TValue& value) {
         TSizeCollector collector;
-        TWritableBuf buffer(DoSizeImpl(collector, version, value));
+        TWritableBuf buffer(nullptr, DoSizeImpl(collector, version, value));
         TKafkaWritable writable(buffer);
         DoWriteImpl(writable, version, value);
 

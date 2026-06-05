@@ -12,7 +12,7 @@ template<class T>
 void CheckUnsignedVarint(const std::vector<T>& values)  {
     for (T v : values) {
         Cerr << ">>>>> Check value=" << v << Endl << Flush;
-        TWritableBuf sb(BUFFER_SIZE);
+        TWritableBuf sb(nullptr, BUFFER_SIZE);
         TKafkaWritable writable(sb);
         TKafkaReadable readable(sb.GetFrontBuffer());
 
@@ -30,7 +30,7 @@ template<class T>
 void CheckVarint(const std::vector<T>& values) {
     for (T v : values) {
         Cerr << ">>>>> Check value=" << v << Endl << Flush;
-        TWritableBuf sb(BUFFER_SIZE);
+        TWritableBuf sb(nullptr, BUFFER_SIZE);
         TKafkaWritable writable(sb);
         TKafkaReadable readable(sb.GetFrontBuffer());
 
@@ -47,7 +47,7 @@ void CheckVarint(const std::vector<T>& values) {
 
 template<class T>
 void CheckVarintWrongBytes(std::vector<ui8> bytes) {
-    TWritableBuf sb(BUFFER_SIZE);
+    TWritableBuf sb(nullptr, BUFFER_SIZE);
     TKafkaWritable writable(sb);
     TKafkaReadable readable(sb.GetFrontBuffer());
 
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
     Y_UNIT_TEST(UnsignedVarint32Deserialize) {
         std::vector<ui8> bytes = {0x81, 0x83, 0x05};
 
-        TWritableBuf sb(BUFFER_SIZE);
+        TWritableBuf sb(nullptr, BUFFER_SIZE);
         TKafkaWritable writable(sb);
         TKafkaReadable readable(sb.GetFrontBuffer());
 

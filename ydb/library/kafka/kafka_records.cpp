@@ -509,7 +509,7 @@ TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
 }
 
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
-    TWritableBuf buffer(batch.Size(version));
+    TWritableBuf buffer(nullptr, batch.Size(version));
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
 

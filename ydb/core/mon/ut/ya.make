@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/testlib/audit_helpers
     ydb/library/aclib
     ydb/library/actors/core
+    ydb/library/security
 )
 
 SRCS(

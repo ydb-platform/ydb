@@ -6,9 +6,7 @@
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <algorithm>
-#include <util/system/thread.h>
+#include <ydb/library/security/util.h>
 
 namespace NMonitoring::NTests {
 
@@ -18,25 +16,14 @@ using namespace NKikimr::Tests;
 
 namespace {
 
-std::string WaitAndFindAuditLine(const std::vector<std::string>& auditLines, const std::string& substr) {
-    for (size_t attempt = 0; attempt < 50; ++attempt) {
-        auto found = std::find_if(auditLines.rbegin(), auditLines.rend(), [&](const auto& line) {
-            return line.contains(substr);
-        });
-        if (found != auditLines.rend()) {
-            Cerr << "AUDIT LOG checked line:" << Endl << "    " << *found << Endl;
-            return *found;
-        }
-        Sleep(TDuration::MilliSeconds(100));
-    }
-    return FindAuditLine(auditLines, substr);
-}
+const TString EXPECTED_SANITIZED_TOKEN = NKikimr::SanitizeTicket(VALID_TOKEN);
 
 void AssertMonitoringAuditHasUser(const std::string& line) {
     UNIT_ASSERT_STRING_CONTAINS(line, "component=monitoring");
     UNIT_ASSERT_STRING_CONTAINS(line, "subject=username");
-    UNIT_ASSERT_STRING_CONTAINS(line, "sanitized_token=");
-    UNIT_ASSERT(line.find("sanitized_token={none}") == std::string::npos);
+    UNIT_ASSERT_STRING_CONTAINS(
+        line,
+        TStringBuilder() << "sanitized_token=" << EXPECTED_SANITIZED_TOKEN);
     UNIT_ASSERT(line.find(VALID_TOKEN) == std::string::npos);
 }
 
@@ -121,8 +108,15 @@ Y_UNIT_TEST_SUITE(MonitoringAudit) {
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
         const auto& auditLines = env.GetAuditLogLines();
-        AssertMonitoringAuditHasUser(WaitAndFindAuditLine(auditLines, "reason=Execute"));
-        AssertMonitoringAuditHasUser(WaitAndFindAuditLine(auditLines, "reason=200 Ok"));
+        std::string line;
+        UNIT_ASSERT_C(
+            WaitAndFindAuditLine(auditLines, "reason=Execute", line),
+            "Audit log line with reason=Execute did not appear within timeout");
+        AssertMonitoringAuditHasUser(line);
+        UNIT_ASSERT_C(
+            WaitAndFindAuditLine(auditLines, "reason=200 Ok", line),
+            "Audit log line with reason=200 Ok did not appear within timeout");
+        AssertMonitoringAuditHasUser(line);
     }
 }
 

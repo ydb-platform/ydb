@@ -149,7 +149,7 @@ void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& 
         args.GroupSIDs = GroupSIDs;
     }
     TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
-    userToken->SetSanitizedToken(NKikimr::MaskTicket(ev->Get()->Ticket));
+    userToken->SetSanitizedToken(NKikimr::SanitizeTicket(ev->Get()->Ticket));
     if (ev->Get()->Ticket != ROOT_TOKEN) {
         userToken->SetSubjectType(NACLibProto::SUBJECT_TYPE_USER);
     }

@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr::NKqp {
@@ -2889,158 +2890,40 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only async-indexed tables are supported by BulkUpsert");
         }
     }
-  
+
+    const TTtlNotAllowedIndexTestConfig JsonTtlNotAllowedConfig{
+        .TextColumnType = "Json",
+        .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
+        .AlterAddIndex = R"(
+            ALTER TABLE TestTable ADD INDEX json_idx
+                GLOBAL USING json ON (Text);
+        )",
+        .ExpectedError = "Table with EIndexTypeGlobalJson index doesn't support TTL",
+    };
+
     Y_UNIT_TEST(TtlNotAllowed_Both) {
         auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text Json,
-                    Stamp Timestamp,
-                    INDEX json_idx GLOBAL USING json ON (Text),
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    TTL = Interval("PT1H") ON Stamp
-                );
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalJson index doesn't support TTL");
-        }
+        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
         auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text Json,
-                    Stamp Timestamp,
-                    INDEX json_idx GLOBAL USING json ON (Text),
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-            )";
-
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalJson index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
         auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text Json,
-                    Stamp Timestamp,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    TTL = Interval("PT0S") ON Stamp
-                );
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable ADD INDEX json_idx
-                    GLOBAL USING json ON (Text);
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalJson index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
         auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text Json,
-                    Stamp Timestamp,
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable ADD INDEX json_idx
-                    GLOBAL USING json ON (Text);
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalJson index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
         auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text Json,
-                    Stamp Timestamp,
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable ADD INDEX json_idx
-                    GLOBAL USING json ON (Text);
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalJson index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
     }
 }
 

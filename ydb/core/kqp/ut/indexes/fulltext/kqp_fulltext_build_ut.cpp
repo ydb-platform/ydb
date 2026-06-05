@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
@@ -9,6 +10,8 @@
 
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/kqp/ut/indexes/fulltext/kqp_fulltext_ut_common.h>
+
+#include <format>
 
 namespace NKikimr::NKqp {
 
@@ -3374,182 +3377,44 @@ Y_UNIT_TEST(FulltextIndexBuildCustomParallel) {
     UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
 }
 
+TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) {
+    const char* indexType = isRelevance ? "relevance" : "plain";
+    const char* enumType = isRelevance ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextPlain";
+    return {
+        .IndexInCreateTable = std::format(
+            "INDEX fulltext_idx GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true),",
+            indexType),
+        .AlterAddIndex = std::format(R"(
+            ALTER TABLE TestTable ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true);
+        )", indexType),
+        .ExpectedError = std::format("Table with {} index doesn't support TTL", enumType),
+    };
+}
+
 Y_UNIT_TEST_TWIN(TtlNotAllowed_Both, IsRelevance) {
     auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-
-    {
-        const std::string query = std::format(R"(
-            CREATE TABLE TestTable (
-                Key Uint64,
-                Text String,
-                Stamp Timestamp,
-                INDEX fulltext_idx GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true),
-                PRIMARY KEY (Key)
-            ) WITH (
-                TTL = Interval("PT1H") ON Stamp
-            );
-        )", IsRelevance ? "relevance" : "plain");
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-
-        if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
-        } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextPlain index doesn't support TTL");
-        }
-    }
+    TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-
-    {
-        const std::string query = std::format(R"(
-            CREATE TABLE TestTable (
-                Key Uint64,
-                Text String,
-                Stamp Timestamp,
-                INDEX fulltext_idx GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true),
-                PRIMARY KEY (Key)
-            );
-        )", IsRelevance ? "relevance" : "plain");
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    {
-        const std::string query = R"(
-            ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-        )";
-
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-
-        if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
-        } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextPlain index doesn't support TTL");
-        }
-    }
+    TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-
-    {
-        const std::string query = R"(
-            CREATE TABLE TestTable (
-                Key Uint64,
-                Text String,
-                Stamp Timestamp,
-                PRIMARY KEY (Key)
-            ) WITH (
-                TTL = Interval("PT0S") ON Stamp
-            );
-        )";
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    {
-        const std::string query = std::format(R"(
-            ALTER TABLE TestTable ADD INDEX fulltext_idx
-                GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true);
-        )", IsRelevance ? "relevance" : "plain");
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-
-        if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
-        } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextPlain index doesn't support TTL");
-        }
-    }
+    TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtlIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-
-    {
-        const std::string query = R"(
-            CREATE TABLE TestTable (
-                Key Uint64,
-                Text String,
-                Stamp Timestamp,
-                PRIMARY KEY (Key)
-            );
-        )";
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    {
-        const std::string query = R"(
-            ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-        )";
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    {
-        const std::string query = std::format(R"(
-            ALTER TABLE TestTable ADD INDEX fulltext_idx
-                GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true);
-        )", IsRelevance ? "relevance" : "plain");
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-
-        if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
-        } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextPlain index doesn't support TTL");
-        }
-    }
+    TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndexTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-
-    {
-        const std::string query = R"(
-            CREATE TABLE TestTable (
-                Key Uint64,
-                Text String,
-                Stamp Timestamp,
-                PRIMARY KEY (Key)
-            );
-        )";
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    {
-        const std::string query = std::format(R"(
-            ALTER TABLE TestTable ADD INDEX fulltext_idx
-                GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true);
-        )", IsRelevance ? "relevance" : "plain");
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    {
-        const std::string query = R"(
-            ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-        )";
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-
-        if (IsRelevance) {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextRelevance index doesn't support TTL");
-        } else {
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalFulltextPlain index doesn't support TTL");
-        }
-    }
+    TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
 }
 
 }

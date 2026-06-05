@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -1783,162 +1784,40 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    const TTtlNotAllowedIndexTestConfig VectorTtlNotAllowedConfig{
+        .IndexInCreateTable = R"(INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
+            WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),)",
+        .AlterAddIndex = R"(
+            ALTER TABLE TestTable ADD INDEX vector_idx
+                GLOBAL USING vector_kmeans_tree ON (Text)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+        )",
+        .ExpectedError = "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL",
+    };
+
     Y_UNIT_TEST(TtlNotAllowed_Both) {
         auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text String,
-                    Stamp Timestamp,
-                    INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    TTL = Interval("PT1H") ON Stamp
-                );
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
-        }
+        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
         auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text String,
-                    Stamp Timestamp,
-                    INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-            )";
-
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
         auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text String,
-                    Stamp Timestamp,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    TTL = Interval("PT0S") ON Stamp
-                );
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable ADD INDEX vector_idx
-                    GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
         auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text String,
-                    Stamp Timestamp,
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable ADD INDEX vector_idx
-                    GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
         auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text String,
-                    Stamp Timestamp,
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable ADD INDEX vector_idx
-                    GLOBAL USING vector_kmeans_tree ON (Text)
-                        WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const std::string query = R"(
-                ALTER TABLE TestTable SET (TTL = Interval("PT1H") ON Stamp);
-            )";
-            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL");
-        }
+        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 }
 

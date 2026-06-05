@@ -58,15 +58,14 @@ size_t CalcMaxBlockLenForOutput(std::vector<TType*> wideComponents) {
     return CalcBlockLen(maxBlockItemSize);
 }
 
-using TEqualsPtr = bool(*)(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
-using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
-
-using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
-using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
-
 static ui64 GetInstanceSeed(void* self) {
-    // Used to return CityHash64(self) but looks like that's unnecessary: we put the seed through regular and then Fibonacci hashing anyway
-    return reinterpret_cast<ui64>(self);
+    char buf[sizeof(void*)];
+    WriteUnaligned<void*>(buf, self);
+    return CityHash64(buf, sizeof(buf));
+}
+
+static Y_FORCE_INLINE ui32 GlobalHashToRhItemHash(ui64 hash) {
+    return static_cast<ui32>(hash >> 32);
 }
 
 struct TSegmentedArena
@@ -572,10 +571,13 @@ struct TDqHashCombineTestParams
     bool DisableStateDehydration = false;
 };
 
+using TEqualsFunc = TWideUnboxedEqual;
+using THashFunc = TWideUnboxedHasherFib<true>;
+
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
 protected:
-    using TMap = TDqRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TMap = TDqRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
 
     static size_t GetStaticMaxRowCount(size_t entryPayloadSizeBytes, size_t memoryLimit) {
         size_t memoryPerRow = entryPayloadSizeBytes + static_cast<size_t>(TMap::GetCellSize() * ExtraMapCapacity);
@@ -862,7 +864,7 @@ protected:
 
                 // TODO: Checkpoint: ensure RefCounts are valid
                 bool isNew = false;
-                Map->Insert(keyAndStateBuf, isNew);
+                Map->Insert(keyAndStateBuf, GlobalHashToRhItemHash(Hasher(keyAndStateBuf)), isNew);
 
                 MKQL_ENSURE(isNew, "Every key in the spilled state must be unique");
             }
@@ -905,7 +907,7 @@ protected:
                 // TODO: extract into a method (this is mostly a copy from ProcessFetchedRow)
                 TUnboxedValuePod* keyBuffer = nullptr;
                 bool isNew = false;
-                char* mapIt = Map->Insert(TempKeyBuffer.data(), isNew);
+                char* mapIt = Map->Insert(TempKeyBuffer.data(), GlobalHashToRhItemHash(Hasher(TempKeyBuffer.data())), isNew);
                 char* statePtr = nullptr;
 
                 if (isNew) {
@@ -991,9 +993,11 @@ protected:
         ui64 bucketId = 0;
         ui64 hash = Hasher(tempKey);
         if (EnableSpilling) {
-            // Lower 16 bits are used by the hash shuffle connection to distribute keys among tasks, so we can't use these (even with the hash seed)
-            // Another solution would be to rehash using a different function but shifted bits are uniform enough
-            bucketId = ((hash * 11400714819323198485llu) >> 16) & ((1ull << BucketBits) - 1ull);
+            // Lower 16 bits of the same hash value are used by the hash shuffle connection to distribute keys among tasks,
+            // so we can't use these (even with the hash seed).
+            // Another solution would be to rehash using a different function but shifted bits are uniform enough.
+            // Actual hashmap items are using the upper 32 bits.
+            bucketId = (hash >> 16) & ((1ull << BucketBits) - 1ull);
         }
 
         if (!SpillingStack.empty()) {
@@ -1037,8 +1041,9 @@ protected:
             return EFillState::ContinueFilling;
         }
 
-        TUnboxedValuePod* keyBuffer = nullptr;
+        TUnboxedValuePod* persistentKeyBuffer = nullptr;
         bool isNew = false;
+<<<<<<< HEAD
         auto mapIt = Map->Insert(tempKey, hash, isNew);
         char* statePtr = nullptr;
         if (isNew) {
@@ -1047,10 +1052,20 @@ protected:
             memcpy(keyBuffer, tempKey, tempKeySize * sizeof(TUnboxedValuePod));
             // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), keyBuffer);
             *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = keyBuffer;
+=======
+        auto mapIt = Map->Insert(keyBuf.data(), GlobalHashToRhItemHash(hash), isNew);
+        char* statePtr = nullptr;
+        if (isNew) {
+            // Copy the value to the specified arena page
+            persistentKeyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
+            memcpy(persistentKeyBuffer, keyBuf.data(), keyBuf.size_bytes());
+            // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), persistentKeyBuffer);
+            *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = persistentKeyBuffer;
+>>>>>>> 96b5960d32d (Reduce hash correlations when partitioning keys for aggregation (#42547))
         } else {
-            keyBuffer = Map->GetKeyValue(mapIt);
+            persistentKeyBuffer = Map->GetKeyValue(mapIt);
         }
-        statePtr = reinterpret_cast<char *>(keyBuffer) + StatesOffset;
+        statePtr = reinterpret_cast<char *>(persistentKeyBuffer) + StatesOffset;
 
         // TODO: loop over Aggs, but for now we always have one and only GenericAggregation
         if (isNew) {
@@ -1146,8 +1161,8 @@ public:
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes, GetInstanceSeed(this))))
-        , Equals(TWideUnboxedEqual(KeyTypes))
+        , Hasher(THashFunc(KeyTypes, GetInstanceSeed(this)))
+        , Equals(TEqualsFunc(KeyTypes))
         , Draining(false)
         , SourceEmpty(false)
         , TestParams(testParams)
@@ -1259,7 +1274,7 @@ protected:
         auto tryAlloc = [this](size_t rows) -> bool {
             size_t newCapacity = GetMapCapacity(rows);
             try {
-                Map.Reset(new TMap(Hasher, Equals, newCapacity));
+                Map.Reset(new TMap(Equals, newCapacity));
                 if (!HasMemoryForProcessing()) {
                     Map.Reset(nullptr);
                     return false;
@@ -1280,7 +1295,7 @@ protected:
 
         // This can emit uncaught TMemoryLimitExceededException if we can't afford even a tiny map
         size_t smallCapacity = GetMapCapacity(LowerFixedRowCount);
-        Map.Reset(new TMap(Hasher, Equals, smallCapacity));
+        Map.Reset(new TMap(Equals, smallCapacity));
         return LowerFixedRowCount;
     }
 

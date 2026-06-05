@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: kubernetes
-Version: 36.0.0
+Version: 36.0.2
 Summary: Kubernetes python client
 Home-page: https://github.com/kubernetes-client/python
 Author: Kubernetes
@@ -25,7 +25,7 @@ License-File: LICENSE
 Requires-Dist: certifi>=14.05.14
 Requires-Dist: six>=1.9.0
 Requires-Dist: python-dateutil>=2.5.3
-Requires-Dist: pyyaml>=5.4.1
+Requires-Dist: pyyaml>=6.0.3
 Requires-Dist: websocket-client!=0.40.0,!=0.41.*,!=0.42.*,>=0.32.0
 Requires-Dist: requests
 Requires-Dist: requests-oauthlib
@@ -34,9 +34,9 @@ Requires-Dist: durationpy>=0.7
 Requires-Dist: certifi>=14.05.14
 Requires-Dist: six>=1.9.0
 Requires-Dist: python-dateutil>=2.5.3
-Requires-Dist: pyyaml>=5.4.1
+Requires-Dist: pyyaml>=6.0.3
 Requires-Dist: urllib3!=2.6.0,>=1.24.2
-Requires-Dist: aiohttp<4.0.0,>=3.9.0
+Requires-Dist: aiohttp<4.0.0,>=3.13.5
 Provides-Extra: google-auth
 Requires-Dist: google-auth>=1.0.1; extra == "google-auth"
 Dynamic: author

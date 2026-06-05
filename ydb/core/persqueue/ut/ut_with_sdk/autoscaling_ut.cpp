@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession_1->Write(Msg(tiny, 1 + i)));
             UNIT_ASSERT(writeSession_2->Write(Msg(tiny, 1000 + i)));
         }
-        Sleep(TDuration::Seconds(12));
+        Sleep(TDuration::Seconds(15));
         auto describeAfter = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_C(
             describeAfter.GetTopicDescription().GetPartitions().size() >= 3,

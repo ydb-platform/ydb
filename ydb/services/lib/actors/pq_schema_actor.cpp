@@ -1014,7 +1014,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 error = TStringBuilder() << "max_partition_write_messages_speed can't be negative, provided " << partMessagesSpeed;
                 return Ydb::StatusIds::BAD_REQUEST;
             } else if (partMessagesSpeed == 0) {
-                partMessagesSpeed = DEFAULT_PARTITION_SPEED;
+                partMessagesSpeed = NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND;
             }
             partConfig->SetWriteSpeedInMessagesPerSecond(partMessagesSpeed);
 
@@ -1328,8 +1328,11 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
 
             auto partMessagesSpeed = request.partition_write_speed_messages_per_second();
-            if (partMessagesSpeed == 0) {
-                partMessagesSpeed = DEFAULT_PARTITION_SPEED;
+            if (partMessagesSpeed < 0) {
+                error = TStringBuilder() << "partition_write_speed_messages_per_second can't be negative, provided " << partMessagesSpeed;
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+            } else if (partMessagesSpeed == 0) {
+                partMessagesSpeed = NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND;
             }
             partConfig->SetWriteSpeedInMessagesPerSecond(partMessagesSpeed);
 
@@ -1341,6 +1344,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         pqTabletConfig->SetFormatVersion(0);
+        pqTabletConfig->SetContentBasedDeduplication(request.content_based_deduplication());
 
         auto ct = pqTabletConfig->MutableCodecs();
         for(const auto& codec : request.supported_codecs().codecs()) {
@@ -1429,6 +1433,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->ClearStorageLimitBytes();
             if (request.set_retention_storage_mb())
                 partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
+        }
+
+        if (request.has_set_content_based_deduplication()) {
+            pqTabletConfig->SetContentBasedDeduplication(request.set_content_based_deduplication());
         }
 
         if (request.has_alter_partitioning_settings()) {
@@ -1533,8 +1541,11 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (request.has_set_partition_write_speed_messages_per_second()) {
                 CHECK_CDC;
                 auto partMessagesSpeed = request.set_partition_write_speed_messages_per_second();
-                if (partMessagesSpeed == 0) {
-                    partMessagesSpeed = DEFAULT_PARTITION_SPEED;
+                if (partMessagesSpeed < 0) {
+                    error = TStringBuilder() << "partition_write_speed_messages_per_second can't be negative, provided " << partMessagesSpeed;
+                    return Ydb::StatusIds::BAD_REQUEST;
+                } else if (partMessagesSpeed == 0) {
+                    partMessagesSpeed = NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND;
                 }
                 partConfig->SetWriteSpeedInMessagesPerSecond(partMessagesSpeed);
             }

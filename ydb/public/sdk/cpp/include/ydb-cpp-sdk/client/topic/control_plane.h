@@ -394,6 +394,7 @@ private:
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
     std::optional<EMetricsLevel> MetricsLevel_;
+    bool ContentBasedDeduplication_;
 };
 
 class TConsumerDescription {

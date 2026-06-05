@@ -64,7 +64,9 @@ void TWriteQuoter::HandleWakeUpImpl() {
 }
 
 void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {
-
+    IncomingMessagesQuotaTracker.UpdateConfigIfChanged(
+        PQTabletConfig.GetPartitionConfig().GetBurstSizeInMessages(),
+        PQTabletConfig.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond());
 }
 
 THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker() const {

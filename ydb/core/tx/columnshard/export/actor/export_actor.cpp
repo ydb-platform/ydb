@@ -69,6 +69,7 @@ void TActor::AbortExport(const TString& errorMessage) {
     }
     KillExporter();
     Stage = EStage::WaitSaveCursor;
+    StageStartTime = TInstant::Now();
     Counters.OnSaveCursorStarted();
     SaveCursorStartTime = TInstant::Now();
     Become(&TActor::StateError);
@@ -100,10 +101,12 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
 }
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
-    Counters.OnAckResponse();
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error")("message", ev->Get()->Record.ShortDebugString());
     Counters.OnError();
     if (ExportSession->GetCursor().IsFinished()) {
+        if (Stage == EStage::WaitData) {
+            Counters.OnAckResponse();
+        }
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error_after_finish")(
             "message", "ignoring scan error because cursor is already finished");
         return;

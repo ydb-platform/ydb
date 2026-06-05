@@ -85,6 +85,7 @@ void TImportActor::AbortImport(const TString& errorMessage) {
         Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
     }
     Stage = EStage::WaitSaveCursor;
+    StageStartTime = TInstant::Now();
     Counters.OnSaveProgressStarted();
     SaveProgressStartTime = TInstant::Now();
     SaveSessionProgress();

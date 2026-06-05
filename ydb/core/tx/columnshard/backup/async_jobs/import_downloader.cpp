@@ -97,7 +97,6 @@ public:
             auto it = YdbSchema.find(colId);
             AFL_VERIFY(it != YdbSchema.end());
             auto [name, typeInfo] = it->second;
-            ;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
 
@@ -118,11 +117,11 @@ public:
         ui64 totalBytes = 0;
         const ui32 rowCount = record.RowsSize();
 
+        TVector<TCell> allCells;
         for (const auto& r : record.GetRows()) {
             keyCells.Parse(r.GetKeyColumns());
             valueCells.Parse(r.GetValueColumns());
 
-            TVector<TCell> allCells;
             allCells.reserve(rowSchemaOrder.size());
             for (const auto& cell : keyCells.GetCells()) {
                 allCells.push_back(cell);
@@ -137,6 +136,7 @@ public:
             ("all_cells_size", allCells.size())("schema_size", rowSchemaOrder.size());
 
             batchBuilder.AddRow(TConstArrayRef<TCell>(allCells.data(), allCells.size()));
+            allCells.clear();
         }
 
         auto resultBatch = batchBuilder.FlushBatch(false);

@@ -208,7 +208,6 @@ public:
     void Bootstrap() {
         auto exporter = NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), BackupTask, ExportFactory, TableColumns, TxId);
         if (!exporter.IsSuccess()) {
-            Counters.OnError();
             Fail(exporter.GetErrorMessage());
             return;
         }

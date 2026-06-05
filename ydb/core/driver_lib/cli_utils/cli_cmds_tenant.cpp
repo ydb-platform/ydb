@@ -280,17 +280,11 @@ public:
             Y_ABORT_UNLESS(response.result().UnpackTo(&result));
             // type -> <required, allocated>
             THashMap<TString, std::pair<ui64, ui64>> pools;
-            // type -> last allocation issue reported by BSC (if any)
-            THashMap<TString, TString> poolIssues;
             // <type, dc> -> <required, allocated>
             THashMap<std::pair<TString, TString>, std::pair<ui64, ui64>> units;
 
             for (auto &unit : result.required_resources().storage_units()) {
                 pools[unit.unit_kind()] = std::make_pair(unit.count(), 0U);
-            }
-
-            for (auto &poolIssue : result.storage_unit_issues()) {
-                poolIssues[poolIssue.unit_kind()] = poolIssue.issue();
             }
 
             for (auto &unit : result.required_resources().computational_units()) {
@@ -311,11 +305,7 @@ public:
             Cout << "  Allocated pools:" << Endl;
             for (auto &pr : pools) {
                 Cout << "    " << pr.first << ": "
-                     << pr.second.second << "/" << pr.second.first;
-                auto issueIt = poolIssues.find(pr.first);
-                if (issueIt != poolIssues.end())
-                    Cout << " (issue: " << issueIt->second << ")";
-                Cout << Endl;
+                     << pr.second.second << "/" << pr.second.first << Endl;
             }
             Cout << "  Allocated units:" << Endl;
             for (auto &pr : units)
@@ -328,6 +318,12 @@ public:
             }
             Cout << "  Data size hard quota: " << result.database_quotas().data_size_hard_quota() << Endl;
             Cout << "  Data size soft quota: " << result.database_quotas().data_size_soft_quota() << Endl;
+            if (!result.issues().empty()) {
+                Cout << "  Issues:" << Endl;
+                for (const auto &issue : result.issues()) {
+                    Cout << "    " << issue.message() << Endl;
+                }
+            }
             return true;
         }
     }

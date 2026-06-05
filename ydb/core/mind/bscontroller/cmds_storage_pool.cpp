@@ -198,11 +198,6 @@ namespace NKikimr::NBsController {
             }
         }
 
-        TBoxId boxId = cmd.GetBoxId();
-        if (!queryAllBoxes && !boxId && Boxes.Get().size() == 1) {
-            boxId = Boxes.Get().begin()->first;
-        }
-
         // create set of allowed storage pool ids to query
         const auto& ids = cmd.GetStoragePoolId();
         THashSet<TBoxStoragePoolId> storagePoolIds;

@@ -2178,9 +2178,11 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
         pool.set_unit_kind(pr.second->Kind);
         pool.set_count(pr.second->Config.GetNumGroups());
         if (pr.second->Issue) {
-            auto &poolIssue = *status.add_storage_unit_issues();
-            poolIssue.set_unit_kind(pr.second->Kind);
-            poolIssue.set_issue(pr.second->Issue);
+            auto *issue = status.add_issues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(TStringBuilder()
+                << pr.second->Kind << ": failed to allocate storage pool: "
+                << pr.second->Issue);
         }
         if (pr.second->AllocatedNumGroups) {
             auto &allocatedPool = *status.mutable_allocated_resources()->add_storage_units();

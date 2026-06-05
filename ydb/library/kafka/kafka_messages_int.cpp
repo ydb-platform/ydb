@@ -2,13 +2,13 @@
 
 namespace NKafka {
 
-TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawString& val) {
-    write(val.data(), val.length());
+TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawBytes& val) {
+    write(val.data(), val.size());
     return *this;
 }
 
-TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawBytes& val) {
-    write(val.data(), val.size());
+TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawString& val) {
+    write(val.data(), val.length());
     return *this;
 }
 

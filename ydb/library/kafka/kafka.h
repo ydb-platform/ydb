@@ -65,6 +65,10 @@ using TKafkaFloat64 = double;
 using TKafkaRawString = TString;
 using TKafkaString = std::optional<TKafkaRawString>;
 using TKafkaRawBytes = TArrayRef<const char>;
+
+inline TKafkaRawBytes ToRawBytes(const TString& str) {
+    return TKafkaRawBytes(str.data(), str.size());
+}
 using TKafkaBytes = std::optional<TKafkaRawBytes>;
 using TKafkaRecords = std::optional<TKafkaRecordBatch>;
 
@@ -341,8 +345,8 @@ public:
     };
 
     TKafkaWritable& operator<<(const TKafkaUuid& val);
-    TKafkaWritable& operator<<(const TKafkaRawString& val);
     TKafkaWritable& operator<<(const TKafkaRawBytes& val);
+    TKafkaWritable& operator<<(const TKafkaRawString& val);
 
     template<class T, typename U = std::make_unsigned_t<T>>
     void writeUnsignedVarint(T v) {

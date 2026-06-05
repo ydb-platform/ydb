@@ -58,7 +58,7 @@
     - [Множественные выходы](structure.md#multiout)
     - [Составные графы](structure.md#complex)
     - [Прекомпьюты](structure.md#precomputes)
-- [Визуализация метрик](metrics.md)
+- [Визуализация метрик запроса](metrics.md)
     - [Параллельность](metrics.md#parallelism)
     - [Агрегаты](metrics.md#aggregates)
     - [Масштаб метрик](metrics.md#scale)

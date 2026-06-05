@@ -4,36 +4,15 @@ import time
 import pytest
 import requests
 
-from security_test_helpers import _test_endpoints
+from security_test_helpers import (
+    _test_endpoints,
+    tablet_devui_expected_on_app,
+    tablet_devui_new_action_paths,
+    tablet_devui_sid_matrix,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-def _tablet_devui_sid_matrix():
-    all_forbidden = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 403,
-    }
-    monitoring_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    }
-    admin_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 200,
-    }
-    return all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok
 
 
 def _is_valid_tablet_id(tablet_id):
@@ -164,8 +143,8 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
     q = f'TabletID={datashard_tablet_id}'
     q_mutating_page = f'{q}&page=volatile-txs'
     q_mutating_action = f'{q}&action=key-access-sample'
-    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = _tablet_devui_sid_matrix()
-    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
     return {
         # New secure path for DataShard DevUI. Should be admin-only in both modes.
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
@@ -203,7 +182,7 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
 
 
 def test_tablets_app_secure_prefix_forbids_non_admins(ydb_cluster_with_enforce_user_token):
-    _, monitoring_allowed_sids_ok, admin_allowed_sids_ok = _tablet_devui_sid_matrix()
+    _, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
     _test_endpoints(
         ydb_cluster_with_enforce_user_token,
         {
@@ -215,8 +194,8 @@ def test_tablets_app_secure_prefix_forbids_non_admins(ydb_cluster_with_enforce_u
 
 def _pers_queue_devui_mon_paths(pers_queue_tablet_id, secure_path_mode):
     q = f'TabletID={pers_queue_tablet_id}'
-    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = _tablet_devui_sid_matrix()
-    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
     return {
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
         f'/tablets/app?{q}': monitoring_allowed_sids_ok,
@@ -233,8 +212,8 @@ def _pers_queue_send_read_set_paths(pers_queue_tablet_id, secure_path_mode):
         f'TabletID={pers_queue_tablet_id}&SendReadSet=1&step=1&txId=1'
         '&decision=commit&allSenderTablets=1'
     )
-    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = _tablet_devui_sid_matrix()
-    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
     return {
         f'/tablets/app?{q}': expected_on_app,
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
@@ -243,8 +222,8 @@ def _pers_queue_send_read_set_paths(pers_queue_tablet_id, secure_path_mode):
 
 def _pers_queue_action_paths(pers_queue_tablet_id, secure_path_mode):
     q = f'TabletID={pers_queue_tablet_id}&action=future_mutation'
-    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = _tablet_devui_sid_matrix()
-    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
     return {
         f'/tablets/app?{q}': expected_on_app,
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
@@ -291,13 +270,23 @@ def test_pers_queue_send_read_set_with_enforce_user_token_and_secure_path_mode(
     )
 
 
-def test_pers_queue_new_action_is_admin_only_by_default_with_secure_path_mode(
+def test_pers_queue_new_action_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_pers_queue_topic,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_pers_queue_topic.pers_queue_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_pers_queue_topic,
+        tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=False),
+    )
+
+
+def test_pers_queue_new_action_with_enforce_user_token_and_secure_path_mode(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
 ):
     tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic.pers_queue_tablet_id
     _test_endpoints(
         ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
-        _pers_queue_action_paths(tid, secure_path_mode=True),
+        tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=True),
     )
 
 

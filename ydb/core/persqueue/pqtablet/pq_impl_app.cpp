@@ -1,7 +1,6 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 
-#include <ydb/core/base/auth.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/common/common_app.h>
@@ -65,25 +64,6 @@ namespace {
         return !cgi.Has("consumer") && !cgi.Has("partitionId");
     }
 
-    bool CheckPersQueueDevUiAccess(
-        bool securePathMode,
-        TStringBuf pathInfo,
-        const TString& userToken,
-        const TCgiParameters& cgi,
-        const TActorId& sender)
-    {
-        if (!securePathMode) {
-            return true;
-        }
-        if (IsPublicPersQueueDevUiRequest(cgi)) {
-            return true;
-        }
-        if (!IsTabletDevUiSecurePath(pathInfo) || !IsAdministrator(AppData(), userToken)) {
-            TActivationContext::Send(new IEventHandle(sender, TActorId(), new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN)));
-            return false;
-        }
-        return true;
-    }
 }
 
 
@@ -354,7 +334,14 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
     const auto& cgi = ev->Get()->Cgi();
     const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (!CheckPersQueueDevUiAccess(securePathMode, ev->Get()->PathInfo(), ev->Get()->GetUserToken(), cgi, ev->Sender)) {
+    if (!CheckTabletDevUiAccess(
+            AppData(ctx),
+            securePathMode,
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            IsPublicPersQueueDevUiRequest(cgi),
+            ev->Sender))
+    {
         return true;
     }
     if (cgi.Has("SendReadSet")) {

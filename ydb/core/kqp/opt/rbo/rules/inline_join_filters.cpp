@@ -73,8 +73,11 @@ TIntrusivePtr<TOpMap> MakeMapFromRenames(TIntrusivePtr<IOperator> input,
 bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {
     auto itemType = input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto & column : columns) {
-        auto columnType = itemType->FindItemType(column.GetFullName());
-        if (columnType->IsOptionalOrNull()) {
+        const auto* columnType = itemType->FindItemType(column.GetFullName());
+        // A key column may be absent from the row type when downstream alias rewrites have renamed
+        // it but the propagated KeyColumns metadata still references the old name. In that case we
+        // cannot prove the key is non-null (nor build a valid join on it), so bail out of the rewrite.
+        if (!columnType || columnType->IsOptionalOrNull()) {
             return false;
         }
     }

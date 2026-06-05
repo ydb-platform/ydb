@@ -154,16 +154,20 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
     Props.Metadata->ColumnsCount = tableData.Metadata->Columns.size();
 
+    // Record lineage: source can rename its columns, so already we need to record that
+    auto outputIUs = GetOutputIUs();
+
+    // KeyColumns must reference the read's actual output IUs (which may have been renamed),
+    // not (Alias, physicalColumn). Columns[i] is the physical name aligned with outputIUs[i],
+    // so map each physical key column to its corresponding output IU.
     for(const auto& column : tableData.Metadata->KeyColumnNames) {
-        if (std::find(Columns.begin(), Columns.end(), column) == Columns.end()) {
+        const auto it = std::find(Columns.begin(), Columns.end(), column);
+        if (it == Columns.end()) {
             Props.Metadata->KeyColumns = {};
             break;
         }
-        Props.Metadata->KeyColumns.emplace_back(Alias, column);
+        Props.Metadata->KeyColumns.push_back(outputIUs[it - Columns.begin()]);
     }
-
-    // Record lineage: source can rename its columns, so already we need to record that
-    auto outputIUs = GetOutputIUs();
 
     const int duplicateId = Props.Metadata->ColumnLineage.AddAlias(Alias, path.StringValue());
     for (size_t i = 0; i < outputIUs.size(); i++) {

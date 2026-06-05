@@ -29,94 +29,11 @@ TString FormatSortElements(const TVector<TSortElement>& sortElements) {
     return result;
 }
 
-TInfoUnit RenameInfoUnit(const TInfoUnit& iu, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    const auto it = renameMap.find(iu);
-    return it == renameMap.end() ? iu : it->second;
-}
-
-bool RenameInfoUnitInPlace(TInfoUnit& iu, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    const auto renamed = RenameInfoUnit(iu, renameMap);
-    if (renamed == iu) {
-        return false;
-    }
-
-    iu = renamed;
-    return true;
-}
-
-bool RenameInfoUnits(TVector<TInfoUnit>& ius, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    bool changed = false;
-    for (auto& iu : ius) {
-        changed |= RenameInfoUnitInPlace(iu, renameMap);
-    }
-    return changed;
-}
-
-bool RenameExternalSubplanReferences(
-    const TIntrusivePtr<IOperator>& op,
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap,
-    TExprContext& ctx)
-{
-    if (!op) {
-        return false;
-    }
-
-    if (op->Kind == EOperator::AddDependencies) {
-        auto addDeps = CastOperator<TOpAddDependencies>(op);
-        return RenameInfoUnits(addDeps->Dependencies, renameMap);
-    }
-
-    bool hasRenamedExternalChild = false;
-    for (const auto& child : op->Children) {
-        hasRenamedExternalChild |= RenameExternalSubplanReferences(child, renameMap, ctx);
-    }
-
-    if (hasRenamedExternalChild) {
-        op->RenameIUs(renameMap, ctx);
-    }
-
-    return hasRenamedExternalChild;
-}
-
 } // namespace
 
 /**
  * Base class Operator methods
  */
-
-void TSubplans::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    if (renameMap.empty() || PlanMap.empty()) {
-        return;
-    }
-
-    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> renamedPlanMap;
-    TVector<TInfoUnit> renamedOrderedList;
-    renamedOrderedList.reserve(OrderedList.size());
-
-    for (const auto& iu : OrderedList) {
-        auto entry = PlanMap.at(iu);
-        const auto renamedIU = RenameInfoUnit(iu, renameMap);
-
-        entry.IU = RenameInfoUnit(entry.IU, renameMap);
-        RenameInfoUnits(entry.Tuple, renameMap);
-        RenameInfoUnits(entry.DependentIUs, renameMap);
-        RenameExternalSubplanReferences(CastOperator<IOperator>(entry.Plan), renameMap, ctx);
-
-        const auto inserted = renamedPlanMap.emplace(renamedIU, std::move(entry)).second;
-        Y_ENSURE(inserted, "Subplan rename produced duplicate binding " << renamedIU.GetFullName());
-        renamedOrderedList.push_back(renamedIU);
-    }
-
-    PlanMap = std::move(renamedPlanMap);
-    OrderedList = std::move(renamedOrderedList);
-}
-
-void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                          const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(renameMap);
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-}
 
 const TTypeAnnotationNode* IOperator::GetIUType(const TInfoUnit& iu) {
     auto structType = Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -199,20 +116,6 @@ bool TOpRead::NeedsMap() const {
         }
     }
     return false;
-}
-
-// FIXME: why does this function belong to op read?
-void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                        const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-
-    for (auto& column : OutputIUs) {
-        const auto it = renameMap.find(column);
-        if (it != renameMap.end()) {
-            column = it->second;
-        }
-    }
 }
 
 NYql::EStorageType TOpRead::GetTableStorageType() const {
@@ -491,34 +394,6 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(T
     return result;
 }
 
-void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                       const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(ctx);
-    TVector<TMapElement> newMapElements;
-
-    for (const auto& el : MapElements) {
-        TInfoUnit newIU = el.GetElementName();
-        const auto it = renameMap.find(newIU);
-        if (it != renameMap.end()) {
-            newIU = it->second;
-        }
-
-        if (el.IsRename()) {
-            auto expr = el.GetExpression();
-            auto from = el.GetRename();
-            if (renameMap.contains(from) && !stopList.contains(from)) {
-                from = renameMap.at(from);
-            }
-            newMapElements.emplace_back(newIU, MakeColumnAccess(from, Pos, expr.Ctx, expr.PlanProps), true);
-        } else {
-            auto expr = el.GetExpression();
-            auto newBody = expr.ApplyRenames(renameMap);
-            newMapElements.emplace_back(newIU, newBody);
-        }
-    }
-    MapElements = std::move(newMapElements);
-}
-
 void TOpMap::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
     TOptimizeExprSettings settings(&ctx.TypeCtx);
     for (size_t i = 0; i < MapElements.size(); i++) {
@@ -629,13 +504,6 @@ TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
     return ius;
 }
 
-void TOpAddDependencies::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-    RenameInfoUnits(Dependencies, renameMap);
-}
-
 TString TOpAddDependencies::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     
@@ -670,13 +538,6 @@ TVector<TInfoUnit> TOpFilter::GetOutputIUs() {
         return *outputIUs;
     }
     return GetInput()->GetOutputIUs();
-}
-
-void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                          const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-    FilterExpr = FilterExpr.ApplyRenames(renameMap);
 }
 
 TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {
@@ -767,27 +628,6 @@ TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
     }
 
     return result;
-}
-
-void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                        const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-
-    for (auto& k : JoinKeys) {
-        if (renameMap.contains(k.first)) {
-            k.first = renameMap.at(k.first);
-        }
-        if (renameMap.contains(k.second)) {
-            k.second = renameMap.at(k.second);
-        }
-    }
-
-    if (JoinFilters.size()) {
-        for (auto& filter : JoinFilters) {
-            filter = filter.ApplyRenames(renameMap);
-        }
-    }
 }
 
 TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
@@ -974,16 +814,6 @@ TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
     return GetInput()->GetOutputIUs();
 }
 
-void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-    LimitCond = LimitCond.ApplyRenames(renameMap);
-    if (OffsetCond) {
-        OffsetCond = OffsetCond->ApplyRenames(renameMap);
-    }
-}
-
 TString TOpLimit::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder builder;
@@ -1043,29 +873,6 @@ TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
         result.push_back(element.SortColumn);
     }
     return result;
-}
-
-void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-    TVector<TSortElement> newSortElements;
-    for (const auto& element : SortElements) {
-        TInfoUnit newIU(element.SortColumn);
-
-        const auto it = renameMap.find(newIU);
-        if (it != renameMap.end()) {
-            newIU = it->second;
-        }
-
-        auto sortElement = TSortElement(element);
-        sortElement.SortColumn = newIU;
-        newSortElements.push_back(sortElement);
-    }
-
-    if (LimitCond.has_value()) {
-        LimitCond = LimitCond->ApplyRenames(renameMap);
-    }
-    SortElements = std::move(newSortElements);
 }
 
 TString TOpSort::ToString(TExprContext& ctx) {
@@ -1156,27 +963,6 @@ TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
         usedIUs.push_back(aggTraits.OriginalColName);
     }
     return usedIUs;
-}
-
-void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                             const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(stopList);
-
-    for (auto& column : KeyColumns) {
-        const auto it = renameMap.find(column);
-        if (it != renameMap.end()) {
-            column = it->second;
-        }
-    }
-    for (auto& trait : AggregationTraitsList) {
-        if (renameMap.contains(trait.OriginalColName) && !stopList.contains(trait.OriginalColName)) {
-            trait.OriginalColName = renameMap.at(trait.OriginalColName);
-        }
-        if (renameMap.contains(trait.ResultColName)) {
-            trait.ResultColName = renameMap.at(trait.ResultColName);
-        }
-    }
 }
 
 TString TOpAggregate::ToString(TExprContext& ctx) {
@@ -1280,12 +1066,6 @@ void TOpCBOTree::RebuildChildren() {
 
             Children.push_back(child);
         }
-    }
-}
-
-void TOpCBOTree::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
-    for (auto op : TreeNodes) {
-        op->RenameIUs(renameMap, ctx, stopList);
     }
 }
 

@@ -17,6 +17,7 @@ SRCS(
     logical_aliases.cpp
     logical_liveness.cpp
     logical_name_constraints.cpp
+    logical_renames.cpp
 )
 
 PEERDIR(

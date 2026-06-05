@@ -108,12 +108,14 @@ function copyToClipboard(textToCopy) {
     }
 }
 
-// Locate the editor range of the leaf key described by a collector path like
-// "/blob_storage_config/foo". Descends ancestor keys to disambiguate repeated names.
-// Returns a monaco range or null if not found.
-function findUnknownFieldRange(model, path, name) {
+// Locate the editor ranges for a collector path like "/config/blob_storage_config/foo":
+// the leaf key range plus the range of each ancestor key found along the path. Descends
+// ancestor keys to disambiguate repeated names; the ancestor ranges let callers lightly
+// tint parents so a collapsed section still signals there is something invalid inside.
+// Returns {leaf: monaco range or null, ancestors: [monaco range, ...]}.
+function findUnknownFieldRanges(model, path, name) {
     if (!model) {
-        return null;
+        return {leaf: null, ancestors: []};
     }
     var segments = (path || '').split('/').filter(function(s) {
         return s.length > 0 && !/^\d+$/.test(s); // drop empty parts and array indices
@@ -136,14 +138,21 @@ function findUnknownFieldRange(model, path, name) {
     }
 
     var fromLine = 1;
-    // Descend ancestors to scope the search to the correct subtree.
+    var ancestors = [];
+    // Descend ancestors to scope the search to the correct subtree, collecting each.
     for (var i = 0; i < segments.length - 1; ++i) {
         var anc = keyMatch(segments[i], fromLine);
         if (anc) {
+            ancestors.push(anc);
             fromLine = anc.startLineNumber + 1;
         }
     }
-    return keyMatch(leaf, fromLine);
+    return {leaf: keyMatch(leaf, fromLine), ancestors: ancestors};
+}
+
+// Back-compat thin wrapper: just the leaf range (or null).
+function findUnknownFieldRange(model, path, name) {
+    return findUnknownFieldRanges(model, path, name).leaf;
 }
 
 // Highlights unknown (red) / deprecated (amber) fields in a monaco editor and
@@ -161,10 +170,14 @@ function highlightUnknownFields(editor, listContainer, fields) {
 
     var decorations = [];
     var located = [];
+    var leafLines = {};       // line numbers that carry a strong (leaf) highlight
+    var parentByLine = {};    // line number -> {range, unknown} for ancestor tinting
     fields.forEach(function(f) {
         var cls = f.deprecated ? 'deprecated-field-amber' : 'unknown-field-red';
-        var range = findUnknownFieldRange(model, f.path, f.name);
+        var found = findUnknownFieldRanges(model, f.path, f.name);
+        var range = found.leaf;
         if (range) {
+            leafLines[range.startLineNumber] = true;
             decorations.push({
                 range: range,
                 options: {
@@ -182,7 +195,42 @@ function highlightUnknownFields(editor, listContainer, fields) {
                 }
             });
         }
+        // Remember each ancestor so we can lightly tint it: a collapsed parent then still
+        // hints that something invalid is nested inside. Unknown (red) outranks deprecated
+        // (amber) when a parent contains both kinds.
+        found.ancestors.forEach(function(anc) {
+            var ln = anc.startLineNumber;
+            var prev = parentByLine[ln];
+            parentByLine[ln] = {
+                range: anc,
+                unknown: (!f.deprecated) || !!(prev && prev.unknown)
+            };
+        });
         located.push({field: f, range: range});
+    });
+
+    // Light parent tints, skipping lines that already carry a strong leaf highlight.
+    Object.keys(parentByLine).forEach(function(ln) {
+        if (leafLines[ln]) {
+            return;
+        }
+        var p = parentByLine[ln];
+        var pcls = p.unknown ? 'unknown-parent-light' : 'deprecated-parent-light';
+        decorations.push({
+            range: p.range,
+            options: {
+                isWholeLine: true,
+                className: pcls,
+                linesDecorationsClassName: pcls + '-gutter',
+                overviewRuler: {
+                    color: p.unknown ? 'rgba(221, 51, 51, 0.5)' : 'rgba(216, 162, 0, 0.5)',
+                    position: monaco.editor.OverviewRulerLane.Left
+                },
+                hoverMessage: {
+                    value: 'Contains ' + (p.unknown ? 'unknown' : 'deprecated') + ' field(s)'
+                }
+            }
+        });
     });
 
     editor.__unknownFieldDecorations = editor.deltaDecorations(

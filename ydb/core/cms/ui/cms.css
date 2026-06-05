@@ -561,6 +561,28 @@ td {
   border-bottom: 2px solid #d8a200;
 }
 
+/* Light tint on ancestors of an unknown/deprecated field, so a collapsed parent still
+   signals there is something invalid nested inside (whole-line tint + gutter bar). */
+.unknown-parent-light {
+  background: rgba(255, 0, 0, 0.06);
+}
+
+.deprecated-parent-light {
+  background: rgba(255, 191, 0, 0.07);
+}
+
+.unknown-parent-light-gutter {
+  background: #d33;
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+.deprecated-parent-light-gutter {
+  background: #d8a200;
+  width: 3px !important;
+  margin-left: 3px;
+}
+
 /* Unknown-fields list widget. */
 .unknown-fields-list {
   padding: 4px 12px;

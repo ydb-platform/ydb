@@ -1008,6 +1008,25 @@ namespace NKikimr::NGRpcProxy::V1 {
             } else {
                 partConfig->SetBurstSize(burstSpeed);
             }
+
+            auto partMessagesSpeed = settings.max_partition_write_messages_speed();
+            if (partMessagesSpeed < 0) {
+                error = TStringBuilder() << "max_partition_write_messages_speed can't be negative, provided " << partMessagesSpeed;
+                return Ydb::StatusIds::BAD_REQUEST;
+            } else if (partMessagesSpeed == 0) {
+                partMessagesSpeed = DEFAULT_PARTITION_SPEED;
+            }
+            partConfig->SetWriteSpeedInMessagesPerSecond(partMessagesSpeed);
+
+            const auto& burstMessages = settings.max_partition_write_messages_burst();
+            if (burstMessages < 0) {
+                error = TStringBuilder() << "max_partition_write_messages_burst can't be negative, provided " << burstMessages;
+                return Ydb::StatusIds::BAD_REQUEST;
+            } else if (burstMessages == 0) {
+                partConfig->SetBurstSizeInMessages(partMessagesSpeed);
+            } else {
+                partConfig->SetBurstSizeInMessages(burstMessages);
+            }
         }
 
         if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)settings.supported_format()) || settings.supported_format() == 0) {
@@ -1307,6 +1326,19 @@ namespace NKikimr::NGRpcProxy::V1 {
             } else {
                 partConfig->SetBurstSize(burstSpeed);
             }
+
+            auto partMessagesSpeed = request.partition_write_speed_messages_per_second();
+            if (partMessagesSpeed == 0) {
+                partMessagesSpeed = DEFAULT_PARTITION_SPEED;
+            }
+            partConfig->SetWriteSpeedInMessagesPerSecond(partMessagesSpeed);
+
+            const auto& burstMessages = request.partition_write_burst_messages();
+            if (burstMessages == 0) {
+                partConfig->SetBurstSizeInMessages(partMessagesSpeed);
+            } else {
+                partConfig->SetBurstSizeInMessages(burstMessages);
+            }
         }
         pqTabletConfig->SetFormatVersion(0);
 
@@ -1495,6 +1527,25 @@ namespace NKikimr::NGRpcProxy::V1 {
                     partConfig->SetBurstSize(partConfig->GetWriteSpeedInBytesPerSecond());
                 } else {
                     partConfig->SetBurstSize(burstSpeed);
+                }
+            }
+
+            if (request.has_set_partition_write_speed_messages_per_second()) {
+                CHECK_CDC;
+                auto partMessagesSpeed = request.set_partition_write_speed_messages_per_second();
+                if (partMessagesSpeed == 0) {
+                    partMessagesSpeed = DEFAULT_PARTITION_SPEED;
+                }
+                partConfig->SetWriteSpeedInMessagesPerSecond(partMessagesSpeed);
+            }
+
+            if (request.has_set_partition_write_burst_messages()) {
+                CHECK_CDC;
+                const auto& burstMessages = request.set_partition_write_burst_messages();
+                if (burstMessages == 0) {
+                    partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
+                } else {
+                    partConfig->SetBurstSizeInMessages(burstMessages);
                 }
             }
         }

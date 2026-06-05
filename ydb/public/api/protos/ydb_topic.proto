@@ -1084,8 +1084,6 @@ message CreateTopicRequest {
 
     // Metrics level. If the level is unset, use database setting.
     optional uint32 metrics_level = 13;
-<<<<<<< HEAD
-=======
 
     // Enable content-based deduplication for the topic.
     bool content_based_deduplication = 14;
@@ -1093,7 +1091,6 @@ message CreateTopicRequest {
     int64 partition_write_speed_messages_per_second = 15 [(Ydb.value) = ">= 0"];
 
     int64 partition_write_burst_messages = 16 [(Ydb.value) = ">= 0"];
->>>>>>> 5c8005dc72c (LOGBROKER-10375 Add new fields to api (#39843))
 }
 
 // Create topic response sent from server to client.
@@ -1230,8 +1227,6 @@ message DescribeTopicResult {
 
     // Metrics level.
     optional uint32 metrics_level = 16;
-<<<<<<< HEAD
-=======
 
     // Is content-based deduplication enabled for the topic.
     bool content_based_deduplication = 17;
@@ -1241,7 +1236,6 @@ message DescribeTopicResult {
 
     // Partition write burst in messages.
     int64 partition_write_burst_messages = 19;
->>>>>>> 5c8005dc72c (LOGBROKER-10375 Add new fields to api (#39843))
 }
 
 // Describe partition request sent from client to server.
@@ -1419,8 +1413,6 @@ message AlterTopicRequest {
         uint32 set_metrics_level = 15;
         google.protobuf.Empty reset_metrics_level = 16;
     }
-<<<<<<< HEAD
-=======
 
     // Enable content-based deduplication for the topic.
     optional bool set_content_based_deduplication = 17;
@@ -1430,7 +1422,6 @@ message AlterTopicRequest {
 
     // Set partition write burst in messages. Must be less than database limit.
     optional int64 set_partition_write_burst_messages = 19 [(Ydb.value) = ">= 0"];
->>>>>>> 5c8005dc72c (LOGBROKER-10375 Add new fields to api (#39843))
 }
 
 // Update topic response sent from server to client.

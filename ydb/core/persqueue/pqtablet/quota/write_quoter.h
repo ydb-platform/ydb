@@ -56,7 +56,7 @@ private:
     bool QuotingEnabled;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
 
-    TQuotaTracker PartitionDeduplicationIdQuotaTracker;
+    TQuotaTracker IncomingMessagesQuotaTracker;
 };
 
 

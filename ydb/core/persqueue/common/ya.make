@@ -7,6 +7,7 @@ SRCS(
     key.cpp
     microseconds_sliding_window.cpp
     percentiles.cpp
+    partitioning_keys_manager.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
@@ -18,6 +19,7 @@ PEERDIR(
     ydb/core/persqueue/public/partition_key_range
     ydb/library/actors/core
     ydb/library/logger
+    ydb/library/kll_median
 )
 
 END()

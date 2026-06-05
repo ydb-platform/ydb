@@ -396,7 +396,17 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
+<<<<<<< HEAD
     if (enforceUserTokenRequirement) {
+=======
+    if (initParameters.EnableTopicPartitionSplitBasedOnKllSketch) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (initParameters.EnableTopicPartitionSplitBasedOnMessages) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnMessages(true);
+    }
+    if (initParameters.EnforceUserTokenRequirement) {
+>>>>>>> 78242e20f03 (LOGBROKER-10375 Add split by mps (#38551))
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);
     }

@@ -1850,6 +1850,24 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/PartitionMaxWriteBytesMax"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/PartitionMaxWriteMessagesMax"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/PartitionMaxWriteQuotaUsage"
       },
       "value": 0
@@ -2078,6 +2096,15 @@
         "sensor": "PQ/WriteBytesQuota"
       },
       "value": 50000000
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/WriteMessagesQuota"
+      },
+      "value": 1048576
     },
     {
       "kind": "GAUGE",
@@ -2156,6 +2183,24 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "total",
+        "sensor": "PQ/PartitionMaxWriteBytesMax"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "total",
+        "sensor": "PQ/PartitionMaxWriteMessagesMax"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "total",
         "sensor": "PQ/PartitionMaxWriteQuotaUsage"
       },
       "value": 0
@@ -2384,6 +2429,15 @@
         "sensor": "PQ/WriteBytesQuota"
       },
       "value": 50000000
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "total",
+        "sensor": "PQ/WriteMessagesQuota"
+      },
+      "value": 1048576
     },
     {
       "kind": "GAUGE",

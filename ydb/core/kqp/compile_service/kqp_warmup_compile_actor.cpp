@@ -98,26 +98,43 @@ public:
 
     void OnRunQuery() override {
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
-        TStringBuilder sql;
-        sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, "
-            << "MAX(CompilationDurationMs) AS CompilationDurationMs, MAX(QueryType) AS QueryType, MAX(Syntax) AS Syntax"
-            << " FROM `" << Database << "/.sys/compile_cache_queries` "
-            << "WHERE IsTruncated = false "
+        const TString tablePath = TStringBuilder() << "`" << Database << "/.sys/compile_cache_queries`";
+        const TString commonPredicates = TStringBuilder()
+            << "IsTruncated = false "
             << "AND AccessCount > 0 "
             << "AND QueryType IS NOT NULL AND QueryType != '' "
             << "AND CompilationDurationMs < " << MaxCompilationDurationMs;
 
-        if (!NodeIds.empty()) {
-            ui32 nodesToQuery = std::min<ui32>(MaxNodesToRequest, NodeIds.size());
-            sql << "  AND NodeId IN (";
+        // Build the inner per-node source. We must NOT use NodeId IN (...) on a sysview:
+        // YQL collapses it into one [min..max] range, and compile_cache.cpp then filters
+        // every proxy node by that range, hitting nodes we did not intend to query
+        // (and breaking MaxNodesToRequest semantics on sparse selections).
+        // UNION ALL of point reads (WHERE NodeId = X) keeps each scan as a single-cell
+        // range, so the sysview talks only to the nodes we actually picked.
+        const ui32 nodesToQuery = NodeIds.empty()
+            ? 0u
+            : (MaxNodesToRequest > 0 ? std::min<ui32>(MaxNodesToRequest, NodeIds.size()) : NodeIds.size());
+
+        TStringBuilder inner;
+        if (nodesToQuery == 0) {
+            inner << "SELECT Query, UserSID, Metadata, AccessCount, CompilationDurationMs, QueryType, Syntax "
+                  << "FROM " << tablePath << " WHERE " << commonPredicates;
+        } else {
             for (ui32 i = 0; i < nodesToQuery; ++i) {
-                if (i > 0) sql << ", ";
-                sql << NodeIds[i];
+                if (i > 0) {
+                    inner << " UNION ALL ";
+                }
+                inner << "SELECT Query, UserSID, Metadata, AccessCount, CompilationDurationMs, QueryType, Syntax "
+                      << "FROM " << tablePath
+                      << " WHERE NodeId = " << NodeIds[i] << " AND " << commonPredicates;
             }
-            sql << ")";
         }
 
-        sql << " GROUP BY Query, UserSID, QueryType, Syntax "
+        TStringBuilder sql;
+        sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, "
+            << "MAX(CompilationDurationMs) AS CompilationDurationMs, MAX(QueryType) AS QueryType, MAX(Syntax) AS Syntax"
+            << " FROM (" << inner << ") "
+            << "GROUP BY Query, UserSID, QueryType, Syntax "
             << "ORDER BY AccessCount DESC "
             << "LIMIT " << limit;
 
@@ -183,21 +200,34 @@ public:
     {}
 
     void OnRunQuery() override {
+        const TString tablePath = TStringBuilder() << "`" << Database << "/.sys/compile_cache_queries`";
+
+        // Same reasoning as TFetchCacheActor: avoid NodeId IN (...) on a sysview because
+        // YQL collapses it into [min..max] and compile_cache.cpp ends up scanning every
+        // proxy node within that range. UNION ALL of point reads keeps each scan bound
+        // to a single node.
+        const ui32 nodesToQuery = NodeIds.empty()
+            ? 0u
+            : (MaxNodesToRequest > 0 ? std::min<ui32>(MaxNodesToRequest, NodeIds.size()) : NodeIds.size());
+
+        TStringBuilder inner;
+        if (nodesToQuery == 0) {
+            inner << "SELECT IsTruncated, QueryType FROM " << tablePath
+                  << " WHERE AccessCount > 0";
+        } else {
+            for (ui32 i = 0; i < nodesToQuery; ++i) {
+                if (i > 0) {
+                    inner << " UNION ALL ";
+                }
+                inner << "SELECT IsTruncated, QueryType FROM " << tablePath
+                      << " WHERE NodeId = " << NodeIds[i] << " AND AccessCount > 0";
+            }
+        }
+
         TStringBuilder sql;
         sql << "SELECT SUM(CASE WHEN IsTruncated = true THEN 1 ELSE 0 END) AS TruncatedCount,"
             << " SUM(CASE WHEN QueryType IS NULL OR QueryType = '' THEN 1 ELSE 0 END) AS EmptyQueryTypeCount"
-            << " FROM `" << Database << "/.sys/compile_cache_queries`"
-            << " WHERE AccessCount > 0";
-
-        if (!NodeIds.empty()) {
-            ui32 nodesToQuery = std::min<ui32>(MaxNodesToRequest, NodeIds.size());
-            sql << " AND NodeId IN (";
-            for (ui32 i = 0; i < nodesToQuery; ++i) {
-                if (i > 0) sql << ", ";
-                sql << NodeIds[i];
-            }
-            sql << ")";
-        }
+            << " FROM (" << inner << ")";
 
         RunStreamQuery(sql);
     }
@@ -272,7 +302,9 @@ void FillYdbParametersFromMetadata(
 
 } // anonymous namespace
 
-
+// Compile warmup actor runs before the node is registered and ready to serve queries.
+// The main goal is to compile popular queries before node starts to avoid execution time drops
+// during the first moments of node work.
 // Triggers: RM kqpexch+ board sync (single-node fast-skip) or KqpProxy TEvStartWarmup
 // (multi-node — fetch SQL federated via TEvListProxyNodesRequest).
 // SoftDeadline: fallback cluster-wide fetch. HardDeadline: lifetime cap.
@@ -332,6 +364,8 @@ private:
             cFunc(TEvPrivate::EvDelayedComplete, HandleDelayedComplete);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
+            // Late tick from the topology poller scheduled in Bootstrap; harmless after we left StateWaitingTopology.
+            IgnoreFunc(TEvPrivate::TEvCheckTopology);
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
@@ -359,6 +393,8 @@ private:
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
+            // Late tick from the topology poller scheduled in Bootstrap; harmless after we left StateWaitingTopology.
+            IgnoreFunc(TEvPrivate::TEvCheckTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
             LOG_W("StateFetching: unexpected event " << ev->GetTypeRewrite());
@@ -371,6 +407,8 @@ private:
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
+            // Late tick from the topology poller scheduled in Bootstrap; harmless after we left StateWaitingTopology.
+            IgnoreFunc(TEvPrivate::TEvCheckTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
             LOG_W("StateCompiling: unexpected event " << ev->GetTypeRewrite());

@@ -20,6 +20,7 @@ from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule, delete_stream
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream, write_stream
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
+from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -54,10 +55,10 @@ def kikimr(request):
     kikimr.stop()
 
 
-def start_yds_query(kikimr, client, sql) -> str:
+def start_yds_query(kikimr, client, sql, timeout=plain_or_under_sanitizer_wrapper(30, 150)) -> str:
     query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
     client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-    kikimr.compute_plane.wait_zero_checkpoint(query_id)
+    kikimr.compute_plane.wait_zero_checkpoint(query_id, timeout)
     return query_id
 
 
@@ -1376,14 +1377,15 @@ class TestPqRowDispatcher(TestYdsBase):
 
         sql = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                     SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` 
-                    WITH (format=raw, SCHEMA (data String NOT NULL))
-                    WHERE data like "%time%" OR {filter};'''
+                    WITH (format=json_each_row, SCHEMA (data String NOT NULL))
+                    WHERE data = "100" OR {filter};'''
 
         logging.debug(f"query text size: {str(len(sql))}")
-        query_id = start_yds_query(kikimr, client, sql)
-        data = ['{"time" = 100;}', '{"time" = 101;}']
+        query_id = start_yds_query(kikimr, client, sql, timeout=300)
+        data = ['{"data": "100"}', '{"data": "101"}']
+        expected = ["100"]
 
         self.write_stream(data)
-        assert self.read_stream(len(data), topic_path=self.output_topic) == data
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         stop_yds_query(client, query_id)

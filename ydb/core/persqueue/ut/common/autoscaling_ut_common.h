@@ -46,8 +46,8 @@ ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TStr
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight);
 
-/** Alter topic через schemeshard (лимит сообщений/сек на партицию, см. pqconfig WriteSpeedInMessagesPerSecond). */
-void AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond);
+/** Alter topic через Topic API (лимит сообщений/сек на партицию). */
+void AlterTopicMessageWriteSpeed(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond);
 
 TWriteMessage Msg(const TString& data, ui64 seqNo);
 

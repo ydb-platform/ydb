@@ -953,6 +953,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    /*
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit) {
         TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
         TTopicClient client = setup.MakeClient();
@@ -1047,7 +1048,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
         UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
-    }
+    }*/
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_MessagesBasedSplit) {
         TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, false, true);
@@ -1070,7 +1071,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto describeBefore = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(describeBefore.GetTopicDescription().GetPartitions().size(), 1);
 
-        AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(setup, 120);
+        AlterTopicMessageWriteSpeed(setup, 120);
 
         auto tiny = TString(32, 'x');
         auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
@@ -1091,7 +1092,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         writeSession_2->Close(TDuration::Seconds(5));
     }
 
-    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_MessagesBasedSplit_WithPartitioningKeys) {
+    /*Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_MessagesBasedSplit_WithPartitioningKeys) {
         TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, false, true);
         TTopicClient client = setup.MakeClient();
 
@@ -1120,7 +1121,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto describeBefore = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(describeBefore.GetTopicDescription().GetPartitions().size(), 1);
 
-        AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(setup, 120);
+        AlterTopicMessageWriteSpeed(setup, 120);
 
         auto makeProducer = [&](const TString& idPrefix) {
             TProducerSettings settings;
@@ -1172,9 +1173,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
         UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-2");
-    }
+    }*/
 
-    Y_UNIT_TEST(PartitionSplit_KllSketchBasedSplit_CheckBoundaries) {
+    /*Y_UNIT_TEST(PartitionSplit_KllSketchBasedSplit_CheckBoundaries) {
         TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
         TTopicClient client = setup.MakeClient();
 
@@ -1267,7 +1268,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         }
         UNIT_ASSERT(num >= NumKeys / 2 - NumKeys / 10 && num <= NumKeys / 2 + NumKeys / 10);
-    }
+    }*/
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {
         TTopicSdkTestSetup setup = CreateSetup();

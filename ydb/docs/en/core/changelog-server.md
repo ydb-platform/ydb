@@ -25,6 +25,10 @@ Release date: June 5, 2026.
 * Database-stored secrets are fully supported (create, alter, drop, and use) — see [Secrets](./concepts/datamodel/secrets.md?version=v25.4). Note that the [legacy syntax](./concepts/datamodel/secrets.md?version=v25.3) is deprecated.
 * [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all) execution was improved with parallel execution, improving performance of analytical queries.
 
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
+
 ## Version 25.3 {#25-3}
 
 ### Version 25.3.1.25 {#25-3-1-25}

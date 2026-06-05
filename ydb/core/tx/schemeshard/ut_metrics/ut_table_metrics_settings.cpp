@@ -242,6 +242,101 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     }
 
     /**
+     * Verify that ALTER TABLE fails correctly, when the given detailed metrics
+     * level (or an explicit "drop") is specified in the request and
+     * the EnableDetailedMetrics feature flag is disabled.
+     *
+     * @param[in] metricsLevel The detailed metrics level to verify (unset == use drop)
+     */
+    void VerifyAlterTableWithDetailedMetricsFlagDisabled(
+        std::optional<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel> metricsLevel
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDetailedMetrics(false);
+
+        // First, create a table without any detailed metrics settings
+        TestCreateTable(
+            runtime,
+            100,
+            "/MyRoot",
+            R"(
+                Name: "TestTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "String" }
+                KeyColumnNames: ["key"]
+            )"
+        );
+
+        env.TestWaitNotification(runtime, 100);
+
+        // Second, execute ALTER TABLE with the detailed metrics settings explicitly specified
+        TestAlterTable(
+            runtime,
+            101,
+            "/MyRoot",
+            (!metricsLevel)
+                ? R"(
+                    Name: "TestTable"
+                    DetailedMetricsSettings {
+                        NotConfigured {
+                        }
+                    }
+                )"
+                : Sprintf(
+                    R"(
+                        Name: "TestTable"
+                        DetailedMetricsSettings {
+                            Configured {
+                                MetricsLevel: %s
+                            }
+                        }
+                    )",
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(*metricsLevel).c_str()
+                ),
+            {{
+                NKikimrScheme::StatusInvalidParameter,
+                "The detailed metrics settings are specified in the request, "
+                "but the detailed metrics feature is disabled by the corresponding "
+                "feature flag (EnableDetailedMetrics)",
+            }}
+        );
+    }
+
+    /**
+     * Verify that CREATE TABLE fails correctly, with different detailed metrics levels
+     * and the EnableDetailedMetrics feature flag disabled.
+     */
+    Y_UNIT_TEST(AlterTableDroppingDetailedMetricsSettingsNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled({});
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelUnspecifiedNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelDisabledNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelTableNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelPartitionNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
+    /**
      * Verify that CREATE TABLE works correctly, when the given valid
      * detailed metrics level is specified in the request.
      *

@@ -221,6 +221,7 @@ function highlightUnknownFields(editor, listContainer, fields) {
                 options: {
                     inlineClassName: cls,
                     className: cls,
+                    linesDecorationsClassName: cls + '-gutter',
                     isWholeLine: false,
                     overviewRuler: {
                         color: f.deprecated ? '#d8a200' : '#d33',

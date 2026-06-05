@@ -571,12 +571,16 @@ td {
   background: rgba(255, 191, 0, 0.07);
 }
 
+/* Left gutter bar for unknown/deprecated fields (leaf, strong) and their parents (light).
+   Same bar so the leaf line is flagged on the left just like its ancestors. */
+.unknown-field-red-gutter,
 .unknown-parent-light-gutter {
   background: #d33;
   width: 3px !important;
   margin-left: 3px;
 }
 
+.deprecated-field-amber-gutter,
 .deprecated-parent-light-gutter {
   background: #d8a200;
   width: 3px !important;

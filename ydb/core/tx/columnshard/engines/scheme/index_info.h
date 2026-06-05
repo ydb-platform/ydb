@@ -428,7 +428,7 @@ public:
         return PKColumns;
     }
 
-    const  THashMap<ui32, TNameTypeInfo>& GetColumns() const {
+    const THashMap<ui32, TNameTypeInfo>& GetColumns() const {
         return Columns;
     }
 

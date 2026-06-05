@@ -41,7 +41,8 @@ public:
 
         HistogramReadDurationMs = TBase::GetHistogram("Export/Read/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
         HistogramWriteDurationMs = TBase::GetHistogram("Export/Write/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
-        HistogramSaveCursorDurationMs = TBase::GetHistogram("Export/SaveCursor/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
+        HistogramSaveCursorDurationMs =
+            TBase::GetHistogram("Export/SaveCursor/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
     }
 
     void OnAckSent() const {

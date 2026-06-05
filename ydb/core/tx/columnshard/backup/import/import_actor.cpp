@@ -33,11 +33,16 @@ public:
 
 TString TImportActor::StageToString(EStage stage) {
     switch (stage) {
-        case EStage::Initialization: return "Initialization";
-        case EStage::WaitData: return "WaitData";
-        case EStage::WaitWriting: return "WaitWriting";
-        case EStage::WaitSaveCursor: return "WaitSaveCursor";
-        case EStage::Finished: return "Finished";
+        case EStage::Initialization:
+            return "Initialization";
+        case EStage::WaitData:
+            return "WaitData";
+        case EStage::WaitWriting:
+            return "WaitWriting";
+        case EStage::WaitSaveCursor:
+            return "WaitSaveCursor";
+        case EStage::Finished:
+            return "Finished";
     }
     return "Unknown";
 }
@@ -52,22 +57,18 @@ void TImportActor::HandleWakeup() {
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
     if (elapsed > OperationTimeout) {
-        const TString errorMessage = TStringBuilder()
-            << "Import operation timed out after " << elapsed.Seconds() << "s"
-            << " in stage " << StageToString(Stage)
-            << ", tablet " << TabletId
-            << ", importActorId " << (ImportActorId ? ImportActorId.ToString() : "none");
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "import_timeout")
-            ("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())
-            ("tablet_id", TabletId)("import_actor_id", ImportActorId ? ImportActorId.ToString() : "none");
+        const TString errorMessage = TStringBuilder() << "Import operation timed out after " << elapsed.Seconds() << "s"
+                                                      << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", importActorId "
+                                                      << (ImportActorId ? ImportActorId.ToString() : "none");
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "import_timeout")("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())(
+            "tablet_id", TabletId)("import_actor_id", ImportActorId ? ImportActorId.ToString() : "none");
         Counters.OnError();
         AbortImport(errorMessage);
         return;
     }
     if (elapsed > WarningInterval) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_slow_operation")
-            ("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())
-            ("tablet_id", TabletId)("import_actor_id", ImportActorId ? ImportActorId.ToString() : "none");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_slow_operation")("stage", StageToString(Stage))(
+            "elapsed_sec", elapsed.Seconds())("tablet_id", TabletId)("import_actor_id", ImportActorId ? ImportActorId.ToString() : "none");
     }
     ScheduleTimeoutCheck();
 }
@@ -197,7 +198,7 @@ void TImportActor::OnSessionProgressSaved() {
         SwitchStage(EStage::WaitData, EStage::Finished);
         SaveSessionState();
     } else {
-        StageStartTime = TInstant::Now();  // reset timeout for next data wait
+        StageStartTime = TInstant::Now();   // reset timeout for next data wait
         AFL_VERIFY(ImportActorId);
         Counters.OnReadStarted();
         ReadStartTime = TInstant::Now();

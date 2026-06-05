@@ -73,9 +73,7 @@ std::shared_ptr<arrow::RecordBatch> TestRecordBatch3Cols() {
     Y_UNUSED(b_builder.Finish(&b_array));
 
     auto schema = arrow::schema({
-        arrow::field("key", arrow::binary()),
-        arrow::field("col_a", arrow::binary()),
-        arrow::field("col_b", arrow::binary()),
+        arrow::field("key", arrow::binary()), arrow::field("col_a", arrow::binary()), arrow::field("col_b", arrow::binary()),
     });
 
     return arrow::RecordBatch::Make(schema, keys.size(), { key_array, a_array, b_array });
@@ -291,8 +289,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
 
         TAutoPtr<IEventHandle> handle;
         runtime->DispatchEvents({}, TDuration::Seconds(1));
-        runtime->Send(
-            new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch3Cols(), true)));
+        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch3Cols(), true)));
         auto exportEvent = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
         UNIT_ASSERT(exportEvent->IsFinish);
 
@@ -317,10 +314,9 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         UNIT_ASSERT_VALUES_EQUAL(batch->schema()->field(2)->name(), "col_b");
 
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(batch->ToString(),
-            "key:   [\n    \"k1\",\n    \"k2\"\n  ]\n"
-            "col_a:   [\n    \"a1\",\n    \"a2\"\n  ]\n"
-            "col_b:   [\n    \"b1\",\n    \"b2\"\n  ]\n");
+        UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), "key:   [\n    \"k1\",\n    \"k2\"\n  ]\n"
+                                                    "col_a:   [\n    \"a1\",\n    \"a2\"\n  ]\n"
+                                                    "col_b:   [\n    \"b1\",\n    \"b2\"\n  ]\n");
 
         runtime->Send(new IEventHandle(importActorId, edge, new TEvPrivate::TEvBackupImportRecordBatchResult()));
 

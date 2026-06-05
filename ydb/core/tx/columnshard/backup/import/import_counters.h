@@ -39,7 +39,8 @@ public:
 
         HistogramReadDurationMs = TBase::GetHistogram("Import/Read/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
         HistogramWriteDurationMs = TBase::GetHistogram("Import/Write/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
-        HistogramSaveProgressDurationMs = TBase::GetHistogram("Import/SaveProgress/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
+        HistogramSaveProgressDurationMs =
+            TBase::GetHistogram("Import/SaveProgress/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
     }
 
     void OnReadStarted() const {

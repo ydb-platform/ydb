@@ -32,7 +32,8 @@ public:
         BatchesProcessed = TBase::GetDeriviative("ImportDownloader/Batches/Processed");
         BytesProcessed = TBase::GetDeriviative("ImportDownloader/Bytes/Processed");
 
-        HistogramProcessDurationMs = TBase::GetHistogram("ImportDownloader/Process/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
+        HistogramProcessDurationMs =
+            TBase::GetHistogram("ImportDownloader/Process/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
     }
 
     void OnActorAlive() const {

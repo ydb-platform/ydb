@@ -96,15 +96,13 @@ public:
             const ui32 colId = rowScheme.GetValueColumnIds(i);
             auto it = YdbSchema.find(colId);
             AFL_VERIFY(it != YdbSchema.end());
-            auto [name, typeInfo] = it->second;;
+            auto [name, typeInfo] = it->second;
+            ;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "s3_upload_rows_schema")
-            ("key_columns", rowScheme.KeyColumnIdsSize())
-            ("value_columns", rowScheme.ValueColumnIdsSize())
-            ("total_columns", rowSchemaOrder.size())
-            ("rows", record.RowsSize());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "s3_upload_rows_schema")("key_columns", rowScheme.KeyColumnIdsSize())(
+            "value_columns", rowScheme.ValueColumnIdsSize())("total_columns", rowSchemaOrder.size())("rows", record.RowsSize());
 
         TSerializedCellVec keyCells;
         TSerializedCellVec valueCells;
@@ -136,8 +134,7 @@ public:
             }
 
             AFL_VERIFY(allCells.size() == rowSchemaOrder.size())
-                ("all_cells_size", allCells.size())
-                ("schema_size", rowSchemaOrder.size());
+            ("all_cells_size", allCells.size())("schema_size", rowSchemaOrder.size());
 
             batchBuilder.AddRow(TConstArrayRef<TCell>(allCells.data(), allCells.size()));
         }

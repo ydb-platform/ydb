@@ -12,11 +12,16 @@ void TActor::SwitchStage(const EStage from, const EStage to) {
 
 TString TActor::StageToString(EStage stage) {
     switch (stage) {
-        case EStage::Initialization: return "Initialization";
-        case EStage::WaitData: return "WaitData";
-        case EStage::WaitWriting: return "WaitWriting";
-        case EStage::WaitSaveCursor: return "WaitSaveCursor";
-        case EStage::Finished: return "Finished";
+        case EStage::Initialization:
+            return "Initialization";
+        case EStage::WaitData:
+            return "WaitData";
+        case EStage::WaitWriting:
+            return "WaitWriting";
+        case EStage::WaitSaveCursor:
+            return "WaitSaveCursor";
+        case EStage::Finished:
+            return "Finished";
     }
     return "Unknown";
 }
@@ -32,24 +37,19 @@ void TActor::HandleWakeup() {
     const auto elapsed = TInstant::Now() - StageStartTime;
     if (elapsed > OperationTimeout) {
         const TString errorMessage = TStringBuilder()
-            << "Export operation timed out after " << elapsed.Seconds() << "s"
-            << " in stage " << StageToString(Stage)
-            << ", tablet " << TabletId
-            << ", scanActorId " << (ScanActorId ? ScanActorId->ToString() : "none")
-            << ", exporter " << Exporter.ToString();
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "export_timeout")
-            ("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())
-            ("tablet_id", TabletId)("scan_actor_id", ScanActorId ? ScanActorId->ToString() : "none")
-            ("exporter", Exporter.ToString());
+                                     << "Export operation timed out after " << elapsed.Seconds() << "s"
+                                     << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", scanActorId "
+                                     << (ScanActorId ? ScanActorId->ToString() : "none") << ", exporter " << Exporter.ToString();
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "export_timeout")("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())(
+            "tablet_id", TabletId)("scan_actor_id", ScanActorId ? ScanActorId->ToString() : "none")("exporter", Exporter.ToString());
         Counters.OnError();
         AbortExport(errorMessage);
         return;
     }
     if (elapsed > WarningInterval) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_slow_operation")
-            ("stage", StageToString(Stage))("elapsed_sec", elapsed.Seconds())
-            ("tablet_id", TabletId)("scan_actor_id", ScanActorId ? ScanActorId->ToString() : "none")
-            ("exporter", Exporter.ToString());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_slow_operation")("stage", StageToString(Stage))(
+            "elapsed_sec", elapsed.Seconds())("tablet_id", TabletId)("scan_actor_id", ScanActorId ? ScanActorId->ToString() : "none")(
+            "exporter", Exporter.ToString());
     }
     ScheduleTimeoutCheck();
 }
@@ -104,7 +104,8 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error")("message", ev->Get()->Record.ShortDebugString());
     Counters.OnError();
     if (ExportSession->GetCursor().IsFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error_after_finish")("message", "ignoring scan error because cursor is already finished");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "scan_error_after_finish")(
+            "message", "ignoring scan error because cursor is already finished");
         return;
     }
     AbortExport("Scan error: " + ev->Get()->Record.ShortDebugString());
@@ -146,7 +147,8 @@ void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchR
 void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& ev) {
     Counters.OnError();
     if (ExportSession->GetCursor().IsFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_error_after_finish")("message", "ignoring export error because cursor is already finished");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "export_error_after_finish")(
+            "message", "ignoring export error because cursor is already finished");
         return;
     }
     AbortExport(ev->Get()->ErrorMessage);
@@ -156,18 +158,18 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     Counters.OnActorAlive();
     StageStartTime = TInstant::Now();
     ScheduleTimeoutCheck();
-    
+
     // Check if cursor is already finished (can happen after restart)
     if (ExportSession->GetCursor().IsFinished()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_bootstrap_cursor_finished")(
-            "tablet_id", TabletId)("session_id", ExportSession->GetIdentifier().ToString());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "export_actor_bootstrap_cursor_finished")("tablet_id", TabletId)(
+            "session_id", ExportSession->GetIdentifier().ToString());
         ExportSession->Finish();
         SaveSessionState();
         SwitchStage(EStage::Initialization, EStage::Finished);
         Become(&TActor::StateFunc);
         return;
     }
-    
+
     NDataShard::IExport::TTableColumns columns;
     int i = 0;
     for (const auto& [name, type] : ExportSession->GetTask().GetColumns()) {
@@ -207,7 +209,6 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
     ExportSession->MutableCursor().InitNext(ev->Get()->LastKey, ev->Get()->Finished);
 }
-
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator(const TCursor& cursor) const {
     const auto& backupTask = ExportSession->GetTask().GetBackupTask();

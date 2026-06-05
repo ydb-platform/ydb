@@ -5,8 +5,9 @@
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_s3_upload.h>
-#include <ydb/library/signals/owner.h>
+
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NColumnShard::NBackup {
 
@@ -39,17 +40,44 @@ public:
         UploaderSleeping = TBase::GetValue("Uploader/Sleeping");
     }
 
-    void OnBatchReceived() const { BatchesReceived->Inc(); }
-    void OnRowsFed(ui64 count) const { *RowsFed += count; }
-    void OnIntermediateResultSent() const { IntermediateResultsSent->Inc(); }
-    void OnFinalResultSent() const { FinalResultsSent->Inc(); }
-    void OnSleep() const { SleepCount->Inc(); UploaderSleeping->Set(1); }
-    void OnWakeup() const { WakeupCount->Inc(); UploaderSleeping->Set(0); }
-    void OnError() const { ErrorCount->Inc(); }
-    void SetQueueSize(ui64 size) const { QueueSize->Set(size); }
-    void ResetSleeping() const { UploaderSleeping->Set(0); }
-};
+    void OnBatchReceived() const {
+        BatchesReceived->Inc();
+    }
 
+    void OnRowsFed(ui64 count) const {
+        *RowsFed += count;
+    }
+
+    void OnIntermediateResultSent() const {
+        IntermediateResultsSent->Inc();
+    }
+
+    void OnFinalResultSent() const {
+        FinalResultsSent->Inc();
+    }
+
+    void OnSleep() const {
+        SleepCount->Inc();
+        UploaderSleeping->Set(1);
+    }
+
+    void OnWakeup() const {
+        WakeupCount->Inc();
+        UploaderSleeping->Set(0);
+    }
+
+    void OnError() const {
+        ErrorCount->Inc();
+    }
+
+    void SetQueueSize(ui64 size) const {
+        QueueSize->Set(size);
+    }
+
+    void ResetSleeping() const {
+        UploaderSleeping->Set(0);
+    }
+};
 
 TRowWriter::TRowWriter(TVector<TSerializedCellVec>& rows)
     : Rows(rows)
@@ -205,17 +233,11 @@ public:
     void HandleWakeup() {
         const auto elapsed = TInstant::Now() - LastActivityTime;
         if (elapsed > DiagnosticInterval) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "slow_upload")
-                ("elapsed_sec", elapsed.Seconds())
-                ("last_state", LastState == NTable::EScan::Sleep ? "Sleep" : "Feed")
-                ("queue_size", DataQueue.size())
-                ("current_batch_rows", CurrentBatch.Batch.size())
-                ("current_batch_position", CurrentBatch.Position)
-                ("current_batch_is_last", CurrentBatch.IsLast)
-                ("total_batches_received", TotalBatchesReceived)
-                ("total_rows_fed", TotalRowsFed)
-                ("total_intermediate_results", TotalIntermediateResults)
-                ("subscriber", SubscriberActorId.ToString());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "slow_upload")("elapsed_sec", elapsed.Seconds())(
+                "last_state", LastState == NTable::EScan::Sleep ? "Sleep" : "Feed")("queue_size", DataQueue.size())(
+                "current_batch_rows", CurrentBatch.Batch.size())("current_batch_position", CurrentBatch.Position)(
+                "current_batch_is_last", CurrentBatch.IsLast)("total_batches_received", TotalBatchesReceived)("total_rows_fed", TotalRowsFed)(
+                "total_intermediate_results", TotalIntermediateResults)("subscriber", SubscriberActorId.ToString());
         }
         ScheduleDiagnostics();
     }
@@ -233,15 +255,10 @@ public:
     }
 
     STRICT_STFUNC(StateMain,
-        hFunc(TEvPrivate::TEvBackupExportError, Handle)
-        hFunc(TEvPrivate::TEvBackupExportState, Handle)
-        hFunc(TEvPrivate::TEvBackupExportRecordBatch, Handle)
-        hFunc(TEvDataShard::TEvGetS3Upload, HandleGetS3Upload)
-        hFunc(TEvDataShard::TEvStoreS3UploadId, HandleStoreS3UploadId)
-        hFunc(TEvDataShard::TEvChangeS3UploadStatus, HandleChangeS3UploadStatus)
-        cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup)
-        cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill)
-    )
+        hFunc(TEvPrivate::TEvBackupExportError, Handle) hFunc(TEvPrivate::TEvBackupExportState, Handle)
+            hFunc(TEvPrivate::TEvBackupExportRecordBatch, Handle) hFunc(TEvDataShard::TEvGetS3Upload, HandleGetS3Upload) hFunc(
+                TEvDataShard::TEvStoreS3UploadId, HandleStoreS3UploadId) hFunc(TEvDataShard::TEvChangeS3UploadStatus, HandleChangeS3UploadStatus)
+                cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
 
     void HandlePoisonPill() {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "poison_pill");
@@ -266,8 +283,8 @@ public:
 
     void HandleStoreS3UploadId(TEvDataShard::TEvStoreS3UploadId::TPtr& ev) {
         const auto& msg = *ev->Get();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "StoreS3UploadId")
-            ("tx_id", msg.TxId)("upload_id", msg.UploadId);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "StoreS3UploadId")("tx_id", msg.TxId)(
+            "upload_id", msg.UploadId);
         auto [it, inserted] = S3Uploads.emplace(msg.TxId, NDataShard::TS3Upload(msg.UploadId));
         if (!inserted) {
             it->second.Id = msg.UploadId;
@@ -280,8 +297,8 @@ public:
 
     void HandleChangeS3UploadStatus(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev) {
         auto& msg = *ev->Get();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "ChangeS3UploadStatus")
-            ("tx_id", msg.TxId)("status", static_cast<ui8>(msg.Status));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "ChangeS3UploadStatus")("tx_id", msg.TxId)(
+            "status", static_cast<ui8>(msg.Status));
         auto it = S3Uploads.find(msg.TxId);
         AFL_VERIFY(it != S3Uploads.end())("tx_id", msg.TxId)("event", "ChangeS3UploadStatus without prior StoreS3UploadId");
         it->second.Status = msg.Status;
@@ -333,8 +350,8 @@ public:
             case NDataShard::EExportOutcome::Success:
                 AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
                 ("component", "TUploaderActor")("reason", "successfully finished")("bytes_read", scanProduct->BytesRead)(
-                    "rows_read", scanProduct->RowsRead)("total_batches_received", TotalBatchesReceived)
-                    ("total_rows_fed", TotalRowsFed)("total_intermediate_results", TotalIntermediateResults);
+                    "rows_read", scanProduct->RowsRead)("total_batches_received", TotalBatchesReceived)("total_rows_fed", TotalRowsFed)(
+                    "total_intermediate_results", TotalIntermediateResults);
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
                 break;
             case NDataShard::EExportOutcome::Error:

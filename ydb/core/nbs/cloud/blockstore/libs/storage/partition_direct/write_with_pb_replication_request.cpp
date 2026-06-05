@@ -143,6 +143,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
                 "%s OnWriteToManyPBuffersResponse ok on %s",
+                LogTitle.GetWithTime().c_str(),
                 PrintHostIndex(host).c_str());
 
             completedWritesOfCurrentResponse.Set(host);
@@ -150,7 +151,8 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
             LOG_WARN(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "%s OnWriteToManyPBuffersResponse error on host %d: %s",
+                "%s OnWriteToManyPBuffersResponse error on host %s: %s",
+                LogTitle.GetWithTime().c_str(),
                 PrintHostIndex(host).c_str(),
                 FormatError(pbufferResponse.Error).c_str());
             // The error will be set and replied below.
@@ -220,6 +222,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
             NKikimrServices::NBS_PARTITION,
             "%s OnWriteToManyPBuffersResponse isHedge: %s: trying to send "
             "fallback writeRequest to %s",
+            LogTitle.GetWithTime().c_str(),
             BoolToString(isHedge),
             PrintHostIndex(host).c_str());
 

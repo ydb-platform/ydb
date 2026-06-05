@@ -114,7 +114,7 @@ void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s SendWriteRequest. HostIndex: %u",
+        "%s SendWriteRequest. HostIndex: %s",
         LogTitle.GetWithTime().c_str(),
         PrintHostIndex(host).c_str());
 

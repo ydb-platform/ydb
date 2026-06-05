@@ -1,32 +1,91 @@
-#include "write_with_pb_test_fixture.h"
+#include "write_request_test_fixture.h"
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+#include "write_with_direct_replication_request.h"
+#include "write_with_pb_replication_request.h"
 
 using namespace NThreading;
 
-TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateOkDirectResponse()
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TWriteClientMock::OnWriteBlocksResponse(
+    std::shared_ptr<TWriteRequestBundle> bundle,
+    const TWriteRequestResponse& response)
 {
-    return {.Error = MakeError(S_OK)};
+    Y_UNUSED(bundle);
+    AllCompletedWrites = AllCompletedWrites.Include(response.CompletedWrites);
+    Response = response;
 }
 
-TDBGWriteBlocksResponse TWriteWithPbTestFixture::CreateFailDirectResponse()
+void TWriteClientMock::OnBelatedWriteBlocksResponse(
+    std::shared_ptr<TWriteRequestBundle> bundle,
+    THostMask hosts)
 {
-    return {.Error = MakeError(E_FAIL, "direct write failed")};
+    Y_UNUSED(bundle);
+    AllCompletedWrites = AllCompletedWrites.Include(hosts);
 }
 
-TWriteWithPbTestFixture::TWriteWithPbTestFixture()
-    : UserLsn{123}
-    , Range{TBlockRange64::WithLength(10, 10)}
-    , HedgeDelay{TDuration::MilliSeconds(1000)}
-    , Timeout{TDuration::MilliSeconds(1000)}
-    , PBufferReplyTimeout{TDuration::MilliSeconds(500)}
+////////////////////////////////////////////////////////////////////////////////
+
+TWriteRequestTestFixture::TWriteRequestTestFixture() = default;
+
+void TWriteRequestTestFixture::Init()
 {
-    Init();
+    TBaseFixture::Init();
+
     DirectBlockGroup->Oracle.WriteHedgingDelay = HedgeDelay;
     DirectBlockGroup->Oracle.WriteRequestTimeout = Timeout;
 
     ExpectedRange = Range;
     RangeData = GenerateRandomString(BlockSize * Range.Size());
+
+    DirectBlockGroup->WriteBlocksToPBufferHandler = [this]   //
+        (ui32 vChunkIndex,
+         ui8 hostIndex,
+         ui64 lsn,
+         TBlockRange64 range,
+         const TGuardedSgList& guardedSglist,
+         const NWilson::TTraceId& traceId)
+    {
+        Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
+
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
+
+        TPromise<TDBGWriteBlocksResponse> response(
+            NewPromise<TDBGWriteBlocksResponse>());
+        DirectWritePromises.push_back(std::move(response));
+
+        return DirectWritePromises.back().GetFuture();
+    };
+
+    DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+        [this](
+            ui32 vChunkIndex,
+            THostIndex coordinatorHostIndex,
+            std::vector<THostIndex> hostIndexes,
+            ui64 lsn,
+            TBlockRange64 range,
+            TDuration replyTimeout,
+            const TGuardedSgList& guardedSglist,
+            const NWilson::TTraceId& traceId,
+            IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
+    {
+        Y_UNUSED(
+            vChunkIndex,
+            coordinatorHostIndex,
+            hostIndexes,
+            lsn,
+            range,
+            replyTimeout,
+            guardedSglist,
+            traceId);
+
+        // Store the callback so tests can invoke it later to simulate a
+        // response (possibly multiple times).
+        ManyPBufferCallback = std::move(callback);
+    };
 
     DirectBlockGroup->ScheduleHandler = [&](TDuration delay, TCallback callback)
     {
@@ -34,8 +93,20 @@ TWriteWithPbTestFixture::TWriteWithPbTestFixture()
     };
 }
 
+// static
+TDBGWriteBlocksResponse TWriteRequestTestFixture::CreateOkDirectResponse()
+{
+    return {.Error = MakeError(S_OK)};
+}
+
+// static
+TDBGWriteBlocksResponse TWriteRequestTestFixture::CreateFailDirectResponse()
+{
+    return {.Error = MakeError(E_FAIL, "direct write failed")};
+}
+
 TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
-TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
+TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 {
     auto result =
         [this](
@@ -74,7 +145,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 }
 
 TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
-TWriteWithPbTestFixture::GetManyPBuffersHandlerHanging()
+TWriteRequestTestFixture::GetManyPBuffersHandlerHanging2()
 {
     auto result =
         [this](
@@ -107,7 +178,7 @@ TWriteWithPbTestFixture::GetManyPBuffersHandlerHanging()
 }
 
 TDirectBlockGroupMock::TWriteBlocksToPBufferHandler
-TWriteWithPbTestFixture::GetDirectWriteHandlerHanging()
+TWriteRequestTestFixture::GetDirectWriteHandlerHanging2()
 {
     auto result = [this]   //
         (ui32 vChunkIndex,
@@ -132,44 +203,67 @@ TWriteWithPbTestFixture::GetDirectWriteHandlerHanging()
     return result;
 }
 
-std::shared_ptr<TWriteWithPbReplicationRequestExecutor>
-TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
+std::shared_ptr<TBaseWriteRequestExecutor>
+TWriteRequestTestFixture::CreatePBufferReplicationExecutor(
+    TRequestHeaders headers)
 {
-    auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
     auto originalRequest =
         std::make_shared<TWriteBlocksLocalRequest>(std::move(headers));
     originalRequest->Sglist = MakeSgList();
 
-    CallbackResult.reset();
+    auto bundle = std::make_shared<TWriteRequestBundle>(
+        Runtime->GetActorSystem(0),
+        WriteClient,
+        std::move(originalRequest),
+        NWilson::TTraceId(),
+        MakeIntrusive<TCallContext>(),
+        Range,
+        UserLsn);
+
+    WriteClient->Response.reset();
+
     auto request = std::make_shared<TWriteWithPbReplicationRequestExecutor>(
         Runtime->GetActorSystem(0),
         LogTitle.GetChild(GetCycleCount()),
         VChunkConfig,
         DirectBlockGroup,
-        Range,
-        std::move(callContext),
+        std::move(bundle));
+
+    return request;
+}
+
+std::shared_ptr<TBaseWriteRequestExecutor>
+TWriteRequestTestFixture::CreateDirectReplicationExecutor(
+    TRequestHeaders headers)
+{
+    auto originalRequest =
+        std::make_shared<TWriteBlocksLocalRequest>(std::move(headers));
+    originalRequest->Sglist = MakeSgList();
+
+    auto bundle = std::make_shared<TWriteRequestBundle>(
+        Runtime->GetActorSystem(0),
+        WriteClient,
         std::move(originalRequest),
-        UserLsn,
-        NWilson::TTraceId());
-    request->SetReplyCallback(
-        [this](TBaseWriteRequestExecutor::TResponse response)
-        {
-            AllCompletedWrites =
-                AllCompletedWrites.Include(response.CompletedWrites);
-            CallbackResult = std::move(response);
-        });
-    request->SetNotifyBelatedCallback(
-        [this](THostMask completedWrites, ui64 lsn)
-        {
-            Y_UNUSED(lsn);
-            AllCompletedWrites = AllCompletedWrites.Include(completedWrites);
-        });
+        NWilson::TTraceId(),
+        MakeIntrusive<TCallContext>(),
+        Range,
+        UserLsn);
+
+    WriteClient->Response.reset();
+
+    auto request = std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
+        Runtime->GetActorSystem(0),
+        LogTitle.GetChild(GetCycleCount()),
+        VChunkConfig,
+        DirectBlockGroup,
+        std::move(bundle));
+
     return request;
 }
 
 // static
 TDBGWriteBlocksToManyPBuffersResponse
-TWriteWithPbTestFixture::CreateOkResponse()
+TWriteRequestTestFixture::CreateOkResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse okResponse;
     okResponse.OverallError = MakeError(S_OK);
@@ -185,7 +279,7 @@ TWriteWithPbTestFixture::CreateOkResponse()
 
 // static
 TDBGWriteBlocksToManyPBuffersResponse
-TWriteWithPbTestFixture::CreateOneOkResponse(THostIndex hostIndex)
+TWriteRequestTestFixture::CreateOneOkResponse(THostIndex hostIndex)
 {
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
     partiallyOkResponse.OverallError = MakeError(S_OK);
@@ -197,7 +291,7 @@ TWriteWithPbTestFixture::CreateOneOkResponse(THostIndex hostIndex)
 
 // static
 TDBGWriteBlocksToManyPBuffersResponse
-TWriteWithPbTestFixture::CreateDBGErrorResponse()
+TWriteRequestTestFixture::CreateDBGErrorResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgErrorResponse;
     dbgErrorResponse.OverallError = MakeError(E_FAIL);
@@ -205,7 +299,7 @@ TWriteWithPbTestFixture::CreateDBGErrorResponse()
     return dbgErrorResponse;
 }
 
-void TWriteWithPbTestFixture::RunScheduledHedge()
+void TWriteRequestTestFixture::RunScheduledHedge()
 {
     UNIT_ASSERT_VALUES_EQUAL(2, Scheduled.size());
     UNIT_ASSERT_VALUES_EQUAL(Timeout, Scheduled[0].first);
@@ -213,5 +307,7 @@ void TWriteWithPbTestFixture::RunScheduledHedge()
 
     Scheduled[1].second();
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

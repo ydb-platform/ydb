@@ -213,6 +213,7 @@ class ParallelWorkloadTestBase:
                             if "coredump" not in err.lower() and "oom" not in err.lower():
                                 workload_errors.append(err)
                     summary_writer.write_workload_errors(workload_errors)
+                    summary_writer.write_warden_results(warden_results)
                 except Exception as e:
                     logging.warning(f"Failed to write summary: {e}")
 
@@ -221,7 +222,7 @@ class ParallelWorkloadTestBase:
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
-            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors)
+            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors, warden_results)
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -306,6 +307,7 @@ class ParallelWorkloadTestBase:
         result: StressUtilTestResults,
         preparation_result: dict[str, StressUtilDeployResult],
         node_errors: list,
+        warden_results: WardenResults = None,
     ) -> None:
         """
         Handles final test status (fail, broken, etc.)
@@ -313,10 +315,14 @@ class ParallelWorkloadTestBase:
         Args:
             result: Test results object
             node_errors: List of node errors
+            warden_results: Full warden check results from the nemesis orchestrator,
+                including cluster-wide safety/liveness checks that are not tied to
+                a particular host.
 
         Raises:
-            pytest.fail: If nodes have coredumps/OOMs
-            Exception: If workload errors occurred
+            pytest.fail: If nodes have coredumps/OOMs/VERIFY/SAN errors, or any
+                warden check reported a violation or error.
+            Exception: If workload errors occurred.
         """
         nodes_with_issues = len(node_errors)
         workload_errors = []
@@ -325,9 +331,46 @@ class ParallelWorkloadTestBase:
                 if "coredump" not in err.lower() and "oom" not in err.lower():
                     workload_errors.append(err)
 
+        # Collect warden check failures (violations + errors). These include
+        # cluster-wide checks (e.g. AllPDisksAreInValidState, LivenessChecks)
+        # that are reported via the orchestrator only and never appear in
+        # node_errors, so without explicit handling here the test silently
+        # passes despite failing cluster checks.
+        warden_violations: list[str] = []
+        warden_errors: list[str] = []
+        if warden_results is not None:
+            for name, check in warden_results.checks.items():
+                if check.is_ok():
+                    continue
+                # Per-host issues (OOM, VERIFY, sanitizer) are already
+                # reflected in node_errors via affected_hosts; do not
+                # double-fail on the same data.
+                name_lower = name.lower()
+                is_per_host_check = (
+                    'grepdmesg' in name_lower
+                    or 'grep_dmesg' in name_lower
+                    or ('verify' in name_lower and 'failed' in name_lower)
+                    or 'sanitizer' in name_lower
+                )
+                if is_per_host_check:
+                    continue
+                violations_count = len(check.violations)
+                affected = ', '.join(sorted(check.affected_hosts)) if check.affected_hosts else '—'
+                summary = f"{name} [{check.status}] violations={violations_count} hosts={affected}"
+                if check.is_violation():
+                    warden_violations.append(summary)
+                else:
+                    warden_errors.append(summary)
+
+            # If the orchestrator polling itself did not succeed, treat it as a
+            # broken test rather than passing silently.
+            if not warden_results.poll_success and warden_results.error_message:
+                warden_errors.append(f"warden_polling: {warden_results.error_message}")
+
         # --- Switch: if cluster_log=all, always attach logs ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
-        if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
+        if (cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors
+                or warden_violations or warden_errors):
             try:
                 errors_collector.attach_nemesis_logs(result.start_time)
             except Exception as e:
@@ -337,13 +380,27 @@ class ParallelWorkloadTestBase:
             except Exception as e:
                 logging.warning(f"Failed to attach kikimr logs: {e}")
 
-        # --- FAIL TEST IF CORES OR OOM FOUND ---
-        if nodes_with_issues > 0:
-            error_msg = f"Test failed: found {nodes_with_issues} issue(s) with coredump(s), OOM(s), VERIFY fail(s) or SAN errors"
-            pytest.fail(error_msg)
-        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
-        if workload_errors:
-            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
+        # --- FAIL TEST IF CORES, OOM, VERIFY, SAN errors, or warden violations ---
+        if nodes_with_issues > 0 or warden_violations:
+            fail_parts = []
+            if nodes_with_issues > 0:
+                fail_parts.append(
+                    f"{nodes_with_issues} node issue(s) (coredump/OOM/VERIFY/SAN)"
+                )
+            if warden_violations:
+                fail_parts.append(
+                    f"{len(warden_violations)} cluster warden violation(s): "
+                    + "; ".join(warden_violations)
+                )
+            pytest.fail("Test failed: " + "; ".join(fail_parts))
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS OR WARDEN INFRA ERRORS ---
+        if workload_errors or warden_errors:
+            messages = []
+            if workload_errors:
+                messages.append("workload errors: " + "; ".join(workload_errors))
+            if warden_errors:
+                messages.append("warden check errors: " + "; ".join(warden_errors))
+            raise Exception("Test marked as broken due to: " + " | ".join(messages))
 
         # In diagnostic mode don't fail due to coredump/OOM warnings
         if not result.is_all_success() and result.error_message:

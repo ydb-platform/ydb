@@ -184,6 +184,54 @@ class SummaryWriter:
         if errors:
             self._append_lines('workload_errors.txt', errors)
 
+    def write_warden_results(self, warden_results) -> None:
+        """Write non-OK warden checks (cluster-wide safety/liveness) into files.
+
+        Per-host issues (OOM, VERIFY, sanitizer) are already written via
+        ``write_node_errors`` from ``NodeErrors``; this method captures the
+        remaining cluster-wide checks (e.g. ``AllPDisksAreInValidState``,
+        ``LivenessChecks``) that otherwise would not appear anywhere.
+
+        Args:
+            warden_results: ``WardenResults`` object from the orchestrator.
+        """
+        if not self._enabled or warden_results is None:
+            return
+        violation_blocks: list[str] = []
+        error_blocks: list[str] = []
+        for name, check in warden_results.checks.items():
+            if check.is_ok():
+                continue
+            name_lower = name.lower()
+            is_per_host_check = (
+                'grepdmesg' in name_lower
+                or 'grep_dmesg' in name_lower
+                or ('verify' in name_lower and 'failed' in name_lower)
+                or 'sanitizer' in name_lower
+            )
+            if is_per_host_check:
+                continue
+            affected = ', '.join(sorted(check.affected_hosts)) if check.affected_hosts else '—'
+            header = (
+                f"===== {name} [{check.status}] hosts={affected} "
+                f"violations={len(check.violations)} ====="
+            )
+            body = '\n'.join(str(v) for v in check.violations) if check.violations else ''
+            block = header if not body else f"{header}\n{body}"
+            if check.is_violation():
+                violation_blocks.append(block)
+            else:
+                error_blocks.append(block)
+
+        if violation_blocks:
+            self._append_lines('warden_violations.txt', violation_blocks)
+        if error_blocks:
+            self._append_lines('warden_errors.txt', error_blocks)
+        if not warden_results.poll_success and warden_results.error_message:
+            self._append_lines('warden_errors.txt', [
+                f"warden_polling: {warden_results.error_message}"
+            ])
+
     def write_status(self, status: str, message: str = '') -> None:
         """Write final test status: passed | failed | broken.
 

@@ -302,11 +302,11 @@ class TPruneDeadAggregateTraitsRule : public IRule {
 };
 
 /**
- * Narrow visible output schemas using final liveness.
+ * Prune dead logical outputs using final liveness.
  */
-class TNarrowByLivenessStage : public IRBOStage {
+class TLogicalOutputPruningStage : public IRBOStage {
   public:
-    TNarrowByLivenessStage();
+    TLogicalOutputPruningStage();
     virtual void RunStage(TOpRoot& root, TRBOContext& ctx) override;
 };
 

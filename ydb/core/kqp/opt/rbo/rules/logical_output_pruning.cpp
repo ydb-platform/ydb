@@ -23,12 +23,12 @@ bool CanOverrideOutput(EOperator kind) {
 
 } // anonymous namespace
 
-TNarrowByLivenessStage::TNarrowByLivenessStage()
-    : IRBOStage("Narrow by liveness") {
+TLogicalOutputPruningStage::TLogicalOutputPruningStage()
+    : IRBOStage("Prune dead logical outputs") {
     Props = ERuleProperties::RequireParents | ERuleProperties::RequireNameConstraints;
 }
 
-void TNarrowByLivenessStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
+void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     Y_UNUSED(ctx);
 
     for (const auto& iter : root) {

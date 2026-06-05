@@ -3034,8 +3034,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(aggregate, pos, {"key", "sum_value"});
 
         ComputeLogicalTestProps(root);
-        TNarrowByLivenessStage narrowByLiveness;
-        narrowByLiveness.RunStage(root, testContext.RboCtx);
+        TLogicalOutputPruningStage outputPruning;
+        outputPruning.RunStage(root, testContext.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
         UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));

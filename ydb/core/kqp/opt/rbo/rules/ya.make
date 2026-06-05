@@ -13,7 +13,7 @@ SRCS(
     inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
-    narrow_by_liveness.cpp
+    logical_output_pruning.cpp
     peephole_predicate.cpp
     projection_pruning.cpp
     projection_pruning_helpers.cpp

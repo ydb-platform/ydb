@@ -56,6 +56,15 @@ bool IsAtomListComparison(const TCoAtomList& list, TString* columnName = nullptr
     return true;
 }
 
+bool IsAtomListComparison(const TExprNode::TPtr& node) {
+    if (!node || !node->IsList() || (node->ChildrenSize() != 3 && node->ChildrenSize() != 4) || !node->Child(0)->IsAtom()) {
+        return false;
+    }
+
+    const auto op = TString(node->Child(0)->Content());
+    return ComparisonSigns().contains(op) || SubstringFormats().contains(op);
+}
+
 void AddColumn(TOlapFilterInspection& inspection, const TString& columnName) {
     if (!columnName.empty()) {
         inspection.Columns.insert(columnName);
@@ -228,15 +237,52 @@ TString FormatOlapFilterExpr(const TExprNode::TPtr& node) {
     return JoinStrings(parts, delim);
 }
 
+TExprNode::TPtr RenameColumnsImpl(const TExprNode::TPtr& node, const THashMap<TString, TString>& renameMap, TExprContext& ctx) {
+    if (!node) {
+        return node;
+    }
+
+    if (node->IsCallable("Member") && node->ChildrenSize() == 2 && node->Child(1)->IsAtom()) {
+        const auto it = renameMap.find(TString(node->Child(1)->Content()));
+        if (it != renameMap.end()) {
+            auto children = node->ChildrenList();
+            children[1] = ctx.NewAtom(node->Child(1)->Pos(), it->second);
+            return ctx.ChangeChildren(*node, std::move(children));
+        }
+        return node;
+    }
+
+    bool changed = false;
+    auto children = node->ChildrenList();
+    for (ui32 i = 0; i < children.size(); ++i) {
+        if (IsAtomListComparison(node) && i == 1 && children[i]->IsAtom()) {
+            const auto it = renameMap.find(TString(children[i]->Content()));
+            if (it != renameMap.end()) {
+                children[i] = ctx.NewAtom(children[i]->Pos(), it->second);
+                changed = true;
+                continue;
+            }
+        }
+
+        auto renamed = RenameColumnsImpl(children[i], renameMap, ctx);
+        if (renamed != children[i]) {
+            children[i] = std::move(renamed);
+            changed = true;
+        }
+    }
+
+    return changed ? ctx.ChangeChildren(*node, std::move(children)) : node;
+}
+
 } // anonymous namespace
 
-TOlapFilterInspection InspectOlapExpression(const TExprNode::TPtr& node) {
+TOlapFilterInspection TOlapFilterInspector::Inspect(const TExprNode::TPtr& node) {
     TOlapFilterInspection inspection;
     InspectOlapExpressionImpl(node, inspection);
     return inspection;
 }
 
-TOlapFilterInspection InspectOlapProcessLambda(const TExprNode::TPtr& lambda) {
+TOlapFilterInspection TOlapFilterInspector::InspectLambda(const TExprNode::TPtr& lambda) {
     TOlapFilterInspection inspection;
     if (!lambda) {
         return inspection;
@@ -250,12 +296,35 @@ TOlapFilterInspection InspectOlapProcessLambda(const TExprNode::TPtr& lambda) {
     return inspection;
 }
 
-TString FormatOlapFilter(const TKqpOlapFilter& filter) {
+TExprNode::TPtr TOlapFilterInspector::RenameColumns(
+    const TExprNode::TPtr& node,
+    const THashMap<TString, TString>& renameMap,
+    TExprContext& ctx)
+{
+    if (renameMap.empty()) {
+        return node;
+    }
+    return RenameColumnsImpl(node, renameMap, ctx);
+}
+
+TString TOlapFilterInspector::Format(const TKqpOlapFilter& filter) {
     auto result = FormatOlapFilterExpr(filter.Condition().Ptr());
     if (auto maybeInnerFilter = TMaybeNode<TKqpOlapFilter>(filter.Input().Ptr())) {
-        return TStringBuilder() << '(' << FormatOlapFilter(maybeInnerFilter.Cast()) << ") AND (" << result << ')';
+        return TStringBuilder() << '(' << Format(maybeInnerFilter.Cast()) << ") AND (" << result << ')';
     }
     return result;
+}
+
+TOlapFilterInspection InspectOlapExpression(const TExprNode::TPtr& node) {
+    return TOlapFilterInspector::Inspect(node);
+}
+
+TOlapFilterInspection InspectOlapProcessLambda(const TExprNode::TPtr& lambda) {
+    return TOlapFilterInspector::InspectLambda(lambda);
+}
+
+TString FormatOlapFilter(const TKqpOlapFilter& filter) {
+    return TOlapFilterInspector::Format(filter);
 }
 
 } // namespace NKikimr::NKqp::NOpt

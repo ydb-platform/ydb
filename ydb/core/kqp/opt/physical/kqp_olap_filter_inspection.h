@@ -4,6 +4,7 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
@@ -15,6 +16,17 @@ struct TOlapFilterInspection {
     bool HasOlapApply = false;
     bool HasOlapProjections = false;
     bool RequiresAllInputColumns = false;
+};
+
+class TOlapFilterInspector {
+public:
+    static TOlapFilterInspection Inspect(const NYql::TExprNode::TPtr& node);
+    static TOlapFilterInspection InspectLambda(const NYql::TExprNode::TPtr& lambda);
+    static NYql::TExprNode::TPtr RenameColumns(
+        const NYql::TExprNode::TPtr& node,
+        const THashMap<TString, TString>& renameMap,
+        NYql::TExprContext& ctx);
+    static TString Format(const NYql::NNodes::TKqpOlapFilter& filter);
 };
 
 TOlapFilterInspection InspectOlapExpression(const NYql::TExprNode::TPtr& node);

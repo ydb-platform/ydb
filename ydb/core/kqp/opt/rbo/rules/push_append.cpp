@@ -205,9 +205,10 @@ TIntrusivePtr<IOperator> PushAppendElementsIntoMap(
     return MakeIntrusive<TOpMap>(bottomMap, map->Pos, topElements, map->Ordered);
 }
 
-bool IsTransparentUnaryForAliasAppend(EOperator kind) {
+bool IsTransparentUnaryForAliasAppend(EOperator kind, bool pushUnderFilter) {
     switch (kind) {
         case EOperator::Filter:
+            return pushUnderFilter;
         case EOperator::Limit:
         case EOperator::Sort:
         case EOperator::AddDependencies:
@@ -217,7 +218,15 @@ bool IsTransparentUnaryForAliasAppend(EOperator kind) {
     }
 }
 
-TIntrusivePtr<IOperator> PushAliasAppendElementsThroughUnary(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
+bool IsTransparentUnaryForExpressionAppend(EOperator kind, bool pushUnderFilter) {
+    return pushUnderFilter && kind == EOperator::Filter;
+}
+
+TIntrusivePtr<IOperator> PushAppendElementsThroughUnary(
+    const TIntrusivePtr<TOpMap>& map,
+    const TPlanProps& props,
+    TCanMoveElement canMoveElement)
+{
     auto unary = CastOperator<IUnaryOperator>(map->GetInput());
     if (!unary->IsSingleConsumer()) {
         return map;
@@ -229,7 +238,7 @@ TIntrusivePtr<IOperator> PushAliasAppendElementsThroughUnary(const TIntrusivePtr
     TVector<TMapElement> pushedElements;
     TVector<TMapElement> topElements;
     for (const auto& mapElement : map->MapElements) {
-        if (CanMoveAliasAppendElement(mapElement, blockedOutputs) && DependenciesAvailable(mapElement, inputIUs)) {
+        if (canMoveElement(mapElement, blockedOutputs) && DependenciesAvailable(mapElement, inputIUs)) {
             pushedElements.push_back(mapElement);
         } else {
             topElements.push_back(mapElement);
@@ -387,8 +396,8 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
         return PushAppendElementsIntoMap(map, props, CanMoveAliasAppendElement, true);
     }
 
-    if (IsTransparentUnaryForAliasAppend(map->GetInput()->Kind)) {
-        return PushAliasAppendElementsThroughUnary(map, props);
+    if (IsTransparentUnaryForAliasAppend(map->GetInput()->Kind, PushUnderFilter)) {
+        return PushAppendElementsThroughUnary(map, props, CanMoveAliasAppendElement);
     }
 
     if (map->GetInput()->Kind == EOperator::Join) {
@@ -398,8 +407,8 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
     return input;
 }
 
-// Push non-column append expressions closer to sources. Filter crossing is intentionally excluded:
-// PushFilterUnderMap owns that direction to avoid a fixpoint cycle and unnecessary expression evaluation.
+// Push non-column append expressions closer to sources. Filter crossing is stage-controlled:
+// the logical rewrite stage disables it because PushFilterUnderMap owns the opposite direction there.
 TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
 
@@ -411,6 +420,10 @@ TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TI
 
     if (map->GetInput()->Kind == EOperator::Map && map->GetInput()->IsSingleConsumer()) {
         return PushAppendElementsIntoMap(map, props, CanMoveExpressionAppendElement, false);
+    }
+
+    if (IsTransparentUnaryForExpressionAppend(map->GetInput()->Kind, PushUnderFilter)) {
+        return PushAppendElementsThroughUnary(map, props, CanMoveExpressionAppendElement);
     }
 
     if (map->GetInput()->Kind == EOperator::Join) {

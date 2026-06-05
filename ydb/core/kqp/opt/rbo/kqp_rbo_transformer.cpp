@@ -350,12 +350,12 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 }
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
-    auto addProjectionAndAliasSimplificationRules = [](TVector<std::unique_ptr<IRule>>& rules) {
+    auto addProjectionAndAliasSimplificationRules = [](TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
         rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
         rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
-        rules.emplace_back(std::make_unique<TPushAppendRule>());
-        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>());
+        rules.emplace_back(std::make_unique<TPushAppendRule>(pushAppendsUnderFilter));
+        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>(pushAppendsUnderFilter));
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
         rules.emplace_back(std::make_unique<TPushRenameRule>());
         rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
@@ -387,12 +387,12 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Clean up aliases and trivial projections before the broader logical rewrites start.
     TVector<std::unique_ptr<IRule>> projectionSimplificationRules;
-    addProjectionAndAliasSimplificationRules(projectionSimplificationRules);
+    addProjectionAndAliasSimplificationRules(projectionSimplificationRules, /*pushAppendsUnderFilter*/ true);
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Simplify projections and aliases", std::move(projectionSimplificationRules)));
 
     // Logical stage.
     TVector<std::unique_ptr<IRule>> logicalStageRules;
-    addProjectionAndAliasSimplificationRules(logicalStageRules);
+    addProjectionAndAliasSimplificationRules(logicalStageRules, /*pushAppendsUnderFilter*/ false);
     logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());

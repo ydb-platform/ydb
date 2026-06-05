@@ -90,9 +90,14 @@ class TFuseFiltersRule : public ISimplifiedRule {
  */
 class TPushAppendRule : public ISimplifiedRule {
   public:
-    TPushAppendRule() : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents) {}
+    explicit TPushAppendRule(bool pushUnderFilter = true)
+        : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents)
+        , PushUnderFilter(pushUnderFilter) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+
+  private:
+    bool PushUnderFilter;
 };
 
 /**
@@ -100,9 +105,14 @@ class TPushAppendRule : public ISimplifiedRule {
  */
 class TPushAppendExpressionRule : public ISimplifiedRule {
   public:
-    TPushAppendExpressionRule() : ISimplifiedRule("Push append expressions", ERuleProperties::RequireParents) {}
+    explicit TPushAppendExpressionRule(bool pushUnderFilter = true)
+        : ISimplifiedRule("Push append expressions", ERuleProperties::RequireParents)
+        , PushUnderFilter(pushUnderFilter) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+
+  private:
+    bool PushUnderFilter;
 };
 
 /**

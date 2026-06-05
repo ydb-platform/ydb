@@ -3419,6 +3419,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(pushedMap->GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
     }
 
+    Y_UNIT_TEST(PushAppendAliasDoesNotCrossFilterWhenDisabled) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto filter = MakeIntrusive<TOpFilter>(
+            read,
+            pos,
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"a", "l_a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendRule>(/*pushUnderFilter*/ false));
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto topMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(!testContext.RboCtx.AppliedRules.contains("Push append map elements"));
+    }
+
     Y_UNIT_TEST(PushAppendAliasCrossesFullJoinSide) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
@@ -3461,6 +3489,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto joinOutput = rewrittenJoin->GetOutputIUs();
         UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("a")) != joinOutput.end());
         UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("l_a")) != joinOutput.end());
+    }
+
+    Y_UNIT_TEST(PushAppendExpressionCrossesFilterWhenEnabled) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto filter = MakeIntrusive<TOpFilter>(
+            read,
+            pos,
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto appendMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("one", pos, testContext.ExprCtx),
+        });
+        TOpRoot root(appendMap, pos, {"a", "one"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>(/*pushUnderFilter*/ true));
+        TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push append expressions");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append expressions to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
+        UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto pushedMap = CastOperator<TOpMap>(rewrittenFilter->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
+        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+    }
+
+    Y_UNIT_TEST(PushAppendExpressionDoesNotCrossFilterWhenDisabled) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto filter = MakeIntrusive<TOpFilter>(
+            read,
+            pos,
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto appendMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("one", pos, testContext.ExprCtx),
+        });
+        TOpRoot root(appendMap, pos, {"a", "one"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>(/*pushUnderFilter*/ false));
+        TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto topMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(!testContext.RboCtx.AppliedRules.contains("Push append expressions"));
     }
 
     Y_UNIT_TEST(PushAppendExpressionConstantChoosesPreservedJoinSide) {

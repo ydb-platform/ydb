@@ -1253,7 +1253,7 @@ private:
 
     void ForgetQuery() {
         QueryForgotten = true;
-        if (QueryResponse && !QueryResponse.IsDone()) {
+        if (!QueryResponse.IsDone()) {
             QueryResponse.FinishOk();
         }
     }
@@ -1269,10 +1269,10 @@ private:
         if (Forget && QueryRequestStartTime && (now - QueryRequestStartTime >= ForgetAfter)) {
             return ReplyAndForgetQuery();
         }
-        if (Timeout && (now - QueryStartTime > Timeout)) {
+        if (!Forget && Timeout && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
-        if (KeepAlive && (now - LastSendTime > KeepAlive)) {
+        if (!Forget && KeepAlive && (now - LastSendTime > KeepAlive)) {
             SendKeepAlive();
         }
         if (OperationId && (!GetOperationResponse.has_value() || GetOperationResponse->IsDone())) {

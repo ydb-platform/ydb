@@ -39,7 +39,7 @@ public:
         if (MaintenanceTaskId) {
             Y_ABORT_UNLESS(Scheduled);
 
-            const ui32 maxInflightActions = Scheduled->Request.GetMaxPermissions();
+            const ui32 maxInflightActions = Scheduled->Request.GetMaxPermissionCount();
 
             Self->State->MaintenanceRequests.emplace(Scheduled->RequestId, *MaintenanceTaskId);
             Self->State->MaintenanceTasks.emplace(*MaintenanceTaskId, TTaskInfo{

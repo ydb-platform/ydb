@@ -665,7 +665,7 @@ class TCreateMaintenanceTask
         cmsRequest.SetPartialPermissionAllowed(!HasSingleCompositeActionGroup);
 
         if (opts.max_inflight_actions() > 0) {
-            cmsRequest.SetMaxPermissions(opts.max_inflight_actions());
+            cmsRequest.SetMaxPermissionCount(opts.max_inflight_actions());
         }
 
         for (const auto& group : request.action_groups()) {

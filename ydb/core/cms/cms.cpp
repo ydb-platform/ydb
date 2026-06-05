@@ -359,8 +359,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         if (request.HasPriority()) {
             scheduled.SetPriority(request.GetPriority());
         }
-        if (request.HasMaxPermissions()) {
-            scheduled.SetMaxPermissions(request.GetMaxPermissions());
+        if (request.HasMaxPermissionCount()) {
+            scheduled.SetMaxPermissionCount(request.GetMaxPermissionCount());
         }
     }
 
@@ -391,14 +391,14 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     auto point = ClusterInfo->PushRollbackPoint();
     size_t storedIssues = 0;
     size_t processedActions = 0;
-    const bool capEnabled = allowPartial && request.HasMaxPermissions();
-    const ui32 maxPermissions = capEnabled ? request.GetMaxPermissions() : 0;
+    const bool capEnabled = allowPartial && request.HasMaxPermissionCount();
+    const ui32 maxPermissions = capEnabled ? request.GetMaxPermissionCount() : 0;
     bool capHit = capEnabled && maxPermissions == 0;
 
     if (capHit) {
         response.MutableStatus()->SetCode(TStatus::DISALLOW_TEMP);
         response.MutableStatus()->SetReason(
-            "MaxPermissions cap exhausted: complete in-flight actions before requesting new ones");
+            "MaxPermissionCount cap exhausted: complete in-flight actions before requesting new ones");
         response.SetDeadline((TActivationContext::Now() + State->Config.DefaultRetryTime).GetValue());
     }
 
@@ -442,7 +442,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
             if (capEnabled && static_cast<ui32>(response.PermissionsSize()) >= maxPermissions) {
                 LOG_DEBUG(ctx, NKikimrServices::CMS,
-                          "MaxPermissions cap (%u) reached, deferring remaining actions",
+                          "MaxPermissionCount cap (%u) reached, deferring remaining actions",
                           maxPermissions);
                 capHit = true;
             }
@@ -2291,9 +2291,9 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             const ui32 quota = task.MaxInflightActions > aliveCount
                 ? task.MaxInflightActions - aliveCount
                 : 0;
-            request.Request.SetMaxPermissions(quota);
+            request.Request.SetMaxPermissionCount(quota);
         } else {
-            request.Request.ClearMaxPermissions();
+            request.Request.ClearMaxPermissionCount();
         }
     }
 

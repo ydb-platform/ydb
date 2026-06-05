@@ -4300,45 +4300,51 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString fsSerializedSettings = std::get<11>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
+                
+                auto fillBackupSettings = [&](auto& tableInfo) {
+                    tableInfo->BackupSettings.SetTableName(tableName);
+                    tableInfo->BackupSettings.SetNeedToBill(needToBill);
+                    tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
+                    tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
+                    tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
 
-                TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
-                Y_ABORT_UNLESS(tableInfo.Get() != nullptr);
-
-                tableInfo->BackupSettings.SetTableName(tableName);
-                tableInfo->BackupSettings.SetNeedToBill(needToBill);
-                tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
-                tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
-                tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
-
-                if (ytSerializedSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableYTSettings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, ytSerializedSettings));
-                } else if (s3SerializedSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableS3Settings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
-                } else if (fsSerializedSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableFSSettings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
-                } else {
-                    Y_ABORT("Unknown settings");
-                }
-
-                if (scanSettings) {
-                    auto settings = tableInfo->BackupSettings.MutableScanSettings();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, scanSettings));
-                }
-
-                if (tableDesc) {
-                    auto desc = tableInfo->BackupSettings.MutableTable();
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
-                }
-
-                if (changefeedUnderlyingTopics) {
-                    NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
-                    for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
-                        *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                    if (ytSerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableYTSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, ytSerializedSettings));
+                    } else if (s3SerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableS3Settings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
+                    } else if (fsSerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableFSSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
+                    } else {
+                        Y_ABORT("Unknown settings");
                     }
+
+                    if (scanSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableScanSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, scanSettings));
+                    }
+
+                    if (tableDesc) {
+                        auto desc = tableInfo->BackupSettings.MutableTable();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
+                    }
+
+                    if (changefeedUnderlyingTopics) {
+                        NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
+                        for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
+                            *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                        }
+                    }
+                };
+                
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupSettings(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillBackupSettings(tableInfo);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
@@ -4360,9 +4366,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     rowSet.GetValue<Schema::RestoreTasks::LocalPathId>());
                 auto task = rowSet.GetValue<Schema::RestoreTasks::Task>();
 
-                TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
-                Y_ABORT_UNLESS(tableInfo.Get() != nullptr);
-                Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    TTableInfo::TPtr tableInfo = it->second;
+                    Y_ABORT_UNLESS(tableInfo.Get() != nullptr);
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
+                }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Loaded restore task"

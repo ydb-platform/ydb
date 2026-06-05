@@ -186,7 +186,7 @@ private:
             .Done()
         );
 
-        for (const auto& key : mainTableMeta.KeyColumnNames) {
+        for (const auto& key : meta->KeyColumnNames) {
             columnsToSelect.emplace_back(Build<TCoAtom>(ctx, pos)
                 .Value(key)
                 .Done()

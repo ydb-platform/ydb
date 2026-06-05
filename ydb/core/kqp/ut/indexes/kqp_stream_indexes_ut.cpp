@@ -488,9 +488,9 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
-    Y_UNIT_TEST(SecondaryUniqueCheckTwoRows) {
+    Y_UNIT_TEST_TWIN(SecondaryUniqueCheckTwoRows, EnableIndexStreamWrite) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

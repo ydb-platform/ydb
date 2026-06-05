@@ -326,6 +326,18 @@ void TCommandExportToS3::Config(TConfig& config) {
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     {
+        TStringBuilder help;
+        help << "Include index data or not";
+        if (config.HelpCommandVerbosiltyLevel >= 2) {
+            help << Endl << "    By default, only index metadata is uploaded and indexes are built during import — it"
+                 << Endl << "    saves space and reduces export time, but it can potentially increase the import time."
+                 << Endl << "    Index data can be uploaded and downloaded back during import.";
+        }
+        config.Opts->AddLongOption("include-index-data", help)
+            .RequiredArgument("BOOL").StoreResult<bool>(&IncludeIndexData).DefaultValue("false");
+    }
+
+    {
         TStringBuilder encryptionAlgorithmHelp;
         encryptionAlgorithmHelp << "Encryption algorithm. Supported values: ";
         bool first = true;
@@ -418,6 +430,7 @@ int TCommandExportToS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
     settings.UseVirtualAddressing(UseVirtualAddressing);
+    settings.IncludeIndexData(IncludeIndexData);
 
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});

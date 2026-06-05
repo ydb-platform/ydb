@@ -34,6 +34,17 @@ const std::optional<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds
     return Changefeeds;
 }
 
+void TMetadata::AddIndex(const TIndexMetadata& index) {
+    if (!Indexes) {
+        Indexes.emplace();
+    }
+    Indexes->push_back(index);
+}
+
+const std::optional<std::vector<TIndexMetadata>>& TMetadata::GetIndexes() const {
+    return Indexes;
+}
+
 void TMetadata::SetEnablePermissions(bool enablePermissions) {
     EnablePermissions = enablePermissions;
 }
@@ -75,8 +86,18 @@ TString TMetadata::Serialize() const {
             changefeeds.AppendValue(std::move(changefeedMap));
         }
     }
-    // We always serialize changefeeds in order to list them explicitly during import
     m["changefeeds"] = changefeeds;
+
+    NJson::TJsonArray indexes;
+    if (Indexes) {
+        for (const auto& index : *Indexes) {
+            NJson::TJsonMap indexMap;
+            indexMap["export_prefix"] = index.ExportPrefix;
+            indexMap["impl_table_prefix"] = index.ImplTablePrefix;
+            indexes.AppendValue(std::move(indexMap));
+        }
+    }
+    m["indexes"] = indexes;
 
     return NJson::WriteJson(&m, false);
 }
@@ -104,6 +125,17 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
             result.AddChangefeed({
                 .ExportPrefix = changefeed["prefix"].GetString(),
                 .Name = changefeed["name"].GetString(),
+            });
+        }
+    }
+
+    if (json.Has("indexes")) {
+        result.Indexes.emplace();
+        const NJson::TJsonValue& indexes = json["indexes"];
+        for (const NJson::TJsonValue& index : indexes.GetArray()) {
+            result.AddIndex({
+                .ExportPrefix = index["export_prefix"].GetString(),
+                .ImplTablePrefix = index["impl_table_prefix"].GetString(),
             });
         }
     }

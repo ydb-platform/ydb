@@ -240,6 +240,7 @@ message TFeatureFlags {
     optional bool EnableShuttingDownNodeState = 218 [default = false];
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
+    optional bool EnableIndexMaterialization = 221 [default = false];
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];

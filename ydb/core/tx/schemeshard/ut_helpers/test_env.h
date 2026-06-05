@@ -84,6 +84,7 @@ namespace NSchemeShardUT_Private {
         OPTION(ui32, NStoragePools, 2);
         OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
         OPTION(bool, EnableAlterDatabase, false);
+        OPTION(std::optional<bool>, EnableIndexMaterialization, std::nullopt);
         OPTION(bool, EnableConditionalEraseResponseBatching, false);
         OPTION(std::optional<ui32>, CondEraseResponseBatchSize, std::nullopt);
         OPTION(std::optional<ui32>, CondEraseResponseBatchMaxTimeMs, std::nullopt);

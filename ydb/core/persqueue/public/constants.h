@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/datetime/base.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NPQ {

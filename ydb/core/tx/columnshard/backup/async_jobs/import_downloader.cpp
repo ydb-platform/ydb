@@ -82,11 +82,6 @@ public:
         const auto& record = ev->Get()->Record;
         const auto& rowScheme = record.GetRowScheme();
 
-        // Build schema directly from RowScheme column IDs to guarantee matching order.
-        // RowScheme has KeyColumnIds first, then ValueColumnIds — cells are serialized
-        // in exactly this order (keys in KeyColumns, values in ValueColumns).
-        // By building the arrow schema in the same order, we avoid any mismatch
-        // caused by non-deterministic THashMap iteration in TIndexInfo::GetColumns().
         TVector<std::pair<TString, NScheme::TTypeInfo>> rowSchemaOrder;
         rowSchemaOrder.reserve(rowScheme.KeyColumnIdsSize() + rowScheme.ValueColumnIdsSize());
 
@@ -129,7 +124,6 @@ public:
             keyCells.Parse(r.GetKeyColumns());
             valueCells.Parse(r.GetValueColumns());
 
-            // Concatenate key + value cells in RowScheme order — matches rowSchemaOrder exactly
             TVector<TCell> allCells;
             allCells.reserve(rowSchemaOrder.size());
             for (const auto& cell : keyCells.GetCells()) {

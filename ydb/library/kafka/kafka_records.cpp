@@ -243,46 +243,8 @@ TKafkaRecord::TKafkaRecord()
     , Attributes(AttributesMeta::Default)
     , TimestampDelta(TimestampDeltaMeta::Default)
     , OffsetDelta(OffsetDeltaMeta::Default)
-    , SourceData()
-    , Key(SourceData.Key)
-    , Value(SourceData.Value)
-    , Headers(SourceData.Headers)
+    , Key(KeyMeta::Default)
 {
-    Key = KeyMeta::Default;
-}
-
-TKafkaRecord::TKafkaRecord(const TKafkaRecord& other)
-    : TKafkaRecord()
-{
-    *this = other;
-}
-
-TKafkaRecord::TKafkaRecord(TKafkaRecord&& other)
-    : TKafkaRecord()
-{
-    *this = std::move(other);
-}
-
-TKafkaRecord& TKafkaRecord::operator=(const TKafkaRecord& other) {
-    if (this != &other) {
-        Length = other.Length;
-        Attributes = other.Attributes;
-        TimestampDelta = other.TimestampDelta;
-        OffsetDelta = other.OffsetDelta;
-        SourceData = other.SourceData;
-    }
-    return *this;
-}
-
-TKafkaRecord& TKafkaRecord::operator=(TKafkaRecord&& other) {
-    if (this != &other) {
-        Length = other.Length;
-        Attributes = other.Attributes;
-        TimestampDelta = other.TimestampDelta;
-        OffsetDelta = other.OffsetDelta;
-        SourceData = std::move(other.SourceData);
-    }
-    return *this;
 }
 
 bool TKafkaRecord::operator==(const TKafkaRecord& other) const {
@@ -290,7 +252,9 @@ bool TKafkaRecord::operator==(const TKafkaRecord& other) const {
         && Attributes == other.Attributes
         && TimestampDelta == other.TimestampDelta
         && OffsetDelta == other.OffsetDelta
-        && SourceData == other.SourceData;
+        && Key == other.Key
+        && Value == other.Value
+        && Headers == other.Headers;
 }
 
 void TKafkaRecord::Read(TKafkaReadable& _readable, TKafkaVersion _version) {

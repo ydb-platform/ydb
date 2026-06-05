@@ -178,6 +178,7 @@ public:
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
         static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
+    KeyMeta::Type Key;
 
     struct ValueMeta {
         using Type = TKafkaBytes;
@@ -192,6 +193,7 @@ public:
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
         static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
+    ValueMeta::Type Value;
 
     struct HeadersMeta {
         using ItemType = TKafkaHeader;
@@ -208,10 +210,8 @@ public:
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
         static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
+    HeadersMeta::Type Headers;
     TSourceData SourceData;
-    KeyMeta::Type& Key;
-    ValueMeta::Type& Value;
-    HeadersMeta::Type& Headers;
 
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;

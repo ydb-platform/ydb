@@ -719,7 +719,13 @@ public:
         const TString decompressed = Decompress(TStringBuf(compressed.data(), compressed.size()), compressionType);
         value = DeserializeImpl(version, decompressed);
         for (auto& record : value) {
+            record.SourceData.Key = record.Key;
+            record.SourceData.Value = record.Value;
+            record.SourceData.Headers = record.Headers;
             record.SourceData.OwnViews();
+            record.Key = record.SourceData.Key;
+            record.Value = record.SourceData.Value;
+            record.Headers = record.SourceData.Headers;
         }
     }
 

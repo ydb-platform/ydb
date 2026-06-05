@@ -209,7 +209,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
             continue;
         }
 
-        record.SourceData = MakeSourceData(dataChunk);
+        auto sourceData = MakeSourceData(dataChunk);
 
         NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(dataChunk.GetCodec() + 1);
         TString codecValue;
@@ -230,7 +230,11 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                 codecValue = std::to_string(static_cast<uint32_t>(codec));
         }
 
-        record.SourceData.AddHeader("__codec", std::move(codecValue));
+        sourceData.AddHeader("__codec", std::move(codecValue));
+        record.SourceData = std::move(sourceData);
+        record.Key = record.SourceData.Key;
+        record.Value = record.SourceData.Value;
+        record.Headers = record.SourceData.Headers;
 
         record.OffsetDelta = lastOffset - baseOffset;
         record.TimestampDelta = lastTimestamp - baseTimestamp;

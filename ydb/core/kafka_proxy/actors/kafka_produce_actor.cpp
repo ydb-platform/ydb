@@ -22,11 +22,11 @@ NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
 }
 
-NKikimrPQClient::TDataChunk MakeDataChunk(const TSourceData& sourceData) {
+NKikimrPQClient::TDataChunk MakeDataChunk(const TKafkaRecord& record) {
     NKikimrPQClient::TDataChunk proto;
-    proto.set_codec(sourceData.Codec);
+    proto.set_codec(NPersQueueCommon::RAW);
 
-    for (const auto& header : sourceData.Headers) {
+    for (const auto& header : record.Headers) {
         auto meta = proto.AddMessageMeta();
         if (header.Key) {
             meta->set_key(static_cast<const char*>(header.Key->data()), header.Key->size());
@@ -36,14 +36,14 @@ NKikimrPQClient::TDataChunk MakeDataChunk(const TSourceData& sourceData) {
         }
     }
 
-    if (sourceData.Key) {
+    if (record.Key) {
         auto meta = proto.AddMessageMeta();
         meta->set_key("__key");
-        meta->set_value(static_cast<const char*>(sourceData.Key->data()), sourceData.Key->size());
+        meta->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
     }
 
-    if (sourceData.Value) {
-        proto.SetData(static_cast<const void*>(sourceData.Value->data()), sourceData.Value->size());
+    if (record.Value) {
+        proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
     }
 
     return proto;
@@ -334,7 +334,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     for (ui64 batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
         const auto& record = batch->Records[batchIndex];
 
-        NKikimrPQClient::TDataChunk proto = MakeDataChunk(record.SourceData);
+        NKikimrPQClient::TDataChunk proto = MakeDataChunk(record);
 
         TString str;
         bool res = proto.SerializeToString(&str);

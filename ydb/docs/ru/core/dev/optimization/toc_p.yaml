@@ -5,7 +5,7 @@ items:
   href: layout.md
 - name: Структура плана запроса
   href: structure.md
-- name: Визуализация метрик
+- name: Визуализация метрик запроса
   href: metrics.md
-- name: Подсказки Оптимизатора
+- name: Подсказки оптимизатора
   href: hints.md

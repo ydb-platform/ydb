@@ -185,6 +185,150 @@ struct TSchedulerTestHelper {
     }
 };
 
+// Aggregate metrics of one ext-blob probe run.
+struct TExtBlobProbeMetrics {
+    ui32 Started = 0;        // iterators launched
+    ui32 Finished = 0;       // iterators that delivered Finished=true
+    ui32 RowsTotal = 0;      // rows delivered across all iterators
+    ui32 DriveIters = 0;     // client-side result/ack cycles
+    ui64 EvGets = 0;         // TEvBlobStorage::TEvGet messages seen
+    ui64 BlobsRequested = 0; // sum of EvGet QuerySize (blobs fetched, incl. re-fetch)
+};
+
+// Runs `numIterators` concurrent ext-blob key reads on the SchedulableRead path
+// (PoolId + tight quota) against a fresh shard, with a configurable shared cache
+// size and per-read MaxBytes (the precharge read-ahead window). Cold data is forced
+// via compact+reboot. Never hangs: bounded by `maxDriveIters`.
+//
+// This is a CALIBRATION probe — it asserts nothing; the caller prints and compares.
+inline TExtBlobProbeMetrics RunExtBlobProbe(
+    ui64 sharedCacheBytes, ui32 numIterators, ui64 reqMaxBytes,
+    ui32 numKeys, ui64 blobSize, ui64 readLimitMs,
+    ui32 maxRowsInResult, ui32 maxDriveIters)
+{
+    using namespace NKqp;
+    using namespace NKqp::NScheduler;
+
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(true);
+    serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(sharedCacheBytes);
+    serverSettings.AddStoragePool("ssd");
+    serverSettings.AddStoragePool("ext");
+    {
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1);
+        serverSettings.SetControls(controls);
+    }
+
+    Tests::TServer::TPtr server = new TServer(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    {
+        auto ev = std::make_unique<TEvAddDatabase>(TEST_DATABASE_ID);
+        runtime.Send(MakeKqpSchedulerServiceId(runtime.GetFirstNodeId()), sender, ev.release());
+    }
+    {
+        auto ev = std::make_unique<TEvAddPool>(TEST_DATABASE_ID, TEST_POOL_ID);
+        ev->Params.TotalCpuLimitPercentPerNode = readLimitMs / 10.;
+        runtime.Send(MakeKqpSchedulerServiceId(runtime.GetFirstNodeId()), sender, ev.release());
+    }
+
+    InitRoot(server, sender);
+
+    TVector<TShardedTableOptions::TColumn> columns = {
+        {"key", "Uint32", true, false},
+        {"value", "String", false, false},
+    };
+    TShardedTableOptions::TFamily fam{
+        .Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd",
+        .DataPoolKind = "ssd", .ExternalPoolKind = "ext",
+        .DataThreshold = 100u, .ExternalThreshold = 512u * 1024,
+    };
+    auto opts = TShardedTableOptions()
+        .Columns(columns)
+        .Families({fam})
+        .ExecutorCacheSize(1);
+    auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+    const ui64 shard = shards.at(0);
+
+    for (ui32 i = 1; i <= numKeys; ++i) {
+        ExecSQL(server, sender, TStringBuilder()
+            << "UPSERT INTO `/Root/table-1` (key, value) VALUES ("
+            << i << ", \"" << TString(blobSize, 'L') << "\");");
+    }
+    WaitTableStats(runtime, shard, [numKeys](const NKikimrTableStats::TTableStats& s) {
+        return s.GetRowCount() == numKeys;
+    });
+    CompactTable(runtime, shard, tableId, false);
+    WaitTableStats(runtime, shard, [](const NKikimrTableStats::TTableStats& s) {
+        return s.GetPartCount() >= 1;
+    });
+    RebootTablet(runtime, shard, sender);
+
+    TExtBlobProbeMetrics m;
+    auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+            ++m.EvGets;
+            m.BlobsRequested += ev->Get<TEvBlobStorage::TEvGet>()->QuerySize;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    auto clientId = runtime.ConnectToPipe(shard, sender, 0, GetPipeConfigWithRetries());
+    auto [tables, ownerId] = GetTables(server, shard);
+    Y_UNUSED(ownerId);
+    const auto& userTable = tables["table-1"];
+    auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"}, TDuration::Hours(1));
+
+    for (ui32 r = 1; r <= numIterators; ++r) {
+        auto request = GetBaseReadRequest(tableId, userTable.GetDescription(), r,
+                                          NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+        request->Record.SetDatabaseId(TEST_DATABASE_ID);
+        request->Record.SetPoolId(TEST_POOL_ID);
+        request->Record.SetMaxRowsInResult(maxRowsInResult);
+        if (reqMaxBytes) {
+            request->Record.SetMaxBytes(reqMaxBytes);
+        }
+        for (ui32 i = 1; i <= numKeys; ++i) {
+            AddKeyQuery(*request, {i});
+        }
+        ::NKikimr::SendReadAsync(server, shard, request.release(), sender, 0,
+                                 GetPipeConfigWithRetries(), clientId);
+        ++m.Started;
+    }
+
+    THashSet<ui64> finished;
+    for (; finished.size() < numIterators && m.DriveIters < maxDriveIters; ++m.DriveIters) {
+        auto result = WaitReadResult(server, TDuration::Seconds(10));
+        if (!result) {
+            break; // throttled/livelocked: no result within the window
+        }
+        if (result->Record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            break;
+        }
+        const ui64 rid = result->Record.GetReadId();
+        m.RowsTotal += result->GetRowsCount();
+        if (result->Record.GetFinished()) {
+            finished.insert(rid);
+            continue;
+        }
+        auto* ack = new TEvDataShard::TEvReadAck();
+        ack->Record.SetReadId(rid);
+        ack->Record.SetSeqNo(result->Record.GetSeqNo());
+        ack->Record.SetMaxRows(1000);
+        ack->Record.SetMaxBytes(50_MB);
+        runtime.SendToPipe(shard, sender, ack, 0, GetPipeConfigWithRetries(), clientId);
+    }
+    m.Finished = finished.size();
+
+    runtime.SetObserverFunc(prevObserver);
+    return m;
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
@@ -370,199 +514,75 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     }
 
     // ----------------------------------------------------------------------------
-    // Regression test for the ext-blob precharge / read-quota livelock.
+    // Regression probe for the ext-blob precharge / read-quota livelock.
     //
     // Bug shape: reading keys whose values are external blobs runs the ext-blob
-    // precharge (PrechargeKeysAfter, gated by ReadIteratorKeysExtBlobsPrecharge).
-    // It records missing blob references for a whole iteration-quota worth of keys
-    // and the executor loads them into cache. The TSchedulableRead quota is checked
-    // at the START of every Execute() attempt, INCLUDING page-fault restarts
-    // (datashard__read_iterator.cpp ~2089). Under a tight pool ReadLimit the read
-    // gets throttled between "blobs loaded" and "rows read", the loaded pages are
-    // dropped, and on resume the same blobs are fetched again -> no forward progress.
+    // precharge (PrechargeKeysAfter, gated by ReadIteratorKeysExtBlobsPrecharge),
+    // which records missing blob references for a whole iteration-quota worth of
+    // keys (read-ahead). Under a tight pool ReadLimit the read is throttled between
+    // "read-ahead loaded" and "read-ahead used"; if the shared cache is too small to
+    // hold the read-ahead (especially with several iterators competing for it), the
+    // loaded pages are evicted before use and re-fetched -> BlobsRequested explodes
+    // and the query effectively stalls.
     //
-    // This test puts the read on the SchedulableRead path (PoolId + tiny ReadLimit)
-    // with a cold/empty shared cache (forces every access to fetch from BlobStorage)
-    // and paces continuations with explicit acks. It is written as a SINGLE-RUN
-    // CALIBRATION probe: it never hangs (hard iteration cap), and it always prints a
-    // diagnostic block with the numbers needed to lock the green/red thresholds.
+    // A single iterator with shared cache DISABLED (MemoryLimit=0) does NOT exhibit
+    // this: each Execute() loads+pins+consumes its current key atomically, so the
+    // throttle only spaces rows out in time. The interesting regime needs a small
+    // NON-ZERO shared cache + a wide precharge window + concurrency.
     //
-    // Expected on buggy code: does NOT finish within the cap and/or BlobsRequested
-    // grows far beyond the number of keys (same blobs re-fetched repeatedly).
-    // Expected after the fix: finishes, returns every row, BlobsRequested ~= #keys.
-    //
-    // !!! CALIBRATE the constants marked [CAL] from the first run's diagnostic block.
+    // This is a CALIBRATION SWEEP: it never hangs (bounded drive loop) and prints a
+    // table of (finished, rows, EvGets, blobsRequested, re-fetch ratio) per scenario.
+    // We use the numbers to (a) confirm whether the livelock reproduces on current
+    // code and in which regime, and (b) fix the green/red threshold for the eventual
+    // assertion. It asserts only forward progress (all iterators finish) for now.
     Y_UNIT_TEST(ExtBlobPrechargeProgressUnderTightQuota) {
-        using namespace NKqp;
-        using namespace NKqp::NScheduler;
+        constexpr ui32 kRows            = 20;          // ext-blob keys per iterator
+        constexpr ui64 kBlobSize        = 1u << 20;    // 1 MiB value -> external blob
+        constexpr ui64 kReadLimitMs     = 5;           // tight pool read quota (ms/s)
+        constexpr ui32 kMaxRowsInResult = 1;           // 1 row/result -> max read-ahead waste
+        constexpr ui32 kCap             = 4000;        // hard drive-loop cap (no hang)
+        constexpr ui64 kWide            = 64u << 20;   // wide precharge window (MaxBytes)
 
-        // ---- [CAL] knobs --------------------------------------------------------
-        constexpr ui32 kRows           = 20;          // number of ext-blob keys read
-        constexpr ui64 kBlobSize       = 1u << 20;    // 1 MiB value -> external blob
-        constexpr ui64 kReadLimitMs    = 5;           // tight pool read quota (ms/s)
-        constexpr ui64 kSharedCacheB   = 0;           // 0 = no shared cache (cold)
-        constexpr ui32 kMaxRowsInResult= 1;           // force a continuation per row
-        constexpr ui32 kMaxIterations  = 500;         // hard cap so we never hang
-        constexpr ui64 kAckRows        = 1000;
-        constexpr ui64 kAckBytes       = 50_MB;
-        // After calibration set this to e.g. 2*kRows; buggy code blows past it.
-        constexpr ui64 kBlobBudget     = 4 * kRows;   // [CAL] max blobs we tolerate
-        // -------------------------------------------------------------------------
-
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(true);
-        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(kSharedCacheB);
-        serverSettings.AddStoragePool("ssd");
-        serverSettings.AddStoragePool("ext");
-        {
-            TServerSettings::TControls controls;
-            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1);
-            serverSettings.SetControls(controls);
-        }
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE_SCHEDULER, NLog::PRI_TRACE);
-
-        // Register a database + pool with a tight read limit BEFORE the shard reads.
-        {
-            auto ev = std::make_unique<TEvAddDatabase>(TEST_DATABASE_ID);
-            runtime.Send(MakeKqpSchedulerServiceId(runtime.GetFirstNodeId()), sender, ev.release());
-        }
-        {
-            auto ev = std::make_unique<TEvAddPool>(TEST_DATABASE_ID, TEST_POOL_ID);
-            ev->Params.TotalCpuLimitPercentPerNode = kReadLimitMs / 10.;
-            runtime.Send(MakeKqpSchedulerServiceId(runtime.GetFirstNodeId()), sender, ev.release());
-        }
-
-        InitRoot(server, sender);
-
-        // External-blob table: a String value above ExternalThreshold is stored as
-        // an external blob, so reads must page-fault into BlobStorage via EvGet.
-        TVector<TShardedTableOptions::TColumn> columns = {
-            {"key", "Uint32", true, false},
-            {"value", "String", false, false},
+        struct TScenario {
+            const char* Name;
+            ui64 SharedCacheBytes;
+            ui32 NumIterators;
+            ui64 ReqMaxBytes;
         };
-        TShardedTableOptions::TFamily fam{
-            .Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd",
-            .DataPoolKind = "ssd", .ExternalPoolKind = "ext",
-            .DataThreshold = 100u, .ExternalThreshold = 512u * 1024,
+        const TVector<TScenario> scenarios = {
+            {"baseline    cache=0    iters=1 narrow", 0,         1, 0},
+            {"wide-ahead  cache=4MB  iters=1 wide  ", 4u << 20,  1, kWide},
+            {"contended   cache=4MB  iters=8 wide  ", 4u << 20,  8, kWide},
+            {"contended   cache=2MB  iters=8 wide  ", 2u << 20,  8, kWide},
         };
-        auto opts = TShardedTableOptions()
-            .Columns(columns)
-            .Families({fam})
-            .ExecutorCacheSize(1);
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-        const ui64 shard = shards.at(0);
 
-        // Fill N rows with large values, then compact so values land as external
-        // blobs, then reboot to drop the tablet's in-memory state.
-        for (ui32 i = 1; i <= kRows; ++i) {
-            ExecSQL(server, sender, TStringBuilder()
-                << "UPSERT INTO `/Root/table-1` (key, value) VALUES ("
-                << i << ", \"" << TString(kBlobSize, 'L') << "\");");
+        Cerr << "=== ExtBlob precharge/quota CALIBRATION SWEEP (kRows=" << kRows << ") ===" << Endl;
+        TVector<std::pair<TString, TExtBlobProbeMetrics>> results;
+        for (const auto& s : scenarios) {
+            auto m = RunExtBlobProbe(s.SharedCacheBytes, s.NumIterators, s.ReqMaxBytes,
+                                     kRows, kBlobSize, kReadLimitMs, kMaxRowsInResult, kCap);
+            const ui64 ideal = (ui64)kRows * s.NumIterators; // each blob fetched once
+            const double ratio = (double)m.BlobsRequested / Max<ui64>(1, ideal);
+            Cerr << "  [" << s.Name << "]"
+                 << " finished=" << m.Finished << "/" << m.Started
+                 << " rows=" << m.RowsTotal
+                 << " drive=" << m.DriveIters << (m.DriveIters >= kCap ? "(CAP!)" : "")
+                 << " EvGets=" << m.EvGets
+                 << " blobs=" << m.BlobsRequested << "/" << ideal
+                 << " ratio=" << Sprintf("%.1f", ratio) << Endl;
+            results.emplace_back(s.Name, m);
         }
-        WaitTableStats(runtime, shard, [](const NKikimrTableStats::TTableStats& s) {
-            return s.GetRowCount() == kRows;
-        });
-        CompactTable(runtime, shard, tableId, false);
-        WaitTableStats(runtime, shard, [](const NKikimrTableStats::TTableStats& s) {
-            return s.GetPartCount() >= 1;
-        });
-        RebootTablet(runtime, shard, sender);
+        Cerr << "=== END SWEEP ===" << Endl;
 
-        // Count BlobStorage reads (after reboot, so compaction/recovery don't count).
-        ui64 evGets = 0;
-        ui64 blobsRequested = 0;
-        ui64 readResults = 0;
-        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvBlobStorage::EvGet: {
-                    ++evGets;
-                    blobsRequested += ev->Get<TEvBlobStorage::TEvGet>()->QuerySize;
-                    break;
-                }
-                case TEvDataShard::TEvReadResult::EventType:
-                    ++readResults;
-                    break;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        auto clientId = runtime.ConnectToPipe(shard, sender, 0, GetPipeConfigWithRetries());
-
-        // Build a multi-key read on the SchedulableRead path (PoolId set).
-        auto [tables, ownerId] = GetTables(server, shard);
-        const auto& userTable = tables["table-1"];
-        Y_UNUSED(ownerId);
-        auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"}, TDuration::Hours(1));
-        auto request = GetBaseReadRequest(tableId, userTable.GetDescription(), /*readId=*/1,
-                                          NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
-        request->Record.SetDatabaseId(TEST_DATABASE_ID);
-        request->Record.SetPoolId(TEST_POOL_ID);
-        request->Record.SetMaxRowsInResult(kMaxRowsInResult);
-        for (ui32 i = 1; i <= kRows; ++i) {
-            AddKeyQuery(*request, {i});
+        // For now assert only forward progress: every iterator must finish in every
+        // scenario. A re-fetch ratio assertion will be added once the sweep tells us
+        // which regime reproduces the blow-up (then threshold := ~2x ideal).
+        for (const auto& [name, m] : results) {
+            UNIT_ASSERT_C(m.Finished == m.Started,
+                "scenario [" << name << "] did not make progress: finished "
+                << m.Finished << "/" << m.Started << " (see SWEEP table)");
+            UNIT_ASSERT_VALUES_EQUAL_C(m.RowsTotal, kRows * m.Started, name);
         }
-
-        ::NKikimr::SendReadAsync(server, shard, request.release(), sender, 0,
-                                 GetPipeConfigWithRetries(), clientId);
-
-        ui32 iterations = 0;
-        ui32 rowsReceived = 0;
-        bool finished = false;
-        Ydb::StatusIds::StatusCode lastStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-        for (; iterations < kMaxIterations; ++iterations) {
-            auto result = WaitReadResult(server, TDuration::Seconds(10));
-            if (!result) {
-                break; // throttled with no result delivered within the window
-            }
-            lastStatus = result->Record.GetStatus().GetCode();
-            if (lastStatus != Ydb::StatusIds::SUCCESS) {
-                break;
-            }
-            rowsReceived += result->GetRowsCount();
-            if (result->Record.GetFinished()) {
-                finished = true;
-                break;
-            }
-            auto* ack = new TEvDataShard::TEvReadAck();
-            ack->Record.SetReadId(result->Record.GetReadId());
-            ack->Record.SetSeqNo(result->Record.GetSeqNo());
-            ack->Record.SetMaxRows(kAckRows);
-            ack->Record.SetMaxBytes(kAckBytes);
-            runtime.SendToPipe(shard, sender, ack, 0, GetPipeConfigWithRetries(), clientId);
-        }
-
-        runtime.SetObserverFunc(prevObserver);
-
-        // ---- single-run calibration block (always printed) ----------------------
-        Cerr << "=== ExtBlobPrechargeProgressUnderTightQuota CALIBRATION ===" << Endl
-             << "  rows requested       : " << kRows << Endl
-             << "  rows received        : " << rowsReceived << Endl
-             << "  finished             : " << (finished ? "YES" : "NO") << Endl
-             << "  last status          : " << Ydb::StatusIds::StatusCode_Name(lastStatus) << Endl
-             << "  iterations (cap "      << kMaxIterations << "): " << iterations << Endl
-             << "  read results          : " << readResults << Endl
-             << "  EvGets                : " << evGets << Endl
-             << "  blobs requested (sum) : " << blobsRequested
-             << "   (#keys=" << kRows << ", budget [CAL]=" << kBlobBudget << ")" << Endl
-             << "=== END CALIBRATION ===" << Endl;
-
-        // Green after the fix. On buggy code at least one of these fails (and the
-        // diagnostic block above gives the numbers to finalize kBlobBudget).
-        UNIT_ASSERT_C(finished, "read did not finish within " << kMaxIterations
-            << " iterations (last status " << Ydb::StatusIds::StatusCode_Name(lastStatus)
-            << ") - see CALIBRATION block");
-        UNIT_ASSERT_VALUES_EQUAL(rowsReceived, kRows);
-        UNIT_ASSERT_LE_C(blobsRequested, kBlobBudget,
-            "blobs were re-fetched far more than #keys - precharge/quota livelock");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler)

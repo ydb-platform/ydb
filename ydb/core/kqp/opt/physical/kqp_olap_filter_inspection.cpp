@@ -84,9 +84,14 @@ void InspectOlapExpressionImpl(const TExprNode::TPtr& node, TOlapFilterInspectio
         return;
     }
 
-    if (TMaybeNode<TKqpOlapProjections>(node)) {
+    if (const auto maybeProjections = TMaybeNode<TKqpOlapProjections>(node)) {
         inspection.HasOlapProjections = true;
-        inspection.RequiresAllInputColumns = true;
+        const auto projections = maybeProjections.Cast();
+        InspectOlapExpressionImpl(projections.Input().Ptr(), inspection);
+        for (const auto& projectionNode : projections.Projections()) {
+            const auto projection = TExprBase(projectionNode).Cast<TKqpOlapProjection>();
+            InspectOlapExpressionImpl(projection.OlapOperation().Ptr(), inspection);
+        }
         return;
     }
 

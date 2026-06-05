@@ -4433,6 +4433,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 auto ast = *result.GetStats()->GetAst();
                 UNIT_ASSERT_C(ast.find("KqpOlapProjections") != std::string::npos, TStringBuilder() << "Projections not pushed down. Query: " << query);
                 UNIT_ASSERT_C(ast.find("KqpOlapProjection") != std::string::npos, TStringBuilder() << "Projection not pushed down. Query: " << query);
+
+                if (i == 0) {
+                    UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan");
+                    const auto plan = TString{*result.GetStats()->GetPlan()};
+                    const auto simplifiedPlan = GetSimplifiedPlan(plan);
+                    const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Table", "foo");
+                    UNIT_ASSERT_C(readOp, plan);
+                    UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), plan);
+                    UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), plan);
+                    UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "jsonDoc"), plan);
+                    UNIT_ASSERT_C(!StringArrayFieldContains(*readOp, "ReadColumns", "timestamp"), plan);
+                    UNIT_ASSERT_C(!StringArrayFieldContains(*readOp, "ReadColumns", "jsonDoc1"), plan);
+                }
             } else {
                 auto result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);

@@ -17,41 +17,7 @@ void AddReadColumnByName(const TOpRead& read, const TString& columnName, TInfoUn
     }
 }
 
-const TStructExprType* GetStructItemType(const TTypeAnnotationNode* type) {
-    if (!type) {
-        return nullptr;
-    }
-
-    switch (type->GetKind()) {
-        case ETypeAnnotationKind::Struct:
-            return type->Cast<TStructExprType>();
-        case ETypeAnnotationKind::List:
-            return GetStructItemType(type->Cast<TListExprType>()->GetItemType());
-        case ETypeAnnotationKind::Flow:
-            return GetStructItemType(type->Cast<TFlowExprType>()->GetItemType());
-        default:
-            return nullptr;
-    }
-}
-
-void AddReadLambdaInputTypeDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
-    if (!lambda || !lambda->IsLambda() || lambda->Head().ChildrenSize() == 0) {
-        return;
-    }
-
-    const auto* structType = GetStructItemType(lambda->Head().Child(0)->GetTypeAnn());
-    if (!structType) {
-        return;
-    }
-
-    for (const auto* item : structType->GetItems()) {
-        AddReadColumnByName(read, TString(item->GetName()), requiredColumns);
-    }
-}
-
 void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
-    AddReadLambdaInputTypeDeps(read, lambda, requiredColumns);
-
     const auto inspection = NOpt::InspectOlapProcessLambda(lambda);
     if (inspection.RequiresAllInputColumns) {
         AddColumnsToSet(requiredColumns, read.OutputIUs);
@@ -143,10 +109,6 @@ TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInf
 }
 
 bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
-    if (read->OlapFilterLambda) {
-        return false;
-    }
-
     TInfoUnitSet requiredColumns;
     AddColumnsToSet(requiredColumns, liveOutput);
     AddReadLambdaDeps(*read, read->OlapFilterLambda, requiredColumns);

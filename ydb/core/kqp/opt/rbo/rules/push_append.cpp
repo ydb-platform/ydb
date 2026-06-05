@@ -222,6 +222,149 @@ bool IsTransparentUnaryForExpressionAppend(EOperator kind, bool pushUnderFilter)
     return pushUnderFilter && kind == EOperator::Filter;
 }
 
+bool CanRewriteResidualTopMapAfterAggregatePush(
+    const TIntrusivePtr<TOpMap>& topMap,
+    size_t appendIdx,
+    const TInfoUnit& from,
+    const TInfoUnit& to)
+{
+    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+        if (idx == appendIdx) {
+            continue;
+        }
+
+        const auto& element = topMap->MapElements[idx];
+        if (element.GetElementName() == to) {
+            return false;
+        }
+        if (element.IsRename() && (element.GetRename() == from || element.GetRename() == to)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void RewriteResidualTopMapInputs(TVector<TMapElement>& elements, const TInfoUnit& from, const TInfoUnit& to) {
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap{{from, to}};
+
+    for (auto& element : elements) {
+        if (!element.IsRename()) {
+            element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
+        }
+    }
+}
+
+void RenameAggregateKey(TOpAggregate& aggregate, const TInfoUnit& from, const TInfoUnit& to) {
+    for (auto& key : aggregate.KeyColumns) {
+        if (key == from) {
+            key = to;
+        }
+    }
+
+    if (!aggregate.IsDistinctAll()) {
+        return;
+    }
+
+    for (auto& traits : aggregate.AggregationTraitsList) {
+        if (traits.OriginalColName == from) {
+            traits.OriginalColName = to;
+        }
+        if (traits.ResultColName == from) {
+            traits.ResultColName = to;
+        }
+    }
+}
+
+TIntrusivePtr<IOperator> TryPushAliasAppendThroughAggregate(
+    const TIntrusivePtr<TOpMap>& map,
+    size_t appendIdx,
+    const TPlanProps& props)
+{
+    const auto& mapElement = map->MapElements[appendIdx];
+    auto aggregate = CastOperator<TOpAggregate>(map->GetInput());
+    if (!aggregate->IsSingleConsumer()) {
+        return map;
+    }
+
+    const auto from = mapElement.GetColumnAccess();
+    const auto to = mapElement.GetElementName();
+    const auto liveIt = props.LiveOut.find(map.get());
+    if (liveIt == props.LiveOut.end() || !liveIt->second.contains(to) || liveIt->second.contains(from)) {
+        return map;
+    }
+
+    if (!ContainsInfoUnit(aggregate->KeyColumns, from) ||
+        !CanRewriteResidualTopMapAfterAggregatePush(map, appendIdx, from, to)) {
+        return map;
+    }
+
+    const auto oldAggregateInput = aggregate->GetInput();
+    const auto oldKeys = aggregate->KeyColumns;
+    const auto oldTraits = aggregate->AggregationTraitsList;
+    const auto aggregateInputIUs = oldAggregateInput->GetOutputIUs();
+    if (!DependenciesAvailable(mapElement, aggregateInputIUs) || ContainsInfoUnit(aggregateInputIUs, to)) {
+        return map;
+    }
+
+    auto pushedMap = MakeIntrusive<TOpMap>(oldAggregateInput, map->Pos, TVector<TMapElement>{mapElement});
+    if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
+        return map;
+    }
+
+    aggregate->SetInput(pushedMap);
+    RenameAggregateKey(*aggregate, from, to);
+    if (HasOutputConflicts(aggregate->GetOutputIUs())) {
+        aggregate->SetInput(oldAggregateInput);
+        aggregate->KeyColumns = oldKeys;
+        aggregate->AggregationTraitsList = oldTraits;
+        return map;
+    }
+
+    TVector<TMapElement> topElements;
+    topElements.reserve(map->MapElements.size() - 1);
+    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+        if (idx != appendIdx) {
+            topElements.push_back(map->MapElements[idx]);
+        }
+    }
+    RewriteResidualTopMapInputs(topElements, from, to);
+
+    if (topElements.empty()) {
+        if (!CanReplaceInParents(map, aggregate, props)) {
+            aggregate->SetInput(oldAggregateInput);
+            aggregate->KeyColumns = oldKeys;
+            aggregate->AggregationTraitsList = oldTraits;
+            return map;
+        }
+        return aggregate;
+    }
+
+    auto newTopMap = MakeIntrusive<TOpMap>(aggregate, map->Pos, topElements, map->Ordered);
+    if (!CanExposeOutput(map, newTopMap->GetOutputIUs(), props)) {
+        aggregate->SetInput(oldAggregateInput);
+        aggregate->KeyColumns = oldKeys;
+        aggregate->AggregationTraitsList = oldTraits;
+        return map;
+    }
+
+    return newTopMap;
+}
+
+TIntrusivePtr<IOperator> PushAppendElementsThroughAggregate(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
+    const auto blockedOutputs = GetRenameSources(map);
+    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+        if (CanMoveAliasAppendElement(map->MapElements[idx], blockedOutputs)) {
+            auto rewritten = TryPushAliasAppendThroughAggregate(map, idx, props);
+            if (rewritten != map) {
+                return rewritten;
+            }
+        }
+    }
+
+    return map;
+}
+
 TIntrusivePtr<IOperator> PushAppendElementsThroughUnary(
     const TIntrusivePtr<TOpMap>& map,
     const TPlanProps& props,
@@ -398,6 +541,10 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
 
     if (IsTransparentUnaryForAliasAppend(map->GetInput()->Kind, PushUnderFilter)) {
         return PushAppendElementsThroughUnary(map, props, CanMoveAliasAppendElement);
+    }
+
+    if (map->GetInput()->Kind == EOperator::Aggregate) {
+        return PushAppendElementsThroughAggregate(map, props);
     }
 
     if (map->GetInput()->Kind == EOperator::Join) {

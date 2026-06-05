@@ -91,7 +91,7 @@ class TFuseFiltersRule : public ISimplifiedRule {
 class TPushAppendRule : public ISimplifiedRule {
   public:
     explicit TPushAppendRule(bool pushUnderFilter = true)
-        : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents)
+        : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness)
         , PushUnderFilter(pushUnderFilter) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;

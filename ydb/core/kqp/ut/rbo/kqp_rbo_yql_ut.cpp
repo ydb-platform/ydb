@@ -3304,6 +3304,208 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("alias_key"));
     }
 
+    Y_UNIT_TEST(PushAppendPushesAggregateKeyAliasBelowAggregate) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestAppend("alias_key", "key", pos, testContext.ExprCtx, expressionProps),
+            MakeTestConstantAppend("sale_type", pos, testContext.ExprCtx),
+        });
+        TOpRoot root(aliasMap, pos, {"alias_key", "sum_value", "sale_type"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push append map elements");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append map elements to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto residualMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL_C(residualMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("sale_type"));
+
+        UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenAggregate = CastOperator<TOpAggregate>(residualMap->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
+        UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("alias_key"));
+
+        UNIT_ASSERT_C(rewrittenAggregate->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto pushedMap = CastOperator<TOpMap>(rewrittenAggregate->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
+        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("alias_key"));
+        UNIT_ASSERT(pushedMap->MapElements.front().GetColumnAccess() == TInfoUnit("key"));
+    }
+
+    Y_UNIT_TEST(PushAppendPushesDistinctAllKeyAliasAndResultBelowAggregate) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("other_key")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("key"), "distinct", TInfoUnit("key")),
+                TOpAggregationTraits(TInfoUnit("other_key"), "distinct", TInfoUnit("other_key")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key"), TInfoUnit("other_key")},
+            EOpPhase::Undefined,
+            true,
+            pos
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestAppend("alias_key", "key", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"alias_key", "other_key"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push append map elements");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append map elements to apply");
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenAggregate = CastOperator<TOpAggregate>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 2);
+        UNIT_ASSERT(rewrittenAggregate->KeyColumns[0] == TInfoUnit("alias_key"));
+        UNIT_ASSERT(rewrittenAggregate->KeyColumns[1] == TInfoUnit("other_key"));
+
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->AggregationTraitsList.size(), 2);
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList[0].OriginalColName == TInfoUnit("alias_key"));
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList[0].ResultColName == TInfoUnit("alias_key"));
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList[1].OriginalColName == TInfoUnit("other_key"));
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList[1].ResultColName == TInfoUnit("other_key"));
+
+        UNIT_ASSERT_C(rewrittenAggregate->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto pushedMap = CastOperator<TOpMap>(rewrittenAggregate->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
+        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("alias_key"));
+        UNIT_ASSERT(pushedMap->MapElements.front().GetColumnAccess() == TInfoUnit("key"));
+    }
+
+    Y_UNIT_TEST(PushAppendDoesNotPushAggregateKeyAliasWhenOriginalKeyIsLive) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("key"), TInfoUnit("value")}, pos);
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("key")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(aggregate, pos, TVector<TMapElement>{
+            MakeTestAppend("alias_key", "key", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"key", "alias_key", "sum_value"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendRule>());
+        TRuleBasedStage pushAppend("Focused push append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == aliasMap, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(aliasMap->GetInput() == aggregate, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(aggregate->KeyColumns.size(), 1);
+        UNIT_ASSERT(aggregate->KeyColumns.front() == TInfoUnit("key"));
+    }
+
+    Y_UNIT_TEST(SimplifyProjectionAliasesOverAggregateKeysAndResult) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> qualifiedKeys = {
+            TInfoUnit("customer.c_customer_id"),
+            TInfoUnit("customer.c_first_name"),
+            TInfoUnit("customer.c_last_name"),
+            TInfoUnit("date_dim.d_year"),
+        };
+        const TVector<TString> aliases = {
+            "customer_id",
+            "customer_first_name",
+            "customer_last_name",
+            "dyear",
+        };
+
+        TVector<TInfoUnit> readIUs = qualifiedKeys;
+        readIUs.push_back(TInfoUnit("__kqp_agg_input_agg_expr_2"));
+        auto read = MakeTestRead(readIUs, pos);
+
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(TInfoUnit("__kqp_agg_input_agg_expr_2"), "sum", TInfoUnit("year_total")),
+            },
+            qualifiedKeys,
+            EOpPhase::Final,
+            false,
+            pos
+        );
+
+        TVector<TMapElement> mapElements;
+        for (ui32 i = 0; i < qualifiedKeys.size(); ++i) {
+            mapElements.push_back(MakeTestAppend(aliases[i], qualifiedKeys[i].GetFullName(), pos, testContext.ExprCtx, expressionProps));
+        }
+        mapElements.push_back(TMapElement(TInfoUnit("sale_type"), MakeConstant("String", "c", pos, &testContext.ExprCtx), false));
+        mapElements.push_back(MakeTestAppend("__kqp_agg_result_agg_col_1", "year_total", pos, testContext.ExprCtx, expressionProps));
+
+        auto aliasMap = MakeIntrusive<TOpMap>(aggregate, pos, std::move(mapElements));
+        TOpRoot root(aliasMap, pos, {
+            "customer_id",
+            "customer_first_name",
+            "customer_last_name",
+            "dyear",
+            "sale_type",
+            "__kqp_agg_result_agg_col_1",
+        });
+
+        TRuleBasedStage projectionSimplification("Focused projection simplification", MakeProjectionMapRulesForTest());
+        ComputeLogicalTestProps(root);
+        projectionSimplification.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto residualMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL_C(residualMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("sale_type"));
+
+        UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenAggregate = CastOperator<TOpAggregate>(residualMap->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), aliases.size());
+        for (ui32 i = 0; i < aliases.size(); ++i) {
+            UNIT_ASSERT_C(rewrittenAggregate->KeyColumns[i] == TInfoUnit(aliases[i]), root.PlanToString(testContext.ExprCtx));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(rewrittenAggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("__kqp_agg_result_agg_col_1"));
+    }
+
     Y_UNIT_TEST(PushRenameUpdatesPendingSubplanTuple) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;

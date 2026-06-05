@@ -269,9 +269,12 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
     }
     for (auto& traits : aggregate.AggregationTraitsList) {
         changed |= RenameInfoUnit(traits.OriginalColName, renameMap);
+        if (aggregate.IsDistinctAll()) {
+            changed |= RenameInfoUnit(traits.ResultColName, renameMap);
+        }
     }
 
-    if (HasOutputConflicts(aggregate.GetOutputIUs())) {
+    if (HasOutputConflicts(aggregate.GetOutputIUs()) || !CanExposeToParents(&aggregate, props)) {
         aggregate.KeyColumns = oldKeys;
         aggregate.AggregationTraitsList = oldTraits;
         return false;

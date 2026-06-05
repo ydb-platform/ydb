@@ -9,6 +9,7 @@ from typing import Any, Iterable, List, Tuple
 from ydb.tests.library.nemesis.safety_warden import (
     LocalCommandExecutor,
     UnifiedAgentVerifyFailedSafetyWarden,
+    UnifiedAgentSanitizerSafetyWarden,
     GrepDMesgForPatternsSafetyWarden,
 )
 from ydb.tests.library.wardens.logs import (
@@ -98,5 +99,10 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
             name="unified_agent_verify_failed",
             description="Check for VERIFY failed errors in unified agent logs",
             build_warden=lambda: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24),
+        ),
+        SafetyCheckSpec(
+            name="unified_agent_sanitizer",
+            description="Check for sanitizer errors (ASan/LSan/TSan/MSan/UBSan) in unified agent logs",
+            build_warden=lambda: UnifiedAgentSanitizerSafetyWarden(hours_back=24),
         ),
     ]

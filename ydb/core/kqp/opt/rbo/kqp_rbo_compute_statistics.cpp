@@ -66,38 +66,21 @@ TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
         return {};
     }
 
-    auto & lineage = join->Props.Metadata->ColumnLineage;
-    auto mapColumns = [&lineage] (const TVector<TInfoUnit>& k) {
-        TVector<TInfoUnit> mapped;
-        for (const auto& c : k) {
-            if (lineage.Mapping.contains(c)) {
-                const auto& entry = lineage.Mapping.at(c);
-                mapped.push_back(TInfoUnit(entry.TableName, entry.ColumnName));
-            } else {
-                mapped.push_back(c);
-            }
-        }
-        return mapped;
-    };
-
-    auto mappedLeftKeys = mapColumns(leftKeys);
-    auto mappedRightKeys = mapColumns(rightKeys);
-
-    TVector<TInfoUnit> mappedLeftJoinKeys;
-    TVector<TInfoUnit> mappedRightJoinKeys;
+    TVector<TInfoUnit> leftJoinKeys;
+    TVector<TInfoUnit> rightJoinKeys;
 
     for (const auto & [l, r] : join->JoinKeys) {
-        mappedLeftJoinKeys.push_back(l);
-        mappedRightJoinKeys.push_back(r);
+        leftJoinKeys.push_back(l);
+        rightJoinKeys.push_back(r);
     }
 
-    mappedLeftJoinKeys = mapColumns(mappedLeftJoinKeys);
-    mappedRightJoinKeys = mapColumns(mappedRightJoinKeys);
-
-    if (IUSetDiff(mappedRightJoinKeys, mappedRightKeys).empty()) {
+    // If right join keys covers all the keys of the right hand side,
+    // we don't need the key of the right side at all
+    if (IUIsSubset(rightKeys, rightJoinKeys)) {
         return leftKeys;
     }
-    else if(IUSetDiff(mappedLeftJoinKeys, mappedLeftKeys).empty()) {
+    // Same for the left side
+    else if(IUIsSubset(leftKeys, leftJoinKeys)) {
         return rightKeys;
     }
 

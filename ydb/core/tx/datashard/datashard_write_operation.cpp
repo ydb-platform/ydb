@@ -158,7 +158,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         if (!col)
             return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Missing column with id " << columnTag};
 
-        if (col->NotNull) {
+        if (col->NotNull || col->SetNotNullInProgress) {
             for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx) {
                 const TCell& cell = Matrix.GetCell(rowIdx, colIdx);
                 if (cell.IsNull()) {
@@ -174,7 +174,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         // at this stage, so we skip the check for UPSERT.
         auto columnIdsSet = THashSet<ui32>(ColumnIds.begin(), ColumnIds.end());
         for (const auto& [id, column] : tableInfo.Columns) {
-            if (column.NotNull && !columnIdsSet.contains(id)) {
+            if ((column.NotNull || column.SetNotNullInProgress) && !columnIdsSet.contains(id)) {
                 return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Missing inserted values for NON NULL column " << id};
             }
         }

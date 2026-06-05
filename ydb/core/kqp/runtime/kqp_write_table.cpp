@@ -336,7 +336,7 @@ std::vector<ui32> BuildWriteColumnIds(
 std::set<std::string> BuildNotNullColumns(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     std::set<std::string> result;
     for (const auto& column : inputColumns) {
-        if (column.GetNotNull()) {
+        if (column.GetNotNull() || column.GetSetNotNullInProgress()) {
             result.insert(column.GetName());
         }
     }

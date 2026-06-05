@@ -62,7 +62,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             typeInfoProto = NKikimr::NScheme::DefaultDecimalProto();
         }
         changes |= AddColumnWithTypeInfo(table, delta.GetColumnName(), delta.GetColumnId(),
-            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), delta.GetIsSensitive(), null);
+            delta.GetColumnType(), typeInfoProto, delta.GetNotNull() || delta.GetSetNotNullInProgress(), delta.GetIsSensitive(), null);
     } else if (action == TAlterRecord::DropColumn) {
         changes |= DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {

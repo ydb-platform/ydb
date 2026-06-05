@@ -798,6 +798,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
                 column.IsBuildInProgress = columnDesc.GetIsBuildInProgress();
+                column.SetNotNullInProgress = columnDesc.GetSetNotNullInProgress();
 
                 if (columnDesc.HasDefaultFromSequence()) {
                     column.SetDefaultFromSequence();

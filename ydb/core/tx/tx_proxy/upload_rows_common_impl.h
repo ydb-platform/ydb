@@ -458,6 +458,10 @@ private:
                 return TConclusionStatus::Fail(Sprintf("Column %s is under build operation", name.c_str()));
             }
 
+            if (ci.SetNotNullInProgress) {
+                return TConclusionStatus::Fail(Sprintf("Column %s is under set not null operation", name.c_str()));
+            }
+
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;

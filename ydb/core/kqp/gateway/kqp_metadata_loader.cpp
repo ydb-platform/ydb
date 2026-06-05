@@ -226,7 +226,13 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
-                columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod,
+                columnDesc.Name,
+                columnDesc.Id,
+                typeName,
+                notNull,
+                columnDesc.SetNotNullInProgress,
+                columnDesc.PType,
+                columnDesc.PTypeMod,
                 columnDesc.DefaultFromSequence,
                 defaultFromSequencePathId,
                 defaultKind,
@@ -290,7 +296,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
         tableMeta->Columns.emplace(
             columnDesc.GetName(),
             NYql::TKikimrColumnMetadata(
-                columnDesc.GetName(), columnDesc.GetId(), typeName, columnDesc.GetNotNull(), typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
+                columnDesc.GetName(), columnDesc.GetId(), typeName, columnDesc.GetNotNull(), false, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
                 columnDesc.GetDefaultFromSequence()
             )
         );
@@ -379,7 +385,7 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
 
         tableMeta->Columns.emplace(
             column.Name,
-            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.PType, column.PTypeMod)
+            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.SetNotNullInProgress, column.PType, column.PTypeMod)
         );
 
         if (column.KeyOrder >= 0) {
@@ -746,7 +752,7 @@ bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSo
         tableMetadata.Columns.emplace(
             column.name(),
             NYql::TKikimrColumnMetadata(
-                column.name(), id, typeName, !column.type().has_optional_type(), typeInfoMod.TypeInfo, typeInfoMod.TypeMod
+                column.name(), id, typeName, !column.type().has_optional_type(), false, typeInfoMod.TypeInfo, typeInfoMod.TypeMod
             )
         );
         ++id;

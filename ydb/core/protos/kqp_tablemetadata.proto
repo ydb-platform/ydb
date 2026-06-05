@@ -58,4 +58,5 @@ message TKqpColumnMetadataProto {
     // fulltext indexes in `UseRowIdAsDocId` mode so that monotonic sequence values
     // spread across partitions instead of concentrating on the last shard.
     optional bool BitReverseSequenceValue = 15 [default = false];
+    optional bool SetNotNullInProgress = 16 [default = false];
 };

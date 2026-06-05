@@ -497,13 +497,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
 
+            // TODO(flown4qqqq): SetNotNullInProgress
             if (isChangeNotNullConstraint) {
                 if (col.GetNotNull()) { // SET NOT NULL
                     column.NotNull = true;
                 } else { // DROP NOT NULL
                     column.NotNull = false;
                 }
-
             }
 
             if (columnFamily) {
@@ -589,6 +589,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
             column.IsBuildInProgress = col.GetIsBuildInProgress();
+            column.SetNotNullInProgress = col.GetSetNotNullInProgress();
             if (source)
                 column.CreateVersion = alterData->AlterVersion;
             if (col.HasDefaultFromSequence()) {
@@ -879,6 +880,7 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
                 *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
             }
             colDescr->SetNotNull(column.NotNull);
+            colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
             colDescr->SetFamily(column.Family);
         }
         for (auto ci : keyColumnIds) {
@@ -1718,6 +1720,7 @@ void TTableInfo::FinishAlter() {
             oldCol->DefaultKind = cinfo.DefaultKind;
             oldCol->DefaultValue = cinfo.DefaultValue;
             oldCol->NotNull = cinfo.NotNull;
+            oldCol->SetNotNullInProgress = cinfo.SetNotNullInProgress;
         } else {
             Columns[col.first] = cinfo;
             if (cinfo.KeyOrder != (ui32)-1) {

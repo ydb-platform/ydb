@@ -918,6 +918,26 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     auto rowType = itemType->Cast<TStructExprType>();
+
+    const bool isStructOfRows = rowType->GetSize() == 2 && [&]() {
+            THashSet<TStringBuf> names;
+            for (const auto& item : rowType->GetItems()) {
+                names.insert(item->GetName());
+                if (item->GetItemType()->GetKind() != NYql::ETypeAnnotationKind::Struct) {
+                    return false;
+                }
+            }
+            return names.contains("new") && names.contains("old");
+        }();
+    if (isStructOfRows) {
+        for (const auto& item : rowType->GetItems()) {
+            if (item->GetName() == "new") {
+                rowType = item->GetItemType()->Cast<TStructExprType>();
+                break;
+            }
+        }
+    }
+
     for (const auto& column : columns) {
         if (!rowType->FindItem(column.Value())) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
@@ -1169,16 +1189,6 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
         }
-    }
-
-    bool allowNonKey = false;
-    if (TKqlDeleteRowsIndex::Match(node.Get())) {
-        auto settings = TKqpDeleteRowsIndexSettings::Parse(TExprBase(node).Cast<TKqlDeleteRowsIndex>());
-        allowNonKey = settings.SkipLookup;
-    }
-    if (!allowNonKey && rowType->GetItems().size() != table.second->Metadata->KeyColumnNames.size()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Input type contains non-key columns"));
-        return TStatus::Error;
     }
 
     auto effectType = MakeKqpEffectType(ctx);

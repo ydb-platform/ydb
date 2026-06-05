@@ -13,10 +13,10 @@ SRCS(
     inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
-    logical_liveness.cpp
-    logical_liveness_helpers.cpp
     narrow_by_liveness.cpp
     peephole_predicate.cpp
+    projection_pruning.cpp
+    projection_pruning_helpers.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp
     push_limit_into_sort.cpp

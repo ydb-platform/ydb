@@ -1,4 +1,4 @@
-#include "logical_liveness_helpers.h"
+#include "projection_pruning_helpers.h"
 
 #include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
 
@@ -12,7 +12,7 @@ using namespace NYql::NNodes;
 void AddReadColumnByName(const TOpRead& read, const TString& columnName, TInfoUnitSet& requiredColumns) {
     for (const auto& outputIU : read.OutputIUs) {
         if (outputIU.GetFullName() == columnName || outputIU.GetColumnName() == columnName) {
-            AddLiveColumn(requiredColumns, outputIU);
+            AddInfoUnit(requiredColumns, outputIU);
         }
     }
 }
@@ -20,7 +20,7 @@ void AddReadColumnByName(const TOpRead& read, const TString& columnName, TInfoUn
 void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
     const auto inspection = NOpt::InspectOlapProcessLambda(lambda);
     if (inspection.RequiresAllInputColumns) {
-        AddColumnsToSet(requiredColumns, read.OutputIUs);
+        AddInfoUnits(requiredColumns, read.OutputIUs);
         return;
     }
 
@@ -56,26 +56,6 @@ void AddReadOriginalPredicateDeps(const TOpRead& read, TInfoUnitSet& requiredCol
 
 } // anonymous namespace
 
-bool AddLiveColumn(TInfoUnitSet& target, const TInfoUnit& iu) {
-    return target.insert(iu).second;
-}
-
-bool AddColumnsToSet(TInfoUnitSet& target, const TVector<TInfoUnit>& ius) {
-    bool changed = false;
-    for (const auto& iu : ius) {
-        changed |= AddLiveColumn(target, iu);
-    }
-    return changed;
-}
-
-bool AddColumnsToSet(TInfoUnitSet& target, const TInfoUnitSet& ius) {
-    bool changed = false;
-    for (const auto& iu : ius) {
-        changed |= AddLiveColumn(target, iu);
-    }
-    return changed;
-}
-
 TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TPlanProps& props) {
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
@@ -110,7 +90,7 @@ TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInf
 
 bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
     TInfoUnitSet requiredColumns;
-    AddColumnsToSet(requiredColumns, liveOutput);
+    AddInfoUnits(requiredColumns, liveOutput);
     AddReadLambdaDeps(*read, read->OlapFilterLambda, requiredColumns);
     AddReadOriginalPredicateDeps(*read, requiredColumns);
 
@@ -143,7 +123,7 @@ bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUn
 
 bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TVector<TInfoUnit>& liveOutput) {
     TInfoUnitSet liveOutputSet;
-    AddColumnsToSet(liveOutputSet, liveOutput);
+    AddInfoUnits(liveOutputSet, liveOutput);
 
     TVector<TOpAggregationTraits> newTraits;
     newTraits.reserve(aggregate->AggregationTraitsList.size());
@@ -159,21 +139,6 @@ bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TV
 
     aggregate->AggregationTraitsList = std::move(newTraits);
     return true;
-}
-
-bool CanOverrideOutput(EOperator kind) {
-    switch (kind) {
-        case EOperator::Map:
-        case EOperator::Filter:
-        case EOperator::Join:
-        case EOperator::Aggregate:
-        case EOperator::Limit:
-        case EOperator::Sort:
-        case EOperator::UnionAll:
-            return true;
-        default:
-            return false;
-    }
 }
 
 } // namespace NKqp

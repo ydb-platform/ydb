@@ -1,35 +1,10 @@
 #include "kqp_rbo.h"
+#include "kqp_rbo_utils.h"
 
 namespace NKikimr {
 namespace NKqp {
 
 namespace {
-
-bool AddInfoUnit(TInfoUnitSet& target, const TInfoUnit& iu) {
-    return target.insert(iu).second;
-}
-
-bool AddColumnsToSet(TInfoUnitSet& target, const TVector<TInfoUnit>& ius) {
-    bool changed = false;
-    for (const auto& iu : ius) {
-        changed |= AddInfoUnit(target, iu);
-    }
-    return changed;
-}
-
-bool AddColumnsToSet(TInfoUnitSet& target, const TInfoUnitSet& ius) {
-    bool changed = false;
-    for (const auto& iu : ius) {
-        changed |= AddInfoUnit(target, iu);
-    }
-    return changed;
-}
-
-TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius) {
-    TInfoUnitSet result;
-    AddColumnsToSet(result, ius);
-    return result;
-}
 
 class TLogicalNameConstraints: public INameConstraintsContext {
 public:
@@ -54,7 +29,7 @@ public:
     TInfoUnitSet GetIncomingForbidden(IOperator* op) const override {
         TInfoUnitSet result;
         for (const auto& [parent, childIdx] : op->Parents) {
-            AddColumnsToSet(result, Props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
+            AddInfoUnits(result, Props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
         }
         return result;
     }
@@ -132,8 +107,8 @@ bool TOpJoin::PropagateNameConstraints(INameConstraintsContext& ctx) {
     TInfoUnitSet rightForbidden;
 
     if (outputsLeft && outputsRight) {
-        AddColumnsToSet(leftForbidden, rightOutput);
-        AddColumnsToSet(rightForbidden, leftOutput);
+        AddInfoUnits(leftForbidden, rightOutput);
+        AddInfoUnits(rightForbidden, leftOutput);
     }
 
     for (const auto& iu : incoming) {

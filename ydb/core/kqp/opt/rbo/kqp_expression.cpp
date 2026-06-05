@@ -1,4 +1,5 @@
 #include "kqp_expression.h"
+#include "kqp_rbo_utils.h"
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -7,7 +8,6 @@
 
 #include <util/stream/str.h>
 
-#include <algorithm>
 #include <optional>
 
 namespace NKikimr::NKqp {
@@ -16,10 +16,6 @@ namespace {
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
-
-bool ContainsInfoUnit(const TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
-    return std::find(ius.begin(), ius.end(), iu) != ius.end();
-}
 
 void AddUniqueInfoUnit(TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
     if (!ContainsInfoUnit(ius, iu)) {

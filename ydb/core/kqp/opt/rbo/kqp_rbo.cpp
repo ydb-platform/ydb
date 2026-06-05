@@ -1,4 +1,5 @@
 #include "kqp_rbo.h"
+#include "kqp_rbo_utils.h"
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -6,11 +7,6 @@ namespace NKikimr {
 namespace NKqp {
 
 namespace {
-
-const TInfoUnitSet& EmptyInfoUnitSet() {
-    static const TInfoUnitSet empty;
-    return empty;
-}
 
 void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
     for (const auto& iter : root) {

@@ -1,15 +1,5 @@
 #include "kqp_rules_include.h"
 
-namespace {
-using namespace NKikimr;
-using namespace NKikimr::NKqp;
-
-bool ContainsIU(const TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
-    return std::find(ius.begin(), ius.end(), iu) != ius.end();
-}
-
-} // namespace
-
 namespace NKikimr {
 namespace NKqp {
     
@@ -69,7 +59,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         };
 
         for (const auto& iu : rightIUs) {
-            if (ContainsIU(leftIUs, iu) && !subplanOutputRenames.contains(iu)) {
+            if (ContainsInfoUnit(leftIUs, iu) && !subplanOutputRenames.contains(iu)) {
                 subplanOutputRenames.emplace(iu, makeInternalIU());
             }
         }
@@ -92,7 +82,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
                 Y_ENSURE(false, "Correlated filter missing join condition");
             }
 
-            if (ContainsIU(leftIUs, rightKey)) {
+            if (ContainsInfoUnit(leftIUs, rightKey)) {
                 const auto renameIt = subplanOutputRenames.find(rightKey);
                 if (renameIt != subplanOutputRenames.end()) {
                     rightKey = renameIt->second;

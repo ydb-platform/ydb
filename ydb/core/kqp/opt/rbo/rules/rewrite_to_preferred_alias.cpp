@@ -1,17 +1,11 @@
 #include "kqp_rules_include.h"
 
-#include <algorithm>
-
 namespace NKikimr {
 namespace NKqp {
 
 namespace {
 
 using TCandidates = TPlanAliases::TCandidates;
-
-bool ContainsInfoUnit(const TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
-    return std::find(ius.begin(), ius.end(), iu) != ius.end();
-}
 
 std::optional<TInfoUnit> ChoosePreferredAlias(const TCandidates& candidates, const TInfoUnitSet& liveOut) {
     if (candidates.empty()) {

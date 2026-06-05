@@ -18,14 +18,8 @@ using namespace NNodes;
 
 using DependencyPairType = std::pair<TInfoUnit, const TTypeAnnotationNode*>;
 
-constexpr TStringBuf IgnoreArgPrefix = "__kqp_rbo_ignore_arg_";
-
-bool ContainsIU(const TVector<TInfoUnit>& units, const TInfoUnit& unit) {
-    return std::find(units.begin(), units.end(), unit) != units.end();
-}
-
 std::optional<TInfoUnit> ResolveVisibleIUByColumnName(const TVector<TInfoUnit>& visibleIUs, const TInfoUnit& iu) {
-    if (ContainsIU(visibleIUs, iu)) {
+    if (ContainsInfoUnit(visibleIUs, iu)) {
         return iu;
     }
 
@@ -47,7 +41,7 @@ void AddInputReferenceRepair(
     const TVector<TInfoUnit>& visibleIUs,
     const TInfoUnit& iu)
 {
-    if (ContainsIU(visibleIUs, iu) || renameMap.contains(iu)) {
+    if (ContainsInfoUnit(visibleIUs, iu) || renameMap.contains(iu)) {
         return;
     }
 
@@ -80,12 +74,6 @@ void RepairInfoUnitReference(TInfoUnit& iu, const TVector<TInfoUnit>& visibleIUs
     }
 }
 
-TInfoUnit MakeIgnoreIU(TPlanProps& props) {
-    TStringBuilder name;
-    name << IgnoreArgPrefix << props.InternalVarIdx++;
-    return TInfoUnit(TString(name));
-}
-
 void ValidateUniqueOutputIUs(const TIntrusivePtr<IOperator>& op, TExprContext& ctx) {
     THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
     for (const auto& iu : op->GetOutputIUs()) {
@@ -95,15 +83,15 @@ void ValidateUniqueOutputIUs(const TIntrusivePtr<IOperator>& op, TExprContext& c
 }
 
 void AddIgnoreRenameToMap(const TIntrusivePtr<TOpMap>& map, const TInfoUnit& source, TExprContext& ctx, TPlanProps& props) {
-    map->MapElements.emplace_back(MakeIgnoreIU(props), source, map->Pos, &ctx, &props);
+    map->MapElements.emplace_back(MakeGeneratedIgnoreIU(props), source, map->Pos, &ctx, &props);
 }
 
 TInfoUnit AddIgnoreRename(TIntrusivePtr<IOperator>& input, const TInfoUnit& source, TPositionHandle pos, TExprContext& ctx, TPlanProps& props) {
-    const auto ignore = MakeIgnoreIU(props);
+    const auto ignore = MakeGeneratedIgnoreIU(props);
 
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
-        if (ContainsIU(map->GetInput()->GetOutputIUs(), source)) {
+        if (ContainsInfoUnit(map->GetInput()->GetOutputIUs(), source)) {
             map->MapElements.emplace_back(ignore, source, map->Pos, &ctx, &props);
             return ignore;
         }
@@ -125,7 +113,7 @@ void RenameJoinSideReferences(TOpJoin& join, const TInfoUnit& from, const TInfoU
 
     for (const auto& filter : join.JoinFilters) {
         const auto filterIUs = filter.GetInputIUs(false, true);
-        Y_ENSURE(!ContainsIU(filterIUs, from), "Cannot normalize duplicate join output used by a join filter");
+        Y_ENSURE(!ContainsInfoUnit(filterIUs, from), "Cannot normalize duplicate join output used by a join filter");
     }
 }
 
@@ -140,7 +128,7 @@ void RepairMapOutputIUs(const TIntrusivePtr<TOpMap>& map, TExprContext& ctx, TPl
     for (const auto& mapElement : map->MapElements) {
         if (mapElement.IsRename()) {
             const auto source = mapElement.GetRename();
-            Y_ENSURE(ContainsIU(inputIUs, source), "Rename source " << source.GetFullName() << " is not visible in map input");
+            Y_ENSURE(ContainsInfoUnit(inputIUs, source), "Rename source " << source.GetFullName() << " is not visible in map input");
             renameSources.insert(source);
         }
     }
@@ -156,7 +144,7 @@ void RepairMapOutputIUs(const TIntrusivePtr<TOpMap>& map, TExprContext& ctx, TPl
             continue;
         }
 
-        if (ContainsIU(inputIUs, output) && !renameSources.contains(output)) {
+        if (ContainsInfoUnit(inputIUs, output) && !renameSources.contains(output)) {
             AddIgnoreRenameToMap(map, output, ctx, props);
             renameSources.insert(output);
         }
@@ -399,7 +387,7 @@ void RepairPlanOutputIUs(TOpRoot& root, TExprContext& ctx) {
     const auto rootOutput = root.GetInput()->GetOutputIUs();
     for (const auto& column : root.ColumnOrder) {
         const auto iu = TInfoUnit(column);
-        Y_ENSURE(ContainsIU(rootOutput, iu), "Root output column " << column << " is not visible before physical result narrowing");
+        Y_ENSURE(ContainsInfoUnit(rootOutput, iu), "Root output column " << column << " is not visible before physical result narrowing");
     }
 }
 
@@ -791,7 +779,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPt
 
     for (const auto& iu : inputIUs) {
         if (outputColumnNames.contains(iu.GetColumnName()) && !renamedSources.contains(iu)) {
-            mapElements.emplace_back(MakeIgnoreIU(PlanProps), iu, node->Pos(), &Ctx, &PlanProps);
+            mapElements.emplace_back(MakeGeneratedIgnoreIU(PlanProps), iu, node->Pos(), &Ctx, &PlanProps);
         }
     }
 

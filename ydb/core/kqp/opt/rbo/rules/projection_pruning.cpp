@@ -1,5 +1,5 @@
 #include "kqp_rules_include.h"
-#include "logical_liveness_helpers.h"
+#include "projection_pruning_helpers.h"
 
 namespace NKikimr {
 namespace NKqp {

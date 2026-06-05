@@ -1,8 +1,27 @@
 #include "kqp_rules_include.h"
-#include "logical_liveness_helpers.h"
+#include "projection_pruning_helpers.h"
 
 namespace NKikimr {
 namespace NKqp {
+
+namespace {
+
+bool CanOverrideOutput(EOperator kind) {
+    switch (kind) {
+        case EOperator::Map:
+        case EOperator::Filter:
+        case EOperator::Join:
+        case EOperator::Aggregate:
+        case EOperator::Limit:
+        case EOperator::Sort:
+        case EOperator::UnionAll:
+            return true;
+        default:
+            return false;
+    }
+}
+
+} // anonymous namespace
 
 TNarrowByLivenessStage::TNarrowByLivenessStage()
     : IRBOStage("Narrow by liveness") {
@@ -76,7 +95,7 @@ void TNarrowByLivenessStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
         auto liveOut = liveIt->second;
         if (iter.Current->Kind == EOperator::Sort) {
             for (const auto& sortElement : CastOperator<TOpSort>(iter.Current)->SortElements) {
-                AddLiveColumn(liveOut, sortElement.SortColumn);
+                AddInfoUnit(liveOut, sortElement.SortColumn);
             }
         }
 

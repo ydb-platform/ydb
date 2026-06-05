@@ -1,4 +1,5 @@
 #include "kqp_rbo.h"
+#include "kqp_rbo_utils.h"
 
 #include <algorithm>
 #include <functional>
@@ -10,14 +11,6 @@ namespace {
 
 using TAliasMap = TPlanAliases::TAliasMap;
 using TCandidates = TPlanAliases::TCandidates;
-
-TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius) {
-    TInfoUnitSet result;
-    for (const auto& iu : ius) {
-        result.insert(iu);
-    }
-    return result;
-}
 
 const TCandidates* FindAliases(const TAliasMap& aliases, const TInfoUnit& iu) {
     const auto it = aliases.find(iu);

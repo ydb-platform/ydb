@@ -1,33 +1,10 @@
 #include "kqp_rbo.h"
+#include "kqp_rbo_utils.h"
 
 namespace NKikimr {
 namespace NKqp {
 
 namespace {
-
-bool AddInfoUnit(TInfoUnitSet& target, const TInfoUnit& iu) {
-    return target.insert(iu).second;
-}
-
-void AddInfoUnits(TInfoUnitSet& target, const TVector<TInfoUnit>& ius) {
-    for (const auto& iu : ius) {
-        AddInfoUnit(target, iu);
-    }
-}
-
-bool AddColumnsToSet(TInfoUnitSet& target, const TVector<TInfoUnit>& ius) {
-    bool changed = false;
-    for (const auto& iu : ius) {
-        changed |= AddInfoUnit(target, iu);
-    }
-    return changed;
-}
-
-TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius) {
-    TInfoUnitSet result;
-    AddInfoUnits(result, ius);
-    return result;
-}
 
 class TLogicalLiveness: public ILivenessContext {
 public:
@@ -80,7 +57,7 @@ public:
     }
 
     void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) override {
-        AddColumnsToSet(target, expr.GetInputIUs(false, true));
+        AddInfoUnits(target, expr.GetInputIUs(false, true));
 
         for (const auto& iu : expr.GetInputIUs(true, false)) {
             if (!iu.IsSubplanContext()) {

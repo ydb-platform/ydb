@@ -13,14 +13,8 @@ using namespace NNodes;
 
 namespace {
 
-const TString IgnoreArgPrefix = "__kqp_rbo_ignore_arg_";
-
-bool IsGeneratedIgnoreName(const TInfoUnit& iu) {
-    return iu.GetAlias().empty() && iu.GetColumnName().StartsWith(IgnoreArgPrefix);
-}
-
 TString FormatMapElementName(const TInfoUnit& iu) {
-    return IsGeneratedIgnoreName(iu) ? "_" : iu.GetFullName();
+    return IsGeneratedIgnoreIU(iu) ? "_" : iu.GetFullName();
 }
 
 TString FormatSortElements(const TVector<TSortElement>& sortElements) {

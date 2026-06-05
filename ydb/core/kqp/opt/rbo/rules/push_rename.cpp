@@ -7,19 +7,6 @@ namespace NKqp {
 
 namespace {
 
-bool AddInfoUnitLocal(TInfoUnitSet& target, const TInfoUnit& iu) {
-    return target.insert(iu).second;
-}
-
-const TInfoUnitSet& EmptyInfoUnitSet() {
-    static const TInfoUnitSet empty;
-    return empty;
-}
-
-bool ContainsInfoUnit(const TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
-    return std::find(ius.begin(), ius.end(), iu) != ius.end();
-}
-
 bool ProducesMapElement(const TIntrusivePtr<TOpMap>& map, const TInfoUnit& iu) {
     return std::any_of(map->MapElements.begin(), map->MapElements.end(), [&iu](const TMapElement& element) {
         return element.GetElementName() == iu;
@@ -164,7 +151,7 @@ TVector<TInfoUnit> SimulateTopMapOutputAfterPush(const TIntrusivePtr<TOpMap>& to
 
         const auto& element = topMap->MapElements[idx];
         if (element.IsRename()) {
-            AddInfoUnitLocal(renameSources, element.GetRename());
+            AddInfoUnit(renameSources, element.GetRename());
         }
     }
 

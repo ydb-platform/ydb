@@ -438,6 +438,11 @@ public:
                     YQL_CLOG(ERROR, FastMapReduce) << error->ErrorMessage << ", taskId: " << taskId;
                     SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed, *error);
                     canRunTask = false;
+                } else {
+                    // Record ownership at dispatch time, not when the worker first reports the task back.
+                    // Otherwise a worker that dies in the gap between receiving a task and its next heartbeat
+                    // leaves the coordinator with no record of the task, so failover never reschedules it.
+                    Workers_[workerId].TaskIds.emplace(taskId);
                 }
             }
             if (canRunTask) {

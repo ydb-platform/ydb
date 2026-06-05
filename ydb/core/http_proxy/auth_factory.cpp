@@ -79,7 +79,6 @@ void TIamAuthFactory::Initialize(
     NKikimr::NHttpProxy::THttpProxyConfig httpProxyConfig;
     httpProxyConfig.Config = config;
     httpProxyConfig.CredentialsProvider = credentialsProvider;
-    httpProxyConfig.CoreFacility = coreFacility;
     httpProxyConfig.UseSDK = UseSDK();
 
     actor = NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig);

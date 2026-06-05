@@ -1,5 +1,7 @@
 #include "ic_storage_transport_actor.h"
 
+#include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
+
 #include <ydb/library/actors/util/rope.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -85,12 +87,14 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
         ListPBufferEntriesRequests);
 
-    for (auto& [id, request]: WriteToManyPBuffersRequests) {
+    for (auto& [id, requestInfo]: WriteToManyPBuffersRequests) {
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             DestroyErrorMessage,
-            request->PersistentBufferIds);
-        request->Promise.SetValue(std::move(response->Record));
+            requestInfo.Request->PersistentBufferIds);
+        if (requestInfo.Request->Callback) {
+            requestInfo.Request->Callback(std::move(response->Record));
+        }
     }
 }
 
@@ -104,7 +108,7 @@ void TICStorageTransportActor::HandleConnect(
     const TEvTransportPrivate::TEvConnect::TPtr& ev,
     const TActorContext& ctx)
 {
-    auto* msg = ev->Get();
+    const auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
@@ -117,14 +121,40 @@ void TICStorageTransportActor::HandleConnect(
         "Sent TEvConnect with requestId# %lu",
         requestId);
 
-    auto request = std::make_unique<NDDisk::TEvConnect>(msg->Credentials);
-
-    ctx.Send(
+    SendWithUndeliveryTracking(
+        ctx,
         msg->ServiceId,
-        request.release(),
-        0,          // flags
-        requestId   // cookie
-    );
+        std::make_unique<NDDisk::TEvConnect>(msg->Credentials),
+        requestId);
+}
+
+void TICStorageTransportActor::HandleConnectUndelivery(
+    const NKikimr::NDDisk::TEvConnect::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received NDDisk::TEvConnect undelivery with requestId# %lu",
+        requestId);
+
+    if (auto* r = ConnectRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        auto result = NKikimrBlobStorage::NDDisk::TEvConnectResult();
+        // How to set undelivery error?
+        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        request.Promise.SetValue(std::move(result));
+        ConnectRequests.erase(requestId);
+    } else {
+        // That means that request is already completed
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "ConnectEvent with requestId# %lu not found",
+            requestId);
+    }
 }
 
 void TICStorageTransportActor::HandleConnectResult(
@@ -248,8 +278,19 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        WriteToManyPBuffersRequests.emplace(requestId, ev->Release().Release());
+    TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> waitingReplies;
+    for (const auto& diskId: msg->PersistentBufferIds) {
+        waitingReplies.emplace(diskId);
+    }
+
+    auto [it, inserted] = WriteToManyPBuffersRequests.emplace(
+        requestId,
+        TWriteToManyPBuffersReqInfo{
+            .Request =
+                std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>(
+                    ev->Release().Release()),
+            .WaitingReplies = std::move(waitingReplies),
+        });
     Y_ABORT_UNLESS(inserted);
 
     LOG_DEBUG(
@@ -320,13 +361,23 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         requestId);
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
-        auto& request = **r;
-        request.Promise.SetValue(std::move(ev->Get()->Record));
-        WriteToManyPBuffersRequests.erase(requestId);
+        auto& requestInfo = *r;
+        auto& request = *requestInfo.Request;
+        auto& waitingReplies = requestInfo.WaitingReplies;
+
+        Y_ABORT_UNLESS(request.Callback);
+        request.Callback(ev->Get()->Record);
+        request.NumberOfCallbackCalls++;
+
+        for (const auto& singlePBufferResponse: ev->Get()->Record.GetResult()) {
+            waitingReplies.erase(singlePBufferResponse.GetPersistentBufferId());
+        }
+
+        if (waitingReplies.empty()) {
+            WriteToManyPBuffersRequests.erase(requestId);
+        }
     } else {
-        // That means that request is already completed
-        // TODO handle this case in writeRequests through weak_ptr with erase
-        LOG_DEBUG(
+        LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "
@@ -763,6 +814,7 @@ STFUNC(TICStorageTransportActor::StateWork)
         cFunc(TEvents::TEvPoison::EventType, PassAway);
 
         HFunc(TEvTransportPrivate::TEvConnect, HandleConnect);
+        HFunc(NDDisk::TEvConnect, HandleConnectUndelivery);
         HFunc(NDDisk::TEvConnectResult, HandleConnectResult);
 
         HFunc(
@@ -814,7 +866,7 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleListPersistentBufferResult);
 
         default:
-            LOG_DEBUG_S(
+            LOG_ERROR_S(
                 TActivationContext::AsActorContext(),
                 NKikimrServices::NBS_PARTITION,
                 "Unhandled event type: " << ev->GetTypeRewrite()

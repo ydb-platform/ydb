@@ -15,6 +15,7 @@ SRCS(
     backup.proto
     base.proto
     bind_channel_storage_pool.proto
+    blob_checker.proto
     blob_depot.proto
     blob_depot_config.proto
     blobstorage.proto
@@ -141,6 +142,7 @@ SRCS(
     scheme_type_operation.proto
     schemeshard_config.proto
     serverless_proxy_config.proto
+    set_column_constraint.proto
     shared_cache.proto
     sqs.proto
     statestorage.proto

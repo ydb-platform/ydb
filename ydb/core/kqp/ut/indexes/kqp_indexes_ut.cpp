@@ -1031,7 +1031,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 23);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 31);
                 UNIT_ASSERT(            !stats.query_phases(0).table_access(0).has_deletes());
@@ -1050,6 +1050,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().bytes(), 23);
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
 
@@ -1131,9 +1132,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseStreamIndex) {
-        if (UseStreamIndex) {
-            return;
-        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -4864,10 +4862,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseStreamIndex) {
-        if (UseStreamIndex) {
-            // TODO
-            return;
-        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);

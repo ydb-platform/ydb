@@ -8,7 +8,6 @@
 namespace NYql {
 
 std::unordered_set<CURLcode> YqlRetriedCurlCodes();
-std::unordered_set<CURLcode> FqRetriedCurlCodes();
 
 struct THttpRetryPolicyOptions {
     TDuration MaxTime = TDuration::Zero(); // Zero means default maxTime
@@ -19,5 +18,7 @@ struct THttpRetryPolicyOptions {
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions&& options = {});
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries = std::numeric_limits<size_t>::max()); // Zero means default maxTime
+
+IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy();
 
 }

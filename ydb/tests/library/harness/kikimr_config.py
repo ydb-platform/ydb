@@ -208,6 +208,7 @@ class KikimrConfigGenerator(object):
             enable_nbs=False,
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
+            shutdown_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -684,6 +685,9 @@ class KikimrConfigGenerator(object):
 
         if system_tablet_backup_config:
             self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
+
+        if shutdown_config:
+            self.yaml_config["shutdown_config"] = shutdown_config
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section

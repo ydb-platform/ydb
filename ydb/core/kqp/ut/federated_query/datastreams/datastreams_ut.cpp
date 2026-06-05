@@ -1579,6 +1579,605 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             EStatus::UNSUPPORTED,
             "Error: AUTH_METHOD=IAM is disabled");
     }
+
+    Y_UNIT_TEST_F(StreamingConstraintsValidation, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+
+        constexpr char input1[] = "streamingConstraintsValidationFirstInputTopic";
+        constexpr char input2[] = "streamingConstraintsValidationSecondInputTopic";
+        CreateTopic(input1);
+        CreateTopic(input2);
+
+        constexpr char source[] = "sourceName";
+        CreatePqSource(source);
+
+        constexpr char table[] = "tableName";
+        ExecQuery(fmt::format(R"sql(
+            CREATE TABLE `{t}` (
+                PRIMARY KEY (id)
+            ) AS
+                SELECT 1 AS id, "name" AS Name;
+        )sql", "t"_a = table));
+
+        //// Reading ////
+
+        // Streaming limit precompute
+        ExecQuery(fmt::format(R"sql(
+                $p = SELECT LENGTH(Data) AS l FROM `{source}`.`{i1}` WITH (STREAMING = "TRUE");
+                SELECT * FROM `{source}`.`{i2}` WITH (STREAMING = "TRUE") LIMIT (SELECT l FROM $p);
+            )sql", "source"_a = source, "i1"_a = input1, "i2"_a = input2),
+            EStatus::GENERIC_ERROR,
+            "Unsupported callable for streaming processing: 'Condense'"
+        );
+
+        // Streaming filter precompute
+        ExecQuery(fmt::format(R"sql(
+                $p = SELECT Data FROM `{source}`.`{i1}` WITH (STREAMING = "TRUE");
+                SELECT * FROM `{source}`.`{i2}` WITH (STREAMING = "TRUE") WHERE Data = (SELECT Data FROM $p);
+            )sql", "source"_a = source, "i1"_a = input1, "i2"_a = input2),
+            EStatus::GENERIC_ERROR,
+            "Unsupported callable for streaming processing: 'Condense'"
+        );
+
+        //// Sorting ////
+
+        // Simple sort
+        ExecQuery(fmt::format(R"sql(
+                SELECT * FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") ORDER BY Data;
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Sorting of streaming input is not supported"
+        );
+
+        // Sort with limit
+        ExecQuery(fmt::format(R"sql(
+                SELECT * FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") ORDER BY LENGTH(Data) LIMIT 10;
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Sorting of streaming input is not supported"
+        );
+
+        //// Aggregations ////
+
+        // Simple agg
+        ExecQuery(fmt::format(R"sql(
+                SELECT Data, COUNT(*) FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") GROUP BY Data;
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Aggregation of streaming input without windows is not supported"
+        );
+
+        // Distinct agg
+        ExecQuery(fmt::format(R"sql(
+                SELECT DISTINCT Data FROM `{source}`.`{i}` WITH (STREAMING = "TRUE");
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Aggregation of streaming input without windows is not supported"
+        );
+
+        // Agg by sessions
+        ExecQuery(fmt::format(R"sql(
+                SELECT Data, COUNT(*) FROM `{source}`.`{i}` WITH (STREAMING = "TRUE")
+                GROUP BY Data, SessionWindow(CAST(Data AS Timestamp), Interval("PT1S"));
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Aggregation of streaming input without windows is not supported"
+        );
+
+        //// Window functions ////
+
+        // Simple window function
+        ExecQuery(fmt::format(R"sql(
+                SELECT COUNT(*) OVER w AS DataCnt, Data FROM `{source}`.`{i}` WITH (STREAMING = "TRUE")
+                WINDOW w AS (PARTITION BY Data ORDER BY LENGTH(Data));
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Window function over streaming input is not supported"
+        );
+
+        //// Process ////
+
+        // Process via non-transperent stream udf is not allowed by default
+        ExecQuery(fmt::format(R"sql(
+                $serialize_json = ($input)->{{
+                    $serialize = YQL::Udf(AsAtom("ClickHouseClient.SerializeFormat"), Void(), TupleType(TupleType(TypeOf($input))), AsAtom("json_each_row"));
+                    return Yql::Map($serialize($input), ($out)->(<|Data: $out|>));
+                }};
+                PROCESS `{source}`.`{i}` WITH (STREAMING = "TRUE")
+                USING $serialize_json(TableRows());
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Unsupported callable for streaming processing: 'Apply'"
+        );
+
+        //// Reduce ////
+
+        // Simple reduce
+        ExecQuery(fmt::format(R"sql(
+                $r = ($stream) -> (YQL::Map($stream, ($row) -> (<|Data: $row.Data || "X"|>)));
+                REDUCE `{source}`.`{i}` WITH (STREAMING = "TRUE") ON Data
+                USING ALL $r(TableRows());
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Reducing by keys of streaming input is not supported"
+        );
+
+        // Reduce with order
+        ExecQuery(fmt::format(R"sql(
+                $r = ($stream) -> (YQL::Map($stream, ($row) -> (<|Data: $row.Data || "X"|>)));
+                REDUCE `{source}`.`{i}` WITH (STREAMING = "TRUE")
+                PRESORT LENGTH(Data) ON Data
+                USING ALL $r(TableRows());
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Reducing by keys of streaming input is not supported"
+        );
+
+        //// Writing ////
+
+        // Upsert into test table returning id
+        ExecQuery(fmt::format(R"sql(
+                UPSERT INTO `{t}`
+                SELECT Data AS Name, LENGTH(Data) AS id FROM `{source}`.`{i}` WITH (STREAMING = "TRUE")
+                RETURNING id;
+            )sql", "source"_a = source, "i"_a = input1, "t"_a = table),
+            EStatus::GENERIC_ERROR,
+            "Streaming input is not supported for DqPrecompute"
+        );
+    }
+
+    Y_UNIT_TEST_F(StreamingJoinConstraintsValidation, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+
+        constexpr char input1[] = "streamingJoinConstraintsValidationFirstInputTopic";
+        constexpr char input2[] = "streamingJoinConstraintsValidationSecondInputTopic";
+        CreateTopic(input1);
+        CreateTopic(input2);
+
+        constexpr char source[] = "sourceName";
+        CreatePqSource(source);
+
+        constexpr char rowTable[] = "rowTableName";
+        ExecQuery(fmt::format(R"sql(
+            CREATE TABLE `{t}` (
+                PRIMARY KEY (id)
+            ) AS
+                SELECT 1 AS id, "name" AS Name;
+        )sql", "t"_a = rowTable));
+
+        constexpr char columnTable[] = "columnTableName";
+        ExecQuery(fmt::format(R"sql(
+            CREATE TABLE `{t}` (
+                PRIMARY KEY (id)
+            ) WITH (
+                STORE = COLUMN 
+            ) AS
+                SELECT 1 AS id, "name" AS Name;
+        )sql", "t"_a = columnTable));
+
+        // Only supported stream JOINs:
+        // finite [any] {Right, RightOnly, RightSemi, Inner} stream
+        // stream {Left, LeftOnly, LeftSemi, Inner} [any] finite
+        // stream Cross finite
+        // finite Cross stream
+
+        // Algo, lStream, rStream, Error
+        const std::vector<std::tuple<TString, std::optional<bool>, std::optional<bool>, TString>> joinTestCases = {
+            {"FULL OUTER", std::nullopt, std::nullopt, "Streaming inputs are not supported for FULL OUTER join"},
+            {"EXCLUSION", std::nullopt, std::nullopt, "Streaming inputs are not supported for EXCLUSION join"},
+            {"LEFT", std::nullopt, true, "Streaming right input is not supported for LEFT join"},
+            {"LEFT ONLY", std::nullopt, true, "Streaming right input is not supported for LEFT ONLY join"},
+            {"LEFT SEMI", std::nullopt, true, "Streaming right input is not supported for LEFT SEMI join"},
+            {"RIGHT", true, std::nullopt, "Streaming left input is not supported for RIGHT join"},
+            {"RIGHT ONLY", true, std::nullopt, "Streaming left input is not supported for RIGHT ONLY join"},
+            {"RIGHT SEMI", true, std::nullopt, "Streaming left input is not supported for RIGHT SEMI join"},
+            {"INNER", true, true, "Join of two streaming inputs is not supported"},
+            {"CROSS", true, true, "Join of two streaming inputs is not supported"},
+        };
+        const auto anyJoinError = "Using ANY JOIN is not supported for streaming inputs";
+
+        // Test that "map" and "grace" `PRAGMA ydb.HashJoinMode` options => same as without `PRAGMA ydb.HashJoinMode`
+        const std::vector<TString> hashModes = {"", "map", "grace"};
+
+        enum ENUM_TEST_OPTIONS {
+            TEST_OPT_LEFT_STREAM = 1,
+            TEST_OPT_LEFT_ANY = 1 << 1,
+            TEST_OPT_RIGHT_STREAM = 1 << 2,
+            TEST_OPT_RIGHT_ANY = 1 << 3,
+            TEST_OPT_SELF_JOIN = 1 << 4,
+            TEST_OPT_FINITE_TABLE_TYPE = 1 << 5,
+            TEST_OPT_MAX = 1 << 6,
+        };
+
+        for (auto [algo, lStreamCases, rStreamCases, error] : joinTestCases) {
+            // All hash modes, stream cases, ANY cases
+            for (size_t i = 0; i < hashModes.size() * TEST_OPT_MAX; ++i) {
+                const bool lStream = i & TEST_OPT_LEFT_STREAM;
+                const bool lAny = i & TEST_OPT_LEFT_ANY;
+                if (lStreamCases && *lStreamCases != lStream) {
+                    if (!lStream || !lAny) {
+                        // Supported join case
+                        continue;
+                    }
+                    error = anyJoinError;
+                }
+
+                const bool rStream = i & TEST_OPT_RIGHT_STREAM;
+                const bool rAny = i & TEST_OPT_RIGHT_ANY;
+                if (rStreamCases && *rStreamCases != rStream) {
+                    if (!rStream || !lAny) {
+                        // Supported join case
+                        continue;
+                    }
+                    error = anyJoinError;
+                }
+
+                if (!lStream && !rStream) {
+                    continue;
+                }
+
+                const bool isSelf = i & TEST_OPT_SELF_JOIN;
+                if (isSelf && lStream != rStream) {
+                    continue;
+                }
+
+                if (algo == "CROSS" && (lAny || rAny)) {
+                    // ANY with CROSS JOIN is not allowed
+                    continue;
+                }
+
+                const auto lStreamSql = fmt::format(
+                    R"sql(
+                        {left_any} `{source}`.`{i1}` WITH (
+                            STREAMING = "{left_settings}",
+                            FORMAT = "raw",
+                            SCHEMA = (
+                                DataLeft String NOT NULL
+                            )
+                        )
+                    )sql",
+                    "source"_a = source,
+                    "i1"_a = input1,
+                    "left_settings"_a = lStream ? "TRUE" : "FALSE",
+                    "left_any"_a = lAny ? "ANY" : ""
+                );
+                const auto rStreamSql = fmt::format(
+                    R"sql(
+                        {right_any} `{source}`.`{i2}` WITH (
+                            STREAMING = "{right_settings}",
+                            FORMAT = "raw",
+                            SCHEMA = (
+                                DataRight String NOT NULL
+                            )
+                        )
+                    )sql",
+                    "source"_a = source,
+                    "i2"_a = isSelf ? input1 : input2,
+                    "right_settings"_a = rStream ? "TRUE" : "FALSE",
+                    "right_any"_a = rAny ? "ANY" : ""
+                );
+
+                if (isSelf) {
+                    // TODO: remove it when topic self join is fixed in YQ-5353
+                    continue;
+                }
+
+                // Execute topic X topic join
+                const auto& hashMode = hashModes[i / TEST_OPT_MAX];
+                ExecQuery(fmt::format(
+                    R"sql(
+                        {hash_mode};
+                        SELECT * FROM {left_stream} AS tp
+                        {algo} JOIN {right_stream} AS tb
+                        {correlation};
+                    )sql",
+                    "left_stream"_a = lStreamSql,
+                    "right_stream"_a = rStreamSql,
+                    "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
+                    "algo"_a = algo,
+                    "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""
+                ), EStatus::GENERIC_ERROR, error);
+
+                const auto finiteTableName = (i & TEST_OPT_FINITE_TABLE_TYPE) ? rowTable : columnTable;
+
+                // Execute topic X table join
+                if (!rStream) {
+                    ExecQuery(fmt::format(
+                        R"sql(
+                            {hash_mode};
+                            SELECT * FROM {left_stream} AS tp
+                            {algo} JOIN {right_any} {right_table} AS tb
+                            {correlation};
+                        )sql",
+                        "left_stream"_a = lStreamSql,
+                        "right_table"_a = finiteTableName,
+                        "right_any"_a = rAny ? "ANY" : "",
+                        "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
+                        "algo"_a = algo,
+                        "correlation"_a = algo != "CROSS" ? "ON CAST(tp.DataLeft AS Int32) = tb.id" : ""
+                    ), EStatus::GENERIC_ERROR, error);
+                }
+
+                // Execute table X topic join
+                if (!lStream) {
+                    ExecQuery(fmt::format(
+                        R"sql(
+                            {hash_mode};
+                            SELECT * FROM {left_any} {left_table} AS tp
+                            {algo} JOIN {right_stream} AS tb
+                            {correlation};
+                        )sql",
+                        "left_table"_a = finiteTableName,
+                        "right_stream"_a = rStreamSql,
+                        "left_any"_a = lAny ? "ANY" : "",
+                        "hash_mode"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
+                        "algo"_a = algo,
+                        "correlation"_a = algo != "CROSS" ? "ON tp.id = CAST(tb.DataRight AS Int32)" : ""
+                    ), EStatus::GENERIC_ERROR, error);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryJoinTypes, TStreamingTestFixture) {
+        LogSettings.Freeze = true;
+        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        auto pqGateway = SetupMockPqGateway();
+
+        const std::vector<TString> tableData = {"X", "TT", "X"};
+        const std::vector<TString> lStreamData = {"X", "YY", "X"};
+        const std::vector<TString> rStreamData = {"X", "ZZ", "X"};
+
+        constexpr char input1[] = "streamingQueryJoinTypesFirstInputTopic";
+        constexpr char input2[] = "streamingQueryJoinTypesSecondInputTopic";
+        constexpr char outputTopic[] = "streamingQueryJoinTypesOutputTopic";
+        CreateTopic(outputTopic);
+        CreateTopic(input1);
+        CreateTopic(input2);
+
+        constexpr char source[] = "sourceName";
+        CreatePqSource(source);
+
+        constexpr char rowTable[] = "rowTableName";
+        ExecQuery(fmt::format(R"sql(
+            CREATE TABLE `{t}` (
+                PRIMARY KEY (id, val)
+            ) AS
+                SELECT * FROM AS_TABLE([
+                    <|id: "X", val: 1|>,
+                    <|id: "TT", val: 2|>,
+                    <|id: "X", val: 3|>
+                ]);
+        )sql", "t"_a = rowTable));
+
+        constexpr char columnTable[] = "columnTableName";
+        ExecQuery(fmt::format(R"sql(
+            CREATE TABLE `{t}` (
+                PRIMARY KEY (id, val)
+            ) WITH (
+                STORE = COLUMN 
+            ) AS
+                SELECT * FROM AS_TABLE([
+                    <|id: "X", val: 1|>,
+                    <|id: "TT", val: 2|>,
+                    <|id: "X", val: 3|>
+                ]);
+        )sql", "t"_a = columnTable));
+
+        const auto testJoinQuery = [&](const TString& text, const TString& hashMode, const TString& algo, bool lAny, bool rAny, bool lStream, bool rStream, bool self) {
+            const auto fullText = fmt::format(R"sql(
+                    {opt_pragma};
+                    PRAGMA ydb.UseGraceJoinCoreForMap = "true";
+
+                    $data = {query_text};
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT ToBytes(Unwrap(Yson2::SerializeJson(Yson::From(AsStruct(
+                        TryMember(TableRow(), "DataLeft", TryMember(TableRow(), "id", NULL)) ?? "null" AS Left,
+                        TryMember(TableRow(), "DataRight", TryMember(TableRow(), "id", NULL)) ?? "null" AS Right
+                    ))))) FROM $data;
+                )sql",
+                "opt_pragma"_a = hashMode ? TStringBuilder() << "PRAGMA ydb.HashJoinMode = \"" << hashMode << "\"" : TStringBuilder(),
+                "query_text"_a = text,
+                "pq_source"_a = source,
+                "output_topic"_a = outputTopic
+            );
+            Cerr << "Running query:\n" << fullText << Endl;
+
+            auto resultFuture = GetQueryClient()->ExecuteQuery(fullText, TTxControl::NoTx());
+            Sleep(TDuration::MilliSeconds(10));
+
+            if (resultFuture.HasValue() || resultFuture.HasException()) {
+                const auto result = resultFuture.ExtractValueSync();
+                UNIT_FAIL("Query unexpectedly finished with status: " << result.GetStatus() << ", and issues:\n" << result.GetIssues().ToOneLineString() << "\nQuery text:\n" << text);
+            }
+
+            const auto writeData = [&](IMockPqReadSession::TPtr session, const std::vector<TString>& data) {
+                session->AddStartSessionEvent(data.size());
+                for (ui64 i = 0; i < data.size(); ++i) {
+                    session->AddDataReceivedEvent(i, data[i], TInstant::Now() + TDuration::Seconds(1));
+                }
+            };
+            if (lStream) {
+                writeData(pqGateway->WaitReadSession(input1), lStreamData);
+            }
+            if (!self && rStream) {
+                writeData(pqGateway->WaitReadSession(input2), rStreamData);
+            }
+
+            resultFuture.Wait(TDuration::Seconds(10));
+            const auto result = resultFuture.ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString() << "\nQuery text:\n" << text);
+
+            const auto prepareData = [](std::vector<TString> data, bool any) {
+                data.push_back("null");
+                std::sort(data.begin(), data.end());
+                if (any) {
+                    data.erase(std::unique(data.begin(), data.end()), data.end());
+                }
+                return data;
+            };
+            const auto lData = prepareData(lStream ? lStreamData : tableData, lAny);
+            const auto rData = prepareData(rStream ? (self ? lStreamData : rStreamData) : tableData, rAny);
+
+            std::vector<TString> messages;
+            for (const auto& l : lData) {
+                for (const auto& r : rData) {
+                    std::optional<std::pair<TString, TString>> res;
+                    if (algo == "LEFT" && l != "null" && (l == r || (r == "null" && !std::binary_search(rData.begin(), rData.end(), l)))) {
+                        res = {l, l == r ? r : "null"};
+                    } else if (algo == "LEFT ONLY" && r == "null" && !std::binary_search(rData.begin(), rData.end(), l)) {
+                        res = {l, "null"};
+                    } else if (algo == "LEFT SEMI" && r == "null" && l != "null" && std::binary_search(rData.begin(), rData.end(), l)) {
+                        res = {l, "null"};
+                    } else if (algo == "RIGHT" && r != "null" && (l == r || (l == "null" && !std::binary_search(lData.begin(), lData.end(), r)))) {
+                        res = {l == r ? l : "null", r};
+                    } else if (algo == "RIGHT ONLY" && l == "null" && !std::binary_search(lData.begin(), lData.end(), r)) {
+                        res = {"null", r};
+                    } else if (algo == "RIGHT SEMI" && l == "null" && r != "null" && std::binary_search(lData.begin(), lData.end(), r)) {
+                        res = {"null", r};
+                    } else if (algo == "INNER" && l != "null" && l == r) {
+                        res = {l, r};
+                    } else if (algo == "CROSS" && l != "null" && r != "null") {
+                        res = {l, r};
+                    }
+
+                    if (res) {
+                        messages.emplace_back(fmt::format(
+                            R"({{"Left":"{l}","Right":"{r}"}})",
+                            "l"_a = res->first,
+                            "r"_a = res->second
+                        ));
+                    }
+                }
+            }
+
+            pqGateway->WaitWriteSession(outputTopic)->ExpectMessages(messages, /* sort */ true);
+        };
+
+        // Only tested stream JOINs:
+        // finite [any] {Right, RightOnly, RightSemi, Inner} stream
+        // stream {Left, LeftOnly, LeftSemi, Inner} [any] finite
+        // stream Cross finite
+        // finite Cross stream
+
+        const std::vector<TString> joinAlgos = {"LEFT", "LEFT ONLY", "LEFT SEMI", "RIGHT", "RIGHT ONLY", "RIGHT SEMI", "INNER", "CROSS"};
+        const std::vector<TString> hashModes = {"", "map", "grace"};
+
+        enum ENUM_TEST_OPTIONS {
+            TEST_OPT_STREAM_SIDE = 1,
+            TEST_OPT_FINITE_ANY = 1 << 1,
+            TEST_OPT_SELF_JOIN = 1 << 2,
+            TEST_OPT_FINITE_TABLE_TYPE = 1 << 3,
+            TEST_OPT_MAX = 1 << 4,
+        };
+
+        for (const auto& algo : joinAlgos) {
+            for (size_t i = 0; i < hashModes.size() * TEST_OPT_MAX; ++i) {
+                const bool any = i & TEST_OPT_FINITE_ANY;
+                if (algo == "CROSS" && any) {
+                    // ANY with CROSS JOIN is not allowed
+                    continue;
+                }
+
+                const bool lStream = i & TEST_OPT_STREAM_SIDE;
+                if ((algo.StartsWith("LEFT") && !lStream) || (algo.StartsWith("RIGHT") && lStream)) {
+                    // Unsupported join type
+                    continue;
+                }
+
+                const bool isSelf = i & TEST_OPT_SELF_JOIN;
+                const auto lStreamSql = fmt::format(
+                    R"sql(
+                        (SELECT * FROM `{source}`.`{i1}` WITH (
+                            STREAMING = "{left_settings}",
+                            FORMAT = "raw",
+                            SCHEMA = (
+                                DataLeft String NOT NULL
+                            )
+                        ) LIMIT {limit})
+                    )sql",
+                    "source"_a = source,
+                    "i1"_a = input1,
+                    "left_settings"_a = lStream ? "TRUE" : "FALSE",
+                    "limit"_a = lStreamData.size()
+                );
+                const auto rStreamSql = fmt::format(
+                    R"sql(
+                        (SELECT * FROM `{source}`.`{i2}` WITH (
+                            STREAMING = "{right_settings}",
+                            FORMAT = "raw",
+                            SCHEMA = (
+                                DataRight String NOT NULL
+                            )
+                        ) LIMIT {limit})
+                    )sql",
+                    "source"_a = source,
+                    "i2"_a = isSelf ? input1 : input2,
+                    "right_settings"_a = !lStream ? "TRUE" : "FALSE",
+                    "limit"_a = isSelf ? lStreamData.size() : rStreamData.size()
+                );
+
+                if (isSelf) {
+                    // TODO: remove it when topic self join is fixed in YQ-5353
+                    continue;
+                }
+
+                // Execute topic X topic join
+                const auto& hashMode = hashModes[i / TEST_OPT_MAX];
+                testJoinQuery(fmt::format(
+                    R"sql(
+                        SELECT * FROM {left_any} {left_stream} AS tp
+                        {algo} JOIN {right_any} {right_stream} AS tb
+                        {correlation};
+                    )sql",
+                    "left_stream"_a = lStreamSql,
+                    "right_stream"_a = rStreamSql,
+                    "left_any"_a = (!lStream && any) ? "ANY" : "",
+                    "right_any"_a = (lStream && any) ? "ANY" : "",
+                    "algo"_a = algo,
+                    "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.DataRight" : ""
+                ), hashMode, algo, (!lStream && any), (lStream && any), /* lStream */ true, /* rStream */ true, isSelf);
+
+                const auto finiteTableSql = fmt::format(
+                    R"sql((SELECT id FROM {table}))sql",
+                    "table"_a = (i & TEST_OPT_FINITE_TABLE_TYPE) ? rowTable : columnTable
+                );
+
+                // Execute topic X table join
+                if (lStream) {
+                    testJoinQuery(fmt::format(
+                        R"sql(
+                            SELECT * FROM {left_stream} AS tp
+                            {algo} JOIN {right_any} {right_table} AS tb
+                            {correlation};
+                        )sql",
+                        "left_stream"_a = lStreamSql,
+                        "right_table"_a = finiteTableSql,
+                        "right_any"_a = any ? "ANY" : "",
+                        "algo"_a = algo,
+                        "correlation"_a = algo != "CROSS" ? "ON tp.DataLeft = tb.id" : ""
+                    ), hashMode, algo, /* lAny*/ false, any, /* lStream */ true, /* rStream */ false, isSelf);
+                }
+
+                // Execute table X topic join
+                if (!lStream) {
+                    testJoinQuery(fmt::format(
+                        R"sql(
+                            SELECT * FROM {left_any} {left_table} AS tp
+                            {algo} JOIN {right_stream} AS tb
+                            {correlation};
+                        )sql",
+                        "left_table"_a = finiteTableSql,
+                        "right_stream"_a = rStreamSql,
+                        "left_any"_a = any ? "ANY" : "",
+                        "algo"_a = algo,
+                        "correlation"_a = algo != "CROSS" ? "ON tp.id = tb.DataRight" : ""
+                    ), hashMode, algo, any, /* rAny*/ false, /* lStream */ false, /* rStream */ true, isSelf);
+                }
+            }
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

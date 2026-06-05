@@ -135,7 +135,9 @@ TReadSource TInflightInfo::ReadMask() const
     }
 }
 
-THostIndex TInflightInfo::RequestFlush(THostIndex destination)
+THostIndex TInflightInfo::RequestFlush(
+    THostIndex destination,
+    THostMask disabledHosts)
 {
     Y_ABORT_UNLESS(
         State == EState::PBufferWritten || State == EState::PBufferFlushing);
@@ -152,6 +154,14 @@ THostIndex TInflightInfo::RequestFlush(THostIndex destination)
         return destination;
     }
 
+    // Prefer enabled hosts.
+    for (auto source: WriteConfirmed.Exclude(disabledHosts)) {
+        State = EState::PBufferFlushing;
+        FlushRequested.Set(destination);
+        return source;
+    }
+
+    // TODO. All hosts are disabled. Need to figure out what to do in this case.
     for (auto source: WriteConfirmed) {
         State = EState::PBufferFlushing;
         FlushRequested.Set(destination);

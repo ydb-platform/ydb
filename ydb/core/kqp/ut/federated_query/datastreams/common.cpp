@@ -251,6 +251,11 @@ void TStreamingTestFixture::CreateTopic(const std::string& topicName, std::optio
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
 
+void TStreamingTestFixture::DropTopic(const std::string& topicName, bool local) {
+    const auto result = GetTopicClient(local)->DropTopic(topicName).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+
 void TStreamingTestFixture::WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition, bool local) {
     auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
         .Path(topicName)
@@ -311,11 +316,11 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
             }
         }
 
-        auto firsts_view = received | std::views::transform([](const auto& p) { return p.first; });
+        auto firstsView = received | std::views::transform([](const auto& p) { return p.first; });
         UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
             << "expected #" << expectedMessages.size() << " messages ("
             << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ",  std::vector<std::string>(firsts_view.begin(), firsts_view.end())) << ")");
+            << JoinSeq(", ",  std::vector<std::string>(firstsView.begin(), firstsView.end())) << ")");
 
         error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
         return false;
@@ -326,14 +331,16 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
             Sort(expectedMessages);
             Sort(received);
         }
-        
+
         UNIT_ASSERT(received.size() == expectedMessages.size());
         for (size_t i = 0; i < received.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedMessages[i]);
         }
     }
+
     return received;
 }
+
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;
@@ -387,7 +394,7 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     }
 
     auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString() << "\nQuery text:\n" << query);
 
     if (astValidator) {
         const auto& stats = result.GetStats();
@@ -398,7 +405,7 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     }
 
     if (!expectedError.empty()) {
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, "Query text:\n" << query);
     }
 
     return result.GetResultSets();
@@ -494,7 +501,7 @@ void TStreamingTestFixture::CreateSolomonSource(const std::string& solomonSource
     ExecQuery(fmt::format(
         R"sql(
             CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
+                SOURCE_TYPE = "Monium.Metrics",
                 LOCATION = "localhost:{solomon_port}",
                 AUTH_METHOD = "NONE",
                 USE_TLS = "false"

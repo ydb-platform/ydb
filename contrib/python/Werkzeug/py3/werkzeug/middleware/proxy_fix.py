@@ -21,6 +21,8 @@ setting each header so the middleware knows what to trust.
 :copyright: 2007 Pallets
 :license: BSD-3-Clause
 """
+from __future__ import annotations
+
 import typing as t
 
 from ..http import parse_list_header
@@ -64,23 +66,16 @@ class ProxyFix:
         app = ProxyFix(app, x_for=1, x_host=1)
 
     .. versionchanged:: 1.0
-        Deprecated code has been removed:
-
-        *   The ``num_proxies`` argument and attribute.
-        *   The ``get_remote_addr`` method.
-        *   The environ keys ``orig_remote_addr``,
-            ``orig_wsgi_url_scheme``, and ``orig_http_host``.
+        The ``num_proxies`` argument and attribute; the ``get_remote_addr`` method; and
+        the environ keys ``orig_remote_addr``, ``orig_wsgi_url_scheme``, and
+        ``orig_http_host`` were removed.
 
     .. versionchanged:: 0.15
-        All headers support multiple values. The ``num_proxies``
-        argument is deprecated. Each header is configured with a
-        separate number of trusted proxies.
+        All headers support multiple values. Each header is configured with a separate
+        number of trusted proxies.
 
     .. versionchanged:: 0.15
-        Original WSGI environ values are stored in the
-        ``werkzeug.proxy_fix.orig`` dict. ``orig_remote_addr``,
-        ``orig_wsgi_url_scheme``, and ``orig_http_host`` are deprecated
-        and will be removed in 1.0.
+        Original WSGI environ values are stored in the ``werkzeug.proxy_fix.orig`` dict.
 
     .. versionchanged:: 0.15
         Support ``X-Forwarded-Port`` and ``X-Forwarded-Prefix``.
@@ -92,7 +87,7 @@ class ProxyFix:
 
     def __init__(
         self,
-        app: "WSGIApplication",
+        app: WSGIApplication,
         x_for: int = 1,
         x_proto: int = 1,
         x_host: int = 0,
@@ -106,7 +101,7 @@ class ProxyFix:
         self.x_port = x_port
         self.x_prefix = x_prefix
 
-    def _get_real_value(self, trusted: int, value: t.Optional[str]) -> t.Optional[str]:
+    def _get_real_value(self, trusted: int, value: str | None) -> str | None:
         """Get the real value from a list header based on the configured
         number of trusted proxies.
 
@@ -128,7 +123,7 @@ class ProxyFix:
         return None
 
     def __call__(
-        self, environ: "WSGIEnvironment", start_response: "StartResponse"
+        self, environ: WSGIEnvironment, start_response: StartResponse
     ) -> t.Iterable[bytes]:
         """Modify the WSGI environ based on the various ``Forwarded``
         headers before calling the wrapped application. Store the

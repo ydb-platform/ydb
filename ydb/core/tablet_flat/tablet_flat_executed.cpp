@@ -255,7 +255,8 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app" || ((TabletType() == TTabletTypes::DataShard || TabletType() == TTabletTypes::PersQueue)
+    if (path == "/app" || ((TabletType() == TTabletTypes::DataShard
+            || (TabletType() == TTabletTypes::PersQueue && AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()))
             && IsTabletDevUiSecurePath(path))) {
         OnRenderAppHtmlPage(ev, ctx);
         return;

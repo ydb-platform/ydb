@@ -703,6 +703,7 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
     try {
         TConvertToAstSettings settings;
+        settings.AllowFreeArgs = true;
         settings.NoInlineFunc = [] (const TExprNode& exprNode) {
             TExprBase node(&exprNode);
 

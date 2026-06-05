@@ -6,8 +6,6 @@
 #include <ydb/library/actors/struct_log/native_types_support.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/overloaded.h>

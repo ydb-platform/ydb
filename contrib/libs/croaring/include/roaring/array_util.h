@@ -1,3 +1,15 @@
+/*
+ * array_util.h
+ *
+ * This header provides low-level utility routines for sorted arrays of
+ * 16-bit integers, which are used heavily by CRoaring's array-based
+ * containers and set-operation kernels. It includes search helpers, counting
+ * helpers, and array intersection/difference primitives.
+ *
+ * Some of the routines also have SIMD-accelerated implementations on supported
+ * platforms, allowing efficient operations on sorted integer arrays that form
+ * the basis of sparse container processing.
+ */
 #ifndef CROARING_ARRAY_UTIL_H
 #define CROARING_ARRAY_UTIL_H
 
@@ -23,29 +35,95 @@ namespace internal {
 #endif
 
 /*
- *  Good old binary search.
+ *  Sorted-array search.
  *  Assumes that array is sorted, has logarithmic complexity.
  *  if the result is x, then:
  *     if ( x>0 )  you have array[x] = ikey
  *     if ( x<0 ) then inserting ikey at position -x-1 in array (insuring that
  * array[-x-1]=ikey) keys the array sorted.
+ *
+ * Adapted from array_container_contains: a SIMD-quad block-narrowing
+ * search at gap=16 (Daniel Lemire,
+ * https://lemire.me/blog/2026/04/27/you-can-beat-the-binary-search/)
+ * followed by a scalar in-block scan that recovers the exact insertion
+ * point required by the binarySearch contract.
  */
 inline int32_t binarySearch(const uint16_t *array, int32_t lenarray,
                             uint16_t ikey) {
-    int32_t low = 0;
-    int32_t high = lenarray - 1;
-    while (low <= high) {
-        int32_t middleIndex = (low + high) >> 1;
-        uint16_t middleValue = array[middleIndex];
-        if (middleValue < ikey) {
-            low = middleIndex + 1;
-        } else if (middleValue > ikey) {
-            high = middleIndex - 1;
-        } else {
-            return middleIndex;
+    const int32_t gap = 16;
+    if (lenarray < gap) {
+        for (int32_t j = 0; j < lenarray; j++) {
+            if (array[j] >= ikey) {
+                return (array[j] == ikey) ? j : -(j + 1);
+            }
+        }
+        return -(lenarray + 1);
+    }
+    const int32_t num_blocks = lenarray / gap;
+    int32_t base = 0;
+    int32_t n = num_blocks;
+    while (n > 3) {
+        int32_t quarter = n >> 2;
+
+        int32_t k1 = array[(base + quarter + 1) * gap - 1];
+        int32_t k2 = array[(base + 2 * quarter + 1) * gap - 1];
+        int32_t k3 = array[(base + 3 * quarter + 1) * gap - 1];
+
+        int32_t c1 = (k1 < ikey);
+        int32_t c2 = (k2 < ikey);
+        int32_t c3 = (k3 < ikey);
+
+        base += (c1 + c2 + c3) * quarter;
+        n -= 3 * quarter;
+    }
+    while (n > 1) {
+        int32_t half = n >> 1;
+        base = (array[(base + half + 1) * gap - 1] < ikey) ? base + half : base;
+        n -= half;
+    }
+    int32_t lo = (array[(base + 1) * gap - 1] < ikey) ? base + 1 : base;
+
+    if (lo < num_blocks) {
+        const int32_t start = lo * gap;
+#if defined(CROARING_IS_X64)
+        // SSE2: subs_epu16 yields zero where lane >= ikey. movemask of an
+        // epi16 compare gives 2 bits per lane; ctz>>1 = lane index. Scan
+        // the first 8 lanes first and exit early when they contain the
+        // answer; otherwise the block-narrowing invariant guarantees the
+        // second-half mask is non-zero.
+        __m128i needle = _mm_set1_epi16((short)ikey);
+        __m128i zero = _mm_setzero_si128();
+        __m128i v0 = _mm_loadu_si128((const __m128i *)(array + start));
+        __m128i ge0 = _mm_cmpeq_epi16(_mm_subs_epu16(needle, v0), zero);
+        unsigned m0 = (unsigned)_mm_movemask_epi8(ge0);
+        if (m0 != 0) {
+            int32_t j = start + (int32_t)(roaring_trailing_zeroes(m0) >> 1);
+            return (array[j] == ikey) ? j : -(j + 1);
+        }
+        __m128i v1 = _mm_loadu_si128((const __m128i *)(array + start + 8));
+        __m128i ge1 = _mm_cmpeq_epi16(_mm_subs_epu16(needle, v1), zero);
+        unsigned m1 = (unsigned)_mm_movemask_epi8(ge1);
+        int32_t j = start + 8 + (int32_t)(roaring_trailing_zeroes(m1) >> 1);
+        return (array[j] == ikey) ? j : -(j + 1);
+#else
+        const int32_t end = start + gap;
+        for (int32_t j = start; j < end; j++) {
+            if (array[j] >= ikey) {
+                return (array[j] == ikey) ? j : -(j + 1);
+            }
+        }
+        // Unreachable: the narrowing guarantees the last element of the
+        // selected block is >= ikey.
+        return -(end + 1);
+#endif
+    }
+
+    for (int32_t j = num_blocks * gap; j < lenarray; j++) {
+        if (array[j] >= ikey) {
+            return (array[j] == ikey) ? j : -(j + 1);
         }
     }
-    return -(low + 1);
+    return -(lenarray + 1);
 }
 
 /**

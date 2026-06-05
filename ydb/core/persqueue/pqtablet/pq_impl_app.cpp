@@ -35,6 +35,55 @@ namespace {
     bool ShouldShowSendReadSetAction(const TDistributedTransaction& tx) {
         return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
     }
+
+    bool IsKnownPublicPersQueueDevUiParam(TStringBuf name) {
+        return name == "TabletID"
+            || name == "kv"
+            || name == "consumer"
+            || name == "partitionId"
+            || name == "TxId";
+    }
+
+    bool IsPublicPersQueueDevUiRequest(const TCgiParameters& cgi) {
+        if (cgi.Has("SendReadSet") || cgi.Has("action")) {
+            return false;
+        }
+        for (const auto& [name, _] : cgi) {
+            if (!IsKnownPublicPersQueueDevUiParam(name)) {
+                return false;
+            }
+        }
+        if (cgi.Has("kv")) {
+            return true;
+        }
+        if (cgi.Has("consumer") && cgi.Has("partitionId")) {
+            return true;
+        }
+        if (cgi.Has("TxId")) {
+            return true;
+        }
+        return !cgi.Has("consumer") && !cgi.Has("partitionId");
+    }
+
+    bool CheckPersQueueDevUiAccess(
+        bool securePathMode,
+        TStringBuf pathInfo,
+        const TString& userToken,
+        const TCgiParameters& cgi,
+        const TActorId& sender)
+    {
+        if (!securePathMode) {
+            return true;
+        }
+        if (IsPublicPersQueueDevUiRequest(cgi)) {
+            return true;
+        }
+        if (!IsTabletDevUiSecurePath(pathInfo) || !IsAdministrator(AppData(), userToken)) {
+            TActivationContext::Send(new IEventHandle(sender, TActorId(), new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN)));
+            return false;
+        }
+        return true;
+    }
 }
 
 
@@ -304,12 +353,9 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     }
 
     const auto& cgi = ev->Get()->Cgi();
-    if (cgi.Has("action")) {
-        if (!IsTabletDevUiSecurePath(ev->Get()->PathInfo())
-        || !IsAdministrator(AppData(ctx), ev->Get()->GetUserToken())) {
-            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-            return true;
-        }
+    const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
+    if (!CheckPersQueueDevUiAccess(securePathMode, ev->Get()->PathInfo(), ev->Get()->GetUserToken(), cgi, ev->Sender)) {
+        return true;
     }
     if (cgi.Has("SendReadSet")) {
         return OnSendReadSetToYourself(ev, ctx);

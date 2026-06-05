@@ -42,12 +42,7 @@ def _pers_queue_tablet_id_from_viewer(cluster, database, topic_path):
     raise RuntimeError('PersQueue tablet id not found in topic description')
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_with_enforce_user_token_and_pers_queue_topic(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-    )
+def _start_pers_queue_cluster(configurator):
     cluster = KiKiMR(configurator)
     cluster.start()
     database = '/Root/pq_mon_security'
@@ -78,7 +73,28 @@ def ydb_cluster_with_enforce_user_token_and_pers_queue_topic(certificates):
     cluster.pers_queue_database = database
     cluster.pers_queue_topic_path = topic_path
     cluster.pers_queue_tablet_id = pers_queue_tablet_id
+    return cluster
 
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_pers_queue_topic(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    cluster = _start_pers_queue_cluster(configurator)
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        enable_tablet_dev_ui_secure_path=True,
+    )
+    cluster = _start_pers_queue_cluster(configurator)
     yield cluster
     cluster.stop()
 

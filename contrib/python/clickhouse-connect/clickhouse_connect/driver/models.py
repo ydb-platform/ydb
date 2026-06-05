@@ -7,6 +7,7 @@ class ColumnDef(NamedTuple):
     """
     ClickHouse column definition from DESCRIBE TABLE command
     """
+
     name: str
     type: str
     default_type: str
@@ -17,7 +18,7 @@ class ColumnDef(NamedTuple):
 
     @property
     def type_name(self):
-        return self.type.replace('\n', '').strip()
+        return self.type.replace("\n", "").strip()
 
     @property
     def ch_type(self):
@@ -28,6 +29,7 @@ class SettingDef(NamedTuple):
     """
     ClickHouse setting definition from system.settings table
     """
+
     name: str
     value: str
     readonly: int
@@ -37,5 +39,6 @@ class SettingStatus(NamedTuple):
     """
     Get the setting "status" from a ClickHouse server setting
     """
+
     is_set: bool
     is_writable: bool

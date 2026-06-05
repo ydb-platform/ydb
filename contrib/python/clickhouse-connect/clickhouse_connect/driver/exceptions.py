@@ -9,8 +9,7 @@ class ClickHouseError(Exception):
     """Exception related to operation with ClickHouse."""
 
 
-# pylint: disable=redefined-builtin
-class Warning(Warning, ClickHouseError):
+class Warning(Warning, ClickHouseError):  # noqa: N818
     """Exception raised for important warnings like data truncations
     while inserting, etc."""
 
@@ -73,12 +72,12 @@ class StreamClosedError(ProgrammingError):
     """Exception raised when a stream operation is executed on a closed stream."""
 
     def __init__(self):
-        super().__init__('Executing a streaming operation on a closed stream')
+        super().__init__("Executing a streaming operation on a closed stream")
 
 
-class StreamCompleteException(Exception):
-    """ Internal exception used to indicate the end of a ClickHouse query result stream."""
+class StreamCompleteException(Exception):  # noqa: N818
+    """Internal exception used to indicate the end of a ClickHouse query result stream."""
 
 
 class StreamFailureError(Exception):
-    """ Stream failed unexpectedly """
+    """Stream failed unexpectedly"""

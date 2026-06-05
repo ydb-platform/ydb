@@ -1,6 +1,5 @@
 #include "pq_impl.h"
 
-#include <ydb/core/base/auth.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/persqueue/common/common_app.h>
 #include <ydb/library/actors/core/log.h>
@@ -11,15 +10,11 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-TString BuildSendReadSetFormAction(TStringBuf pathInfo, ui64 tabletId) {
-    if (IsTabletDevUiSecurePath(pathInfo)) {
+TString BuildSendReadSetFormAction(TStringBuf pathInfo, ui64 tabletId, bool enableSecurePath) {
+    if (!enableSecurePath || IsTabletDevUiSecurePath(pathInfo)) {
         return "?";
     }
     return TStringBuilder() << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << tabletId;
-}
-
-bool IsSendReadSetDevUiAllowed(const TAppData* appData, TStringBuf pathInfo, const TString& userToken) {
-    return IsTabletDevUiSecurePath(pathInfo) && IsAdministrator(appData, userToken);
 }
 
 } // namespace
@@ -61,7 +56,10 @@ TString TPersQueue::RenderSendReadSetHtmlForms(
     const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
     TStringBuf pathInfo) const
 {
-    const TString formAction = BuildSendReadSetFormAction(pathInfo, TabletID());
+    const TString formAction = BuildSendReadSetFormAction(
+        pathInfo,
+        TabletID(),
+        AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath());
     struct TOption {
         const char* Decision;
         const char* Text;
@@ -122,11 +120,6 @@ static TVector<ui64> GetSenderTablets(const TCgiParameters& cgi, const TDistribu
 
 bool TPersQueue::OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx)
 {
-    if (!IsSendReadSetDevUiAllowed(AppData(ctx), ev->Get()->PathInfo(), ev->Get()->GetUserToken())) {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-        return true;
-    }
-
     const TCgiParameters& cgi = ev->Get()->Cgi();
     const auto step = GetParameter<ui64>(cgi, "step");
     const auto txId = GetParameter<ui64>(cgi, "txId");

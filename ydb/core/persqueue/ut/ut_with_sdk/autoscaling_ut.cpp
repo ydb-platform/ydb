@@ -953,8 +953,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit) {
         TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
         TTopicClient client = setup.MakeClient();
@@ -1271,7 +1269,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(num >= NumKeys / 2 - NumKeys / 10 && num <= NumKeys / 2 + NumKeys / 10);
     }
 
->>>>>>> 78242e20f03 (LOGBROKER-10375 Add split by mps (#38551))
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {
         TTopicSdkTestSetup setup = CreateSetup();
         TTopicClient client = setup.MakeClient();

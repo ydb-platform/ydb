@@ -113,8 +113,8 @@ namespace {
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
                 records->Records.resize(1);
-                records->Records[0].Key = KeyToProduce;
-                records->Records[0].Value = ValueToProduce;
+                records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
+                records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
 
                 partitionData.Records = records;
                 topicData.PartitionData.push_back(partitionData);

@@ -43,7 +43,6 @@
 
       "go.opentelemetry.io/otel/attribute"
       "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-      "go.opentelemetry.io/otel/log/global"
       sdklog "go.opentelemetry.io/otel/sdk/log"
       "go.opentelemetry.io/otel/sdk/resource"
 
@@ -70,15 +69,12 @@
       )
       defer lp.Shutdown(ctx)
 
-      // Делаем провайдер глобальным, чтобы адаптер мог получить из него логгер.
-      global.SetLoggerProvider(lp)
-
       // 2. Открываем драйвер YDB с адаптером ydb-go-sdk-otel.
-      // WithLogger пересылает события логов SDK в OTel log records;
-      // передача nil использует global.Logger("ydb-go-sdk").
+      // WithLogger пересылает события логов SDK в OTel log records.
+      logger := lp.Logger("ydb-go-sdk")
       db, err := ydb.Open(ctx,
           os.Getenv("YDB_CONNECTION_STRING"),
-          ydbOtel.WithLogger(nil, ydbOtel.WithDetailer(trace.DetailsAll)),
+          ydbOtel.WithLogger(logger, ydbOtel.WithDetailer(trace.DetailsAll)),
       )
       if err != nil {
           panic(err)

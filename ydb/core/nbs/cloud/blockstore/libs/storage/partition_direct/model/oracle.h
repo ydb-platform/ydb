@@ -21,6 +21,7 @@ enum class EHostHealth
 {
     Online,
     Sufferer,
+    TemporaryOffline,
     Offline,
 };
 
@@ -29,6 +30,22 @@ class IOracle
 public:
     virtual ~IOracle() = default;
 
+    virtual void OnRequestStarted(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) = 0;
+    virtual void OnRequestSucceeded(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now,
+        TDuration executionTime) = 0;
+    virtual void OnRequestFailed(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) = 0;
+
+    // Picks the best host (by lowest inflight count) out of the provided set
+    // of hosts. Ties are broken uniformly at random.
     [[nodiscard]] virtual THostIndex SelectBestPBufferHost(
         std::span<const THostIndex> hostIndexes,
         EOperation operation) const = 0;
@@ -37,6 +54,8 @@ public:
     [[nodiscard]] virtual TDuration GetWriteRequestTimeout() const = 0;
     [[nodiscard]] virtual TDuration GetPBufferReplyTimeout() const = 0;
     [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
+
+    [[nodiscard]] virtual TString Dump() const = 0;
 };
 
 class TOracle: public IOracle
@@ -44,14 +63,24 @@ class TOracle: public IOracle
 public:
     TOracle(
         TStorageConfigPtr storageConfig,
-        IHostStateController* hostStateController,
-        const TVector<THostStat>& stats,
-        const TVector<THostState>& states);
+        IHostStateController* hostStateController);
 
     void Think(TInstant now);
 
-    // Picks the best host (by lowest inflight count) out of the provided set
-    // of hosts. Ties are broken uniformly at random.
+    void OnRequestStarted(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+    void OnRequestSucceeded(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now,
+        TDuration executionTime) override;
+    void OnRequestFailed(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         std::span<const THostIndex> hostIndexes,
         EOperation operation) const override;
@@ -61,18 +90,20 @@ public:
     [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
 
+    [[nodiscard]] TString Dump() const override;
+
 private:
     const TStorageConfigPtr StorageConfig;
 
     IHostStateController* const HostStateController;
-    const TVector<THostStat>& Stats;
-    const TVector<THostState>& States;
     const TDuration DefaultWriteHedgingDelay;
     const TDuration DefaultWriteRequestTimeout;
     const TDuration DefaultPBufferReplyTimeout;
     const EWriteMode DefaultWriteMode;
 
-    TVector<EHostHealth> Statuses;
+    TVector<THostStat> HostStatistics;
+    TVector<THostState> HostStates;
+    TVector<EHostHealth> HostsHealths;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

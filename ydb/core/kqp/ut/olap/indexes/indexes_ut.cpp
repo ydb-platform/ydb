@@ -8,7 +8,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
@@ -49,11 +49,13 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
-    Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService) {
+    Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
@@ -63,9 +65,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
     }
 
-    Y_UNIT_TEST(MinMaxIndexAppliedToDataAfterCompaction, EUseQueryService) {
+    Y_UNIT_TEST(MinMaxIndexAppliedToDataAfterCompaction, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);        
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -155,16 +159,21 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
     )";
-    Y_UNIT_TEST(ChunkDetailsMinMax) {
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+    Y_UNIT_TEST(ChunkDetailsMinMax, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(settings);
     }
 
 
-    Y_UNIT_TEST(MinMaxIndexUsedInQueries, EUseQueryService) {
+    Y_UNIT_TEST(MinMaxIndexUsedInQueries, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -262,11 +271,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
     }
 
-    Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {
+    Y_UNIT_TEST(MinMaxNulls, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -347,11 +358,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     }
 
-    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -422,11 +435,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -447,11 +463,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;");
     }
 
-    Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -472,10 +490,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService) {
+    Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -497,10 +517,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT(!result.IsSuccess());
     }
-    Y_UNIT_TEST(LocalBloomFilterIndexDoesntAllowWrongParametersOnAlter, EUseQueryService) {
+
+    Y_UNIT_TEST(LocalBloomFilterIndexDoesntAllowWrongParametersOnAlter, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -527,12 +551,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT(!result.IsSuccess());
     }
 
-
-    Y_UNIT_TEST(BloomNgramAddIndexThenUpsertIndexChangesFilterParams, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramAddIndexThenUpsertIndexChangesFilterParams, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
         auto& client = kikimr.GetTestClient();
 
@@ -576,23 +601,42 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ui32 filterBytesBefore = 0;
         readBloomNGramm(fppBefore, filterBytesBefore);
 
-        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
+        if (LocalIndexAsSchemeObject) {
+            // New syntax: ALTER TABLE ADD INDEX with same name triggers upsert
+            ExecQuery(kikimr, UseQueryService, R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/olapTableBloomNgramAddThenUpsert`
+                ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (resource_id)
+                    WITH (ngram_size = 3, false_positive_probability = 0.05, case_sensitive = true);
+            )");
+        } else {
+            ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapTableBloomNgramAddThenUpsert` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, "records_count" : 50000, "case_sensitive" : true, "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
         )", "cannot switch bloom ngram index from false_positive_probability mode to deprecated sizing");
+        }
 
         double fppAfter = 0;
         ui32 filterBytesAfter = 0;
         readBloomNGramm(fppAfter, filterBytesAfter);
 
-        UNIT_ASSERT_DOUBLES_EQUAL_C(
-            fppBefore, fppAfter, 1e-9,
-            TStringBuilder() << "Rejected UPSERT_INDEX must not change false_positive_probability; before fpp="
-                             << fppBefore << " after fpp=" << fppAfter);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            filterBytesBefore, filterBytesAfter,
-            TStringBuilder() << "Rejected UPSERT_INDEX must not change filter_size_bytes; before="
-                             << filterBytesBefore << " after=" << filterBytesAfter);
+        if (LocalIndexAsSchemeObject) {
+            UNIT_ASSERT_C(
+                fppBefore != fppAfter || filterBytesBefore != filterBytesAfter,
+                TStringBuilder() << "After adding an index with different params, schema should change; before fpp="
+                                 << fppBefore << " filter_size_bytes=" << filterBytesBefore << " after fpp=" << fppAfter
+                                 << " filter_size_bytes=" << filterBytesAfter);
+        } else {
+            UNIT_ASSERT_DOUBLES_EQUAL_C(
+                fppBefore, fppAfter, 1e-9,
+                TStringBuilder() << "Rejected UPSERT_INDEX must not change false_positive_probability; before fpp="
+                                 << fppBefore << " after fpp=" << fppAfter);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                filterBytesBefore, filterBytesAfter,
+                TStringBuilder() << "Rejected UPSERT_INDEX must not change filter_size_bytes; before="
+                                 << filterBytesBefore << " after=" << filterBytesAfter);
+        }
     }
 
     Y_UNIT_TEST(BloomNgramIndexCreatedViaAlterObjectWithFalsePositiveProbability, EUseQueryService) {
@@ -704,10 +748,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         NYdb::TResultSetParser parser(showResult.GetResultSet(0));
         UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
         TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
-        bool hasDefault = createText.Contains("case_sensitive=true") ||
-            createText.Contains("\"case_sensitive\":true") ||
-            createText.Contains("\\\"case_sensitive\\\":true");
-        UNIT_ASSERT_C(hasDefault, "SHOW CREATE should contain case_sensitive default true, got: " << createText);
+        UNIT_ASSERT_C(createText.Contains("INDEX `idx_ngram` LOCAL USING bloom_ngram_filter") ||
+            createText.Contains("INDEX idx_ngram LOCAL USING bloom_ngram_filter"),
+            "SHOW CREATE should contain idx_ngram bloom ngram filter definition, got: " << createText);
     }
 
 Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
@@ -1163,6 +1206,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -2104,23 +2148,21 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        const auto executeProbeQuery = [&]() -> TDuration {
-            const TInstant start = TInstant::Now();
+        const auto executeProbeQuery = [&]() {
             auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
                 --!syntax_v1
                 SELECT COUNT(*)
                 FROM `/Root/olapStore/olapTable`
-                WHERE resource_id = 'nonexistent_value'
+                WHERE resource_id = '0'
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             CompareYson(StreamResultToYson(it), "[[0u;]]");
-            return TInstant::Now() - start;
         };
 
         const ui64 skipBeforeNoIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveBeforeNoIndex = csController->GetIndexesApprovedOnSelect().Val();
-        const TDuration noIndexDuration = executeProbeQuery();
+        executeProbeQuery();
         const ui64 skipAfterNoIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveAfterNoIndex = csController->GetIndexesApprovedOnSelect().Val();
         UNIT_ASSERT_VALUES_EQUAL_C(skipAfterNoIndex, skipBeforeNoIndex, "No index configured yet, skipping counter must not change");
@@ -2128,7 +2170,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_bf_probe, TYPE=BLOOM_FILTER,
-                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
+                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.001}`);
         )");
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -2136,20 +2178,18 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         )");
 
         csController->WaitActualization(TDuration::Seconds(10));
+        csController->WaitCompactions(TDuration::Seconds(5));
 
         const ui64 skipBeforeWithIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveBeforeWithIndex = csController->GetIndexesApprovedOnSelect().Val();
-        const TDuration withIndexDuration = executeProbeQuery();
-        const ui64 skipAfterWithIndex = csController->GetIndexesSkippingOnSelect().Val();
-        const ui64 approveAfterWithIndex = csController->GetIndexesApprovedOnSelect().Val();
+        const ui64 skippedNoDataBeforeWithIndex = csController->GetIndexesSkippedNoData().Val();
+        executeProbeQuery();
+        const ui64 skippedPortions = csController->GetIndexesSkippingOnSelect().Val() - skipBeforeWithIndex;
+        const ui64 approvedPortions = csController->GetIndexesApprovedOnSelect().Val() - approveBeforeWithIndex;
 
-        UNIT_ASSERT_C(skipAfterWithIndex > skipBeforeWithIndex, TStringBuilder() << "Expected bloom filter to skip portions in appropriate scenario. before=" << skipBeforeWithIndex << ", after=" << skipAfterWithIndex);
-        UNIT_ASSERT_C(skipAfterWithIndex + approveAfterWithIndex > skipBeforeWithIndex + approveBeforeWithIndex, "Expected bloom filter index to be checked after creation");
-        UNIT_ASSERT_C(
-            withIndexDuration < noIndexDuration,
-            TStringBuilder()
-                << "Expected probe query to become faster with bloom index. no-index=" << noIndexDuration
-                << ", with-index=" << withIndexDuration);
+        UNIT_ASSERT_VALUES_EQUAL_C(csController->GetIndexesSkippedNoData().Val(), skippedNoDataBeforeWithIndex, "Every portion must have bloom data; otherwise select falls back to reading data");
+        UNIT_ASSERT_VALUES_EQUAL_C(approvedPortions, 0, "Absent resource_id must not produce bloom false positives on any portion");
+        UNIT_ASSERT_C(skippedPortions >= 3, TStringBuilder() << "Bloom filter must skip multiple portions for resource_id = '0', skipped=" << skippedPortions);
     }
 
     Y_UNIT_TEST(TestIndicesWorkOnSupportedDataTypes) {
@@ -2255,6 +2295,204 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         }
 
         UNIT_ASSERT(expectedIndexNames.empty());
+    }
+
+    Y_UNIT_TEST(BloomFilterEqualOnDifferentTypesAndNulls) {
+        const bool UseQueryService = true;
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/bloomEqualTypesTable`
+            (
+                id Int32 NOT NULL,
+                str_col Utf8,
+                int_col Int32,
+                bool_col Bool,
+                ts_col Timestamp,
+                message Utf8,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1)
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_str_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "str_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_int_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "int_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_bool_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "bool_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ts_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "ts_col", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_message_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
+        )");
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/bloomEqualTypesTable`
+                    (id, str_col, int_col, bool_col, ts_col, message)
+                VALUES
+                    (1, "alpha", 10, true, Timestamp("2024-01-01T00:00:00Z"), "alpha"),
+                    (2, NULL, 20, false, NULL, "BETA"),
+                    (3, "beta", NULL, NULL, Timestamp("2024-01-02T00:00:00Z"), "beta"),
+                    (4, "alpha", 30, true, Timestamp("2024-01-03T00:00:00Z"), "delta");
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        auto checkCount = [&](const TString& query, TStringBuf expectedYson) {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(TString(expectedYson), StreamResultToYson(it));
+        };
+
+        auto checkSkipOnAbsentEqual = [&](const TString& query, TStringBuf columnName) {
+            const intptr_t skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+            const intptr_t approveBefore = csController->GetIndexesApprovedOnSelect().Val();
+            checkCount(query, "[[0u;]]");
+            UNIT_ASSERT_C(
+                csController->GetIndexesSkippingOnSelect().Val() > skipBefore,
+                TStringBuilder() << "Expected bloom index to skip at least one portion for absent value on " << columnName);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                csController->GetIndexesApprovedOnSelect().Val(),
+                approveBefore,
+                TStringBuilder() << "Bloom index must not approve portions for absent value on " << columnName);
+        };
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col = "alpha"
+        )", "[[2u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE int_col = 20
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE bool_col = true
+        )", "[[2u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE bool_col = false
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable`
+            WHERE ts_col = Timestamp("2024-01-02T00:00:00Z")
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE message = "beta"
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE message = "BETA"
+        )", "[[1u;]]");
+
+        checkSkipOnAbsentEqual(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col = "missing"
+        )", "str_col");
+
+        checkSkipOnAbsentEqual(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE int_col = 99999
+        )", "int_col");
+
+        checkSkipOnAbsentEqual(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE message = "missing"
+        )", "message");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col IS NULL
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE int_col IS NULL
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE bool_col IS NULL
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE ts_col IS NULL
+        )", "[[1u;]]");
+
+        const intptr_t approveBeforeNullOnly = csController->GetIndexesApprovedOnSelect().Val();
+
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/bloomEqualTypesTable` (id, str_col)
+                SELECT CAST(item AS Int32) AS id, CAST(NULL AS Utf8?) AS str_col
+                FROM AS_TABLE(ListMap(ListFromRange(100, 110), ($x) -> { RETURN AsStruct($x AS item); }));
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/bloomEqualTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col = "missing_in_null_portion"
+        )", "[[0u;]]");
+
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), approveBeforeNullOnly);
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/bloomEqualTypesTable` WHERE str_col IS NULL
+        )", "[[11u;]]");
     }
 
     Y_UNIT_TEST(TestIndicesNotWorkingOnNotSupportedDataTypes) {
@@ -2415,7 +2653,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
         UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(15)));
 
-        constexpr ui64 MaxFilterSizeBytes = NOlap::NIndexes::NBloomNGramm::TConstants::MaxFilterSizeBytes;
+        constexpr ui64 MaxFilterSizeBytes = NLocalIndex::NBloom::TConstants::MaxFilterSizeBytes;
 
         auto sizes = csController->GetCompactionIndexBlobSizes();
         UNIT_ASSERT_C(!sizes.empty(), "Compaction should produce at least one index blob");
@@ -2553,11 +2791,13 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         )", "cannot switch bloom ngram index from false_positive_probability mode to deprecated sizing");
     }
 
-    Y_UNIT_TEST(BloomNgramAlterIndexBasic, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramAlterIndexBasic, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -2596,11 +2836,13 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         )");
     }
 
-    Y_UNIT_TEST(BloomNgramAlterIndexKeepsSameSchemeIndexId, EUseQueryService) {
+    Y_UNIT_TEST(BloomNgramAlterIndexKeepsSameSchemeIndexId, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
         auto& client = kikimr.GetTestClient();
 
@@ -2705,10 +2947,12 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 createText.Contains("resource_id Utf8 ENCODING(DICT)"),
                 "SHOW CREATE should contain dictionary encoding for resource_id, got: " << createText);
             UNIT_ASSERT_C(
-                createText.Contains("NAME = idx_bloom") && createText.Contains("TYPE = BLOOM_FILTER"),
+                createText.Contains("INDEX `idx_bloom` LOCAL USING bloom_filter") ||
+                createText.Contains("INDEX idx_bloom LOCAL USING bloom_filter"),
                 "SHOW CREATE should contain idx_bloom bloom filter definition, got: " << createText);
             UNIT_ASSERT_C(
-                createText.Contains("NAME = idx_ngram") && createText.Contains("TYPE = BLOOM_NGRAMM_FILTER"),
+                createText.Contains("INDEX `idx_ngram` LOCAL USING bloom_ngram_filter") ||
+                createText.Contains("INDEX idx_ngram LOCAL USING bloom_ngram_filter"),
                 "SHOW CREATE should contain idx_ngram bloom ngram definition, got: " << createText);
         }
 

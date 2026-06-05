@@ -599,12 +599,7 @@ public:
     template <class... TAs>
     static auto Run(TCallArg<TAs>... args, NDetail::TBindStateBase* base)
     {
-        auto* volatile state = static_cast<TBindState*>(base);
-
-        // Prevent optimizing |state| away for GDB printer.
-        // See devtools/gdb/yt_fibers_printer.py.
-        auto* volatile unoptimizedState = state;
-        Y_UNUSED(unoptimizedState);
+        auto* state = static_cast<TBindState*>(base);
 
         auto propagatingStorageGuard = state->MakePropagatingStorageGuard();
         Y_UNUSED(propagatingStorageGuard);

@@ -33,8 +33,8 @@ public:
 
     TDDiskDataCopier(
         NActors::TActorSystem* actorSystem,
+        IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
-        IPartitionDirectServicePtr partitionDirectService,
         IDirectBlockGroupPtr directBlockGroup,
         TBlocksDirtyMap* dirtyMap,
         THostIndex destination);
@@ -59,9 +59,9 @@ private:
         const TDBGWriteBlocksResponse& response);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    IPartitionDirectService* const PartitionDirectService = nullptr;
     const TVChunkConfig VChunkConfig;
     const TVolumeConfigPtr VolumeConfig;
-    const IPartitionDirectServicePtr PartitionDirectService;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const THostIndex Destination;
     TBlocksDirtyMap* const DirtyMap;

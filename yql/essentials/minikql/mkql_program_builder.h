@@ -489,6 +489,14 @@ public:
                                 ui64 memLimit, std::optional<ui32> sortedTableOrder,
                                 EAnyJoinSettings anyJoinSettings, ui32 tableIndexField,
                                 TType* returnType);
+
+    using TColumnsMap = TArrayRef<const std::pair<const ui32, const ui32>>;
+    TRuntimeNode ListJoinCore(TRuntimeNode stream,
+                              TType* keyType, const TColumnsMap& keyColumns,
+                              const TColumnsMap& leftColumns, const TColumnsMap& rightColumns,
+                              TType* leftArgType, const TUnaryLambda& leftArgmapLambda,
+                              TType* rightArgType, const TUnaryLambda& rightArgmapLambda,
+                              TType* returnType, const TTernaryLambda& joinLambda);
     TRuntimeNode GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
                                  const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
                                  const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
@@ -893,6 +901,8 @@ private:
 
     template <bool Asc, bool Equal>
     TRuntimeNode BuildSqlCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
+
+    TRuntimeNode BuildColumnList(const TColumnsMap& columnsMap);
 
     TType* ChooseCommonType(TType* type1, TType* type2);
     TType* BuildArithmeticCommonType(TType* type1, TType* type2);

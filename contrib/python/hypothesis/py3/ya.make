@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.152.7)
+VERSION(6.152.9)
 
 LICENSE(MPL-2.0)
 
@@ -88,6 +88,7 @@ PY_SRCS(
     hypothesis/internal/observability.py
     hypothesis/internal/reflection.py
     hypothesis/internal/scrutineer.py
+    hypothesis/internal/statistics.py
     hypothesis/internal/validation.py
     hypothesis/provisional.py
     hypothesis/reporting.py

@@ -246,7 +246,9 @@ enum EPartitionLabeledCounters {
 
     METRIC_READ_QUOTA_NO_CONSUMER_BYTES = 40                      [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MIN SVName: "topic.partition.read_without_consumer.speed_limit_bytes_per_second"}];
     METRIC_READ_QUOTA_NO_CONSUMER_USAGE = 41                      [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.read_without_consumer.throttled_microseconds_max"}];
-    METRIC_WRITE_QUOTA_MESSAGES_USAGE = 42                        [(LabeledCounterOpts) = {Name: "PartitionMaxWriteMessagesQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.write.messages_quota_usage"}];
+    METRIC_WRITE_QUOTA_MESSAGES_USAGE = 42                        [(LabeledCounterOpts) = {Name: "PartitionMaxWriteMessagesMax" AggrFunc : EAF_MAX SVName: "topic.partition.write.messages_max"}];
+    METRIC_WRITE_QUOTA_BYTES_USAGE = 43                           [(LabeledCounterOpts) = {Name: "PartitionMaxWriteBytesMax" AggrFunc : EAF_MAX SVName: "topic.partition.write.bytes_max"}];
+    METRIC_WRITE_QUOTA_MESSAGES = 44                              [(LabeledCounterOpts) = {Name: "WriteMessagesQuota" AggrFunc : EAF_MIN SVName: "topic.partition.write.speed_limit_messages_per_second"}];
 }
 
 enum EPartitionKeyCompactionLabeledCounters {

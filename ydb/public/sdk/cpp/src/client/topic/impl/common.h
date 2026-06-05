@@ -399,6 +399,8 @@ protected:
 
 public:
     NThreading::TFuture<void> WaitEvent() {
+        bool needSelfCheck = false;
+        NThreading::TFuture<void> res;
         {
             std::lock_guard<std::mutex> guard (Mutex);
             if (HasEventsImpl()) {
@@ -406,14 +408,17 @@ public:
             } else {
                 if (const auto now = TInstant::Now(); now - LastSelfCheckAt > TDuration::Seconds(10)) {
                     LastSelfCheckAt = now;
-                    SelfCheck();
+                    needSelfCheck = true;
                 }
 
                 Y_ABORT_UNLESS(Waiter.Valid());
-                auto res = Waiter.GetFuture();
-                return res;
+                res = Waiter.GetFuture();
             }
         }
+        if (needSelfCheck) {
+            SelfCheck();
+        }
+        return res;
     }
 
     bool IsClosed() {

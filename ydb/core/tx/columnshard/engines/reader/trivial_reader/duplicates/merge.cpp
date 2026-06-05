@@ -51,8 +51,9 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     Context->PrevRowsAdded = Context->FiltersBuilder.GetRowsAdded();
     Context->PrevRowsSkipped = Context->FiltersBuilder.GetRowsSkipped();
 
-    TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
-                                                         Context->FiltersBuilder.ExtractReadyFilters(), TConclusionStatus::Success()));
+    auto readyFilters = Context->FiltersBuilder.ExtractReadyFilters();
+    TActivationContext::AsActorContext().Send(Owner,
+        std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context), std::move(readyFilters), TConclusionStatus::Success()));
 }
 
 void TMergeBorders::DoOnCannotExecute(const TString& reason) {

@@ -3,6 +3,8 @@
 #include "node_warden_impl.h"
 #include "distconf.h"
 
+#include <ydb/core/blob_depot/s3_router_events.h>
+
 #include <google/protobuf/util/message_differencer.h>
 #include <ydb/core/config/validation/validators.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
@@ -216,6 +218,9 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvNodeWardenListLocalDDisks, Handle);
 
+        hFunc(TEvNodeWardenAcquireBlobDepotS3Router, Handle);
+        hFunc(TEvNodeWardenReleaseBlobDepotS3Router, Handle);
+
         default:
             EnqueuePendingMessage(ev);
             break;
@@ -364,6 +369,7 @@ void TNodeWarden::PassAway() {
 
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
     StopInvalidGroupProxy();
+    TerminateBlobDepotS3Routers();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
     return TActorBootstrapped::PassAway();
 }

@@ -40,7 +40,7 @@ void TWriteWithDirectReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
-    for (auto host: VChunkConfig.PBufferHosts.GetPrimary()) {
+    for (auto host: VChunkConfig.GetDesiredPBuffers()) {
         SendWriteRequest(host);
     }
 }
@@ -59,7 +59,9 @@ void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
                     TWriteWithDirectReplicationRequestExecutor>(
                     weakSelf.lock()))
             {
-                self->SendWriteRequestsToHandoffPBuffers();
+                if (!self->IsAlreadyReplied()) {
+                    self->SendWriteRequestsToHandoffPBuffers();
+                }
             }
         });
 }
@@ -67,10 +69,6 @@ void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
 void TWriteWithDirectReplicationRequestExecutor::
     SendWriteRequestsToHandoffPBuffers()
 {
-    if (Promise.IsReady()) {
-        return;
-    }
-
     const auto availableHandOffHosts = GetAvailableHandOffHosts();
     const size_t neededHedgingRequestsCount = std::min(
         QuorumDirectBlockGroupHostCount - CompletedWrites.Count(),
@@ -84,7 +82,7 @@ void TWriteWithDirectReplicationRequestExecutor::
             "TWriteWithDirectReplicationRequestExecutor. Send write request to "
             "handoff host %u since we "
             "have %lu completed writes",
-            static_cast<ui32>(host),
+            PrintHostIndex(host).c_str(),
             CompletedWrites.Count());
 
         SendWriteRequest(host);

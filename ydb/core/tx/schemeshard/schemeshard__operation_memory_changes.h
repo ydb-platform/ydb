@@ -72,6 +72,14 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TIncrementalBackupState = std::pair<ui64, TIncrementalBackupInfo::TPtr>;
     TStack<TIncrementalBackupState> IncrementalBackups;
 
+    // Mirrors IncrementalBackups: UnDo erases the id from Self->FullBackups.
+    using TFullBackupState = std::pair<ui64, TFullBackupInfo::TPtr>;
+    TStack<TFullBackupState> FullBackups;
+
+    // UnDo erases the (bcPathId -> id) entry, keeping BCPathToFullBackup atomic with FullBackups.
+    using TBCPathToFullBackupState = std::pair<TPathId, std::optional<ui64>>;
+    TStack<TBCPathToFullBackupState> BCPathToFullBackup;
+
     using TSecretState = std::pair<TPathId, TSecretInfo::TPtr>;
     TStack<TSecretState> Secrets;
 
@@ -108,13 +116,16 @@ public:
     void GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId);
     void GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId);
 
+    void GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
 
+    void GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
     void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewView(TSchemeShard* ss, const TPathId& pathId);
     void GrabView(TSchemeShard* ss, const TPathId& pathId);
 
+    void GrabNewResourcePool(TSchemeShard* ss, const TPathId& pathId);
     void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewBackupCollection(TSchemeShard* ss, const TPathId& pathId);
@@ -127,6 +138,9 @@ public:
     void GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
 
     void GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id);
+
+    void GrabNewFullBackupOp(TSchemeShard* ss, ui64 id);
+    void GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId);
 
     void GrabNewSecret(TSchemeShard* ss, const TPathId& pathId);
     void GrabSecret(TSchemeShard* ss, const TPathId& pathId);

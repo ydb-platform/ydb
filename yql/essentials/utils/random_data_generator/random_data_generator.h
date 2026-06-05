@@ -132,8 +132,10 @@ struct TRandomDataGenerator<std::variant<Ts...>> {
         const size_t idx = SelectWeightedIndex(provider, settings.Weights);
         std::variant<Ts...> result;
         [&]<size_t... Is>(std::index_sequence<Is...>) {
-            Y_UNUSED(((Is == idx && (result = TRandomDataGenerator<Ts>::Generate(
-                                         provider, std::get<Is>(settings.InnerSettings)), true)) ||
+            Y_UNUSED(((Is == idx && (result = std::variant<Ts...>(
+                                         std::in_place_index<Is>,
+                                         TRandomDataGenerator<Ts>::Generate(
+                                             provider, std::get<Is>(settings.InnerSettings))), true)) ||
                       ...));
         }(std::index_sequence_for<Ts...>{});
         return result;

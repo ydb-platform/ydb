@@ -5,6 +5,8 @@
 #include <util/string/builder.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
@@ -34,6 +36,14 @@ void TLongTxServiceActor::Bootstrap() {
     RegisterLongTxServiceProbes();
 
     Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
+
+    if (NActors::TMon* mon = AppData()->Mon) {
+        NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+        NMonitoring::TIndexMonPage* longTxMonPage = actorsMonPage->RegisterIndexPage(
+            "long_tx_service", "Long Tx Service");
+        mon->RegisterActorPage(longTxMonPage, "locks", "Locks",
+            false, TActivationContext::ActorSystem(), SelfId());
+    }
 
     TXLOG_NOTICE("Started, SelfId: " << SelfId());
     Become(&TThis::StateWork);
@@ -1788,6 +1798,94 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     TXLOG_DEBUG("Updated immutable snapshots registry. "
         << "Local snapshots count: " << localSnapshotsCount
         << ", Remote snapshots count: " << remoteSnapshotsCount);
+}
+
+void TLongTxServiceActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
+    TString path(ev->Get()->Request.GetPath());
+    auto pathParts = SplitPath(path);
+    if (pathParts.empty()) {
+        Send(ev->Sender, new NMon::TEvHttpInfoRes("Bad path: " + path));
+        return;
+    }
+    const auto& page = pathParts[pathParts.size() - 1];
+    TString res;
+    if (page == "locks") {
+        res = RenderLocksMonPage();
+    } else {
+        res = "Unknown page: " + page;
+    }
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(std::move(res)));
+}
+
+TString TLongTxServiceActor::RenderLocksMonPage() {
+    auto now = AppData()->TimeProvider->Now();
+    TStringStream str;
+    HTML(str) {
+        PRE() {
+            str << "Local locks: " << Locks.size() << Endl;
+            for (const auto& [id, lock] : Locks) {
+                str << "    Id: " << id
+                    << " Timestamp: " << lock.Timestamp
+                    << " (Age: " << (now - lock.Timestamp).MilliSeconds() << "ms)"
+                    << Endl;
+            }
+        }
+        PRE() {
+            str << "Remote locks proxy nodes: " << ProxyNodes.size() << Endl;
+            for (const auto& [nodeId, node] : ProxyNodes) {
+                str << "    NodeId: " << nodeId
+                    << " State: " << static_cast<int>(node.State)
+                    << " Locks: " << node.Locks.size()
+                    << Endl;
+                for (const auto& [lockId, lock] : node.Locks) {
+                    str << "        LockId: " << lockId
+                        << " State: " << static_cast<int>(lock.State)
+                        << " Timestamp: ";
+                    if (lock.TimestampReady) {
+                        str << lock.Timestamp
+                            << " (Age: " << (now - lock.Timestamp).MilliSeconds() << "ms)";
+                    } else {
+                        str << "(not ready)";
+                    }
+                    str << Endl;
+                }
+            }
+        }
+        PRE() {
+            str << "Wait edges: " << WaitEdges.size() << Endl;
+            str << "Lock islands: " << LockIslands.size() << Endl;
+            TVector<const TWaitEdge*> islandEdges;
+            for (const auto& [id, island] : LockIslands) {
+                str << "Island " << id << ": " << island.LocksCount << " locks" << Endl;
+                islandEdges.clear();
+                for (const auto& lock : island.Locks) {
+                    for (const auto& blocker : lock.Blockers) {
+                        islandEdges.push_back(&blocker);
+                    }
+                }
+                auto sortingTuple = [&](const TWaitEdge* edge) {
+                    return std::tuple(
+                        edge->Awaiter.LockNodeId(SelfId()), edge->Awaiter.LockId(),
+                        edge->Blocker.LockNodeId(SelfId()), edge->Blocker.LockId());
+                };
+                std::sort(
+                    islandEdges.begin(), islandEdges.end(),
+                    [&](const TWaitEdge* left, const TWaitEdge* right) {
+                        return sortingTuple(left) < sortingTuple(right);
+                    });
+                for (const auto* edge : islandEdges) {
+                    str << "    (" << edge->Awaiter.LockNodeId(SelfId())
+                        << ", " << edge->Awaiter.LockId() <<  ") -> ("
+                        << edge->Blocker.LockNodeId(SelfId())
+                        << ", " << edge->Blocker.LockId() << ") "
+                        << (edge->Broken ? "(broken) " : "")
+                        << "Id: " << edge->Id
+                        << Endl;
+                }
+            }
+        }
+    }
+    return str.Str();
 }
 
 } // namespace NLongTxService

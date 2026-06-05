@@ -25,6 +25,37 @@ const TString boolTrueSuffix = TString("\0\1", 2);
 const TString boolFalseSuffix = TString("\0\0", 2);
 const TString nullSuffix = TString("\0\2", 2);
 
+TString encodeKey(TStringBuf key) {
+    TString result;
+    size_t size = key.size() + 1;
+    do {
+        if (size < 0x80) {
+            result.push_back(static_cast<char>(size));
+        } else {
+            result.push_back(static_cast<char>(0x80 | (size & 0x7F)));
+        }
+        size >>= 7;
+    } while (size > 0);
+    result.append(key.data(), key.size());
+    return result;
+}
+
+TString encodePath(const std::vector<TString>& keys) {
+    TString result;
+    for (const auto& key : keys) {
+        result += encodeKey(key);
+    }
+    return result;
+}
+
+TString keyWithNull(TStringBuf before, TStringBuf after) {
+    TString key;
+    key.append(before);
+    key.push_back('\0');
+    key.append(after);
+    return key;
+}
+
 const TString compError = "Comparison is not allowed between literals/variables on both sides";
 const TString predError = "Predicates are not allowed in this context";
 const TString filterError = "'@' is only allowed inside filters";
@@ -156,6 +187,19 @@ void CheckMerge(const TCollectResult& result, std::vector<TString> expectedToken
         expectedTokenList.emplace_back(token, "");
     }
     CheckMergeFull(result, expectedTokenList, expectedMode, "CheckMerge");
+}
+
+void CheckPathAndOrMerge(const TString& a, const TString& b,
+    const std::vector<TString>& andExpected, const std::vector<TString>& orExpected)
+{
+    CheckMerge(MergeAnd(MakeTokens({a}), MakeTokens({b})), andExpected, EMode::And);
+    CheckMerge(MergeAnd(MakeTokens({b}), MakeTokens({a})), andExpected, EMode::And);
+    CheckMerge(MergeOr(MakeTokens({a}), MakeTokens({b})), orExpected, EMode::Or);
+    CheckMerge(MergeOr(MakeTokens({b}), MakeTokens({a})), orExpected, EMode::Or);
+}
+
+void CheckMergeSymmetric(const TString& a, const TString& b, const std::vector<TString>& expected) {
+    CheckPathAndOrMerge(a, b, expected, expected);
 }
 
 }  // namespace
@@ -2498,6 +2542,185 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             {"\2a\2b", "\2a\2c"}, EMode::Or);
     }
 
+    Y_UNIT_TEST(MergeAndOr_ValueTokens) {
+        CheckMerge(
+            MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
+            {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::And);
+        CheckMerge(
+            MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
+            {"\2a\2b" + strSuffix("x")}, EMode::And);
+
+        CheckMerge(
+            MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
+            {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::Or);
+        CheckMerge(
+            MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
+            {"\2a\2b"}, EMode::Or);
+    }
+
+    // Literal suffixes at a path and at root ($); bool false is \0\0 (must not be confused with path bytes).
+    Y_UNIT_TEST(MergeAndOr_LiteralValues) {
+        const TString ab = "\2a\2b";
+        const TString abStrX = ab + strSuffix("x");
+        const TString abStrXyz = ab + strSuffix("xyz");
+        const TString abStrEmpty = ab + strSuffix("");
+        const TString abNum5 = ab + numSuffix(5.0);
+        const TString abNum7 = ab + numSuffix(7.0);
+        const TString abTrue = ab + boolTrueSuffix;
+        const TString abFalse = ab + boolFalseSuffix;
+        const TString abNull = ab + nullSuffix;
+
+        const TString rootStrX = strSuffix("x");
+        const TString rootStrA = strSuffix("a");
+        const TString rootStrAb = strSuffix("ab");
+        const TString rootStrEmpty = strSuffix("");
+        const TString rootNum0 = numSuffix(0.0);
+        const TString rootNum1 = numSuffix(1.0);
+
+        // Same path, same kind, different values -> both kept (no byte-prefix collapse).
+        CheckMergeSymmetric(abStrX, abStrXyz, {abStrX, abStrXyz});
+        CheckMergeSymmetric(abNum5, abNum7, {abNum5, abNum7});
+        CheckMergeSymmetric(rootStrA, rootStrAb, {rootStrA, rootStrAb});
+        CheckMergeSymmetric(rootNum0, rootNum1, {rootNum0, rootNum1});
+
+        // Same path: path-only vs each literal kind.
+        CheckPathAndOrMerge(ab, abStrX, {abStrX}, {ab});
+        CheckPathAndOrMerge(ab, abNum5, {abNum5}, {ab});
+        CheckPathAndOrMerge(ab, abTrue, {abTrue}, {ab});
+        CheckPathAndOrMerge(ab, abFalse, {abFalse}, {ab});
+        CheckPathAndOrMerge(ab, abNull, {abNull}, {ab});
+
+        // Same path: different literal kinds (false suffix is \0\0).
+        CheckMergeSymmetric(abStrX, abFalse, {abStrX, abFalse});
+        CheckMergeSymmetric(abStrX, abTrue, {abStrX, abTrue});
+        CheckMergeSymmetric(abStrX, abNull, {abStrX, abNull});
+        CheckMergeSymmetric(abStrX, abNum5, {abStrX, abNum5});
+        CheckMergeSymmetric(abFalse, abTrue, {abFalse, abTrue});
+        CheckMergeSymmetric(abFalse, abNull, {abFalse, abNull});
+        CheckMergeSymmetric(abFalse, abNum5, {abFalse, abNum5});
+        CheckMergeSymmetric(abTrue, abNull, {abTrue, abNull});
+        CheckMergeSymmetric(abNum5, abTrue, {abNum5, abTrue});
+        CheckMergeSymmetric(abStrEmpty, abFalse, {abStrEmpty, abFalse});
+
+        // Root-only literals: pairwise distinct kinds and values.
+        CheckMergeSymmetric(boolFalseSuffix, boolTrueSuffix, {boolFalseSuffix, boolTrueSuffix});
+        CheckMergeSymmetric(boolFalseSuffix, nullSuffix, {boolFalseSuffix, nullSuffix});
+        CheckMergeSymmetric(boolFalseSuffix, rootStrX, {boolFalseSuffix, rootStrX});
+        CheckMergeSymmetric(boolFalseSuffix, rootStrEmpty, {boolFalseSuffix, rootStrEmpty});
+        CheckMergeSymmetric(boolFalseSuffix, rootNum0, {boolFalseSuffix, rootNum0});
+        CheckMergeSymmetric(boolTrueSuffix, nullSuffix, {boolTrueSuffix, nullSuffix});
+        CheckMergeSymmetric(boolTrueSuffix, rootStrX, {boolTrueSuffix, rootStrX});
+        CheckMergeSymmetric(nullSuffix, rootNum1, {nullSuffix, rootNum1});
+        CheckMergeSymmetric(nullSuffix, rootStrX, {nullSuffix, rootStrX});
+        CheckMergeSymmetric(rootStrX, rootNum1, {rootStrX, rootNum1});
+
+        // Root literal vs keyed path / empty-key path (no \0-byte false positive).
+        CheckMergeSymmetric(boolFalseSuffix, abFalse, {boolFalseSuffix, abFalse});
+        CheckMergeSymmetric(boolFalseSuffix, ab, {boolFalseSuffix, ab});
+        CheckMergeSymmetric(boolTrueSuffix, "\1", {boolTrueSuffix, "\1"});
+        CheckMergeSymmetric(boolFalseSuffix, abStrX, {boolFalseSuffix, abStrX});
+        CheckMergeSymmetric(nullSuffix, abNull, {nullSuffix, abNull});
+
+        // Root literal vs without path
+        CheckPathAndOrMerge(rootStrX, "", {rootStrX}, {""});
+
+        // Multi-token merge: literals on the same path must survive together under AND.
+        CheckMerge(
+            MergeAnd(MakeTokens({ab, abFalse, abStrX, abTrue, abNull, abNum5}, EMode::And),
+                     MakeTokens({abNum7}, EMode::And)),
+            {abFalse, abStrX, abTrue, abNull, abNum5, abNum7}, EMode::And);
+
+        // OR: path-only on $.a.b covers all literals on that path.
+        CheckMerge(
+            MergeOr(MakeTokens({ab, abFalse, abStrX}, EMode::Or),
+                    MakeTokens({abTrue, abNull, abNum5}, EMode::Or)),
+            {ab}, EMode::Or);
+
+        // Root-only batch: no token is a prefix of another.
+        CheckMerge(
+            MergeOr(MakeTokens({boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootNum0}, EMode::Or),
+                    MakeTokens({rootStrAb, rootNum1}, EMode::Or)),
+            {boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootStrAb, rootNum0, rootNum1}, EMode::Or);
+
+        CheckMerge(
+            MergeAnd(MakeTokens({boolFalseSuffix, boolTrueSuffix, nullSuffix}, EMode::And),
+                     MakeTokens({rootStrX, rootNum0}, EMode::And)),
+            {boolFalseSuffix, boolTrueSuffix, nullSuffix, rootStrX, rootNum0}, EMode::And);
+    }
+
+    // Keys may embed a zero byte; LEB128 length prefixes must not be confused with the
+    // literal separator (\0) or with unrelated keys that share raw byte prefixes.
+    Y_UNIT_TEST(MergeAndOr_ZeroByte) {
+        const TString keyA0 = keyWithNull("a", "");
+        const TString keyA0b = keyWithNull("a", "b");
+        const TString keyAb = "ab";
+
+        const TString pathA0 = encodeKey(keyA0);
+        const TString pathA0b = encodeKey(keyA0b);
+        const TString pathA = encodeKey("a");
+        const TString pathAb = encodeKey(keyAb);
+
+        // Same encoded length (2-byte keys), different content.
+        CheckMergeSymmetric(pathA0, pathAb, {pathA0, pathAb});
+
+        // "a" must not match key "a\0b"
+        CheckMergeSymmetric(pathA, pathA0b, {pathA, pathA0b});
+
+        // Real ancestor–descendant: null byte only in the deepest key segment.
+        const TString parent = encodePath({"a", "b"});
+        const TString child = encodePath({"a", "b", keyA0b});
+        CheckPathAndOrMerge(parent, child, {child}, {parent});
+
+        // Zero byte inside a key must not be parsed as the literal separator.
+        const TString pathALiteral = encodeKey("a") + strSuffix("x");
+        CheckMergeSymmetric(pathA0, pathALiteral, {pathA0, pathALiteral});
+        CheckMergeSymmetric(pathA0b, pathALiteral, {pathA0b, pathALiteral});
+
+        // Path-only vs path+literal on a key that contains \0.
+        const TString pathA0bLitX = pathA0b + strSuffix("x");
+        CheckPathAndOrMerge(pathA0b, pathA0bLitX, {pathA0bLitX}, {pathA0b});
+
+        // Same keyed path, different literal values.
+        const TString pathA0bLitY = pathA0b + strSuffix("y");
+        CheckMergeSymmetric(pathA0bLitX, pathA0bLitY, {pathA0bLitX, pathA0bLitY});
+
+        // bool-false literal suffix (\0\0) must not collide with \0 inside a key name.
+        const TString pathA0False = pathA0 + boolFalseSuffix;
+        CheckPathAndOrMerge(pathA0, pathA0False, {pathA0False}, {pathA0});
+        CheckMergeSymmetric(boolFalseSuffix, pathA0False, {boolFalseSuffix, pathA0False});
+
+        // Long keys (>= 127 bytes force multi-byte LEB128 length encoding).
+        TString longKey128;
+        longKey128.append(64, 'x');
+        longKey128.push_back('\0');
+        longKey128.append(63, 'y');
+
+        TString longKey128Alt;
+        longKey128Alt.append(65, 'x');
+        longKey128Alt.append(63, 'y');
+
+        const TString pathLong128 = encodeKey(longKey128);
+        const TString pathLong128Alt = encodeKey(longKey128Alt);
+        UNIT_ASSERT(pathLong128.size() > 128);
+        UNIT_ASSERT(pathLong128Alt.size() > 128);
+
+        CheckMergeSymmetric(pathLong128, pathLong128Alt, {pathLong128, pathLong128Alt});
+
+        const TString pathParentLong = encodePath({"prefix"});
+        const TString pathChildLong = encodePath({"prefix", longKey128});
+        CheckPathAndOrMerge(pathParentLong, pathChildLong, {pathChildLong}, {pathParentLong});
+
+        TString longKey200;
+        longKey200.append(100, 'a');
+        longKey200.push_back('\0');
+        longKey200.append(99, 'b');
+
+        const TString pathLong200 = encodeKey(longKey200);
+        const TString pathLong200Lit = pathLong200 + strSuffix("value");
+        UNIT_ASSERT(pathLong200.size() > 200);
+        CheckPathAndOrMerge(pathLong200, pathLong200Lit, {pathLong200Lit}, {pathLong200});
+    }
+
     // Ensure different-length key names don't create false prefix matches.
     // Key "ab" (2 bytes, length prefix \x02) must NOT match as a prefix for key "a" (\x01).
     Y_UNIT_TEST(MergeAndOr_DifferentLengthKeys) {
@@ -2656,29 +2879,6 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     }
 
     Y_UNIT_TEST(FormatJsonIndexToken) {
-        auto encodeKey = [](const TString& key) {
-            TString result;
-            size_t size = key.size() + 1;
-            do {
-                if (size < 0x80) {
-                    result.push_back(static_cast<char>(size));
-                } else {
-                    result.push_back(static_cast<char>(0x80 | (size & 0x7F)));
-                }
-                size >>= 7;
-            } while (size > 0);
-            result += key;
-            return result;
-        };
-
-        auto encodePath = [&](const std::vector<TString>& keys) {
-            TString result;
-            for (const auto& key : keys) {
-                result += encodeKey(key);
-            }
-            return result;
-        };
-
         // path only
         UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}), ""), R"({"path":"k1.k2"})");
 

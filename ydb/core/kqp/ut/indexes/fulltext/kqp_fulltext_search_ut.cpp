@@ -321,6 +321,76 @@ Y_UNIT_TEST(SelectWithFulltextMatchEmpty) {
     }
 }
 
+// Regression: a cached fulltext query plan pins the index impl-table schema version at
+// compile time. When that impl table's schema version advances (e.g. a build/finalize or
+// a partitioning alter) WITHOUT the main table's version changing, the cached plan keeps
+// requesting the old version and the datashard rejects the read with SCHEME_ERROR
+// (surfaced to the client as ABORTED, "Read request aborted, status: SCHEME_ERROR").
+//
+// The session actor's cached-plan version check (TKqpQueryState::FillTables) only registers
+// the fulltext MAIN table for a kFullTextSource read -- not the impl tables -- so it never
+// detects the impl-table skew and never invalidates the stale plan. (A normal secondary
+// index reads via kReadRangesSource, whose impl table IS registered, which is why the
+// analogous multishard test YqWorksFineAfterAlterIndexTableDirectly passes.)
+//
+// Before the fix this test fails on the second execution (ABORTED); after registering the
+// fulltext impl tables in FillTables it recompiles transparently and succeeds.
+Y_UNIT_TEST(SelectAfterImplTableSchemaVersionBump) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndex(db); // plain fulltext index "fulltext_idx" over Text -> posting "indexImplTable"
+
+    const auto querySettings = NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30));
+    const TString sql = R"sql(
+        SELECT `Key`, `Text`
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(`Text`, "cats")
+        ORDER BY `Key`;
+    )sql";
+
+    // 1. Execute once to populate the compile cache; the plan now pins the current
+    //    indexImplTable schema version.
+    TString expected;
+    {
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        expected = NYdb::FormatResultSetYson(result.GetResultSet(0));
+        UNIT_ASSERT_STRING_CONTAINS(expected, "Cats"); // sanity: the query actually matched rows
+    }
+
+    // 2. Bump ONLY the impl table's schema version, leaving the main table untouched.
+    //    Regular users may alter an indexImplTable's PartitionConfig; the AlterTable
+    //    increments the impl table's AlterVersion/TableSchemaVersion.
+    {
+        Tests::TClient& client = kikimr.GetTestClient();
+        const TString scheme = R"(
+            Name: "indexImplTable"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 100500
+                }
+            }
+        )";
+        auto result = client.AlterTable("/Root/Texts/fulltext_idx", scheme, {});
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK,
+            result->Record.ShortDebugString());
+    }
+
+    // 3. Re-execute the same query. It hits the compile cache; the cached plan still pins
+    //    the old impl-table version. The fulltext impl tables are not in the version-check
+    //    set, so without the fix the stale plan is replayed and the read fails. With the fix
+    //    the skew is detected, the query recompiles, and it succeeds with identical results.
+    {
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(expected, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();

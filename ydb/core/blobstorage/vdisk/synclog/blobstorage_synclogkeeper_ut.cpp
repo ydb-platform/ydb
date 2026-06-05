@@ -4,6 +4,8 @@
 
 #include <util/stream/null.h>
 
+#include <algorithm>
+
 #define STR Cnull
 
 namespace NKikimr {
@@ -60,6 +62,8 @@ namespace NKikimr {
         void PrintStatus(const TString &str = {}) {
             ::NKikimr::PrintStatus(State.get(), str);
         }
+        void RunDisposeTest();
+
     private:
         std::unique_ptr<TSyncLogKeeperState> State;
         TPayloadWriter PayloadWriter;
@@ -182,6 +186,124 @@ namespace NKikimr {
         std::unique_ptr<TSyncLogKeeperCommitData> CommitData;
     };
 
+    ////////////////////////////////////////////////////////////////////////////
+    // TCommitWithSwap
+    // Simulates the committer writing the swap snapshot to disk (assigning fresh
+    // chunk indices) and applies the commit result to the keeper state.
+    ////////////////////////////////////////////////////////////////////////////
+    class TCommitWithSwap {
+    public:
+        void Start(TSyncLogKeeperState *state, ui64 recoveryLogConfirmedLsn) {
+            CommitData = std::make_unique<TSyncLogKeeperCommitData>(state->PrepareCommitData(recoveryLogConfirmedLsn));
+            STR << "Swap commit started\n";
+        }
+
+        bool HasSwap() const {
+            return CommitData->SwapSnap && !CommitData->SwapSnap->Empty();
+        }
+
+        TVector<ui32> GetChunksToDelete() const {
+            return CommitData->ChunksToDelete;
+        }
+
+        void Finish(TSyncLogKeeperState *state, ui64 commitLsn, ui32 firstChunkIdx, TVector<ui32> *writtenChunks) {
+            auto snap = CommitData->SyncLogSnap;
+            const ui32 indexBulk = snap->DiskSnapPtr->IndexBulk;
+            const ui32 pagesInChunk = snap->DiskSnapPtr->PagesInChunk;
+
+            TDeltaToDiskRecLog delta(indexBulk);
+            auto &swap = CommitData->SwapSnap;
+            ui32 chunkIdx = firstChunkIdx;
+            if (swap && !swap->Empty()) {
+                ui32 total = swap->Size();
+                ui32 pos = 0;
+                while (pos < total) {
+                    ui32 m = Min(pagesInChunk, total - pos);
+                    TVector<TSyncLogPageSnap> pages;
+                    for (ui32 i = 0; i < m; ++i) {
+                        pages.push_back((*swap)[pos + i]);
+                    }
+                    delta.Append(chunkIdx, pages);
+                    if (writtenChunks) {
+                        writtenChunks->push_back(chunkIdx);
+                    }
+                    ++chunkIdx;
+                    pos += m;
+                }
+            }
+
+            TEntryPointSerializer entryPointSerializer(snap, {}, CommitData->RecoveryLogConfirmedLsn);
+            entryPointSerializer.Serialize(delta);
+            TCommitHistory commitHistory(TInstant(), commitLsn, CommitData->RecoveryLogConfirmedLsn);
+            TEvSyncLogCommitDone commitDone(commitHistory, entryPointSerializer.GetEntryPointDbgInfo(),
+                std::move(delta), std::move(CommitData->ChunksToDelete));
+            state->ApplyCommitResult(&commitDone);
+            STR << "Swap commit finished lsn# " << commitLsn << "\n";
+        }
+
+    private:
+        std::unique_ptr<TSyncLogKeeperCommitData> CommitData;
+    };
+
+    static bool Contains(const TVector<ui32> &v, ui32 x) {
+        return std::find(v.begin(), v.end(), x) != v.end();
+    }
+
+    void TSyncLogKeeperTest::RunDisposeTest() {
+        CreateState(TEntryPointPair{TString(), 0});
+
+        // write sample payload
+        ui64 lsn = 0;
+        for (ui64 i = 0; i < 10; ++i) {
+            PayloadWriter.WriteToLog(State.get(), &lsn);
+        }
+
+        // Force a swap-to-disk commit so the disk sync log gets some chunks.
+        bool commit = CutLog(100);
+        Y_ABORT_UNLESS(commit);
+
+        TCommitWithSwap swapCommit;
+        swapCommit.Start(State.get(), 0);
+        Y_ABORT_UNLESS(swapCommit.HasSwap());
+        TVector<ui32> writtenChunks;
+        swapCommit.Finish(State.get(), 11, 1000, &writtenChunks);
+        Y_ABORT_UNLESS(!writtenChunks.empty());
+
+        // disk sync log must be non-empty now
+        UNIT_ASSERT(!State->GetSyncLogSnapshot()->DiskSnapPtr->Empty());
+
+        // Simulate OUT_OF_SPACE disposal. Report one orphan chunk (allocated during
+        // the aborted commit but not part of the disk log).
+        const ui32 orphanChunk = 2000;
+        State->DisposeDiskSyncLog({orphanChunk});
+
+        // disk log must be dropped immediately
+        UNIT_ASSERT(State->GetSyncLogSnapshot()->DiskSnapPtr->Empty());
+
+        // Drive the disposal commit: swap must be suppressed and all disk chunks +
+        // orphan must be scheduled for deletion.
+        TCommitWithSwap disposalCommit;
+        disposalCommit.Start(State.get(), 11);
+        UNIT_ASSERT(!disposalCommit.HasSwap());
+
+        TVector<ui32> chunksToDelete = disposalCommit.GetChunksToDelete();
+        for (ui32 c : writtenChunks) {
+            UNIT_ASSERT_C(Contains(chunksToDelete, c), "disk chunk# " << c << " not scheduled for deletion");
+        }
+        UNIT_ASSERT_C(Contains(chunksToDelete, orphanChunk), "orphan chunk not scheduled for deletion");
+
+        TVector<ui32> nothingWritten;
+        disposalCommit.Finish(State.get(), 12, 3000, &nothingWritten);
+        UNIT_ASSERT(nothingWritten.empty());
+
+        // disk log stays empty after the disposal commit
+        UNIT_ASSERT(State->GetSyncLogSnapshot()->DiskSnapPtr->Empty());
+
+        // the orphan chunk must be ready to be forgotten
+        TVector<ui32> toForget = State->GetChunksToForget();
+        UNIT_ASSERT_C(Contains(toForget, orphanChunk), "orphan chunk not ready to forget");
+    }
+
     void TSyncLogKeeperTest::Run() {
         TEntryPointPair entryPointPair;
         CreateState(TEntryPointPair{TString(), 0});
@@ -258,6 +380,11 @@ namespace NKikimr {
         Y_UNIT_TEST(CutLog_EntryPointNewFormat) {
             TSyncLogKeeperTest test;
             test.Run();
+        }
+
+        Y_UNIT_TEST(DisposeDiskSyncLogOnOutOfSpace) {
+            TSyncLogKeeperTest test;
+            test.RunDisposeTest();
         }
 
         Y_UNIT_TEST(WhatsNextReadsMemoryWhenCacheStartsBeforeDisk) {

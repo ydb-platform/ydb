@@ -704,6 +704,170 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     ++msgSeqNo;
 }
 
+void AssertBatchedReadResults(
+    const NKikimrClient::TCmdReadResult& readResult,
+    const TVector<TBatchedMessageSpec>& expected,
+    size_t dataSize)
+{
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        const auto& exp = expected[i];
+        const auto& msg = readResult.GetResult(i);
+        if (exp.Offset != Max<ui64>()) {
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
+    }
+}
+
+NKikimrClient::TCmdReadResult CmdReadAndGetResult(
+    const TPQCmdReadSettings& settings,
+    TTestContext& tc)
+{
+    for (ui32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
+        try {
+            BeginCmdRead(settings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();
+                retriesLeft = 3;
+                continue;
+            }
+            UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+            UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdReadResult());
+            return result->Record.GetPartitionResponse().GetCmdReadResult();
+        } catch (NActors::TSchedulingLimitReachedException) {
+            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
+            retriesLeft = 3;
+        }
+    }
+    Y_UNREACHABLE();
+}
+
+void CmdReadAndAssertBatched(
+    TPQCmdReadSettings settings,
+    TTestContext& tc,
+    const TVector<TBatchedMessageSpec>& expected,
+    size_t dataSize)
+{
+    size_t readIdx = 0;
+    while (readIdx < expected.size()) {
+        settings.Offset = expected[readIdx].Offset;
+        settings.Count = static_cast<ui32>(expected.size() - readIdx);
+        settings.ResCount = 0;
+
+        const auto readResult = CmdReadAndGetResult(settings, tc);
+        UNIT_ASSERT(readResult.ResultSize() > 0);
+
+        for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+            const auto& exp = expected[readIdx + i];
+            const auto& msg = readResult.GetResult(i);
+            if (exp.Offset != Max<ui64>()) {
+                UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), exp.MessageCount >= 1 ? exp.MessageCount : 1);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
+        }
+
+        readIdx += readResult.ResultSize();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(readIdx, expected.size());
+}
+
+void CmdWriteBatched(
+    const ui32 partition,
+    const TString& sourceId,
+    ui64 seqNo,
+    const TString& data,
+    ui64 totalBatchMessages,
+    TTestContext& tc,
+    i64 offset,
+    bool disableDeduplication,
+    std::optional<ui64> maxSeqNo,
+    NPersQueue::NErrorCode::EErrorCode expectedError)
+{
+    TAutoPtr<IEventHandle> handle;
+    TEvPersQueue::TEvResponse* result = nullptr;
+    ui32& msgSeqNo = tc.MsgSeqNoMap[partition];
+    TString& cookie = tc.OwnerCookieMap[partition];
+
+    for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
+        try {
+            THolder<TEvPersQueue::TEvRequest> request;
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvPersQueue::TEvRequest);
+            auto req = request->Record.MutablePartitionRequest();
+            req->SetPartition(partition);
+            req->SetOwnerCookie(cookie);
+            req->SetMessageNo(msgSeqNo);
+            if (offset >= 0) {
+                req->SetCmdWriteOffset(offset);
+            }
+            auto* write = req->AddCmdWrite();
+            write->SetSourceId(sourceId);
+            write->SetSeqNo(seqNo);
+            write->SetData(data);
+            if (totalBatchMessages >= 1) {
+                write->SetMessageCount(static_cast<i64>(totalBatchMessages));
+            }
+            if (maxSeqNo) {
+                write->SetMaxSeqNo(static_cast<i64>(*maxSeqNo));
+            } else if (expectedError == NPersQueue::NErrorCode::OK && totalBatchMessages >= 1) {
+                UNIT_ASSERT(totalBatchMessages >= 1);
+                write->SetMaxSeqNo(static_cast<i64>(seqNo + totalBatchMessages - 1));
+            }
+            write->SetDisableDeduplication(disableDeduplication);
+
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+                [](const TEvPersQueue::TEvResponse& ev) {
+                    return ev.Record.HasPartitionResponse()
+                        && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0
+                        || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+                });
+
+            UNIT_ASSERT(result);
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();
+                retriesLeft = 3;
+                continue;
+            }
+
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
+                cookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition).first;
+                msgSeqNo = 0;
+                retriesLeft = 3;
+                continue;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                static_cast<ui32>(result->Record.GetErrorCode()),
+                static_cast<ui32>(expectedError),
+                result->Record.DebugString());
+            if (expectedError == NPersQueue::NErrorCode::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1u);
+                const auto& writeResult = result->Record.GetPartitionResponse().GetCmdWriteResult(0);
+                UNIT_ASSERT(writeResult.HasOffset());
+                if (offset >= 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOffset(), offset);
+                }
+            }
+            retriesLeft = 0;
+        } catch (NActors::TSchedulingLimitReachedException) {
+            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
+            retriesLeft = 3;
+        }
+    }
+    ++msgSeqNo;
+}
+
 void CmdWrite(const TCmdWriteOptions& o) {
     CmdWrite(
         o.Partition,

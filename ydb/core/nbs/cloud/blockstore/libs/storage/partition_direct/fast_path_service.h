@@ -30,7 +30,7 @@ private:
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
-    const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
+    const TVector<TRegionPtr> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};

@@ -38,7 +38,7 @@ private:
     // of any write request - f.e. secondary hosts from ManyPBuffers request.
     // It excludes hosts for which responses have been received.
     THostMask AvailableHostsForDirectSending;
-    size_t ActiveDirectWritesNumber{};
+    THostMask ActiveDirectWrites;
     const TDuration PbufferReplyTimeout;
 
     void SendWriteRequestToManyPBuffers(TVector<THostIndex> hosts);
@@ -52,6 +52,8 @@ private:
 
     void ScheduleHedging() override;
     void SendDirectWriteRequest(THostIndex host);
+
+    TString ExtendedDebugState() const override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

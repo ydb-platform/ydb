@@ -296,6 +296,84 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         UNIT_ASSERT_C(false, "Session closed event not received");
     }
 
+    Y_UNIT_TEST(WriteSessionClosedWithSessionExpiredWhenOwnershipLost) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TTopicClient client(setup.MakeDriver());
+
+        auto createSession = [&]() {
+            TWriteSessionSettings settings;
+            settings.Path(TEST_TOPIC)
+                .ProducerId("producer-1")
+                .MessageGroupId("producer-1")
+                .PartitionId(0)
+                .Codec(ECodec::RAW)
+                .BatchFlushInterval(TDuration::Zero())
+                .BatchFlushSizeBytes(0)
+                .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
+            return client.CreateWriteSession(settings);
+        };
+
+        auto waitReady = [](const std::shared_ptr<IWriteSession>& session) {
+            for (;;) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    return std::move(ready->ContinuationToken);
+                }
+                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ready: "
+                                               << closed->DebugString());
+                }
+            }
+        };
+
+        auto waitAck = [](const std::shared_ptr<IWriteSession>& session) {
+            for (;;) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    UNIT_ASSERT(!ack->Acks.empty());
+                    for (const auto& item : ack->Acks) {
+                        UNIT_ASSERT_C(
+                            item.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN
+                                || item.State == TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN,
+                            TStringBuilder() << "Unexpected ack state: " << item.State);
+                    }
+                    return;
+                }
+                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ack: "
+                                               << closed->DebugString());
+                }
+            }
+        };
+
+        auto waitClosed = [](const std::shared_ptr<IWriteSession>& session) {
+            for (;;) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    return *closed;
+                }
+            }
+        };
+
+        auto first = createSession();
+        first->Write(waitReady(first), "first", 1);
+        waitAck(first);
+
+        auto second = createSession();
+        second->Write(waitReady(second), "second", 2);
+        waitAck(second);
+
+        const auto closed = waitClosed(first);
+        UNIT_ASSERT_VALUES_EQUAL_C(closed.GetStatus(), NYdb::EStatus::SESSION_EXPIRED, closed.DebugString());
+
+        UNIT_ASSERT(second->Close(TDuration::Seconds(5)));
+    }
+
     Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC);

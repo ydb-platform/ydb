@@ -35,7 +35,9 @@ struct TNbsDbgLikeFinishStats {
     ui64 MeasuredMs = 0;
     ui32 MaxInFlight = 0;
 
-    // Latency histograms (microseconds), samples only after MeasurementStartTime.
+    // Ok/err/byte counters and latency histograms cover the measurement window only
+    // (after DelayBeforeMeasurementsSeconds, before drain). WritesIssued/Reads*Issued
+    // are full-run totals. Monlib load/actor counters are not gated.
     static constexpr i64 kLatencyHistMaxUs = 134'000'000;
     static constexpr i32 kLatencyHistPrecision = 2;
     NHdr::THistogram WriteQuorumUs{kLatencyHistMaxUs, kLatencyHistPrecision};

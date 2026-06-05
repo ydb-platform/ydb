@@ -15,12 +15,12 @@ namespace {
 
 NUdf::TUnboxedValuePod SliceSkipBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
     const auto& datum = TArrowBlock::From(block).GetDatum();
-    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
+    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(*datum.array(), offset, datum.array()->length - offset));
 }
 
 NUdf::TUnboxedValuePod SliceTakeBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
     const auto& datum = TArrowBlock::From(block).GetDatum();
-    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
+    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(*datum.array(), 0ULL, offset));
 }
 
 template <bool Skip>

@@ -396,7 +396,7 @@ Checks: >
   -readability-non-const-parameter,
   -readability-qualified-auto,
   -readability-redundant-access-specifiers,
-  readability-redundant-cast,
+  -readability-redundant-casting,
   -readability-redundant-control-flow,
   readability-redundant-declaration,
   readability-redundant-function-ptr-dereference,
@@ -414,8 +414,7 @@ Checks: >
   -readability-uniqueptr-delete-release,
   readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
-  readability-avoid-const-params-in-decls,
-  -sdc-no-lowercase-l-suffix
+  readability-avoid-const-params-in-decls
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true

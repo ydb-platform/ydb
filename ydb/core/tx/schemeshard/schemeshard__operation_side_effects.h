@@ -68,6 +68,11 @@ private:
     THashMap<TActorId, TVector<TPathId>> TempDirsToMakeState;
     THashMap<TActorId, TVector<TPathId>> TempDirsToRemoveState;
 
+    // Per-item done events staged in ApplyOnExecute, sent in ApplyOnComplete.
+    // Fields: <FullBackupId, DstPathId, Success>
+    using TFullBackupItemDoneRec = std::tuple<ui64, TPathId, bool>;
+    TVector<TFullBackupItemDoneRec> PendingFullBackupItemDone;
+
 public:
     using TPtr = TIntrusivePtr<TSideEffects>;
     ~TSideEffects() = default;
@@ -181,6 +186,8 @@ private:
 
     void DoSetBarriers(TSchemeShard* ss, const TActorContext& ctx);
     void DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+
+    void DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx);
 };
 
 }

@@ -43,10 +43,8 @@ public:
     void DoAction() {
         Become(&TCreateTopicActor::StateWork);
 
-        auto database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
-
         Register(NPQ::NSchema::CreateCreateTopicOperationActor(SelfId(), {
-            .Database = database,
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TCreateTopicStrategy>(*GetProtoRequest()),

@@ -20,12 +20,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace Ydb;
 
-// unused?
-// struct TCommitCookie {
-//     ui64 AssignId;
-//     ui64 Cookie;
-// };
-
 struct TLocalResponseBase {
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
@@ -120,34 +114,6 @@ struct TEvPQProxy {
         { }
 
         const ui64 Cookie;
-    };
-
-    struct TEvScheduleUpdateClusters : public NActors::TEventLocal<TEvScheduleUpdateClusters, EvScheduleUpdateClusters> {
-        TEvScheduleUpdateClusters()
-        { }
-    };
-
-
-    struct TEvUpdateClusters : public NActors::TEventLocal<TEvUpdateClusters, EvUpdateClusters> {
-        TEvUpdateClusters(const TString& localCluster, bool enabled, const TVector<TString>& clusters)
-            : LocalCluster(localCluster)
-            , Enabled(enabled)
-            , Clusters(clusters)
-        { }
-
-        const TString LocalCluster;
-        const bool Enabled;
-        const TVector<TString> Clusters;
-    };
-
-    struct TEvQueryCompiled : public NActors::TEventLocal<TEvQueryCompiled, EvQueryCompiled> {
-        TEvQueryCompiled(const TString& selectQ, const TString& updateQ, const TString& deleteQ)
-            : SelectQ(selectQ)
-            , UpdateQ(updateQ)
-            , DeleteQ(deleteQ)
-        { }
-
-        const TString SelectQ, UpdateQ, DeleteQ;
     };
 
     struct TEvWriteInit : public NActors::TEventLocal<TEvWriteInit, EvWriteInit> {
@@ -692,25 +658,6 @@ struct TGetPartitionsLocationRequest : public TLocalRequestBase {
     {}
 
     TVector<ui32> PartitionIds;
-
 };
-
-struct TAlterTopicRequest : public TLocalRequestBase {
-    TAlterTopicRequest(Ydb::Topic::AlterTopicRequest&& request, const TString& workDir, const TString& name,
-                       const TString& database, const TString& token, bool missingOk)
-        : TLocalRequestBase(request.path(), database, token)
-        , Request(std::move(request))
-        , WorkingDir(workDir)
-        , Name(name)
-        , MissingOk(missingOk)
-    {}
-
-    Ydb::Topic::AlterTopicRequest Request;
-    TString WorkingDir;
-    TString Name;
-    bool MissingOk;
-};
-
-
 
 }

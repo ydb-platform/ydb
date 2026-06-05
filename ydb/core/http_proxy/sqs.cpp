@@ -43,19 +43,6 @@ namespace NKikimr::NHttpProxy {
         return {};
     }
 
-    template <class TRequest>
-    std::expected<TString, TString> MaybeGetDatabasePathFromSQSTopicQueueUrl(const TRequest& request) {
-        TString queueUrl = MaybeGetQueueUrl(request);
-        if (queueUrl.empty()) {
-            return {};
-        }
-        auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
-        if (!parsedQueueUrl.has_value()) {
-            return std::unexpected(std::move(parsedQueueUrl).error());
-        }
-        return parsedQueueUrl->Database;
-    }
-
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class TSqsTopicHttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
     using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
@@ -110,7 +97,6 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
@@ -423,7 +409,6 @@ namespace NKikimr::NHttpProxy {
                     }
                     TopicPath = parsedQueueUrl->TopicPath;
                     ConsumerName = parsedQueueUrl->Consumer;
-                    IsFifo = parsedQueueUrl->Fifo;
 
                     if (!AssignDatabasePath(ctx, parsedQueueUrl->Database)) {
                         return;
@@ -439,15 +424,15 @@ namespace NKikimr::NHttpProxy {
                               "stream '" << MaybeGetQueueUrl<TProtoRequest>(Request) << "'");
 
                 ReportInputCounters(ctx);
-                if (!HttpContext.IamToken.empty() || Signature) {
-                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
-                        ctx.SelfID, HttpContext, std::move(Signature)));
-                } else if (!HttpContext.SecurityToken.empty()) {
+                if (!HttpContext.SecurityToken.empty()) {
                     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                         .Ticket = HttpContext.SecurityToken,
                         .Database = HttpContext.DatabasePath,
                         .PeerName = HttpContext.SourceAddress,
                     }));
+                } else if (!HttpContext.IamToken.empty() || Signature) {
+                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
+                        ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(
@@ -466,10 +451,8 @@ namespace NKikimr::NHttpProxy {
 
         private:
             TInstant StartTime;
-            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
-            ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
@@ -477,7 +460,6 @@ namespace NKikimr::NHttpProxy {
             TString Method;
             TString TopicPath;
             TString ConsumerName;
-            bool IsFifo{};
             TRetryCounter RetryCounter;
 
             TActorId AuthActor;

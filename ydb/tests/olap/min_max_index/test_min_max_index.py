@@ -125,7 +125,7 @@ class TestYdbMinMaxIndex(TestBase):
             },
             extra_feature_flags={
                 'enable_local_min_max_index': True
-            }
+            },
         ))
 
         cls.cluster.start()

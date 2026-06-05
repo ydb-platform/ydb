@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -17,6 +18,8 @@
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
+
+#include <functional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -92,12 +95,6 @@ struct TAggregatedListPBufferResponse
     TMap<THostIndex, TListPBufferMetaVector> Meta;
 };
 
-struct TDDiskIdLess
-{
-    using TDDiskId = NKikimrBlobStorage::NDDisk::TDDiskId;
-    bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
-};
-
 struct TDBGDumpResponse
 {
     size_t DirectBlockGroupIndex = 0;
@@ -164,8 +161,10 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
-    virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    using TWriteBlocksToManyPBuffersCallback =
+        std::function<void(TDBGWriteBlocksToManyPBuffersResponse)>;
+
+    virtual void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
@@ -173,7 +172,8 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) = 0;
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) = 0;
 
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when

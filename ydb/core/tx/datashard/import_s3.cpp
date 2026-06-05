@@ -8,6 +8,7 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -1023,7 +1024,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         } else {
             if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
                 Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                    << ": S3 error: " << error);
+                    << ": " << PartLogPrefix() << " error: " << error);
             } else {
                 Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                     << ": " << error);
@@ -1065,6 +1066,10 @@ public:
         return NKikimrServices::TActivity::IMPORT_S3_DOWNLOADER_ACTOR;
     }
 
+    static constexpr TStringBuf PartLogPrefix() {
+        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
+    }
+
     TStringBuf LogPrefix() const {
         return LogPrefix_;
     }
@@ -1084,7 +1089,7 @@ public:
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
-        , LogPrefix_(TStringBuilder() << "s3:" << TxId)
+        , LogPrefix_(TStringBuilder() << PartLogPrefix() << ":" << TxId)
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(GetReadBatchSize(task))
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())

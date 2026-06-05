@@ -1269,20 +1269,6 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrHive::ETabletVolatileState st
     return flag;
 }
 
-NKikimrViewer::EFlag GetFlagFromUsage(double usage) {
-    NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
-    if (usage >= 0.94) {
-        flag = NKikimrViewer::EFlag::Red;
-    } else if (usage >= 0.92) {
-        flag = NKikimrViewer::EFlag::Orange;
-    } else if (usage >= 0.85) {
-        flag = NKikimrViewer::EFlag::Yellow;
-    } else  {
-        flag = NKikimrViewer::EFlag::Green;
-    }
-    return flag;
-}
-
 NKikimrViewer::EFlag GetPDiskStateFlag(const NKikimrWhiteboard::TPDiskStateInfo& info) {
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     switch (info.GetState()) {
@@ -1426,8 +1412,9 @@ NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
         return NKikimrViewer::EFlag::Orange;
     case NKikimrWhiteboard::EFlag::Red:
         return NKikimrViewer::EFlag::Red;
+    default:
+        return NKikimrViewer::EFlag::Grey;
     }
-    return static_cast<NKikimrViewer::EFlag>((int)flag);
 }
 
 }

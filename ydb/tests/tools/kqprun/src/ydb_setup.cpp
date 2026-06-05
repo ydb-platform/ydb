@@ -839,7 +839,7 @@ private:
     TQueryRequest GetQueryRequest(const TRequestOptions& query) {
         ui32 targetNodeIndex = GetNodeIndexForDatabase(query.Database);
         auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, targetNodeIndex, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY, targetNodeIndex, event->Record);
 
         if (auto progressStatsPeriodMs = Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
             event->SetProgressStatsPeriod(TDuration::MilliSeconds(progressStatsPeriodMs));

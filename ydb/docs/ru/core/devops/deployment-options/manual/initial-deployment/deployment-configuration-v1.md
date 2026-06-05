@@ -48,23 +48,19 @@
       enforce_user_token_requirement: true
       monitoring_allowed_sids:
       - "root"
-      - ADMINS
-      - DATABASE-ADMINS
+      - "ADMINS"
+      - "DATABASE-ADMINS"
       administration_allowed_sids:
       - "root"
-      - ADMINS
-      - DATABASE-ADMINS
+      - "ADMINS"
+      - "DATABASE-ADMINS"
       viewer_allowed_sids:
       - "root"
-      - ADMINS
-      - DATABASE-ADMINS
+      - "ADMINS"
+      - "DATABASE-ADMINS"
       register_dynamic_node_allowed_sids:
       - databaseNodes@cert
       - root@builtin
-      bootstrap_allowed_sids:
-      - "root"
-      - ADMINS
-      - DATABASE-ADMINS
     domain:
     - name: Root
       storage_pool_types:
@@ -185,7 +181,7 @@
   client_certificate_authorization:
     request_client_certificate: true
     client_certificate_definitions:
-      - member_groups: ["registerNode@cert"]
+      - member_groups: ["databaseNodes@cert"]
         subject_terms:
         - short_name: "O"
           values: ["YDB"]

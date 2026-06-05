@@ -28,9 +28,8 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     columns.reserve(columnsMap.size());
     for (const ui32 columnId : indexInfo.GetColumnIds(false)) {
         auto it = columnsMap.find(columnId);
-        if (it != columnsMap.end()) {
-            columns.emplace_back(it->second);
-        }
+        AFL_VERIFY(it != columnsMap.end())("column_id", columnId);
+        columns.emplace_back(it->second);
     }
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), columns, txBody.GetBackupTask(), GetTxId());
     NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()),

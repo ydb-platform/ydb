@@ -68,8 +68,7 @@ public:
     friend class TTxMonitoring;
 
 private:
-    TString ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf baseQuery, ui64 backend) const;
-    bool CanAdminActionViaDevUi(TStringBuf pathInfo, const TString& userToken) const;
+    TString ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf baseQuery, ui64 backend, bool securePathMode) const;
 };
 
 } // NGraph

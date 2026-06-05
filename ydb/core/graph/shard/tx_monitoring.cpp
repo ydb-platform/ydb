@@ -1,7 +1,6 @@
 #include "shard_impl.h"
 #include "log.h"
 #include <library/cpp/json/json_writer.h>
-#include <ydb/core/base/auth.h>
 #include <ydb/core/base/mon_auth.h>
 
 namespace NKikimr {
@@ -21,13 +20,15 @@ private:
     NMon::TEvRemoteHttpInfo::TPtr Event;
     TString PathInfo;
     TString CgiQuery;
+    bool SecurePathMode;
 
 public:
-    TTxMonitoring(TGraphShard* shard, NMon::TEvRemoteHttpInfo::TPtr ev)
+    TTxMonitoring(TGraphShard* shard, NMon::TEvRemoteHttpInfo::TPtr ev, bool securePathMode)
         : TBase(shard)
         , Event(std::move(ev))
         , PathInfo(Event->Get()->PathInfo())
         , CgiQuery(Event->Get()->Cgi().Print())
+        , SecurePathMode(securePathMode)
     {}
 
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_MONITORING; }
@@ -82,9 +83,9 @@ public:
         html << "</td></tr>";
 
         html << "<tr><td>Change backend (admin)</td><td>";
-        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 0) << "\">Memory</a> | ";
-        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 1) << "\">Local</a> | ";
-        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 2) << "\">External</a>";
+        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 0, SecurePathMode) << "\">Memory</a> | ";
+        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 1, SecurePathMode) << "\">Local</a> | ";
+        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 2, SecurePathMode) << "\">External</a>";
         html << "</td></tr>";
 
         html << "<tr><td>Memory.MetricsSize</td><td>" << DumpMetricsIndex(Self->MemoryBackend.MetricsIndex) << "</td></tr>";
@@ -175,12 +176,17 @@ public:
 
 
 void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
+    const bool securePathMode = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath();
     if (ev->Get()->Cgi().Has("action")) {
         const TString action = ev->Get()->Cgi().Get("action");
-        if (!IsPublicMonitoringAction(action)
-            && !CanAdminActionViaDevUi(ev->Get()->PathInfo(), ev->Get()->GetUserToken()))
+        if (!CheckTabletDevUiAccess(
+                AppData(),
+                securePathMode,
+                ev->Get()->PathInfo(),
+                ev->Get()->GetUserToken(),
+                IsPublicMonitoringAction(action),
+                ev->Sender))
         {
-            Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
             return;
         }
 
@@ -199,12 +205,12 @@ void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
         Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>bad parameters</p></html>"));
         return;
     }
-    Execute(new TTxMonitoring(this, std::move(ev)));
+    Execute(new TTxMonitoring(this, std::move(ev), securePathMode));
 }
 
-TString TGraphShard::ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf baseQuery, ui64 backend) const {
+TString TGraphShard::ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf baseQuery, ui64 backend, bool securePathMode) const {
     TStringBuilder href;
-    if (!IsTabletDevUiSecurePath(pathInfo)) {
+    if (securePathMode && !IsTabletDevUiSecurePath(pathInfo)) {
         href << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
     }
     href << '?';
@@ -215,10 +221,5 @@ TString TGraphShard::ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf bas
     return href;
 }
 
-bool TGraphShard::CanAdminActionViaDevUi(TStringBuf pathInfo, const TString& userToken) const {
-    return IsTabletDevUiSecurePath(pathInfo) && IsAdministrator(AppData(), userToken);
-}
-
 } // NGraph
 } // NKikimr
-

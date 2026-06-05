@@ -76,12 +76,7 @@ def ydb_cluster_for_mon_endpoints_auth(request, certificates):
     cluster.stop()
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_with_enforce_user_token_and_graph_shard(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-    )
+def _start_graph_shard_cluster(configurator):
     configurator.yaml_config.setdefault('feature_flags', {})['enable_graph_shard'] = True
     cluster = KiKiMR(configurator)
     cluster.start()
@@ -104,7 +99,28 @@ def ydb_cluster_with_enforce_user_token_and_graph_shard(certificates):
         time.sleep(1)
     assert graph_shard_tablet_id, 'GraphShard tablet id not available after tenant up'
     cluster.graph_shard_tablet_id = graph_shard_tablet_id
+    return cluster
 
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_graph_shard(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    cluster = _start_graph_shard_cluster(configurator)
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        enable_tablet_dev_ui_secure_path=True,
+    )
+    cluster = _start_graph_shard_cluster(configurator)
     yield cluster
     cluster.stop()
 

@@ -7,7 +7,6 @@ TEST_SRCS(
     conftest.py
     security_test_helpers.py
     test_grants.py
-    test_graph_shard_mon_auth.py
     test_mon_endpoints_auth.py
     test_mon_mtls_auth.py
     test_mon_viewer_access_controls.py

@@ -108,27 +108,30 @@ function copyToClipboard(textToCopy) {
     }
 }
 
-// Locate the editor ranges for a collector path like "/config/blob_storage_config/foo":
-// the leaf key range plus the range of each ancestor key found along the path. Descends
-// ancestor keys to disambiguate repeated names; the ancestor ranges let callers lightly
-// tint parents so a collapsed section still signals there is something invalid inside.
-// Returns {leaf: monaco range or null, ancestors: [monaco range, ...]}.
+// Locate the editor ranges for a collector path like
+// "/selector_config/2/config/blob_storage_config/foo": the leaf key range plus the range of
+// each ancestor (keys *and* sequence items, e.g. the selector entry) found along the path.
+// Numeric segments are array indices and are descended into the matching sequence item, so a
+// field nested inside a selector_config entry is located in the right entry and its parents
+// (selector_config, that selector, config, ...) can be tinted. Returns
+// {leaf: monaco range or null, ancestors: [monaco range, ...]}.
 function findUnknownFieldRanges(model, path, name) {
     if (!model) {
         return {leaf: null, ancestors: []};
     }
     var segments = (path || '').split('/').filter(function(s) {
-        return s.length > 0 && !/^\d+$/.test(s); // drop empty parts and array indices
+        return s.length > 0; // keep array indices so selector entries can be located
     });
     if (segments.length === 0) {
         segments = [name];
     }
     var leaf = segments[segments.length - 1];
 
+    // Match a YAML key at the start of a line, optionally right after a "- " list marker
+    // (e.g. "  foo:" or "- foo:"), at or after fromLine.
     function keyMatch(key, fromLine) {
-        // YAML key at the start of a line (after indentation), e.g. "  foo:"
         var escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        var matches = model.findMatches('^\\s*' + escaped + '\\s*:', false, true, false, null, true);
+        var matches = model.findMatches('^\\s*(-\\s+)?' + escaped + '\\s*:', false, true, false, null, true);
         for (var i = 0; i < matches.length; ++i) {
             if (matches[i].range.startLineNumber >= fromLine) {
                 return matches[i].range;
@@ -137,14 +140,49 @@ function findUnknownFieldRanges(model, path, name) {
         return null;
     }
 
+    function indentOf(lineNumber) {
+        return model.getLineContent(lineNumber).match(/^\s*/)[0].length;
+    }
+
+    // Locate the (index)-th item of the YAML sequence whose items start at/after fromLine.
+    // Sequence items begin with "- "; lock onto the indentation of the first such item and
+    // count only siblings at that indentation, stopping when the block dedents.
+    function arrayItemMatch(index, fromLine) {
+        var matches = model.findMatches('^\\s*-\\s', false, true, false, null, true);
+        var siblings = [];
+        var indent = null;
+        for (var i = 0; i < matches.length; ++i) {
+            var r = matches[i].range;
+            if (r.startLineNumber < fromLine) {
+                continue;
+            }
+            var ind = indentOf(r.startLineNumber);
+            if (indent === null) {
+                indent = ind;
+            }
+            if (ind < indent) {
+                break;            // sequence ended (dedent)
+            }
+            if (ind === indent) {
+                siblings.push(r); // deeper markers belong to a nested sequence -> skip
+            }
+        }
+        return siblings[index] || null;
+    }
+
     var fromLine = 1;
     var ancestors = [];
     // Descend ancestors to scope the search to the correct subtree, collecting each.
     for (var i = 0; i < segments.length - 1; ++i) {
-        var anc = keyMatch(segments[i], fromLine);
+        var seg = segments[i];
+        var anc = /^\d+$/.test(seg)
+            ? arrayItemMatch(parseInt(seg, 10), fromLine)
+            : keyMatch(seg, fromLine);
         if (anc) {
             ancestors.push(anc);
-            fromLine = anc.startLineNumber + 1;
+            // Continue from this ancestor's line (inclusive) so a key sharing the line with a
+            // "- " marker (e.g. "- config:") is still matched on the next descent step.
+            fromLine = anc.startLineNumber;
         }
     }
     return {leaf: keyMatch(leaf, fromLine), ancestors: ancestors};

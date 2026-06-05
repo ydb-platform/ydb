@@ -719,6 +719,27 @@ config:
   unknown_field_for_test: 42
 )";
 
+const TString YAML_CONFIG_WITH_UNKNOWN_IN_SELECTOR = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: cluster1
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+selector_config:
+- description: selector with unknown
+  selector:
+    test: true
+  config:
+    unknown_in_selector: 7
+)";
+
 const TString YAML_CONFIG_2 = R"(
 ---
 metadata:
@@ -1372,6 +1393,26 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
 
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetMainConfigUnknownFields().size(), 0);
+    }
+
+    // An unknown field nested inside a selector_config entry is reported with a path that
+    // pinpoints the selector, so the UI can highlight it and its parents in the editable YAML.
+    Y_UNIT_TEST(YamlConfigUnknownFieldsInSelectorHaveSelectorPath) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        DoReplaceYamlConfig(runtime, YAML_CONFIG_WITH_UNKNOWN_IN_SELECTOR, Ydb::StatusIds::SUCCESS,
+            /* errorSubstring = */ {}, /* allowAbsentDatabase = */ false, /* allowUnknownFields = */ true);
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        const auto& unknown = response->Record.GetMainConfigUnknownFields();
+        UNIT_ASSERT_VALUES_EQUAL(unknown.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_in_selector");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetPath(), "/selector_config/0/config/unknown_in_selector");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetDeprecated(), false);
     }
 
     Y_UNIT_TEST(TestAddConfigItem) {

@@ -411,6 +411,9 @@ public:
         if (Timeout) {
             Deadline = TActivationContext::Now() + Timeout;
         }
+        if (Forget) {
+            QueryRequestStartTime = TActivationContext::Now();
+        }
         SendKpqProxyRequest();
         Become(&TThis::StateWork);
         if (Timeout || KeepAlive || Long || Action == "fetch-long-query" || Forget) {
@@ -650,7 +653,7 @@ public:
         }
         request.SetIsInternalCall(InternalCall);
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        if (Forget) {
+        if (Forget && !QueryRequestStartTime) {
             QueryRequestStartTime = TActivationContext::Now();
         }
         return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());

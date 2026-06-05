@@ -135,7 +135,9 @@ protected:
 
         bool FinishOk() {
             if (!IsDone()) {
-                Span.EndOk();
+                if (Span) {
+                    Span.EndOk();
+                }
                 Response = nullptr;
                 return true;
             }

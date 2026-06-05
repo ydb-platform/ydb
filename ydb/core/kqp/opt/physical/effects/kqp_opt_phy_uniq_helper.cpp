@@ -169,7 +169,7 @@ private:
         NYql::TExprNode::TPtr lambda;
         TVector<TExprBase> columnsToSelect;
 
-        columnsToSelect.reserve(mainTableMeta.KeyColumnNames.size());
+        columnsToSelect.reserve(meta->KeyColumnNames.size());
 
         inputs.emplace_back(Build<TDqPhyPrecompute>(ctx, pos)
             .Connection<TDqCnValue>()

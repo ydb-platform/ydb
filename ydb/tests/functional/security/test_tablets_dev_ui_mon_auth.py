@@ -4,7 +4,11 @@ import time
 import pytest
 import requests
 
-from security_test_helpers import _test_endpoints
+from security_test_helpers import (
+    _test_endpoints,
+    tablet_devui_expected_on_app,
+    tablet_devui_sid_matrix,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -136,31 +140,8 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
     q = f'TabletID={datashard_tablet_id}'
     q_mutating_page = f'{q}&page=volatile-txs'
     q_mutating_action = f'{q}&action=key-access-sample'
-    all_forbidden = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 403,
-    }
-    monitoring_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    }
-    admin_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 200,
-    }
-    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
     return {
         # New secure path for DataShard DevUI. Should be admin-only in both modes.
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,

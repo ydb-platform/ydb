@@ -255,7 +255,9 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app" || (TabletType() == TTabletTypes::DataShard && IsTabletDevUiSecurePath(path))) {
+    if (path == "/app" || (UsesTabletDevUiSecurePath(TabletType(),
+            AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath())
+            && IsTabletDevUiSecurePath(path))) {
         OnRenderAppHtmlPage(ev, ctx);
         return;
     } else if (path == "/executorInternals" && Executor()) {
@@ -305,7 +307,8 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
             }
 
             if (OnRenderAppHtmlPage(nullptr, ctx)) {
-                const TStringBuf tabletDevUiAppPrefix = TabletType() == TTabletTypes::DataShard && AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+                const TStringBuf tabletDevUiAppPrefix = (TabletType() == TTabletTypes::DataShard || TabletType() == TTabletTypes::Hive)
+                    && AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
                     ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
                     : TStringBuf("app");
                 DIV_CLASS("row") {

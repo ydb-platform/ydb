@@ -8,9 +8,20 @@ namespace NGraph {
 
 namespace {
 
-bool IsPublicMonitoringAction(TStringBuf action) {
-    // Any action outside this list is treated as admin-only by default.
-    return action == "get_settings";
+bool IsKnownPublicGraphShardDevUiParam(TStringBuf name) {
+    return name == "TabletID";
+}
+
+bool IsPublicGraphShardDevUiRequest(const TCgiParameters& cgi) {
+    if (cgi.Has("action")) {
+        return cgi.Get("action") == "get_settings";
+    }
+    for (const auto& [name, _] : cgi) {
+        if (!IsKnownPublicGraphShardDevUiParam(name)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -177,21 +188,22 @@ public:
 
 void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
     const bool securePathMode = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (ev->Get()->Cgi().Has("action")) {
-        const TString action = ev->Get()->Cgi().Get("action");
-        if (!CheckTabletDevUiAccess(
-                AppData(),
-                securePathMode,
-                ev->Get()->PathInfo(),
-                ev->Get()->GetUserToken(),
-                IsPublicMonitoringAction(action),
-                ev->Sender))
-        {
-            return;
-        }
+    const auto& cgi = ev->Get()->Cgi();
+    if (!CheckTabletDevUiAccess(
+            AppData(),
+            securePathMode,
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            IsPublicGraphShardDevUiRequest(cgi),
+            ev->Sender))
+    {
+        return;
+    }
 
+    if (cgi.Has("action")) {
+        const TString action = cgi.Get("action");
         if (action == "change_backend") {
-            ui64 backend = FromStringWithDefault(ev->Get()->Cgi().Get("backend"), 0);
+            ui64 backend = FromStringWithDefault(cgi.Get("backend"), 0);
             if (backend >= 0 && backend <= 2) {
                 ExecuteTxChangeBackend(static_cast<EBackendType>(backend));
                 Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>ok</p></html>"));

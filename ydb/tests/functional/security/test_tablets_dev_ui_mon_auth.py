@@ -221,7 +221,7 @@ def test_graph_shard_new_action_with_enforce_user_token(
     tid = ydb_cluster_with_enforce_user_token_and_graph_shard.graph_shard_tablet_id
     _test_endpoints(
         ydb_cluster_with_enforce_user_token_and_graph_shard,
-        tablet_devui_new_action_paths(tid, 'action=new_action', secure_path_mode=False),
+        tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=False),
     )
 
 
@@ -231,7 +231,7 @@ def test_graph_shard_new_action_with_enforce_user_token_and_secure_path_mode(
     tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard.graph_shard_tablet_id
     _test_endpoints(
         ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
-        tablet_devui_new_action_paths(tid, 'action=new_action', secure_path_mode=True),
+        tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=True),
     )
 
 

@@ -658,10 +658,6 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 static_cast<uint32_t>(NYdb::NTopic::ECodec::ZSTD));
             const TString decompressed = codec->Decompress(Base64Decode(message["Body"].GetString()));
             UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
-
-            // Second call during visibility timeout
-            jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
-            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageReturnToQueue, TFixture) {

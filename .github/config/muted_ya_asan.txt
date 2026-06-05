@@ -271,10 +271,12 @@ ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/federated_query/actors/ut_service/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphBasic
+ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryMatchRecognize
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryWithDefineAction
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReplaceAfterError
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess+EnableKqpConstraintsTransformer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadPartOfSysViewColumns
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
@@ -451,6 +453,7 @@ ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEn
 ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_1_Test
 ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionNotExists_Test
 ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
+ydb/core/persqueue/ut/ut_with_sdk CommitOffset.CommitMessages_ReloadPQRB-autoPartitioningSupport-false
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.CommitMessages_ReloadPQRB-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommit-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommitCDC-autoPartitioningSupport-true
@@ -460,6 +463,7 @@ ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorerWithScaling.TestRootPartitio
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionMerge_PreferedPartition_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionMerge_PreferedPartition_BeforeAutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_AutosplitByLoad_AfterAlter
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_AutosplitByLoad_MessagesBasedSplit_WithPartitioningKeys
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_PQv1
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.Simple_AutoscaleAwareSDK
@@ -565,6 +569,7 @@ ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReb
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket3]
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
+ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_restore TRestoreTests.ShouldHandleOverloadedShard
 ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
@@ -578,6 +583,7 @@ ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
 ydb/core/viewer/tests test.py.TestViewer.test_transfer_describe
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_describe_column_table_local_index
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
@@ -629,6 +635,7 @@ ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut Per
 ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut ReadSessionImplTest.CommonHandler
 ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut ReadSessionImplTest.DataReceivedCallback
 ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
+ydb/public/sdk/cpp/src/client/topic/ut BasicUsage.Producer_BasicWrite
 ydb/public/sdk/cpp/src/client/topic/ut BasicUsage.Producer_TimeoutError
 ydb/public/sdk/cpp/src/client/topic/ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/src/client/topic/ut TopicTxSkipConflictAndProducerMeta.InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit_Query

@@ -259,7 +259,7 @@ void TPartitionActor::Start(
     TVChunkConfigByIndex vChunkConfigsByIndex;
     vChunkConfigsByIndex.reserve(vChunkConfigs.size());
     for (const auto& cfg: vChunkConfigs) {
-        vChunkConfigsByIndex[cfg.VChunkIndex] = cfg;
+        vChunkConfigsByIndex[cfg.GetVChunkIndex()] = cfg;
     }
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
@@ -432,7 +432,8 @@ void TPartitionActor::HandleUpdateVChunkConfig(
         ctx,
         NKikimrServices::NBS_PARTITION,
         LogTitle.GetWithTime().c_str()
-            << " Handle UpdateVChunkConfig, vChunkIndex: " << cfg.VChunkIndex);
+            << " Handle UpdateVChunkConfig, vChunkIndex: "
+            << cfg.GetVChunkIndex());
 
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }

@@ -147,7 +147,7 @@ message TDefineStoragePool {
         repeated uint32 GroupId = 1;
     }
 
-    uint64 BoxId = 1; // the box in which we are creating this storage pool
+    optional uint64 BoxId = 1; // the box in which we are creating this storage pool
     uint64 StoragePoolId = 2; // integer key unique to the box; if set to zero, Name is used for lookup
     string Name = 3; // user-friendly name
     string ErasureSpecies = 4; // name for erasure species of contained groups
@@ -174,7 +174,7 @@ message TDefineStoragePool {
 }
 
 message TReadStoragePool {
-    uint64 BoxId = 1; // use Max<ui64> to query all the pools
+    optional uint64 BoxId = 1; // use Max<ui64> to query all the pools
 
     // calculates intersection of names and ids
     repeated uint64 StoragePoolId = 2; // when empty, then query all the boxes
@@ -585,6 +585,7 @@ message TUpdateSettings {
     repeated bool AllowMultipleRealmsOccupation = 12;
     repeated bool UseSelfHealLocalPolicy = 13;
     repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    repeated uint64 BlobCheckerPeriodicitySeconds = 15;
 }
 
 message TBscConfig {
@@ -605,6 +606,7 @@ message TBscConfig {
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
     optional TClusterBalancingSettings ClusterBalancingSettings = 15;
     optional TSelfHealSettings SelfHealSettings = 16;
+    optional uint64 BlobCheckerPeriodicitySeconds = 17;
 }
 
 message TBoxStoragePoolId {
@@ -678,6 +680,10 @@ message TInferPDiskSlotCountSettings {
     optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 2;
 }
 
+message TDeleteSpecificGroups {
+    repeated uint32 GroupIds = 1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -735,6 +741,7 @@ message TConfigRequest {
             TDeleteDDiskPool DeleteDDiskPool = 59;
             TMoveDDisk MoveDDisk = 60;
             TPopulatePDisk PopulatePDisk = 61;
+            TDeleteSpecificGroups DeleteSpecificGroups = 62;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

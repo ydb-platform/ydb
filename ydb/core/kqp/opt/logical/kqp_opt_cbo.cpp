@@ -347,8 +347,8 @@ TMaybe<double> ComputeSelectivityCorrection(
             if (!overlapCard.Defined() || overlapCard.GetRef() == 0) {
                 YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
             } else {
-                // correction = total PK / overlapping PK
-                auto selectivityCorrection = overlapCard.GetRef() / std::max(leftStats.Nrows, 1.0);
+                // correction = total PK column tuples / overlapping FK column tuples
+                auto selectivityCorrection = leftStats.Nrows / std::max(static_cast<double>(overlapCard.GetRef()), 1.0);
                 return std::min(selectivityCorrection, 1.0);
             }
         }

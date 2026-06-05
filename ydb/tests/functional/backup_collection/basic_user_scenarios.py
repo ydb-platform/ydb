@@ -2468,3 +2468,211 @@ class TestBackupCollectionServiceObjectsRotation(BaseTestBackupInFiles):
         # Check products table too
         has_cfs_products, _ = self.has_changefeeds(t_products)
         assert not has_cfs_products, "Products changefeeds should also be cleaned up"
+
+
+class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
+    """End-to-end lifecycle that drives every backup-collection operation
+    through the operation_id RETURNED by the KQP statement, and polls each
+    one to a terminal state via `ydb operation get`, using the proper
+    `ydb://<kind>/<num>?id=` wrapping per kind:
+
+        full BACKUP        -> ydb://fullbackup/14?id=N
+        incremental BACKUP -> ydb://incbackup/11?id=N
+        RESTORE            -> ydb://restore/12?id=N
+
+    Also exercises `operation list <kind>` and `operation forget` for each.
+    This is the "control-plane via long ops" happy path: start -> get id ->
+    poll to Done -> verify data -> forget.
+    """
+
+    # ---- CLI helpers ---------------------------------------------------
+
+    def _endpoint(self):
+        return f"grpc://localhost:{self.cluster.nodes[1].grpc_port}"
+
+    def _cli(self, *args):
+        cmd = [backup_bin(), "-e", self._endpoint(), "-d", self.root_dir, *args]
+        return yatest.common.execute(cmd, check_exit_code=False)
+
+    @staticmethod
+    def _decode(res):
+        out = (res.std_out or b"").decode("utf-8", "ignore")
+        err = (res.std_err or b"").decode("utf-8", "ignore")
+        return out, err
+
+    @staticmethod
+    def _extract_operation_id(stdout):
+        """Pull the `operation_id` column value out of
+        `ydb yql --format json-unicode` output. Handles both a single JSON
+        value/array and newline-delimited JSON objects."""
+        candidates = []
+        s = stdout.strip()
+        if s:
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    candidates.extend(parsed)
+                elif isinstance(parsed, dict):
+                    candidates.append(parsed)
+            except json.JSONDecodeError:
+                for line in s.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        candidates.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        for obj in candidates:
+            if isinstance(obj, dict) and obj.get("operation_id"):
+                return str(obj["operation_id"])
+        return None
+
+    @staticmethod
+    def _wrap_op_id(kind, raw_id):
+        """Wrap a bare numeric operation id into a canonical ydb:// id. The CLI
+        parser reads the numeric EKind from the URI path, so the form must be
+        ydb://<kind>/<num>?id=<n> (see operation_id.cpp). If the statement
+        already returned a wrapped id, keep it as-is."""
+        rid = str(raw_id)
+        if rid.startswith("ydb://"):
+            return rid
+        kind_num = {"fullbackup": 14, "incbackup": 11, "restore": 12}[kind]
+        return f"ydb://{kind}/{kind_num}?id={rid}"
+
+    def _run_statement_capture_op_id(self, sql, kind, max_retries=10):
+        """Run a backup/restore statement that returns an operation_id result
+        column, retrying transient errors, and return the kind-wrapped id.
+
+        Uses `ydb sql` (query service / ExecuteQuery), NOT `ydb yql`
+        (scripting / StreamExecuteYqlScript): the operation_id comes back as a
+        query result set, which the scripting path drops but the query service
+        surfaces (see kqp_scheme_ut BackupReturnsOperationId)."""
+        retry_delay = 2.0
+        last_out = last_err = ""
+        for attempt in range(max_retries + 1):
+            res = self._cli("sql", "--script", sql, "--format", "json-unicode")
+            out, err = self._decode(res)
+            last_out, last_err = out, err
+            if res.exit_code == 0:
+                raw = self._extract_operation_id(out)
+                assert raw, f"No operation_id column returned by `{sql}`:\nSTDOUT:{out}\nSTDERR:{err}"
+                wrapped = self._wrap_op_id(kind, raw)
+                logger.info(f"[op] `{sql}` -> {wrapped}")
+                return wrapped
+            retryable = ("OVERLOADED" in err or "under operation" in err or "path exist" in err)
+            if retryable and attempt < max_retries:
+                logger.info(f"`{sql}` retryable error (attempt {attempt + 1}): {err.strip()}; retry in {retry_delay}s")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 1.5, 15.0)
+                continue
+            raise AssertionError(f"`{sql}` failed: code={res.exit_code}\nSTDOUT:{out}\nSTDERR:{err}")
+        raise AssertionError(f"`{sql}` exhausted retries\nSTDOUT:{last_out}\nSTDERR:{last_err}")
+
+    def poll_operation(self, op_id, timeout_s=240, poll_interval=2.0):
+        """Poll `ydb operation get <op_id>` until ready==true; assert SUCCESS.
+        This is the minimal external control loop: one GetOperation per
+        interval until the long op reaches its terminal state."""
+        deadline = time.time() + timeout_s
+        last = {}
+        while time.time() < deadline:
+            res = self._cli("operation", "get", op_id, "--format", "proto-json-base64")
+            out, err = self._decode(res)
+            assert res.exit_code == 0, f"`operation get {op_id}` failed: code={res.exit_code}\nSTDOUT:{out}\nSTDERR:{err}"
+            try:
+                last = json.loads(out)
+            except (json.JSONDecodeError, TypeError):
+                last = {"raw": out}
+            ready = last.get("ready", False)
+            status = last.get("status", "UNKNOWN")
+            logger.info(f"[poll] {op_id} ready={ready} status={status}")
+            if ready:
+                assert status == "SUCCESS", f"operation {op_id} terminal but status={status}: {last}"
+                return last
+            time.sleep(poll_interval)
+        raise AssertionError(f"operation {op_id} not ready within {timeout_s}s; last={last}")
+
+    def operation_list_ids(self, kind):
+        """Return the set of operation ids from `ydb operation list <kind>`."""
+        res = self._cli("operation", "list", kind, "--format", "proto-json-base64")
+        out, err = self._decode(res)
+        assert res.exit_code == 0, f"`operation list {kind}` failed: code={res.exit_code}\nSTDOUT:{out}\nSTDERR:{err}"
+        try:
+            data = json.loads(out)
+        except (json.JSONDecodeError, TypeError):
+            return set()
+        return {op["id"] for op in data.get("operations", []) if "id" in op}
+
+    def operation_forget(self, op_id):
+        res = self._cli("operation", "forget", op_id)
+        out, err = self._decode(res)
+        assert res.exit_code == 0, f"`operation forget {op_id}` failed: code={res.exit_code}\nSTDOUT:{out}\nSTDERR:{err}"
+
+    # ---- the test ------------------------------------------------------
+
+    def test_full_cycle_all_operation_ids_with_polling(self):
+        t_orders = "orders"
+        t_products = "products"
+        tables = [t_orders, t_products]
+
+        with self.session_scope() as session:
+            create_table_with_data(session, t_orders)
+            create_table_with_data(session, t_products)
+
+        collection = f"ops_poll_{uuid.uuid4().hex[:8]}"
+        table_list = ", ".join(f'TABLE `{t}`' for t in tables)
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{collection}`
+                ( {table_list} )
+            WITH (
+                STORAGE = 'cluster',
+                INCREMENTAL_BACKUP_ENABLED = 'true'
+            );
+        """
+        res = self._cli("yql", "--script", create_sql)
+        out, err = self._decode(res)
+        assert res.exit_code == 0, f"CREATE BACKUP COLLECTION failed:\nSTDOUT:{out}\nSTDERR:{err}"
+        self.wait_for_collection(collection, timeout_s=30)
+
+        # ---- 1) FULL backup: capture id -> ydb://fullbackup -> poll ------
+        time.sleep(1.1)
+        full_id = self._run_statement_capture_op_id(f"BACKUP `{collection}`;", "fullbackup")
+        assert full_id.startswith("ydb://fullbackup/14?id="), full_id
+        self.poll_operation(full_id)
+        assert full_id in self.operation_list_ids("fullbackup"), \
+            f"{full_id} not found in `operation list fullbackup`"
+
+        # ---- 2) modify data, INCREMENTAL backup: capture -> poll ---------
+        data = DataHelper(self, t_orders)
+        data.modify(add_rows=[(4, 40, "four"), (5, 50, "five")], remove_ids=[1])
+        # Snapshot the post-incremental state for later round-trip verification.
+        expected_orders = self._capture_snapshot(t_orders)
+        expected_products = self._capture_snapshot(t_products)
+
+        time.sleep(1.1)
+        incr_id = self._run_statement_capture_op_id(f"BACKUP `{collection}` INCREMENTAL;", "incbackup")
+        assert incr_id.startswith("ydb://incbackup/11?id="), incr_id
+        self.poll_operation(incr_id)
+        assert incr_id in self.operation_list_ids("incbackup"), \
+            f"{incr_id} not found in `operation list incbackup`"
+
+        # ---- 3) drop source tables, RESTORE: capture -> poll -------------
+        self._try_remove_tables(tables)
+
+        restore_id = self._run_statement_capture_op_id(f"RESTORE `{collection}`;", "restore")
+        assert restore_id.startswith("ydb://restore/12?id="), restore_id
+        self.poll_operation(restore_id)
+        assert restore_id in self.operation_list_ids("restore"), \
+            f"{restore_id} not found in `operation list restore`"
+
+        # ---- 4) verify restored data == post-incremental state -----------
+        self.wait_for_table_rows(t_orders, expected_orders, timeout_s=120)
+        self.wait_for_table_rows(t_products, expected_products, timeout_s=120)
+
+        # ---- 5) cleanup: forget every operation, confirm it's gone -------
+        for op_id in (incr_id, restore_id, full_id):
+            self.operation_forget(op_id)
+        assert full_id not in self.operation_list_ids("fullbackup"), \
+            f"{full_id} still listed after forget"
+        assert incr_id not in self.operation_list_ids("incbackup"), \
+            f"{incr_id} still listed after forget"

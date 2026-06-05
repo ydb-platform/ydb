@@ -43,6 +43,18 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
     return true;
 }
 
+bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
+    TOlapSchemaUpdate schemaDiff;
+    if (!schemaDiff.Parse(tableSchema, errors, allowNullKeys)) {
+        return false;
+    }
+    if (!Update(schemaDiff, errors)) {
+        return false;
+    }
+    ParseIndexesFromFullSchema(tableSchema);
+    return true;
+}
+
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
     Version = tableSchema.GetVersion();

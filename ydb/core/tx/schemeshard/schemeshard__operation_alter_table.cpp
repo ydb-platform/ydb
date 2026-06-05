@@ -135,7 +135,14 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             return nullptr;
         }
 
-        if (col.GetNotNull() && !hasDefault) {
+        auto colId = table->GetColumnIdByNameSlow(col.GetName());
+        bool altersExistingColumn = (colId != TTableInfo::InvalidColumnId);
+
+        // Adding a new NOT NULL column to an existing table requires a default,
+        // otherwise pre-existing rows would have no value for that column and
+        // would violate the constraint immediately. Altering an existing column (SET NOT NULL way)
+        // is handled separately and may validate existing data instead.
+        if (col.GetNotNull() && !hasDefault && !altersExistingColumn) {
             errStr = Sprintf("Not null columns without defaults are not supported.");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
@@ -175,7 +182,6 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
-        .EnableSetColumnConstraint = AppData()->FeatureFlags.GetEnableSetColumnConstraint(),
     };
 
 

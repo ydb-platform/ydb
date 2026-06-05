@@ -918,6 +918,26 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     auto rowType = itemType->Cast<TStructExprType>();
+
+    const bool isStructOfRows = rowType->GetSize() == 2 && [&]() {
+            THashSet<TStringBuf> names;
+            for (const auto& item : rowType->GetItems()) {
+                names.insert(item->GetName());
+                if (item->GetItemType()->GetKind() != NYql::ETypeAnnotationKind::Struct) {
+                    return false;
+                }
+            }
+            return names.contains("new") && names.contains("old");
+        }();
+    if (isStructOfRows) {
+        for (const auto& item : rowType->GetItems()) {
+            if (item->GetName() == "new") {
+                rowType = item->GetItemType()->Cast<TStructExprType>();
+                break;
+            }
+        }
+    }
+
     for (const auto& column : columns) {
         if (!rowType->FindItem(column.Value())) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
@@ -1169,16 +1189,6 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
         }
-    }
-
-    bool allowNonKey = false;
-    if (TKqlDeleteRowsIndex::Match(node.Get())) {
-        auto settings = TKqpDeleteRowsIndexSettings::Parse(TExprBase(node).Cast<TKqlDeleteRowsIndex>());
-        allowNonKey = settings.SkipLookup;
-    }
-    if (!allowNonKey && rowType->GetItems().size() != table.second->Metadata->KeyColumnNames.size()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Input type contains non-key columns"));
-        return TStatus::Error;
     }
 
     auto effectType = MakeKqpEffectType(ctx);
@@ -2672,12 +2682,7 @@ TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
-    if (std::stoi(TString(pgSyntax->Content()))) {
-        node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
-    } else {
-        node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
-    }
+    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
 
     return TStatus::Ok;
 }
@@ -2856,6 +2861,28 @@ TStatus AnnotateOpProject(const TExprNode::TPtr& input, TExprContext& ctx) {
 
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpProject done: " << *resultAnn;
 
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto structType = input->ChildPtr(TKqpOpReplaceAlias::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes;
+    auto typeItems = structType->GetItems();
+
+    for (const auto& item: typeItems) {
+        auto columnName = TString(item->GetName());
+        if (auto it = columnName.find("."); it != TString::npos) {
+            columnName = columnName.substr(it+1);
+        }
+
+        auto alias = TString(input->ChildPtr(TKqpOpReplaceAlias::idx_Alias)->Content());
+        columnName = alias + "." + columnName;
+        structItemTypes.push_back(ctx.MakeType<TItemExprType>(columnName, item->GetItemType()));
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+    input->SetTypeAnn(resultAnn);
     return TStatus::Ok;
 }
 
@@ -3178,6 +3205,7 @@ public:
         AddHandler({TKqpOpLimit::CallableName()}, Hndl(&AnnotateOpLimit));
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));
+        AddHandler({TKqpOpReplaceAlias::CallableName()}, Hndl(&AnnotateOpReplaceAlias));
         AddHandler({TKqpOpAggregate::CallableName()}, Hndl(&AnnotateOpAggregate));
         AddHandler({TKqpOpRoot::CallableName()}, Hndl(&AnnotateOpRoot));
     }

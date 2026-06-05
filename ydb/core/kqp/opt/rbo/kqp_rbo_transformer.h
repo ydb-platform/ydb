@@ -122,7 +122,7 @@ private:
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);
 
-NYql::TExprNode::TPtr RewriteSelect(const NYql::TExprNode::TPtr& node, NYql::TExprContext& ctx, const NYql::TTypeAnnotationContext& typeCtx, const NOpt::TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, bool pgSyntax = false);
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot = false);
 
 } // namespace NKikimr::NKqp

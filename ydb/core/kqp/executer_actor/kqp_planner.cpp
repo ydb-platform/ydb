@@ -544,7 +544,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
         .WithProgressStats = WithProgressStats,
-        .Deadline = Deadline,
+        // Compute actor should not arm a timeout timer: in case of timeout it will receive
+        // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
+        // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.
+        .Deadline = TInstant(),
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,

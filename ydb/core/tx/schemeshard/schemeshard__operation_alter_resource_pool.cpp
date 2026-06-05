@@ -149,12 +149,27 @@ public:
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
         const TPathElement::TPtr resourcePool = ReplaceResourcePoolPathElement(dstPath);
-        NResourcePool::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxAlterResourcePool);
-        NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
 
-        NIceDb::TNiceDb db(context.GetDB());
-        NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, /* acl */ TString());
+        auto guard = context.DbGuard();
+
+        context.MemChanges.GrabPath(context.SS, resourcePool->PathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabResourcePool(context.SS, resourcePool->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(resourcePool->PathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistResourcePool(resourcePool->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        context.SS->ResourcePools[resourcePool->PathId] = resourcePoolInfo;
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterResourcePool, resourcePool->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
@@ -164,7 +179,6 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TAlterResourcePool AbortPropose: opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterResourcePool");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

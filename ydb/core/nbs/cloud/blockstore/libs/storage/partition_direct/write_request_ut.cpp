@@ -85,7 +85,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -103,6 +105,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             MakeWriteTestRequestHeaders(range, BlockSize));
         originalRequest->Sglist = MakeSgList();
 
+        std::optional<TBaseWriteRequestExecutor::TResponse> callbackResult;
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
@@ -114,9 +117,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(originalRequest),
                 userLsn,
                 NWilson::TTraceId());
-        auto future = writeRequest->GetFuture();
+        writeRequest->SetReplyCallback(
+            [&](TBaseWriteRequestExecutor::TResponse response)
+            { callbackResult = std::move(response); });
         writeRequest->Run();
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, callbackResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(2, scheduled.size());
         UNIT_ASSERT_VALUES_EQUAL(timeout, scheduled[0].first);
         UNIT_ASSERT_VALUES_EQUAL(hedgeDelay, scheduled[1].first);
@@ -126,8 +131,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         writePBufferPromises[1].SetValue({.Error = MakeError(S_OK)});
         writePBufferPromises[2].SetValue({.Error = MakeError(S_OK)});
 
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(true, callbackResult.has_value());
+        const auto& response = *callbackResult;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
     }
 
@@ -163,7 +168,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -181,6 +188,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             MakeWriteTestRequestHeaders(range, BlockSize));
         originalRequest->Sglist = MakeSgList();
 
+        std::optional<TBaseWriteRequestExecutor::TResponse> callbackResult;
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
@@ -192,9 +200,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(originalRequest),
                 userLsn,
                 NWilson::TTraceId());
-        auto future = writeRequest->GetFuture();
+        writeRequest->SetReplyCallback(
+            [&](TBaseWriteRequestExecutor::TResponse response)
+            { callbackResult = std::move(response); });
         writeRequest->Run();
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, callbackResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(2, scheduled.size());
         UNIT_ASSERT_VALUES_EQUAL(timeout, scheduled[0].first);
         UNIT_ASSERT_VALUES_EQUAL(hedgeDelay, scheduled[1].first);
@@ -204,8 +214,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         // Run hedge callback.
         scheduled[0].second();
 
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(true, callbackResult.has_value());
+        const auto& response = *callbackResult;
         UNIT_ASSERT_VALUES_EQUAL(E_TIMEOUT, response.Error.GetCode());
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("Write request timeout"),
@@ -246,7 +256,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -264,6 +276,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             MakeWriteTestRequestHeaders(range, BlockSize));
         originalRequest->Sglist = MakeSgList();
 
+        std::optional<TBaseWriteRequestExecutor::TResponse> callbackResult;
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
@@ -275,9 +288,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(originalRequest),
                 userLsn,
                 NWilson::TTraceId());
-        auto future = writeRequest->GetFuture();
+        writeRequest->SetReplyCallback(
+            [&](TBaseWriteRequestExecutor::TResponse response)
+            { callbackResult = std::move(response); });
         writeRequest->Run();
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, callbackResult.has_value());
         UNIT_ASSERT_VALUES_EQUAL(2, scheduled.size());
         UNIT_ASSERT_VALUES_EQUAL(timeout, scheduled[0].first);
         UNIT_ASSERT_VALUES_EQUAL(hedgeDelay, scheduled[1].first);
@@ -291,17 +306,17 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         writePBufferPromises[3].SetValue(   // HandOff0
             {.Error = MakeError(S_OK)});
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, callbackResult.has_value());
 
         writePBufferPromises[4].SetValue(   // HandOff1
             {.Error = MakeError(S_OK)});
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, callbackResult.has_value());
 
         writePBufferPromises[2].SetValue(   // Primary2
             {.Error = MakeError(S_OK)});
 
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(true, callbackResult.has_value());
+        const auto& response = *callbackResult;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
             MakeHostMask({0, 1, 2, 3, 4}),
@@ -341,7 +356,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(guardedSglist);
 
             UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
             writePBufferPromises.emplace(
@@ -359,6 +376,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             MakeWriteTestRequestHeaders(range, BlockSize));
         originalRequest->Sglist = MakeSgList();
 
+        std::optional<TBaseWriteRequestExecutor::TResponse> callbackResult;
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
@@ -370,7 +388,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(originalRequest),
                 userLsn,
                 NWilson::TTraceId());
-        auto future = writeRequest->GetFuture();
+        writeRequest->SetReplyCallback(
+            [&](TBaseWriteRequestExecutor::TResponse response)
+            { callbackResult = std::move(response); });
         writeRequest->Run();
 
         UNIT_ASSERT_VALUES_EQUAL(2, scheduled.size());
@@ -382,7 +402,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             {.Error = MakeError(S_OK)});
         writePBufferPromises[1].SetValue(   // Primary1
             {.Error = MakeError(S_OK)});
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, callbackResult.has_value());
 
         scheduled[1].second();
         UNIT_ASSERT_VALUES_EQUAL(4, writePBufferPromises.size());
@@ -397,8 +417,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(4, writePBufferPromises.size());
         UNIT_ASSERT(!writePBufferPromises.contains(4));   // HandOff1
 
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(true, callbackResult.has_value());
+        const auto& response = *callbackResult;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2, 3}), response.RequestedWrites);
         UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2}), response.CompletedWrites);
@@ -417,20 +437,19 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // prepare and call main request
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
-        auto future = writeRequest->GetFuture();
+
         writeRequest->Run();
 
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(true, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
 
-        const auto& response = future.GetValue();
+        const auto& response = *CallbackResult;
 
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.GetDesiredPBuffers(),
             response.RequestedWrites);
         UNIT_ASSERT_EQUAL(
-            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.GetDesiredPBuffers(),
             response.CompletedWrites);
     }
 
@@ -447,23 +466,25 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // prepare and call main request
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
-        auto future = writeRequest->GetFuture();
         writeRequest->Run();
 
         // as response is hanging, there is no results
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+        // ManyPBufferCallback is set because hanging handler stored it
+        UNIT_ASSERT_VALUES_EQUAL(true, bool(ManyPBufferCallback));
 
-        // call hedge mechanism.
+        // call hedge mechanism. It will work with default response's handler
+        // from base fixture
         RunScheduledHedge();
         // Reply to all write to PBuffer requests.
         SetWriteResult(
             TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
             false);
 
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        // ManyPBufferCallback is still set (main request still pending)
+        UNIT_ASSERT_VALUES_EQUAL(true, bool(ManyPBufferCallback));
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
@@ -486,30 +507,29 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // prepare and call main request
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
-        auto future = writeRequest->GetFuture();
         writeRequest->Run();
 
         // as response is hanging, there is no results
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(true, bool(ManyPBufferCallback));
 
         // call hedge mechanism
         RunScheduledHedge();
 
         // hedge is hanging too
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
 
         // reply from main request
-        ManyPBufferPromise.SetValue(CreateOkResponse());
-        const auto& response = future.GetValue();
+        ManyPBufferCallback(CreateOkResponse());
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
 
         // but there were sent requests to HO too
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
         UNIT_ASSERT_EQUAL(
-            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.GetDesiredPBuffers(),
             response.CompletedWrites);
     }
 
@@ -528,34 +548,30 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // prepare and call main request
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
-        auto future = writeRequest->GetFuture();
         writeRequest->Run();
 
         // as response is hanging, there is no results
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(true, bool(ManyPBufferCallback));
 
         // call hedge mechanism
         RunScheduledHedge();
 
         // hedge is hanging too
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
 
         // partially reply from main request
-        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
-        auto manyPBufferResult = ManyPBufferPromise.GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{0}));
 
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
 
         UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
         DirectWritePromises[0].SetValue(CreateOkDirectResponse());
         DirectWritePromises[1].SetValue(CreateOkDirectResponse());
 
         // reply is ready
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_VALUES_EQUAL(3, response.CompletedWrites.Count());
 
@@ -565,9 +581,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{0}));
         bool atLeastOneHandoffResponded =
             response.CompletedWrites.Get(
-                *VChunkConfig.PBufferHosts.GetHandOff().Nth(0)) ||
+                *VChunkConfig.GetSecondaryPBuffers().Nth(0)) ||
             response.CompletedWrites.Get(
-                *VChunkConfig.PBufferHosts.GetHandOff().Nth(1));
+                *VChunkConfig.GetSecondaryPBuffers().Nth(1));
         UNIT_ASSERT_EQUAL(true, atLeastOneHandoffResponded);
     }
 
@@ -588,26 +604,22 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // prepare and call main request
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
-        auto future = writeRequest->GetFuture();
         writeRequest->Run();
 
         // as response is hanging, there is no results
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(true, bool(ManyPBufferCallback));
 
         // call hedge mechanism
         RunScheduledHedge();
 
         // hedge is hanging too
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
 
         // partially reply from main request
-        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
-        auto manyPBufferResult = ManyPBufferPromise.GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{0}));
 
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
 
         UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
         DirectWritePromises[0].SetValue(CreateFailDirectResponse());
@@ -615,14 +627,14 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         DirectWritePromises[2].SetValue(CreateOkDirectResponse());
 
         // reply is not ready still
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
         // there is retry direct write
         UNIT_ASSERT_VALUES_EQUAL(4, DirectWritePromises.size());
         DirectWritePromises[3].SetValue(CreateOkDirectResponse());
 
         // reply is ready
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_VALUES_EQUAL(3, response.CompletedWrites.Count());
 
@@ -644,18 +656,15 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // prepare and call main request
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
-        auto future = writeRequest->GetFuture();
         writeRequest->Run();
 
         // as response is hanging, there is no results
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(true, bool(ManyPBufferCallback));
 
         // partially reply from main request
-        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
-        auto manyPBufferResult = ManyPBufferPromise.GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
 
         // immediate automatically sent retries
         UNIT_ASSERT_VALUES_EQUAL(2, DirectWritePromises.size());
@@ -675,19 +684,136 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
         // immediate retry after fail of direct request
         UNIT_ASSERT_VALUES_EQUAL(4, DirectWritePromises.size());
-        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
         DirectWritePromises[3].SetValue(CreateFailDirectResponse());
 
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
 
         // reply is ready with error result
-        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
-        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
         UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_VALUES_EQUAL(2, response.CompletedWrites.Count());
 
         // there were sent requests all locations
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
+    }
+
+    Y_UNIT_TEST_F(ShouldANotherTryOnOverallError, TWriteWithPbTestFixture)
+    {
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+
+        writeRequest->Run();
+
+        ManyPBufferCallback(CreateDBGErrorResponse());
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            3,
+            DirectWritePromises.size());   // retry from main
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[2].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+    }
+
+    Y_UNIT_TEST_F(ShouldWorkWithMultipleResponses, TWriteWithPbTestFixture)
+    {
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+
+        writeRequest->Run();
+
+        {
+            TDBGWriteBlocksToManyPBuffersResponse partResponse;
+            partResponse.OverallError = MakeError(S_OK);
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{2}, .Error = MakeError(S_OK)});
+
+            ManyPBufferCallback(std::move(partResponse));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            DirectWritePromises.size());   // retry from main
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+
+        UNIT_ASSERT_EQUAL(3, response.CompletedWrites.Count());
+
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{0}));
+        UNIT_ASSERT_EQUAL(3, response.CompletedWrites.Count());
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldWorkWithMultipleResponsesAndHedge,
+        TWriteWithPbTestFixture)
+    {
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+
+        writeRequest->Run();
+
+        //  call hedge mechanism
+        RunScheduledHedge();
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+
+        {
+            TDBGWriteBlocksToManyPBuffersResponse partResponse;
+            partResponse.OverallError = MakeError(S_OK);
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{2}, .Error = MakeError(S_OK)});
+
+            ManyPBufferCallback(std::move(partResponse));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+
+        {
+            ManyPBufferCallback(CreateOneOkResponse(THostIndex{1}));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+
+        UNIT_ASSERT_EQUAL(3, response.CompletedWrites.Count());
+
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[2].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_EQUAL(5, AllCompletedWrites.Count());
     }
 }
 

@@ -48,6 +48,18 @@ std::shared_ptr<arrow::Buffer> CreateShiftedBitmask(arrow::MemoryPool& pool, std
     return resultBitmap;
 }
 
+template <typename T>
+std::shared_ptr<arrow::Buffer> MakeShiftedBuffer(const arrow::ArrayData& array,
+                                                 int bufferIdx,
+                                                 ui64 shift,
+                                                 arrow::MemoryPool& pool) {
+    const i64 newLen = shift + array.length;
+    auto result_buffer = ARROW_RESULT(arrow::AllocateBuffer(newLen * sizeof(T), &pool));
+    T* destination = reinterpret_cast<T*>(result_buffer->mutable_data());
+    std::copy(array.GetValues<T>(bufferIdx), array.GetValues<T>(bufferIdx) + array.length, destination + shift);
+    return result_buffer;
+}
+
 ui64 CalculateRandomOffsetShift(IRandomProvider& randomProvider) {
     return randomProvider.Uniform(0, MaxOffsetShift + 1);
 }
@@ -183,11 +195,48 @@ protected:
     TOffsetFuzzerBase::TPtr Base_;
 };
 
+class TVariantOffsetFuzzer: public TOffsetFuzzerBase {
+public:
+    TVariantOffsetFuzzer(TVector<TOffsetFuzzerBase::TPtr>&& children,
+                         const NYql::NUdf::TType* type,
+                         const TTypeEnvironment& env)
+        : TOffsetFuzzerBase(type, /*isTypeOptional=*/false, env)
+        , Children_(std::move(children))
+    {
+    }
+
+    std::shared_ptr<arrow::ArrayData> DoFuzzArray(const arrow::ArrayData& array,
+                                                  arrow::MemoryPool& memoryPool,
+                                                  IRandomProvider& randomProvider) const override {
+        const auto extraShift = CalculateRandomOffsetShift(randomProvider);
+        const i64 newLen = extraShift + array.length;
+
+        auto result = arrow::ArrayData::Make(
+            array.type, newLen,
+            {nullptr,
+             MakeShiftedBuffer<i8>(array, 1, extraShift, memoryPool),
+             MakeShiftedBuffer<i32>(array, 2, extraShift, memoryPool)});
+
+        result->child_data.resize(Children_.size());
+
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            result->child_data[childIndex] = Children_[childIndex]->FuzzArray(
+                *array.child_data[childIndex], memoryPool, randomProvider);
+        }
+
+        return SynchronizeArrayDataMeta(std::move(result), array, extraShift);
+    }
+
+private:
+    TVector<TOffsetFuzzerBase::TPtr> Children_;
+};
+
 struct TFuzzerTraits {
     using TResult = TOffsetFuzzerBase;
 
     template <bool Nullable>
     using TTuple = TTupleOffsetFuzzer<Nullable>;
+    using TVariant = TVariantOffsetFuzzer;
 
     template <typename T, bool Nullable>
     using TFixedSize = TLeafOffsetFuzzer<Nullable>;
@@ -279,7 +328,7 @@ private:
         auto result = arrayData.Copy();
         MKQL_ENSURE(!result->buffers.empty(), "Expected at least 1 buffer for type: " << arrayData.type->ToString() << "Array length: " << arrayData.length);
         if (result->buffers[0]) {
-            int64_t nullCount = result->GetNullCount();
+            i64 nullCount = result->GetNullCount();
             if (nullCount == 0 && randomProvider.GenRandReal2() < RemoveMaskProbability) {
                 result->buffers[0] = nullptr;
             }

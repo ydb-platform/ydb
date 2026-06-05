@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxRemoveRequest : public TTransactionBase<TCms> {
@@ -18,7 +20,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_REQUEST; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveRequest Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveRequest Execute");
 
         auto it = Self->State->ScheduledRequests.find(Id);
         if (it != Self->State->ScheduledRequests.end()) {
@@ -42,7 +44,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveRequest Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveRequest Complete");
 
         if (Response) {
             Y_ABORT_UNLESS(Request);

@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NConsole {
 
 void TConsole::DefaultSignalTabletActive(const TActorContext &)
@@ -48,13 +50,14 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
 
 void TConsole::OnDetach(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "TConsole::OnDetach");
+    YDB_LOG_CTX_DEBUG(ctx, "TConsole::OnDetach");
     Die(ctx);
 }
 
 void TConsole::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx)
 {
-    LOG_INFO(ctx, NKikimrServices::CMS, "TConsole::OnTabletDead: %" PRIu64, TabletID());
+    YDB_LOG_CTX_INFO(ctx, "TConsole::OnTabletDead: ",
+        {"#_TabletID()", TabletID()});
 
     if (Counters)
         Counters->ResetCounters();
@@ -64,9 +67,10 @@ void TConsole::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContex
 
 void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS,
-              "TConsole::Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-              TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
+    YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TConsole::Enqueue:, event",
+        {"#_TabletID()", TabletID()},
+        {"type", ev->GetTypeRewrite()},
+        {"event", ev->ToString().data()});
     InitQueue.push_back(ev);
 }
 
@@ -103,7 +107,7 @@ bool TConsole::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActo
 
 void TConsole::Cleanup(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "TConsole::Cleanup");
+    YDB_LOG_CTX_DEBUG(ctx, "TConsole::Cleanup");
 
     if (ConfigsManager) {
         ConfigsManager->Detach();
@@ -140,9 +144,10 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
 {
     while (!InitQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
-        LOG_DEBUG(ctx, NKikimrServices::CMS,
-                  "TConsole::Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-                  TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
+        YDB_LOG_CTX_DEBUG(ctx, "TConsole::Dequeue:, event",
+            {"#_TabletID()", TabletID()},
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString().data()});
         ctx.Send(ev.Release());
         InitQueue.pop_front();
     }

@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
@@ -25,7 +27,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_PERMISSIONS ; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxStorePermissions Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Param>().Key(Schema::Param::Key).Update(
@@ -138,7 +140,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxStorePermissions complete");
 
         Self->Reply(Request.Get(), Response, ctx);
         Self->SchedulePermissionsCleanup(ctx);

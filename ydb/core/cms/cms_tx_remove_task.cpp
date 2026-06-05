@@ -1,6 +1,8 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 template <typename TTable>
@@ -19,7 +21,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_TASK; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveTask Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTask Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<TTable>().Key(Id).Delete();
@@ -32,14 +34,15 @@ public:
             Self->AuditLog(ctx, TStringBuilder() << "Remove task"
                 << ": id# " << Id);
         } else {
-            LOG_ERROR(ctx, NKikimrServices::CMS, "Can't find task %s", Id.data());
+            YDB_LOG_CTX_ERROR(ctx, "Can't find task ",
+                {"#_Id.data()", Id.data()});
         }
 
         return true;
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveTask Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTask Complete");
     }
 
 private:

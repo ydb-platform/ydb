@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/util/stlog.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 class TConfigsDispatcherProxy : public TActorBootstrapped<TConfigsDispatcherProxy> {
@@ -15,7 +17,8 @@ private:
 public:
     void Bootstrap(const TActorContext& ctx) {
         ConfigsDispatcher = MakeConfigsDispatcherID(ctx.SelfID.NodeId());
-        STLOG(PRI_INFO, CMS_CONFIGS, CDP01, "ConfigsDispatcher proxy started");
+        YDB_LOG_INFO("ConfigsDispatcher proxy started",
+            {"Marker", "CDP01"});
  
         Become(&TConfigsDispatcherProxy::StateWork);
     }

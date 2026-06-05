@@ -2,6 +2,8 @@
 #include "scheme.h"
 #include "sentinel.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxUpdateConfig : public TTransactionBase<TCms> {
@@ -20,7 +22,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_UPDATE_CONFIG; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "TTxUpdateConfig Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfig Execute");
 
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->State->ConfigProto)) {
             NIceDb::TNiceDb db(txc.DB);
@@ -34,14 +36,14 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxUpdateConfig Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfig Complete");
 
         if (Modify) {
             Self->State->ConfigProto = Config;
             Self->State->Config.Deserialize(Config);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                        "Updated config: " << Config.ShortDebugString());
+            YDB_LOG_CTX_DEBUG(ctx, "Updated",
+                {"config", Config.ShortDebugString()});
         }
 
         ctx.Send(Response.Release());

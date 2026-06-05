@@ -1,6 +1,8 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
@@ -19,16 +21,15 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         auto &req = Request->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TTxGetLogTail Execute " << req.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Execute",
+            {"#_req.ShortDebugString()", req.ShortDebugString()});
 
         TVector<NKikimrCms::TLogRecord> records;
         if (!Self->Logger.DbLoadLogTail(req.GetLogFilter(), records, txc))
             return false;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TTxGetLogTail found " << records.size()
-                    << " matching log records");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail found matching log records",
+            {"#_records.size()", records.size()});
 
         Response = MakeHolder<TEvCms::TEvGetLogTailResponse>();
         auto &rec = Response->Record;
@@ -46,7 +47,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxGetLogTail Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Complete");
 
         ctx.Send(Request->Sender, Response.Release());
     }

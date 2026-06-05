@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxStoreWalleTask : public TTransactionBase<TCms> {
@@ -20,7 +22,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_WALLE_TASK; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStoreWalleTask Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxStoreWalleTask Execute");
 
         for (auto &perm : Task.Permissions) {
             if (Self->State->Permissions.find(perm) == Self->State->Permissions.end()) {
@@ -50,7 +52,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStoreWalleTask Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxStoreWalleTask Complete");
         Self->Reply(Request.Get(), Response, ctx);
     }
 

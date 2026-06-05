@@ -188,8 +188,9 @@ private:
     }
 
     STFUNC(StateInit) {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->ToString().data());
+        YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateInit event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString().data()});
         StateInitImpl(ev, SelfId());
     }
 
@@ -223,8 +224,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event event: ",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString().data()});
             }
         }
     }
@@ -292,8 +294,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event type: %" PRIx32 " event: %s",
-                          ev->GetTypeRewrite(), ev->ToString().data());
+                YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString().data()});
             }
         }
     }

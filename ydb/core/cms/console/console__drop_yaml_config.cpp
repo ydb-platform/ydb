@@ -4,6 +4,8 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -67,7 +69,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxDropYamlConfig Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxDropYamlConfig Complete");
 
         ctx.Send(Response.Release());
 

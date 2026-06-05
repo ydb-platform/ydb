@@ -3,6 +3,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
@@ -23,8 +25,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         auto &rec = RequestEvent->Get()->Record;
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
-                  rec.ShortDebugString().data());
+        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request: ",
+            {"#_rec.ShortDebugString().data()", rec.ShortDebugString().data()});
 
         TAutoPtr<TEvCms::TEvWalleListTasksResponse> response = new TEvCms::TEvWalleListTasksResponse;
 

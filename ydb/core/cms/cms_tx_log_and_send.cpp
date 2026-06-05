@@ -1,6 +1,8 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxLogAndSend : public TTransactionBase<TCms> {
@@ -15,8 +17,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_LOG_AND_SEND; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TTxLogAndSend Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogAndSend Execute");
 
         Self->Logger.DbLogData(Event->Get()->LogData, txc, ctx);
 
@@ -24,7 +25,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLogAndSend Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogAndSend Complete");
 
         if (Event->Get()->Event)
             ctx.Send(Event->Get()->Event.Release());

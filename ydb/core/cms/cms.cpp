@@ -34,6 +34,8 @@
 #include <util/string/join.h>
 #include <util/system/hostname.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
@@ -95,7 +97,7 @@ void TCms::OnActivateExecutor(const TActorContext &ctx)
 
 void TCms::OnDetach(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::OnDetach");
+    YDB_LOG_CTX_DEBUG(ctx, "TCms::OnDetach");
 
     Die(ctx);
 }
@@ -104,7 +106,8 @@ void TCms::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext 
 {
     Y_UNUSED(ev);
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "OnTabletDead: %" PRIu64, TabletID());
+    YDB_LOG_CTX_INFO(ctx, "OnTabletDead: ",
+        {"#_TabletID()", TabletID()});
 
     Die(ctx);
 }
@@ -361,8 +364,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::CMS,
-                "Check request: " << request.ShortDebugString());
+    YDB_LOG_CTX_INFO(ctx, "Check",
+        {"request", request.ShortDebugString()});
 
     switch (request.GetAvailabilityMode()) {
     case MODE_MAX_AVAILABILITY:
@@ -404,7 +407,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         TErrorInfo error;
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
+        YDB_LOG_CTX_DEBUG(ctx, "Checking action: ",
+            {"#_action.ShortDebugString().data()", action.ShortDebugString().data()});
 
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
@@ -412,7 +416,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
 
         if (prepared && CheckAction(action, opts, error, ctx)) {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
+            YDB_LOG_CTX_DEBUG(ctx, "Result: ALLOW");
 
             auto *permission = response.AddPermissions();
             permission->MutableAction()->CopyFrom(action);
@@ -422,8 +426,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
             ClusterInfo->AddTempLocks(action, request.GetPriority(), requestId, &ctx);
         } else {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
-                      ToString(error.Code).data(), error.Reason.GetMessage().data());
+            YDB_LOG_CTX_DEBUG(ctx, "Result: (reason: )",
+                {"#_ToString(error.Code).data()", ToString(error.Code).data()},
+                {"#_error.Reason.GetMessage().data()", error.Reason.GetMessage().data()});
 
             if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
                 response.MutableStatus()->SetCode(error.Code);
@@ -767,8 +772,9 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
-                                                                 << "; State: " << TStateStorageRingInfo::RingStateToString(state));
+        YDB_LOG_DEBUG("",
+            {"Ring", ringInfo->RingId},
+            {"State", TStateStorageRingInfo::RingStateToString(state)});
         
         if (state == TStateStorageRingInfo::RestartByThisRequest) {
             hasRestartRingsByThisRequest = true;
@@ -1114,11 +1120,11 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         auto &permission = *resp.MutablePermissions(i);
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
         State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner, priority));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission"
-            << ": id# " << permission.GetId()
-            << ", requestId# " << requestId
-            << ", owner# " << owner
-            << ", priority# " << priority);
+        YDB_LOG_DEBUG("Accepting permission",
+            {"id", permission.GetId()},
+            {"requestId", requestId},
+            {"owner", owner},
+            {"priority", priority});
         ClusterInfo->AddLocks(permission, requestId, owner, priority, &ctx);
 
         if (!check) {
@@ -1146,7 +1152,8 @@ void TCms::ScheduleCleanup(TInstant time, const TActorContext &ctx)
         && ScheduledCleanups.top() <= (time + TDuration::Seconds(1)))
         return;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Schedule cleanup at " << time);
+    YDB_LOG_CTX_DEBUG(ctx, "Schedule cleanup at",
+        {"time", time});
 
     ScheduledCleanups.push(time);
     ctx.Schedule(time - now, new TEvPrivate::TEvCleanupExpired);
@@ -1230,7 +1237,7 @@ void TCms::DoPermissionsCleanup(const TActorContext &ctx)
 
 void TCms::CleanupWalleTasks(const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Running CleanupWalleTasks");
+    YDB_LOG_CTX_DEBUG(ctx, "Running CleanupWalleTasks");
 
     // Wall-E tasks are updated separately from its request and
     // permissions which means we might have some Wall-E requests
@@ -1274,7 +1281,8 @@ TVector<TString> TCms::FindEmptyTasks(const THashMap<TString, TTaskInfo> &tasks,
     for (const auto &entry : tasks) {
         const auto &task = entry.second;
         if (!State->ScheduledRequests.contains(task.RequestId) && task.Permissions.empty()) {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Found empty task %s", task.TaskId.data());
+            YDB_LOG_CTX_DEBUG(ctx, "Found empty task ",
+                {"#_task.TaskId.data()", task.TaskId.data()});
             tasksToRemove.push_back(task.TaskId);
         }
     }
@@ -1292,7 +1300,7 @@ void TCms::RemoveEmptyTasks(const TActorContext &ctx)
 
 void TCms::Cleanup(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::Cleanup");
+    YDB_LOG_CTX_DEBUG(ctx, "TCms::Cleanup");
 
     NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 
@@ -1370,8 +1378,9 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Get %s permissions for %s",
-              all ? "all" : "selected", user.data());
+    YDB_LOG_CTX_INFO(ctx, "Get permissions for ",
+        {"#_num_0", all ? "all" : "selected"},
+        {"#_user.data()", user.data()});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1402,8 +1411,9 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_CTX_DEBUG(ctx, "Resulting status: ",
+        {"#_TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
+        {"#_resp->Record.GetStatus().GetReason().data()", resp->Record.GetStatus().GetReason().data()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1414,8 +1424,10 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "User %s %s permissions %s",
-              user.data(), done ? "is done with" : "rejected", ToString(rec.GetPermissions()).data());
+    YDB_LOG_CTX_INFO(ctx, "User permissions ",
+        {"#_user.data()", user.data()},
+        {"#_num_0", done ? "is done with" : "rejected"},
+        {"#_ToString(rec.GetPermissions()).data()", ToString(rec.GetPermissions()).data()});
 
     TVector<TString> ids;
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
@@ -1437,8 +1449,9 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
         ids.push_back(id);
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_CTX_DEBUG(ctx, "Resulting status: ",
+        {"#_TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
+        {"#_resp->Record.GetStatus().GetReason().data()", resp->Record.GetStatus().GetReason().data()});
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1454,8 +1467,9 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Get %s requests for %s",
-              all ? "all" : "selected", user.data());
+    YDB_LOG_CTX_INFO(ctx, "Get requests for ",
+        {"#_num_0", all ? "all" : "selected"},
+        {"#_user.data()", user.data()});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1480,8 +1494,9 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_CTX_DEBUG(ctx, "Resulting status: ",
+        {"#_TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
+        {"#_resp->Record.GetStatus().GetReason().data()", resp->Record.GetStatus().GetReason().data()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1493,7 +1508,9 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
     const TString &user = rec.GetUser();
     const TString &id = rec.GetRequestId();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "User %s removes request %s", user.data(), id.data());
+    YDB_LOG_CTX_INFO(ctx, "User removes request ",
+        {"#_user.data()", user.data()},
+        {"#_id.data()", id.data()});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     auto it = State->ScheduledRequests.find(id);
@@ -1515,8 +1532,9 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_CTX_DEBUG(ctx, "Resulting status: ",
+        {"#_TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()", TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data()},
+        {"#_resp->Record.GetStatus().GetReason().data()", resp->Record.GetStatus().GetReason().data()});
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
@@ -1573,8 +1591,8 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvCms::TEvPermissionResponse, Handle);
                 default:
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS,
-                                "Unexpected event type: " << ev->GetTypeName());
+                    YDB_LOG_ERROR("Unexpected event",
+                        {"type", ev->GetTypeName()});
                     break;
             }
         }
@@ -1638,8 +1656,9 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
     const auto &rec = ev->Get()->Record;
     const TString &user = rec.GetUser();
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Get %s notifications for %s",
-              all ? "all" : "selected", user.data());
+    YDB_LOG_CTX_INFO(ctx, "Get notifications for ",
+        {"#_num_0", all ? "all" : "selected"},
+        {"#_user.data()", user.data()});
 
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     if (all) {
@@ -1664,8 +1683,9 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
         }
     }
 
-    LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
-              ToString(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
+    YDB_LOG_CTX_DEBUG(ctx, "Resulting status: ",
+        {"#_ToString(resp->Record.GetStatus().GetCode()).data()", ToString(resp->Record.GetStatus().GetCode()).data()},
+        {"#_resp->Record.GetStatus().GetReason().data()", resp->Record.GetStatus().GetReason().data()});
 
     Reply(ev, std::move(resp), ctx);
 }
@@ -1807,9 +1827,9 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
         auto row = db.Table<Schema::NodeTenant>().Key(nodeId);
         row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant));
 
-        LOG_TRACE(ctx, NKikimrServices::CMS,
-                  "Persist node %" PRIu32 " tenant '%s'",
-                  nodeId, tenant.data());
+        YDB_LOG_CTX_TRACE(ctx, "Persist node tenant ''",
+            {"nodeId", nodeId},
+            {"#_tenant.data()", tenant.data()});
     }
 }
 
@@ -1912,7 +1932,7 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
 
 void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 {
-    LOG_WARN(ctx, NKikimrServices::CMS, "BS Controller connection error");
+    YDB_LOG_CTX_WARN(ctx, "BS Controller connection error");
 
     if (State->BSControllerPipe) {
         NTabletPipe::CloseClient(ctx, State->BSControllerPipe);
@@ -1935,8 +1955,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     TabletCounters->Percentile()[COUNTER_LATENCY_INFO_COLLECTOR].IncrementFor((ctx.Now() - InfoCollectorStartTime).MilliSeconds());
 
     if (!ev->Get()->Success) {
-        LOG_NOTICE_S(ctx, NKikimrServices::CMS,
-                     "Couldn't collect cluster state.");
+        YDB_LOG_CTX_NOTICE(ctx, "Couldn't collect cluster state.");
 
         if (!ClusterInfo) {
             State->ClusterInfo = new TClusterInfo;
@@ -2399,8 +2418,8 @@ bool TCms::CheckNotification(const TNotification &notification,
     for (const auto &action : notification.GetActions()) {
         TErrorInfo error;
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Processing notification for action: %s",
-                  action.ShortDebugString().data());
+        YDB_LOG_CTX_DEBUG(ctx, "Processing notification for action: ",
+            {"#_action.ShortDebugString().data()", action.ShortDebugString().data()});
 
         if (!IsValidNotificationAction(action, time, error, ctx)) {
             resp.MutableStatus()->SetCode(error.Code);
@@ -2426,8 +2445,8 @@ void TCms::Handle(TEvCms::TEvManageNotificationRequest::TPtr &ev, const TActorCo
 {
     auto &rec = ev->Get()->Record;
 
-    LOG_INFO(ctx, NKikimrServices::CMS, "Notification management request: %s",
-              rec.ShortDebugString().data());
+    YDB_LOG_CTX_INFO(ctx, "Notification management request: ",
+        {"#_rec.ShortDebugString().data()", rec.ShortDebugString().data()});
 
     if (!rec.GetUser()) {
         return ReplyWithError<TEvCms::TEvManageNotificationResponse>(
@@ -2574,9 +2593,9 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        LOG_ERROR_S(ctx, NKikimrServices::CMS,
-                    "Cannot subscribe for config updates: " << rec.GetStatus().GetCode()
-                    << " " << rec.GetStatus().GetReason());
+        YDB_LOG_CTX_ERROR(ctx, "Cannot subscribe for config",
+            {"updates", rec.GetStatus().GetCode()},
+            {"#_rec.GetStatus().GetReason()", rec.GetStatus().GetReason()});
 
         SubscribeForConfig(ctx);
         return;
@@ -2584,8 +2603,8 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 
     ConfigSubscriptionId = rec.GetSubscriptionId();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Got config subscription id=" << ConfigSubscriptionId);
+    YDB_LOG_CTX_DEBUG(ctx, "Got config subscription",
+        {"id", ConfigSubscriptionId});
 }
 
 void TCms::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev,

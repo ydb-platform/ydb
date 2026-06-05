@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxProcessNotification : public TTransactionBase<TCms> {
@@ -16,14 +18,15 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROCESS_NOTIFICATION; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxProcessNotification Execute");
 
         auto &rec = Event->Get()->Record;
         Response = new TEvCms::TEvNotificationResponse;
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing notification from %s (time=%s reason='%s')",
-                  rec.GetUser().data(), TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data(),
-                  rec.GetReason().data());
+        YDB_LOG_CTX_INFO(ctx, "Processing notification from (time= reason='')",
+            {"#_rec.GetUser().data()", rec.GetUser().data()},
+            {"#_TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()},
+            {"#_rec.GetReason().data()", rec.GetReason().data()});
 
         if (Self->CheckNotification(rec, Response->Record, ctx)) {
             TString id = Self->AcceptNotification(rec, ctx);
@@ -49,8 +52,8 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxProcessNotification complete with response: %s",
-                  Response->Record.ShortDebugString().data());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxProcessNotification complete with response: ",
+            {"#_Response->Record.ShortDebugString().data()", Response->Record.ShortDebugString().data()});
 
         Self->Reply(Event, std::move(Response), ctx);
         Self->ScheduleNotificationsCleanup(ctx);

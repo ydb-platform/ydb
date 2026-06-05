@@ -1,5 +1,7 @@
 #include "console_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NConsole {
 
 class TConsole::TTxInitScheme : public TTransactionBase<TConsole> {
@@ -11,7 +13,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TConsole::TTxInitScheme Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxInitScheme Execute");
 
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
@@ -20,7 +22,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TConsole::TTxInitScheme Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxInitScheme Complete");
 
         Self->TxProcessor->ProcessTx(Self->CreateTxLoadState(), ctx);
         Self->TxProcessor->TxCompleted(this, ctx);

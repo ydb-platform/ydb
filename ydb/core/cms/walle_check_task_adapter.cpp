@@ -3,6 +3,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
@@ -25,8 +27,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
-                  RequestEvent->Get()->Record.ShortDebugString().data());
+        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request: ",
+            {"#_RequestEvent->Get()->Record.ShortDebugString().data()", RequestEvent->Get()->Record.ShortDebugString().data()});
 
         if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);
@@ -74,9 +76,9 @@ private:
             HFunc(TEvCms::TEvPermissionResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS,
-                      "TWalleRemoveTaskAdapter::StateWork ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleRemoveTaskAdapter::StateWork ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 

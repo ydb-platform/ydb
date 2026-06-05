@@ -13,6 +13,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
@@ -96,8 +98,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "TWalleApiHandler::StateCreateTask ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateCreateTask ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -139,8 +142,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "TWalleApiHandler::StateListTasks ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateListTasks ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -186,8 +190,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "TWalleApiHandler::StateCheckTask ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateCheckTask ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -230,8 +235,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "TWalleApiHandler::StateRemoveTask ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateRemoveTask ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -345,7 +351,7 @@ private:
     }
 
     void HandlePipeDestroyed(const TActorContext &ctx) {
-        LOG_WARN(ctx, NKikimrServices::CMS, "TWalleApiHandler::HandlePipeDestroyed");
+        YDB_LOG_CTX_WARN(ctx, "TWalleApiHandler::HandlePipeDestroyed");
 
         NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
         Bootstrap(ctx);

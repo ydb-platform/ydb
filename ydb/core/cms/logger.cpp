@@ -3,6 +3,8 @@
 
 #include <util/generic/utility.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
@@ -30,8 +32,8 @@ bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
     TInstant fromDate = ctx.Now() - State->Config.LogConfig.TTL;
     ui64 from = Max<ui64>() - fromDate.GetValue();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Cleanup log records until " << fromDate);
+    YDB_LOG_CTX_DEBUG(ctx, "Cleanup log records until",
+        {"fromDate", fromDate});
 
     auto rowset = db.Table<Schema::LogRecords>().GreaterOrEqual(from)
         .Select<Schema::LogRecords::Timestamp>();
@@ -47,8 +49,8 @@ bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
             return false;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Removing " << ids.size() << " log records");
+    YDB_LOG_CTX_DEBUG(ctx, "Removing log records",
+        {"#_ids.size()", ids.size()});
 
     for (auto id : ids)
         db.Table<Schema::LogRecords>().Key(id).Delete();
@@ -110,10 +112,9 @@ void TLogger::DbLogData(const TLogRecordData &data, TTransactionContext &txc, co
         timestamp = State->LastLogRecordTimestamp + 1;
     State->LastLogRecordTimestamp = timestamp;
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                "Add log record to local DB"
-                << " timestamp=" << timestamp
-                << " data=" << data.ShortDebugString());
+    YDB_LOG_CTX_TRACE(ctx, "Add log record to local DB",
+        {"timestamp", timestamp},
+        {"data", data.ShortDebugString()});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::LogRecords>().Key(Max<ui64>() - timestamp)

@@ -1,5 +1,7 @@
 #include "console_configs_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -17,16 +19,15 @@ public:
     {
         auto &req = Request->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTxGetLogTail Execute " << req.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Execute",
+            {"#_req.ShortDebugString()", req.ShortDebugString()});
 
         TVector<NKikimrConsole::TLogRecord> records;
         if (!Self->Logger.DbLoadLogTail(req.GetLogFilter(), records, txc))
             return false;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTxGetLogTail found " << records.size()
-                    << " matching log records");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail found matching log records",
+            {"#_records.size()", records.size()});
 
         Response = MakeHolder<TEvConsole::TEvGetLogTailResponse>();
         auto &rec = Response->Record;
@@ -41,7 +42,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxGetLogTail Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Complete");
 
         ctx.Send(Request->Sender, Response.Release());
 

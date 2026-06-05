@@ -14,6 +14,8 @@
 #include <util/string/builder.h>
 #include <util/system/hostname.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
 #error log macro definition clash
 #endif
@@ -450,18 +452,18 @@ void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THash
         TString tenant = pr.second;
 
         if (!HasNode(nodeId)) {
-            LOG_ERROR(ctx, NKikimrServices::CMS,
-                      "Forgoten node tenant '%s' at node %" PRIu32 ". Node is unknown.",
-                      tenant.data(), nodeId);
+            YDB_LOG_CTX_ERROR(ctx, "Forgoten node tenant at node. Node is unknown.",
+                {"tenant", tenant.data()},
+                {"nodeId", nodeId});
             continue;
         }
 
         TNodeInfo& node = NodeRef(nodeId);
         node.PreviousTenant = tenant;
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS,
-                  "Initial node tenant '%s' at node %" PRIu32,
-                  tenant.data(), nodeId);
+        YDB_LOG_CTX_DEBUG(ctx, "Initial node tenant at node ",
+            {"tenant", tenant.data()},
+            {"nodeId", nodeId});
     }
 }
 
@@ -728,8 +730,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
 
     if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
         if (ctx)
-            LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown host %s",
-                      action.GetHost().data());
+            YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown host ",
+                {"#_action.GetHost().data()", action.GetHost().data()});
         return res;
     }
 
@@ -742,8 +744,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
                 res.insert(node);
             }
         } else if (ctx) {
-            LOG_ERROR_S(*ctx, NKikimrServices::CMS,
-                        "FindLockedItems: unknown host " << action.GetHost());
+            YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown host",
+                {"#_action.GetHost()", action.GetHost()});
         }
         break;
 
@@ -761,14 +763,15 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
             if (item)
                 res.insert(item);
             else if (ctx)
-                LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown device %s", device.data());
+                YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown device ",
+                    {"#_device.data()", device.data()});
         }
         break;
 
     default:
         if (ctx) {
-            LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: action %s is not supported",
-                      TAction::EType_Name(action.GetType()).data());
+            YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: action is not supported",
+                {"#_TAction::EType_Name(action.GetType()).data()", TAction::EType_Name(action.GetType()).data()});
         }
         break;
     }
@@ -801,9 +804,10 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
 
         if (lock) {
             if (ctx)
-                LOG_INFO(*ctx, NKikimrServices::CMS, "Adding lock for %s (permission %s until %s)",
-                          item->PrettyItemName().data(), permission.PermissionId.data(),
-                          permission.Deadline.ToStringLocalUpToSeconds().data());
+                YDB_LOG_CTX_INFO(*ctx, "Adding lock for (permission until )",
+                    {"#_item->PrettyItemName().data()", item->PrettyItemName().data()},
+                    {"#_permission.PermissionId.data()", permission.PermissionId.data()},
+                    {"#_permission.Deadline.ToStringLocalUpToSeconds().data()", permission.Deadline.ToStringLocalUpToSeconds().data()});
             item->AddLock(permission);
             ++locks;
         }
@@ -823,8 +827,8 @@ ui64 TClusterInfo::AddExternalLocks(const TNotificationInfo &notification, const
 
         for (auto item : items) {
             if (ctx)
-                LOG_INFO(*ctx, NKikimrServices::CMS, "Adding external lock for %s",
-                          item->PrettyItemName().data());
+                YDB_LOG_CTX_INFO(*ctx, "Adding external lock for ",
+                    {"#_item->PrettyItemName().data()", item->PrettyItemName().data()});
 
             item->AddExternalLock(notification, action);
         }
@@ -1020,8 +1024,8 @@ void TClusterInfo::GenerateClusterNodesCheckers() {
 
 void TClusterInfo::DebugDump(const TActorContext &ctx) const
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Timestamp: " << Timestamp.ToStringLocalUpToSeconds());
+    YDB_LOG_CTX_DEBUG(ctx, "",
+        {"Timestamp", Timestamp.ToStringLocalUpToSeconds()});
     for (auto &entry: Nodes) {
         TStringStream ss;
         auto &node = *entry.second;
@@ -1037,7 +1041,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
             ss << "  VDisk: " << vd.ToString() << Endl;
         node.DebugLocksDump(ss, "  ");
         ss << "}" << Endl;
-        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
+        YDB_LOG_CTX_TRACE(ctx, ss.Str());
     }
     for (auto &entry: PDisks) {
         TStringStream ss;
@@ -1048,7 +1052,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
            << "  State: " << EState_Name(pdisk.State) << Endl;
         pdisk.DebugLocksDump(ss, "  ");
         ss << "}" << Endl;
-        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
+        YDB_LOG_CTX_TRACE(ctx, ss.Str());
     }
     for (auto &entry: VDisks) {
         TStringStream ss;
@@ -1062,7 +1066,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
             ss << "  BSGroup: " << id << Endl;
         vdisk.DebugLocksDump(ss, "  ");
         ss << "}" << Endl;
-        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
+        YDB_LOG_CTX_TRACE(ctx, ss.Str());
     }
     for (auto &entry: BSGroups) {
         TStringStream ss;
@@ -1076,7 +1080,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
         for (auto &vd : group.VDisks)
             ss << "  VDisk: " << vd.ToString() << Endl;
         ss << "}" << Endl;
-        LOG_TRACE(ctx, NKikimrServices::CMS, ss.Str());
+        YDB_LOG_CTX_TRACE(ctx, ss.Str());
     }
 }
 

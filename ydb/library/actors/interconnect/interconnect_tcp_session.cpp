@@ -38,6 +38,12 @@ namespace NActors {
         return eventTypeName.empty() ? TStringBuf("manual") : TStringBuf(eventTypeName);
     }
 
+    enum class ESendPath : ui64 {
+        DirectSend = 0,
+        BatchPredicted = 1,
+        YieldByTime = 2,
+    };
+
     TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params)
         : TActor(&TInterconnectSessionTCP::StateFunc)
         , Created(TInstant::Now())
@@ -227,7 +233,7 @@ namespace NActors {
             }
         }
 
-        IssueRam(true);
+        IssueRam();
     }
 
     void TInterconnectSessionTCP::Forward(STATEFN_SIG) {
@@ -499,17 +505,53 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::IssueRam(bool batching) {
+    void TInterconnectSessionTCP::IssueRam() {
         const auto& batchPeriod = Proxy->Common->Settings.BatchPeriod;
-        if (!RamInQueue || (!batching && RamInQueue->Batching && batchPeriod != TDuration())) {
-            auto ev = std::make_unique<TEvRam>(batching);
+        if (!RamInQueue) {
+            auto startRam = [&] {
+                LWPROBE(StartRam, Proxy->PeerNodeId);
+                RamStartedCycles = GetCycleCountFast();
+            };
+
+            if (batchPeriod != TDuration()) {
+                auto ev = std::make_unique<TEvRam>(true);
+                RamInQueue = ev.get();
+                auto handle = std::make_unique<IEventHandle>(SelfId(), SelfId(), ev.release());
+                TActivationContext::Schedule(batchPeriod, handle.release());
+                startRam();
+            } else {
+                GenerateTraffic();
+                if (!RamInQueue || RamInQueue->Batching) {
+                    auto recordSendPath = [&](ESendPath sendPath) {
+                        Proxy->Metrics->UpdateSendPathHistogram(static_cast<ui64>(sendPath));
+                    };
+                    DirectPredictor.Predict(
+                        [&]() {
+                            recordSendPath(ESendPath::DirectSend);
+                            RamInQueue = nullptr;
+                        },
+                        [&]() {
+                            recordSendPath(ESendPath::BatchPredicted);
+                            auto ev = std::make_unique<TEvRam>(true);
+                            RamInQueue = ev.get();
+                            auto handle = std::make_unique<IEventHandle>(SelfId(), SelfId(), ev.release());
+                            TActivationContext::Send(handle.release());
+                            startRam();
+                        });
+                }
+            }
+        }
+    }
+
+    void TInterconnectSessionTCP::IssueRamCpuStarvation() {
+        const auto& batchPeriod = Proxy->Common->Settings.BatchPeriod;
+        if (!RamInQueue || RamInQueue->Batching && batchPeriod != TDuration()) {
+            Proxy->Metrics->UpdateSendPathHistogram(static_cast<ui64>(ESendPath::YieldByTime));
+            auto ev = std::make_unique<TEvRam>(false);
             RamInQueue = ev.get();
             auto handle = std::make_unique<IEventHandle>(SelfId(), SelfId(), ev.release());
-            if (batching && batchPeriod != TDuration()) {
-                TActivationContext::Schedule(batchPeriod, handle.release());
-            } else {
-                TActivationContext::Send(handle.release());
-            }
+            TActivationContext::Send(handle.release());
+
             LWPROBE(StartRam, Proxy->PeerNodeId);
             RamStartedCycles = GetCycleCountFast();
         }
@@ -518,6 +560,9 @@ namespace NActors {
     void TInterconnectSessionTCP::HandleRam(TEvRam::TPtr& ev) {
         if (ev->Get() == RamInQueue) {
             LWPROBE(FinishRam, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - ev->SendTime) * 1000.0);
+            if (RamInQueue->Batching) {
+                DirectPredictor.Train(!NumEventsInQueue);
+            }
             RamInQueue = nullptr;
             GenerateTraffic();
         }
@@ -563,7 +608,7 @@ namespace NActors {
                 break;
             } else if (TimeLimit->CheckExceeded()) {
                 SetEnoughCpu(++StarvingInRow < StarvingInRowForNotEnoughCpu);
-                IssueRam(false);
+                IssueRamCpuStarvation();
                 notEnoughCpu = true;
                 break;
             }

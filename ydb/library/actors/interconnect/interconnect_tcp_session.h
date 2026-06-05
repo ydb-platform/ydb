@@ -38,6 +38,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <tuple>
+#include <utility>
 
 namespace NInterconnect {
     class TInterconnectZcProcessor;
@@ -412,6 +413,68 @@ namespace NActors {
         void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr ev);
     };
 
+    // Predicts when the caller may bypass the regular TEvRam path that collects a batch of events
+    // and use the direct path instead.
+    //
+    // Predict() calls the direct callback while the current direct-send budget is non-zero; otherwise it
+    // calls the training callback. The training callback only starts the safe/checking path. It does not
+    // have to call Train() immediately: delayed/asynchronous confirmation may report the result later via
+    // Train(bool). If the result is never reported, the predictor stays conservative and keeps choosing the
+    // training callback.
+    //
+    // Successful training reports raise a saturating confidence counter. Once confidence reaches the
+    // threshold, the predictor grants DIRECT_SEND_UNTIL_RETRAIN direct calls, then asks for one more
+    // training pass. Failed training reports cancel an active direct burst and decrement confidence. This
+    // gives branch-predictor-like hysteresis: noisy misses do not reset all accumulated confidence.
+    class TDirectSendPredictor {
+        static constexpr ui32 CONFIDENCE_TO_SWITCH = 4;
+        static constexpr ui32 MAX_CONFIDENCE = 7;
+        static constexpr ui32 DIRECT_SEND_UNTIL_RETRAIN = 64;
+    public:
+        template <typename TDirectCallback, typename TDirectArgsTuple, typename TTrainCallback, typename TTrainArgsTuple>
+        void Predict(
+                TDirectCallback&& directCallback,
+                TDirectArgsTuple&& directArgs,
+                TTrainCallback&& trainCallback,
+                TTrainArgsTuple&& trainArgs) {
+            if (DirectSendCnt) {
+                DirectSendCnt--;
+                std::apply(std::forward<TDirectCallback>(directCallback), std::forward<TDirectArgsTuple>(directArgs));
+            } else {
+                std::apply(std::forward<TTrainCallback>(trainCallback), std::forward<TTrainArgsTuple>(trainArgs));
+            }
+        }
+
+        template <typename TDirectCallback, typename TTrainCallback>
+        void Predict(TDirectCallback&& directCallback, TTrainCallback&& trainCallback) {
+            Predict(
+                std::forward<TDirectCallback>(directCallback),
+                std::tuple<>(),
+                std::forward<TTrainCallback>(trainCallback),
+                std::tuple<>());
+        }
+
+        void Train(bool ok) noexcept {
+            if (ok) {
+                if (Confidence < MAX_CONFIDENCE) {
+                    ++Confidence;
+                }
+                if (Confidence >= CONFIDENCE_TO_SWITCH) {
+                    DirectSendCnt = DIRECT_SEND_UNTIL_RETRAIN;
+                }
+            } else {
+                DirectSendCnt = 0;
+                if (Confidence) {
+                    Confidence--;
+                }
+            }
+        }
+
+    private:
+        ui32 DirectSendCnt = 0;
+        ui32 Confidence = 0;
+    };
+
     class TInterconnectSessionTCP
        : public TActor<TInterconnectSessionTCP>
        , public TInterconnectLoggingBase
@@ -552,7 +615,9 @@ namespace NActors {
 
         TEvRam* RamInQueue = nullptr;
         ui64 RamStartedCycles = 0;
-        void IssueRam(bool batching);
+        TDirectSendPredictor DirectPredictor;
+        void IssueRam();
+        void IssueRamCpuStarvation();
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
         void ProducePackets();

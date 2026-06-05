@@ -318,6 +318,10 @@ namespace {
             NumEventsInQueueHistogram->Collect(value);
         }
 
+        void UpdateSendPathHistogram(ui64 value) override {
+            SendPathHistogram->Collect(value);
+        }
+
         void UpdateRdmaReadTimeHistogram(ui64 value) override {
             RdmaReadTimeHistogram->Collect(value);
         }
@@ -404,8 +408,10 @@ namespace {
                     "InterconnectQueueTimeHistogramUs", NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram = AdaptiveCounters->GetHistogram(
                     "NumEventsInQueue", NMonitoring::ExplicitHistogram({0, 1, 2, 6, 24, 120}));
+                SendPathHistogram = AdaptiveCounters->GetHistogram(
+                    "SendPath", NMonitoring::ExplicitHistogram({0, 1, 2}));
                 RdmaReadTimeHistogram = AdaptiveCounters->GetHistogram(
-+                    "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
+                    "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
                 RdmaMultipartEvents = AdaptiveCounters->GetCounter("RdmaMultipartEvents", true);
             }
 
@@ -504,6 +510,7 @@ namespace {
         NMonitoring::THistogramPtr PingTimeHistogram;
         NMonitoring::THistogramPtr InterconnectQueueTimeHistogram;
         NMonitoring::THistogramPtr NumEventsInQueueHistogram;
+        NMonitoring::THistogramPtr SendPathHistogram;
         NMonitoring::THistogramPtr RdmaReadTimeHistogram;
         NMonitoring::TDynamicCounters::TCounterPtr RdmaMultipartEvents;
 
@@ -768,6 +775,10 @@ namespace {
             NumEventsInQueueHistogram_->Record(value);
         }
 
+        void UpdateSendPathHistogram(ui64 value) override {
+            SendPathHistogram_->Record(value);
+        }
+
         void UpdateRdmaReadTimeHistogram(ui64 value) override {
             RdmaReadTimeHistogram_->Record(value);
         }
@@ -872,6 +883,8 @@ namespace {
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ic_queue_time_us"}}), NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.num_events_in_queue"}}), NMonitoring::ExplicitHistogram({0, 1, 2, 6, 24, 120}));
+                SendPathHistogram_ = AdaptiveMetrics_->HistogramRate(
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.send_path"}}), NMonitoring::ExplicitHistogram({0, 1, 2}));
                 RdmaReadTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.rdma_read_time_us"}}), NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
                 RdmaMultipartEvents_ = createRate(AdaptiveMetrics_, "interconnect.rdma_multipart_events");
@@ -1004,6 +1017,7 @@ namespace {
         NMonitoring::IHistogram* PingTimeHistogram_;
         NMonitoring::IHistogram* InterconnectQueueTimeHistogram_;
         NMonitoring::IHistogram* NumEventsInQueueHistogram_;
+        NMonitoring::IHistogram* SendPathHistogram_;
         NMonitoring::IHistogram* RdmaReadTimeHistogram_;
         NMonitoring::IRate* RdmaMultipartEvents_;
 

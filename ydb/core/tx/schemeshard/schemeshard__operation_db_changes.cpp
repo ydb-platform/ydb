@@ -129,8 +129,24 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistIncrementalBackup(db, id);
     }
 
+    for (const auto& id : FullBackups) {
+        ss->PersistFullBackup(db, id);
+    }
+
     for (const auto& pId : StreamingQueries) {
         ss->PersistStreamingQuery(db, pId);
+    }
+
+    for (const auto& pId : ExternalDataSources) {
+        ss->PersistExternalDataSource(db, pId);
+    }
+
+    for (const auto& pId : ExternalTables) {
+        ss->PersistExternalTable(db, pId);
+    }
+
+    for (const auto& pId : ResourcePools) {
+        ss->PersistResourcePool(db, pId);
     }
 }
 

@@ -12,6 +12,7 @@ SRCS(
     name_conflicts_ut.cpp
     profiler_ut.cpp
     solomon_ut.cpp
+    summary_ut.cpp
     tag_ut.cpp
     cube_ut.cpp
     encoder_ut.cpp

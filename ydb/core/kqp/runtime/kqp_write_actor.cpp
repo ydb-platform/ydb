@@ -1954,7 +1954,7 @@ private:
         THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyToReadCellsIndex;
 
         lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
-            AFL_ENSURE(cells.size() > KeyColumnTypes.size());
+            AFL_ENSURE(cells.size() >= KeyColumnTypes.size());
 
             readCells.emplace_back(cells);
             const auto key = readCells.back().first(KeyColumnTypes.size());

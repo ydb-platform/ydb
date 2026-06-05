@@ -1,4 +1,6 @@
 #include "partition.h"
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include <util/string/escape.h>
@@ -74,7 +76,8 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(std::move(p.Msg.SourceId), p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                        p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey)); //remove curOffset when LB will report CTime
+                        p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
+                        p.Msg.MessageCount, p.Msg.MessageFormat); //remove curOffset when LB will report CTime
 
     bool lastBlobPart = blob.IsLastPart();
 
@@ -135,7 +138,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                 << " NewHead: " << CompactionBlobEncoder.NewHead
         );
 
-        ++curOffset;
+        curOffset += p.Msg.MessageCount;
         CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
 
@@ -288,7 +291,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             ui16 partNo = blob.GetPartNo();
             const auto offsetPartNo = std::make_pair(offset, partNo);
             if (blob.IsLastPart()) {
-                ++offset;
+                offset += blob.MessageCount;
             }
 
             if (FirstCompactionPart && (offsetPartNo <= *FirstCompactionPart)) {
@@ -354,6 +357,8 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
+                .MessageCount = blob.MessageCount,
+                .MessageFormat = blob.MessageFormat,
             }, std::nullopt};
             msg.Internal = true;
 
@@ -660,6 +665,18 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
                                 CompactionBlobEncoder.Head.PartNo,
                                 CompactionBlobEncoder.NewHead.GetCount() + CompactionBlobEncoder.Head.GetCount(),
                                 CompactionBlobEncoder.Head.GetInternalPartsCount() +  CompactionBlobEncoder.NewHead.GetInternalPartsCount());
+            if (HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()) {
+                ui64 offsetDelta = 0;
+                if (!CompactionBlobEncoder.Head.GetBatches().empty()) {
+                    offsetDelta += CompactionBlobEncoder.Head.GetOffsetDelta();
+                }
+                if (!CompactionBlobEncoder.NewHead.GetBatches().empty()) {
+                    offsetDelta += CompactionBlobEncoder.NewHead.GetOffsetDelta();
+                }
+                if (offsetDelta > 0) {
+                    key.SetOffsetDelta(offsetDelta);
+                }
+            }
         } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead
         res = std::make_pair(key, headSize + CompactionBlobEncoder.NewHead.PackedSize);
     } else {

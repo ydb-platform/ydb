@@ -1087,6 +1087,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterColumnTable(NextPartId(), txState);
     case TTxState::ETxType::TxDropColumnTable:
         return CreateDropColumnTable(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateLocalIndex:
+        return CreateNewLocalIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxDropLocalIndex:
+        return CreateDropLocalIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterLocalIndex:
+        return CreateAlterLocalIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxMoveLocalIndex:
+        return CreateMoveLocalIndex(NextPartId(), txState);
 
     case TTxState::ETxType::TxCreatePQGroup:
         return CreateNewPQ(NextPartId(), txState);
@@ -1305,6 +1313,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateLongIncrementalBackupOp:
         return CreateLongIncrementalBackupOp(NextPartId(), txState);
 
+    case TTxState::ETxType::TxCreateFullBackupOp:
+        return CreateNewFullBackupOp(NextPartId(), txState);
+
     // Secret
     case TTxState::ETxType::TxCreateSecret:
         return CreateNewSecret(NextPartId(), txState);
@@ -1397,11 +1408,11 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         if (tx.GetCreateColumnTable().HasCopyFromTable()) {
             return {CreateReadOnlyCopyColumnTable(op.NextPartId(), tx)};
         }
-        return {CreateNewColumnTable(op.NextPartId(), tx)};
+        return CreateColumnTableWithLocalIndexes(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        return {CreateAlterColumnTable(op.NextPartId(), tx)};
+        return AlterColumnTableWithLocalIndexes(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
-        return {CreateDropColumnTable(op.NextPartId(), tx)};
+        return DropColumnTableWithLocalIndexes(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         return {CreateNewPQ(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
@@ -1542,8 +1553,14 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateConsistentMoveTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         return {CreateMoveTableIndex(op.NextPartId(), tx)};
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex: {
+        const auto& moving = tx.GetMoveIndex();
+        TPath tablePath = TPath::Resolve(moving.GetTablePath(), context.SS);
+        if (tablePath.IsResolved() && !tablePath.IsDeleted() && tablePath->IsColumnTable()) {
+            return CreateConsistentMoveLocalIndex(op.NextPartId(), tx, context);
+        }
         return CreateConsistentMoveIndex(op.NextPartId(), tx, context);
+    }
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
         return {CreateMoveSequence(op.NextPartId(), tx)};
 
@@ -1635,6 +1652,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
+        // Internal control op only - not valid for direct user submission via TModifyScheme.
+        return {CreateNewFullBackupOp(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:

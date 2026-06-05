@@ -824,7 +824,7 @@ protected:
         if (offset != 0 || len != blockLen) {
             for (auto& datum : datums) {
                 if (datum.is_array()) {
-                    datum = NYql::NUdf::DeepSlice(datum.array(), offset, len);
+                    datum = NYql::NUdf::DeepSlice(*datum.array(), offset, len);
                 }
             }
             datums[blockLenIndex] = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len));

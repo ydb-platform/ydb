@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <functional>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,6 +34,9 @@ public:
         THostMask CompletedWrites;
     };
 
+    using TReplyCallback = std::function<void(TResponse)>;
+    using TNotifyBelatedCallback = std::function<void(THostMask, ui64)>;
+
     TBaseWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
         TChildLogTitle logTitle,
@@ -45,12 +50,19 @@ public:
 
     virtual ~TBaseWriteRequestExecutor();
 
-    [[nodiscard]] NThreading::TFuture<TResponse> GetFuture() const;
+    void SetReplyCallback(TReplyCallback callback);
+    void SetNotifyBelatedCallback(TNotifyBelatedCallback callback);
+
+    [[nodiscard]] bool IsAlreadyReplied() const;
 
     virtual void Run() = 0;
 
 protected:
+    void ReplyOrNotifyBelated(
+        NProto::TError error,
+        THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
+    void NotifyBelated(THostMask completedOnCurrentResponse);
 
     void SendWriteRequest(THostIndex host);
 
@@ -64,6 +76,7 @@ protected:
     [[nodiscard]] bool ShouldReplyOk() const;
 
     TVector<THostIndex> GetAvailableHandOffHosts() const;
+    virtual TString ExtendedDebugState() const;
 
     virtual void ScheduleHedging() = 0;
 
@@ -79,10 +92,13 @@ protected:
     const TDuration HedgingDelay;
     const TDuration RequestTimeout;
 
-    NThreading::TPromise<TResponse> Promise =
-        NThreading::NewPromise<TResponse>();
     THostMask RequestedWrites;
     THostMask CompletedWrites;
+
+private:
+    TReplyCallback ReplyCallback;
+    TNotifyBelatedCallback NotifyBelatedCallback;
+    bool IsReplied = false;
 };
 
 using TBaseWriteRequestExecutorPtr = std::shared_ptr<TBaseWriteRequestExecutor>;

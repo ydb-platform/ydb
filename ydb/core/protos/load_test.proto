@@ -643,6 +643,11 @@ message TEvNbsLoadTabletGetSummaryResult {
     optional uint32 NumDirectBlockGroups = 5;
     optional uint64 VChunkSizeBytes = 6;
     optional uint32 TargetNumVChunks = 7;
+    // Longest contiguous prefix [0, N) of allocated DBGs where every DBG has
+    // at least kPrimaryHostsPerDbg PB peers connected. Load actors must use
+    // this count (not NumDirectBlockGroups) as the effective DBG count so that
+    // they do not generate addresses for DBGs whose peers are not yet ready.
+    optional uint32 NumReadyDirectBlockGroups = 8;
 }
 
 message TEvLoadTestResponse {

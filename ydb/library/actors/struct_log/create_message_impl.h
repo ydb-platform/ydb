@@ -1,7 +1,7 @@
 #pragma once
 
-#include "create_message.h"
 #include "key_name.h"
+#include "structured_message.h"
 
 #include <ydb/core/base/id_wrapper.h>
 #include <ydb/library/services/services.pb.h>
@@ -16,6 +16,24 @@
 #include <utility>
 
 namespace NActors::NStructuredLog {
+
+class TCreateMessageArg;
+
+class TCreateMessageGuard {
+    friend class TCreateMessageArg;
+
+public:
+    TCreateMessageGuard();
+    ~TCreateMessageGuard();
+    TStructuredMessage Pop();
+
+protected:
+    static TStructuredMessage& PushBuildMessage();
+    static TStructuredMessage& GetBuildMessage();
+    static TStructuredMessage PopBuildMessage();
+
+    bool Popped{false};
+};
 
 class TCreateMessageArg {
 public:

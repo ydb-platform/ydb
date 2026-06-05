@@ -208,6 +208,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         ui32 Offset = 0;
         ui32 Limit = 0;
         bool IsTabletListFragment = false; // true for mode=tablet_list (returns fragment only)
+        TString ResultsUuid; // optional mode=results filter
     };
 
     struct TNodeFinishedTestInfo {
@@ -763,13 +764,13 @@ public:
                 const double sec = s->MeasuredMs > 0 ? s->MeasuredMs / 1000.0 : 1.0;
                 auto& jr = msg->JsonResult;
                 jr["write_rps"]     = s->WritesOk / sec;
-                jr["write_p50"]     = s->WriteE2eUs.GetValueAtPercentile(50.0) / 1000.0;
-                jr["write_p95"]     = s->WriteE2eUs.GetValueAtPercentile(95.0) / 1000.0;
-                jr["write_p99"]     = s->WriteE2eUs.GetValueAtPercentile(99.0) / 1000.0;
+                jr["write_p50"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(50.0));
+                jr["write_p95"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(95.0));
+                jr["write_p99"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(99.0));
                 jr["read_rps"]      = (s->ReadsPbOk + s->ReadsDDiskOk) / sec;
-                jr["read_p50"]      = s->ReadPbUs.GetValueAtPercentile(50.0) / 1000.0;
-                jr["read_p95"]      = s->ReadPbUs.GetValueAtPercentile(95.0) / 1000.0;
-                jr["read_p99"]      = s->ReadPbUs.GetValueAtPercentile(99.0) / 1000.0;
+                jr["read_p50"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(50.0));
+                jr["read_p95"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(95.0));
+                jr["read_p99"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(99.0));
                 jr["max_in_flight"] = static_cast<ui64>(s->MaxInFlight);
             }
 
@@ -914,16 +915,26 @@ public:
         LOG_N("handle http GET request, mode: " << mode << " LoadActors.size(): " << LoadActors.size());
 
         if (mode == "results") {
+            info.ResultsUuid = params.Has("uuid") ? params.Get("uuid") : "";
+
             if (IsJsonContentType(info.AcceptFormat)) {
                 GenerateJsonInfoRes(id);
                 return;
             }
 
             // send messages to subactors
+            info.HttpInfoResPending = 0;
             for (const auto& [tag, actorId] : LoadActors) {
-                Send(actorId, new NMon::TEvHttpInfo(request, id));
-                info.ActorMap[actorId].Tag = tag;
                 auto reqIt = RequestsInProcessing.find(UuidByTag.at(tag));
+                if (info.ResultsUuid) {
+                    if (reqIt == RequestsInProcessing.end() || reqIt->second.GetUuid() != info.ResultsUuid) {
+                        continue;
+                    }
+                }
+
+                Send(actorId, new NMon::TEvHttpInfo(request, id));
+                ++info.HttpInfoResPending;
+                info.ActorMap[actorId].Tag = tag;
                 if (reqIt != RequestsInProcessing.end()) {
                     const TEvLoadTestRequest& req = reqIt->second;
                     info.ActorMap[actorId].Uuid = req.GetUuid();
@@ -932,7 +943,6 @@ public:
             }
 
             // record number of responses pending
-            info.HttpInfoResPending = LoadActors.size();
             if (!info.HttpInfoResPending) {
                 GenerateHttpInfoRes(mode, id);
             }
@@ -1255,6 +1265,9 @@ public:
         for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
             NJson::TJsonValue value;
             const TFinishedTestInfo& testInfo = *it;
+            if (info.ResultsUuid && testInfo.Uuid != info.ResultsUuid) {
+                continue;
+            }
             value["uuid"] = testInfo.Uuid;
             value["tag"] = testInfo.Tag;
 
@@ -1435,10 +1448,15 @@ public:
                     str << "UUID# " << uuid << " (node tag# " << tag << ")";
                 };
 
+                bool printed = false;
                 for (auto it = info.ActorMap.rbegin(); it != info.ActorMap.rend(); ++it) {
                     const TActorInfo& perActorInfo = it->second;
                     auto uuidIter = UuidByTag.find(perActorInfo.Tag);
                     const TString uuid = uuidIter != UuidByTag.end() ? uuidIter->second : "";
+                    if (info.ResultsUuid && uuid != info.ResultsUuid) {
+                        continue;
+                    }
+                    printed = true;
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             printUuidTag(uuid, perActorInfo.Tag);
@@ -1451,6 +1469,10 @@ public:
 
                 for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
                     const TFinishedTestInfo& testInfo = *it;
+                    if (info.ResultsUuid && testInfo.Uuid != info.ResultsUuid) {
+                        continue;
+                    }
+                    printed = true;
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             printUuidTag(testInfo.Uuid, testInfo.Tag);
@@ -1462,6 +1484,13 @@ public:
                                 str << "Finish time# " << nodeInfo.Finish.ToStringUpToSeconds() << "<br/>";
                                 str << nodeInfo.LastHtmlPage;
                             }
+                        }
+                    }
+                }
+                if (info.ResultsUuid && !printed) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-body") {
+                            str << "No load actor result found for requested UUID";
                         }
                     }
                 }

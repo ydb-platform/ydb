@@ -1,20 +1,22 @@
+#include "yql_pq_datasource_constraints.h"
+#include "yql_pq_helpers.h"
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_topic_key_parser.h"
-#include "yql_pq_helpers.h"
+#include "yql_pq_settings.h"
+
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_lazy_init.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/yql_names.h>
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -29,12 +31,13 @@ public:
         : State_(state)
         , Gateway_(gateway)
         , ConfigurationTransformer_([this]() {
-        return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
-    })
+            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
+        })
         , LoadMetaDataTransformer_(CreatePqLoadTopicMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSourceTypeAnnotationTransformer(State_))
-        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_)) {
-    }
+        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_))
+        , ConstraintsTransformer_(CreatePqDataSourceConstraintTransformer(State_))
+    {}
 
     TStringBuf GetName() const override {
         return PqProviderName;
@@ -80,6 +83,11 @@ public:
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer_;
+    }
+
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer_;
     }
 
     bool EnableDqSource() const {
@@ -342,6 +350,7 @@ private:
     THolder<IGraphTransformer> LoadMetaDataTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<IGraphTransformer> IODiscoveryTransformer_;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer_;
 };
 
 } // anonymous namespace

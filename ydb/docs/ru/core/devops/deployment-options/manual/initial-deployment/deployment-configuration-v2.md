@@ -13,7 +13,7 @@
 ## Подготовьте конфигурационные файлы {#config}
 
 Подготовьте конфигурационный файл {{ ydb-short-name }}:
-Также при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config (см. [конфигурирование Kafka API](../../../reference/configuration/kafka_proxy_config)).
+Также при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config (см. [конфигурирование Kafka API](../../../../reference/configuration/kafka_proxy_config.md)).
 
 
 ```yaml

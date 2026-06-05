@@ -110,13 +110,13 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         // Start flushes
         UNIT_ASSERT_VALUES_EQUAL(
             THostIndex{0},
-            inflightInfo.RequestFlush(THostIndex{0}));
+            inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
             THostIndex{1},
-            inflightInfo.RequestFlush(THostIndex{1}));
+            inflightInfo.RequestFlush(THostIndex{1}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
             THostIndex{2},
-            inflightInfo.RequestFlush(THostIndex{2}));
+            inflightInfo.RequestFlush(THostIndex{2}, THostMask()));
 
         // Confirm flushes
         inflightInfo.ConfirmFlush(THostRoute{
@@ -142,12 +142,6 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             inflightInfo.RequestErase(THostIndex{2}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{3}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{4}));
 
         // Confirm erases
         UNIT_ASSERT_VALUES_EQUAL(
@@ -173,9 +167,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
         // Start flushes
-        auto l = inflightInfo.RequestFlush(THostIndex{0});
-        l = inflightInfo.RequestFlush(THostIndex{1});
-        l = inflightInfo.RequestFlush(THostIndex{2});
+        auto l = inflightInfo.RequestFlush(THostIndex{0}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{1}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{2}, THostMask());
         Y_UNUSED(l);
 
         // Confirm two flushes
@@ -209,12 +203,6 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             inflightInfo.RequestErase(THostIndex{2}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{3}));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(THostIndex{4}));
 
         // Confirm erases
         UNIT_ASSERT_VALUES_EQUAL(
@@ -241,13 +229,13 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         // Flush started
         UNIT_ASSERT_VALUES_EQUAL(
             THostIndex{0},
-            inflightInfo.RequestFlush(THostIndex{0}));
+            inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
             THostIndex{1},
-            inflightInfo.RequestFlush(THostIndex{1}));
+            inflightInfo.RequestFlush(THostIndex{1}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
             THostIndex{2},
-            inflightInfo.RequestFlush(THostIndex{2}));
+            inflightInfo.RequestFlush(THostIndex{2}, THostMask()));
 
         // When a flush fails, the lsn must be queued for a flush again.
         readyQueue.ReadyToFlush.clear();
@@ -259,7 +247,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         // Restart flush to host 0
         UNIT_ASSERT_VALUES_EQUAL(
             THostIndex{0},
-            inflightInfo.RequestFlush(THostIndex{0}));
+            inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
 
         // Confirm flushes
         inflightInfo.ConfirmFlush(THostRoute{

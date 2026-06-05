@@ -2,6 +2,7 @@
 #include "mkql_block_builder.h"
 #include "mkql_block_reader.h"
 
+#include <yql/essentials/public/udf/arrow/dense_union_scalar.h>
 #include <yql/essentials/minikql/arrow/mkql_functions.h>
 #include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -81,6 +82,17 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         }
 
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
+    }
+
+    if (type->IsVariant()) {
+        auto variantType = AS_TYPE(TVariantType, type);
+        const ui32 index = value.GetVariantIndex();
+        TType* alternativeType = variantType->GetUnderlyingType()->IsStruct()
+                                     ? SkipTaggedType(AS_TYPE(TStructType, variantType->GetUnderlyingType())->GetMemberType(index))
+                                     : SkipTaggedType(AS_TYPE(TTupleType, variantType->GetUnderlyingType())->GetElementType(index));
+        auto innerValue = value.GetVariantItem();
+        auto innerScalar = DoConvertScalar(alternativeType, innerValue, pool).scalar();
+        return arrow::Datum(std::make_shared<NYql::NUdf::TDenseUnionScalar>(innerScalar, index, arrowType));
     }
 
     if (type->IsData()) {

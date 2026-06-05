@@ -1336,6 +1336,64 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultType, "IncompleteSignature");
     }
 
+    Y_UNIT_TEST_F(TestAuthPriority, TFixture) {
+        // AWS temporary credentials send x-amz-security-token together with SigV4 signature.
+        const TString queueName = "SigV4WithSessionTokenQueue";
+
+        ActorRuntime->GetAppData().EnforceUserTokenRequirement = true;
+
+        {
+            auto res = SendHttpRequest(
+                "/Root",
+                "AmazonSQS.CreateQueue",
+                NJson::TJsonMap{{"QueueName", queueName}},
+                FormAuthorizationStr("unknown-region"),
+                "application/json",
+                "");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            TString resultType = GetByPath<TString>(json, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "IncompleteSignature");
+            TString message = GetByPath<TString>(json, "message");
+            UNIT_ASSERT_VALUES_EQUAL(message, "Wrong service region: got unknown-region expected ru-central1");
+        }
+
+        {
+            auto res = SendHttpRequest(
+                "/Root",
+                "AmazonSQS.CreateQueue",
+                NJson::TJsonMap{{"QueueName", queueName}},
+                FormAuthorizationStr("unknown-region"),
+                "application/json",
+                "__wrong_token__");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            TString resultType = GetByPath<TString>(json, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "AccessDeniedException");
+            TString message = GetByPath<TString>(json, "message");
+            UNIT_ASSERT_VALUES_EQUAL(message, "Permission Denied");
+        }
+
+        {
+            auto res = SendHttpRequest(
+                "/Root",
+                "AmazonSQS.CreateQueue",
+                NJson::TJsonMap{{"QueueName", queueName}},
+                FormAuthorizationStr("unknown-region"),
+                "application/json",
+                "root@builtin");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+            UNIT_ASSERT(queueUrl.Contains(queueName));
+            UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
+        }
+    }
+
     Y_UNIT_TEST_F(TestCreateQueueSetsDefaultTopicMessageRateLimit, TFixture) {
         const TString queueName = "CreateQueueDefaultRateLimit";
 

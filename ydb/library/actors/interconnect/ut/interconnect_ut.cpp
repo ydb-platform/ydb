@@ -71,6 +71,16 @@ ui64 GetHistogramSamples(const NMonitoring::THistogramPtr& histogram) {
     return samples;
 }
 
+ui64 GetHistogramBucketSamples(const NMonitoring::THistogramPtr& histogram, NMonitoring::TBucketBound upperBound) {
+    auto snapshot = histogram->Snapshot();
+    for (ui32 i = 0; i < snapshot->Count(); ++i) {
+        if (snapshot->UpperBound(i) == upperBound) {
+            return snapshot->Value(i);
+        }
+    }
+    return 0;
+}
+
 template <typename TCallback>
 void WaitForCondition(TDuration timeout, TCallback&& callback, TStringBuf description) {
     const TInstant deadline = TInstant::Now() + timeout;
@@ -697,6 +707,31 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
     Y_UNIT_TEST(KernelLivenessReconnectLocalFallbackNotAppliedRdma) {
         RunKernelLivenessReconnectLocalFallbackNotApplied(true);
+    }
+
+    Y_UNIT_TEST(NumEventsInQueueHistogram) {
+        constexpr size_t messages = 32;
+        constexpr size_t payloadSize = 64;
+
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA);
+
+        auto* recipientPtr = new TDropRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+        cluster.RegisterActor(new TBurstSenderActor(recipient, messages, payloadSize), 2);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= messages;
+        }, "one-way delivery for NumEventsInQueue histogram");
+
+        auto nodeCounters = cluster.GetCounters()->FindSubgroup("nodeId", "2");
+        UNIT_ASSERT_C(nodeCounters, "nodeId=2 counters were not created");
+        auto peerCounters = nodeCounters->FindSubgroup("peer");
+        UNIT_ASSERT_C(peerCounters, "peer counters were not created");
+
+        auto histogram = peerCounters->FindHistogram("NumEventsInQueue");
+        UNIT_ASSERT_C(histogram, "NumEventsInQueue histogram was not created");
+        UNIT_ASSERT_GE(GetHistogramSamples(histogram), messages);
+        UNIT_ASSERT_GT(GetHistogramBucketSamples(histogram, 0), 0ULL);
     }
 
     Y_UNIT_TEST(UnavailableNodeOutgoingHandshakeLogCount) {

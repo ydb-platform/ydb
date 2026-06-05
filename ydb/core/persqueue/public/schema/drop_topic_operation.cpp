@@ -19,6 +19,7 @@ public:
         : TBaseActor<TDropTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
         , ParentId(parentId)
         , Settings(std::move(settings))
+        , Database(CanonizePath(Settings.Database))
     {
     }
 
@@ -43,7 +44,7 @@ private:
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
             SelfId(),
-            Settings.Database,
+            Database,
             { Settings.Path },
             {
                 .UserToken = Settings.UserToken,
@@ -96,7 +97,7 @@ private:
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
-        proposal->Record.SetDatabaseName(Settings.Database);
+        proposal->Record.SetDatabaseName(Database);
         proposal->Record.SetPeerName(Settings.PeerName);
         if (Settings.UserToken) {
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
@@ -146,6 +147,7 @@ private:
 private:
     const TActorId ParentId;
     const TDropTopicOperationSettings Settings;
+    const TString Database;
 
     NDescriber::TTopicInfo TopicInfo;
 };

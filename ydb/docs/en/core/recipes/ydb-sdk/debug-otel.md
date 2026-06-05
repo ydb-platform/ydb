@@ -1,6 +1,7 @@
 # Tracing with OpenTelemetry
 
 {{ ydb-short-name }} SDK instrument Query Service operations with OpenTelemetry spans, providing distributed tracing from the application code to each gRPC call to YDB. The spans are exported via the standard OTLP protocol and are compatible with Jaeger, Grafana Tempo, Zipkin, and any other backend that supports OpenTelemetry.
+
 ## Created Spans {#spans}
 
 Currently, spans are supported for Query Service operations. Support for topics and other services is planned for future versions of the SDK.
@@ -39,6 +40,7 @@ ydb.RunWithRetry  (Internal)
 If an attempt ends with an error, its `ydb.Try` span ends with an error status. A new `ydb.Try` is created for a retry attempt; starting from the second attempt, it includes the `ydb.retry.backoff_ms` attribute — the wait time before this attempt in milliseconds. This wait is included in the duration of the next `ydb.Try` span: the span starts before the backoff pause, and then RPC calls for this attempt are executed after the pause.
 
 {% endnote %}
+
 ## Span Attributes {#attributes}
 
 The SDK uses both standard OpenTelemetry semantic conventions and YDB-specific extensions.
@@ -67,9 +69,11 @@ The following attributes are YDB extensions on top of the standard semantic conv
 | `ydb.node.id` | RPC spans | ID of the YDB node that processed the request |
 | `ydb.node.dc` | RPC spans | Data center of the YDB node that processed the request |
 | `ydb.retry.backoff_ms` | `ydb.Try` spans starting from the second attempt | Wait time before the retry attempt in milliseconds |
+
 ## W3C trace context {#w3c}
 
 The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC call. This allows the YDB server to trace internal operations within the same trace without additional configuration. More about server-side tracing is in the section [Passing an external trace-id to {{ ydb-short-name }}](../../reference/observability/tracing/external-traces.md).
+
 ## Connecting to the SDK {#integration}
 
 {% list tabs %}
@@ -340,4 +344,5 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   ```bash
   node --import @opentelemetry/sdk-node/register --import @ydbjs/telemetry/register your-app.js
   ```
+
 {% endlist %}

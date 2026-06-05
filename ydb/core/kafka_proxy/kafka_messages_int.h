@@ -8,7 +8,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 
-#include <contrib/libs/cxxsupp/libcxx/include/type_traits>
+#include <type_traits>
 
 #include "kafka_records.h"
 #include "kafka_consumer_protocol.h"

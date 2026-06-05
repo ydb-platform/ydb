@@ -90,8 +90,7 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvWritePersistentBufferResult>(
         WriteToPBufferRequests);
     RejectAllPending<NDDisk::TEvWriteResult>(WriteToDDiskRequests);
-    RejectAllPending<NDDisk::TEvSyncResult>(
-        FlushFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvSyncResult>(FlushFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
         BatchEraseFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(

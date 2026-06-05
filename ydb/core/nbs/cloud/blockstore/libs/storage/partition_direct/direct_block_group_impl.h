@@ -133,8 +133,7 @@ public:
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
-    using TEvSyncResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncResult;
+    using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;

@@ -4,6 +4,7 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

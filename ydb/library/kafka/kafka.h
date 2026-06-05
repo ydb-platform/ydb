@@ -342,6 +342,7 @@ public:
 
     TKafkaWritable& operator<<(const TKafkaUuid& val);
     TKafkaWritable& operator<<(const TKafkaRawString& val);
+    TKafkaWritable& operator<<(const TKafkaRawBytes& val);
 
     template<class T, typename U = std::make_unsigned_t<T>>
     void writeUnsignedVarint(T v) {

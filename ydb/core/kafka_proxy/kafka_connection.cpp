@@ -691,7 +691,7 @@ protected:
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
         SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);
         try {
-            TWritableBuf replyBuffer(size + sizeof(size));
+            TWritableBuf replyBuffer(nullptr, size + sizeof(size));
             TKafkaWritable writable(replyBuffer);
             writable << size;
             responseHeader.Write(writable, headerVersion);

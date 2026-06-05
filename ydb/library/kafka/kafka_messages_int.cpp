@@ -7,6 +7,11 @@ TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawString& val) {
     return *this;
 }
 
+TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawBytes& val) {
+    write(val.data(), val.size());
+    return *this;
+}
+
 TKafkaWritable& TKafkaWritable::operator<<(const TKafkaUuid& val) {
     ui64 h = ui64(val >> (sizeof(ui64) << 3));
     ui64 l = ui64(val);

@@ -790,14 +790,14 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
                 if (!IsDefaultValue<Meta>(value)) {
                     ++collector.NumTaggedFields;
 
-                    const i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+                    i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
                     collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size);
                     if constexpr (DEBUG_ENABLED) {
                         Cerr << "Size of field '" << Meta::Name << "' " << size << " + " << SizeOfUnsignedVarint(Meta::Tag) << " + " << SizeOfUnsignedVarint(size) << Endl;
                     }
                 }
             } else {
-                const i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+                i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
                 collector.Size += size;
                 if constexpr (DEBUG_ENABLED) {
                     Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;
@@ -806,7 +806,7 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
         }
     } else {
         if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
-            const i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+            i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
             collector.Size += size;
             if constexpr (DEBUG_ENABLED) {
                 Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;

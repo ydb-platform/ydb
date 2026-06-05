@@ -1,5 +1,7 @@
 #include "console_tenants_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateSubDomainKey : public TTransactionBase<TTenantsManager> {
@@ -21,23 +23,23 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdateSubDomainKey for tenant " << Path
-                    << " schemeshardid=" << SchemeShardId
-                    << " pathid=" << PathId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateSubDomainKey for tenant",
+            {"Path", Path},
+            {"schemeshardid", SchemeShardId},
+            {"pathid", PathId});
 
         Tenant = Self->GetTenant(Path);
         if (!Tenant) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxUpdateSubDomainKey cannot find tenant " << Path);
+            YDB_LOG_CTX_ERROR(ctx, "TTxUpdateSubDomainKey cannot find tenant",
+                {"Path", Path});
             return true;
         }
 
         // We are probably already removing this tenant.
         if (Tenant->IsRemoving()) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxUpdateSubDomainKey found tenant " << Path
-                        << " in wrong state " << Tenant->State);
+            YDB_LOG_CTX_ERROR(ctx, "TTxUpdateSubDomainKey found tenant in wrong state",
+                {"Path", Path},
+                {"TenantState", Tenant->State});
             Tenant = nullptr;
             return true;
         }
@@ -61,8 +63,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdateSubDomainKey complete for " << Path);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateSubDomainKey complete for",
+            {"Path", Path});
 
         if (Tenant) {
             if (Tenant->DomainId) {

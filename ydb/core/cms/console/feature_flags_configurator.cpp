@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/mon.h>
 #include <google/protobuf/descriptor.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
     class TFeatureFlagsConfigurator : public TActorBootstrapped<TFeatureFlagsConfigurator> {
@@ -21,8 +23,7 @@ namespace NKikimr::NConsole {
         TFeatureFlagsConfigurator() = default;
 
         void Bootstrap() {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,
-                "TFeatureFlagsConfigurator Bootstrap");
+            YDB_LOG_DEBUG("TFeatureFlagsConfigurator Bootstrap");
 
             Become(&TThis::StateWork);
 
@@ -40,8 +41,8 @@ namespace NKikimr::NConsole {
 
         void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
             const auto& record = ev->Get()->Record;
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,
-                "TFeatureFlagsConfigurator: new config: " << record.GetConfig().ShortDebugString());
+            YDB_LOG_INFO("TFeatureFlagsConfigurator: new",
+                {"config", record.GetConfig().ShortDebugString()});
 
             // Atomically replace runtime feature flags with the new config
             AppDataVerified().UpdateRuntimeFlags(record.GetConfig().GetFeatureFlags());

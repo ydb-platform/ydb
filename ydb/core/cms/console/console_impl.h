@@ -140,9 +140,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS,
-                           "TConsole::StateWork unexpected event type: " << ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
+                YDB_LOG_COMP_CRIT(NKikimrServices::CMS, "TConsole::StateWork unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
             }
         }
     }

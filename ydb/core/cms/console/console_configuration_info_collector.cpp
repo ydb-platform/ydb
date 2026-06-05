@@ -2,10 +2,12 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/core/base/nameservice.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/cms/console/configs_dispatcher_proxy.h> 
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/configs_dispatcher_proxy.h>
 #include <ydb/core/util/stlog.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -16,7 +18,8 @@ TConfigurationInfoCollector::TConfigurationInfoCollector(TActorId replyToActorId
 }
 
 void TConfigurationInfoCollector::Bootstrap() {
-    STLOG(PRI_DEBUG, CMS_CONFIGS, CIG1, "Starting configuration info collection");
+    YDB_LOG_DEBUG("Starting configuration info collection",
+        {"Marker", "CIG1"});
     Become(&TThis::StateWork);
     RequestNodeList();
     Schedule(Timeout, new TEvPrivate::TEvTimeout());
@@ -29,7 +32,8 @@ void TConfigurationInfoCollector::RequestNodeList() {
 void TConfigurationInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     auto &nodes = ev->Get()->Nodes;
     if (nodes.empty()) {
-        STLOG(PRI_DEBUG, CMS_CONFIGS, CIG2, "Received empty node list from NameService");
+        YDB_LOG_DEBUG("Received empty node list from NameService",
+            {"Marker", "CIG2"});
         ReplyAndDie();
         return;
     }
@@ -65,7 +69,10 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             V2Nodes++;
             V2NodesList.push_back(nodeId);
         } else {
-            STLOG(PRI_DEBUG, CMS_CONFIGS, CIG3, "Received unknown version '" << record.GetVersion() << "' from NodeId: " << nodeId);
+            YDB_LOG_DEBUG("Received unknown version ' '",
+                {"Marker", "CIG3"},
+                {"Version", record.GetVersion()},
+                {"from_NodeId", nodeId});
             UnknownNodes++;
             UnknownNodesList.push_back(nodeId);
         }
@@ -74,13 +81,18 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             ReplyAndDie();
         }
     } else {
-        STLOG(PRI_WARN, CMS_CONFIGS, CIG4, "Received unexpected TEvGetNodeConfigurationVersionResponse from NodeId: " << nodeId << " (sender: " << ev->Sender << ")");
+        YDB_LOG_WARN("Received unexpected TEvGetNodeConfigurationVersionResponse",
+            {"Marker", "CIG4"},
+            {"from_NodeId", nodeId},
+            {"(sender", ev->Sender});
     }
 }
 
 void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
-    STLOG(PRI_WARN, CMS_CONFIGS, CIG5, "Collection timed out. Missing responses from " << PendingNodes.size() << " nodes.");
+    YDB_LOG_WARN("Collection timed out. Missing responses from nodes.",
+        {"Marker", "CIG5"},
+        {"PendingNodes", PendingNodes.size()});
     UnknownNodes += PendingNodes.size();
     for (const auto& nodeId : PendingNodes) {
         UnknownNodesList.push_back(nodeId);
@@ -90,8 +102,13 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
 }
 
 void TConfigurationInfoCollector::ReplyAndDie() {
-    STLOG(PRI_DEBUG, CMS_CONFIGS, CIG6, "Replying with collected info: V1=" << V1Nodes << ", V2=" << V2Nodes << ", Unknown=" << UnknownNodes << " (Total=" << TotalNodes << ")");
-    auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>(); 
+    YDB_LOG_DEBUG("Replying with collected info:",
+        {"Marker", "CIG6"},
+        {"V1", V1Nodes},
+        {"V2", V2Nodes},
+        {"Unknown", UnknownNodes},
+        {"(Total", TotalNodes});
+    auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>();
     auto *result = response->Record.MutableResponse();
     result->set_v1_nodes(V1Nodes);
     result->set_v2_nodes(V2Nodes);
@@ -123,7 +140,10 @@ STFUNC(TConfigurationInfoCollector::StateWork) {
         hFunc(TEvConsole::TEvGetNodeConfigurationVersionResponse, Handle);
         hFunc(TEvPrivate::TEvTimeout, Handle);
         default:
-            STLOG(PRI_DEBUG, CMS_CONFIGS, CIG7, "Unhandled event type: " << ev->GetTypeRewrite() << " sender: " << ev->Sender);
+            YDB_LOG_DEBUG("Unhandled event",
+                {"Marker", "CIG7"},
+                {"type", ev->GetTypeRewrite()},
+                {"sender", ev->Sender});
             break;
     }
 }

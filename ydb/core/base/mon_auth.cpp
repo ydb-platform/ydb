@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/mon.h>
 
-#include <util/generic/hashset.h>
+#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {

@@ -1337,7 +1337,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->SetWriteSpeedInMessagesPerSecond(partMessagesSpeed);
 
             const auto& burstMessages = request.partition_write_burst_messages();
-            if (burstMessages == 0) {
+            if (burstMessages < 0) {
+                error = TStringBuilder() << "partition_write_burst_messages can't be negative, provided " << burstMessages;
+                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+            } else if (burstMessages == 0) {
                 partConfig->SetBurstSizeInMessages(partMessagesSpeed);
             } else {
                 partConfig->SetBurstSizeInMessages(burstMessages);
@@ -1553,7 +1556,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (request.has_set_partition_write_burst_messages()) {
                 CHECK_CDC;
                 const auto& burstMessages = request.set_partition_write_burst_messages();
-                if (burstMessages == 0) {
+                if (burstMessages < 0) {
+                    error = TStringBuilder() << "partition_write_burst_messages can't be negative, provided " << burstMessages;
+                    return Ydb::StatusIds::BAD_REQUEST;
+                } else if (burstMessages == 0) {
                     partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
                 } else {
                     partConfig->SetBurstSizeInMessages(burstMessages);

@@ -722,7 +722,7 @@ When executing commands to create user accounts and assign groups, the {{ ydb-sh
 ## Test the created database {#try-first-db}
 
 1. Install the {{ ydb-short-name }} CLI, as described in the [documentation](../../../reference/ydb-cli/install.md).
-2. Create a test row (`test_row_table`) or column table (`test_column_table`):
+2. Create a test row (`test_row_table`) or columnar table (`test_column_table`):
 
 {% list tabs %}
 

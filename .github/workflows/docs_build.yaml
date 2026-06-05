@@ -19,7 +19,7 @@ jobs:
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"pending","description":"Waiting for relevant checks to complete","context":"checks_integrated"}'
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Build

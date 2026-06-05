@@ -93,9 +93,10 @@ private:
         }
     }
 
-    TDuration GetWakeupPeriod() const {
+    TDuration GetWakeupPeriod(TInstant now = TInstant()) const {
         if (Forget && QueryRequestStartTime) {
-            return Min(WakeupPeriod, ForgetAfter);
+            now = now ? now : TActivationContext::Now();
+            return Min(WakeupPeriod, ForgetAfter - Min(now - QueryRequestStartTime, ForgetAfter));
         }
         return WakeupPeriod;
     }
@@ -356,7 +357,7 @@ public:
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
         if (params.Has("forget-after")) {
-            ForgetAfter = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("forget-after"), ForgetAfter.MilliSeconds()));
+            ForgetAfter = TDuration::MilliSeconds(Max<ui64>(FromStringWithDefault<ui64>(params.Get("forget-after"), ForgetAfter.MilliSeconds()), 1));
         }
         if (Streaming == EStreamingType::None || params.Has("timeout")) {
             Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
@@ -442,6 +443,10 @@ public:
     }
 
     void Cancelled() {
+        if (Forget) {
+            ForgetQuery();
+            return TBase::Cancelled();
+        }
         CancelQuery();
         TBase::Cancelled();
     }
@@ -1237,16 +1242,20 @@ private:
     }
 
     void ReplyAndForgetQuery() {
-        QueryForgotten = true;
-        if (QueryResponse && !QueryResponse.IsDone()) {
-            QueryResponse.Error("QueryForgotten");
-        }
+        ForgetQuery();
 
         NJson::TJsonValue json;
         InitJsonResponse(json);
         json["status"] = Ydb::StatusIds_StatusCode_Name(Ydb::StatusIds::SUCCESS);
         json["message"] = "Query is running in background";
         ReplyWithJsonAndPassAway("QueryForgotten", std::move(json));
+    }
+
+    void ForgetQuery() {
+        QueryForgotten = true;
+        if (QueryResponse && !QueryResponse.IsDone()) {
+            QueryResponse.FinishOk();
+        }
     }
 
     void CheckOperationStatus() {
@@ -1269,7 +1278,7 @@ private:
         if (OperationId && (!GetOperationResponse.has_value() || GetOperationResponse->IsDone())) {
             CheckOperationStatus();
         }
-        Schedule(GetWakeupPeriod(), new TEvents::TEvWakeup());
+        Schedule(GetWakeupPeriod(now), new TEvents::TEvWakeup());
     }
 
 private:

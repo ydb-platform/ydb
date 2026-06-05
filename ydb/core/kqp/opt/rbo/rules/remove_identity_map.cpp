@@ -9,11 +9,6 @@ bool IsIdentityRename(const TMapElement& mapElement) {
     return mapElement.IsRename() && mapElement.GetRename() == mapElement.GetElementName();
 }
 
-bool CanRemoveWholeMap(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
-    return map->GetOutputIUs() == map->GetInput()->GetOutputIUs() &&
-        CanReplaceInParents(map, map->GetInput(), props);
-}
-
 } // anonymous namespace
 
 // Remove extra maps that arrise during translation.
@@ -21,6 +16,7 @@ bool CanRemoveWholeMap(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props
 
 TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return input;
@@ -28,7 +24,7 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
 
     auto map = CastOperator<TOpMap>(input);
     if (map->MapElements.empty()) {
-        return CanRemoveWholeMap(map, props) ? map->GetInput() : input;
+        return map->GetInput();
     }
 
     TVector<TMapElement> newElements;
@@ -47,7 +43,7 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
     }
 
     if (newElements.empty()) {
-        return CanRemoveWholeMap(map, props) ? map->GetInput() : input;
+        return map->GetInput();
     }
 
     return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, newElements, map->IsOrdered());

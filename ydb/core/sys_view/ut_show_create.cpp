@@ -1361,7 +1361,7 @@ Y_UNIT_TEST(Table) {
             WITH (
                 AUTO_PARTITIONING_BY_LOAD = ENABLED,
                 PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
-                KEY_BLOOM_FILTER = ENABLED,
+                KEY_BLOOM_FILTER = ENABLED
             );
         )"
     );

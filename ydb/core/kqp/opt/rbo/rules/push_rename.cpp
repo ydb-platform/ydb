@@ -48,6 +48,12 @@ bool IsPassThroughMap(const TIntrusivePtr<TOpMap>& map, const TInfoUnit& from) {
     return !ProducesMapElement(map, from) && !HasRenameSource(map, from);
 }
 
+bool ProducesAggregateResult(const TIntrusivePtr<TOpAggregate>& aggregate, const TInfoUnit& iu) {
+    return std::any_of(aggregate->AggregationTraitsList.begin(), aggregate->AggregationTraitsList.end(), [&iu](const TOpAggregationTraits& traits) {
+        return traits.ResultColName == iu;
+    });
+}
+
 TIntrusivePtr<IOperator> SelectJoinInputForRename(const TIntrusivePtr<TOpJoin>& join, const TInfoUnit& from) {
     const bool leftHas = ContainsInfoUnit(join->GetLeftInput()->GetOutputIUs(), from);
     const bool rightHas = ContainsInfoUnit(join->GetRightInput()->GetOutputIUs(), from);
@@ -88,6 +94,15 @@ bool BuildRenamePath(const TIntrusivePtr<TOpMap>& topMap, const TInfoUnit& from,
             path.TransparentOps.push_back(current);
             current = map->GetInput();
             continue;
+        }
+
+        if (current->Kind == EOperator::Aggregate) {
+            auto aggregate = CastOperator<TOpAggregate>(current);
+            if (ProducesAggregateResult(aggregate, from)) {
+                path.Producer = current;
+                return true;
+            }
+            return false;
         }
 
         if (current->Kind == EOperator::Join) {
@@ -202,6 +217,19 @@ void RenameProducerOutput(const TIntrusivePtr<IOperator>& producer, const TInfoU
 
     if (producer->Kind == EOperator::Source) {
         producer->RenameIUs(renameMap, ctx);
+        return;
+    }
+
+    if (producer->Kind == EOperator::Aggregate) {
+        auto aggregate = CastOperator<TOpAggregate>(producer);
+        for (auto& traits : aggregate->AggregationTraitsList) {
+            if (traits.ResultColName == from) {
+                traits.ResultColName = to;
+                return;
+            }
+        }
+
+        Y_ENSURE(false, "Rename aggregate producer does not produce the expected result");
         return;
     }
 

@@ -95,7 +95,7 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
         BatchEraseFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
-        EraseFromPBufferRequests);
+        BarrierEraseFromPBufferRequests);
     RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
         ListPBufferEntriesRequests);
 
@@ -603,20 +603,21 @@ void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
 }
 
 void TICStorageTransportActor::HandleErasePersistentBuffer(
-    const TEvTransportPrivate::TEvEraseFromPBuffer::TPtr& ev,
+    const TEvTransportPrivate::TEvBarrierEraseFromPBuffer::TPtr& ev,
     const TActorContext& ctx)
 {
     auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        EraseFromPBufferRequests.emplace(requestId, ev->Release().Release());
+    auto [it, inserted] = BarrierEraseFromPBufferRequests.emplace(
+        requestId,
+        ev->Release().Release());
     Y_ABORT_UNLESS(inserted);
 
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvEraseFromPBuffer with requestId# %lu lsn# %lu",
+        "Sent TEvBarrierEraseFromPBuffer with requestId# %lu lsn# %lu",
         requestId,
         msg->Lsn);
 
@@ -680,10 +681,10 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
         BatchEraseFromPBufferRequests.erase(requestId);
         return;
     }
-    if (auto* r = EraseFromPBufferRequests.FindPtr(requestId)) {
+    if (auto* r = BarrierEraseFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
         request.Promise.SetValue(std::move(ev->Get()->Record));
-        EraseFromPBufferRequests.erase(requestId);
+        BarrierEraseFromPBufferRequests.erase(requestId);
         return;
     }
     // That means that request is already completed
@@ -1120,7 +1121,7 @@ STFUNC(TICStorageTransportActor::StateWork)
             TEvTransportPrivate::TEvBatchEraseFromPBuffer,
             HandleBatchErasePersistentBuffer);
         HFunc(
-            TEvTransportPrivate::TEvEraseFromPBuffer,
+            TEvTransportPrivate::TEvBarrierEraseFromPBuffer,
             HandleErasePersistentBuffer);
         HFunc(
             NDDisk::TEvBatchErasePersistentBuffer,

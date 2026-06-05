@@ -49,7 +49,7 @@ struct TScopedNbsService: TDisableCopyMove
     TEnvironmentSetup& env,
     EWriteMode writeMode,
     TDuration writeHedgingDelay = TDuration::Seconds(1),
-    ui64 pbCleanupLsnStep = 0,
+    ui64 pbufferCleanupLsnStep = 0,
     ui32 syncRequestsBatchSize = 0)
 {
     env.CreateBoxAndPool();
@@ -84,7 +84,7 @@ struct TScopedNbsService: TDisableCopyMove
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
     storageConfig->SetVChunkSize(DefaultVChunkSize);
     storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
-    storageConfig->SetPBCleanupLsnStep(pbCleanupLsnStep);
+    storageConfig->SetPBufferCleanupLsnStep(pbufferCleanupLsnStep);
     if (syncRequestsBatchSize) {
         storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
     }
@@ -1029,8 +1029,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         }
     }
 
-    // PB cleanup: once the write LSN advances by PBCleanupLsnStep the tablet
-    // barrier-erases PB records up to the cleanup bound. Drive two write
+    // PBuffer cleanup: once the write LSN advances by PBufferCleanupLsnStep the tablet
+    // barrier-erases PBuffer records up to the cleanup bound. Drive two write
     // batches and assert a real barrier-erase (TEvErasePersistentBuffer with
     // Lsn > 0) reaches the persistent buffer, with no data lost.
     Y_UNIT_TEST(ShouldBarrierErasePBufferOnCleanup)
@@ -1045,7 +1045,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             env,
             EWriteMode::DirectPBuffersFilling,
             TDuration::Seconds(1),
-            /*pbCleanupLsnStep=*/4,
+            /*pbufferCleanupLsnStep=*/4,
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
@@ -1111,7 +1111,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         }
     }
 
-    // PB cleanup must never barrier-erase a record that has not been
+    // PBuffer cleanup must never barrier-erase a record that has not been
     // per-record erased yet (still in the dirty map) - even one already
     // flushed to DDisk; erasing it out from under the dirty map desyncs it
     // from the PBuffer. We let an initial batch flush+erase (advancing the
@@ -1130,7 +1130,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             env,
             EWriteMode::DirectPBuffersFilling,
             TDuration::Seconds(1),
-            /*pbCleanupLsnStep=*/2,
+            /*pbufferCleanupLsnStep=*/2,
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);

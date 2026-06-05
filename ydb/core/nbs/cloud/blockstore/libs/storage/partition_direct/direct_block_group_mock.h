@@ -100,11 +100,6 @@ public:
             THostIndex hostIndex,
             const TVector<TPBufferSegment>& segments,
             const NWilson::TTraceId& traceId)>;
-    using TEraseFromPBufferHandler =
-        std::function<NThreading::TFuture<TDBGEraseResponse>(
-            THostIndex hostIndex,
-            ui64 lsn,
-            const NWilson::TTraceId& traceId)>;
     using TDBGRestoreHandler =
         std::function<NThreading::TFuture<TDBGRestoreResponse>(
             ui32 vChunkIndex)>;
@@ -125,12 +120,14 @@ public:
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
     TBatchEraseFromPBufferHandler BatchEraseFromPBufferHandler;
-    TEraseFromPBufferHandler EraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
+
+    // Records every lsn passed to BarrierEraseFromPBuffer (tests assert on it).
+    TVector<ui64> IssuedBarrierErases;
 
     TDirectBlockGroupMock();
 
@@ -201,15 +198,7 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
-        THostIndex hostIndex,
-        ui64 lsn,
-        const NWilson::TTraceId& traceId) override;
-
-    void IssueBarrierErase(ui64 lsn) override;
-
-    // Records every lsn passed to IssueBarrierErase (tests assert on it).
-    TVector<ui64> IssuedBarrierErases;
+    void BarrierEraseFromPBuffer(ui64 lsn) override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;

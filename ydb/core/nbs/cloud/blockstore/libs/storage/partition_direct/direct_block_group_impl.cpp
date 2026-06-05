@@ -852,7 +852,32 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
     return result;
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
+void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
+{
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), lsn]()
+        {
+            auto self = weakSelf.lock();
+            if (!self) {
+                return;
+            }
+            LOG_DEBUG(
+                *self->ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "DBG[%lu] barrier-erase lsn=%lu on %lu PBuffer hosts",
+                self->DirectBlockGroupIndex,
+                lsn,
+                self->PBufferConnections.size());
+            for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
+                auto future =
+                    self->DoBarrierEraseFromPBuffer(h, lsn, NWilson::TTraceId{});
+                Y_UNUSED(future);
+            }
+        });
+}
+
+NThreading::TFuture<TDBGEraseResponse>
+TDirectBlockGroup::DoBarrierEraseFromPBuffer(
     THostIndex hostIndex,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
@@ -864,11 +889,12 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
 
     const auto startAt = TMonotonic::Now();
 
-    auto childSpan = CreateChildSpan(traceId, "NbsPartition.EraseFromPBuffer");
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.DoBarrierEraseFromPBuffer");
 
-    OnRequest(hostIndex, EOperation::Erase);
+    OnRequest(hostIndex, EOperation::BarrierErase);
 
-    auto future = StorageTransport->EraseFromPBuffer(
+    auto future = StorageTransport->BarrierEraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
         lsn,
         childSpan.get());
@@ -906,7 +932,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
-                            EOperation::Erase,
+                            EOperation::BarrierErase,
                             error);
                     }
 
@@ -916,30 +942,6 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         });
 
     return result;
-}
-
-void TDirectBlockGroup::IssueBarrierErase(ui64 lsn)
-{
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(), lsn]()
-        {
-            auto self = weakSelf.lock();
-            if (!self) {
-                return;
-            }
-            LOG_DEBUG(
-                *self->ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "DBG[%lu] barrier-erase lsn=%lu on %lu PB hosts",
-                self->DirectBlockGroupIndex,
-                lsn,
-                self->PBufferConnections.size());
-            for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
-                auto future =
-                    self->EraseFromPBuffer(h, lsn, NWilson::TTraceId{});
-                Y_UNUSED(future);
-            }
-        });
 }
 
 NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(

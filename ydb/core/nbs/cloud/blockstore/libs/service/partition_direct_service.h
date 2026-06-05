@@ -8,6 +8,7 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/vector.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore {
@@ -39,6 +40,10 @@ struct IPartitionDirectService
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
 
     virtual void ReportCleanupBound(ui32 vChunkIndex, ui64 bound) = 0;
+
+    // Releases lsns that a vchunk has taken ownership of (covered by its
+    // cleanup bound), so they no longer pin the global cleanup watermark.
+    virtual void CompleteOutstandingLsns(const TVector<ui64>& lsns) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

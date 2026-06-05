@@ -43,6 +43,11 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(vChunkIndex);
         Y_UNUSED(bound);
     }
+
+    void CompleteOutstandingLsns(const TVector<ui64>& lsns) override
+    {
+        Y_UNUSED(lsns);
+    }
 };
 
 using TPartitionDirectServiceMockPtr =

@@ -87,6 +87,16 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
+size_t RegionCount(ui64 blockCount, ui32 blockSize)
+{
+    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
+}
+
+size_t VChunkCount(ui64 blockCount, ui32 blockSize, ui64 vChunkSize)
+{
+    return RegionCount(blockCount, blockSize) * (RegionSize / vChunkSize);
+}
+
 TVector<std::shared_ptr<TRegion>> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
@@ -96,10 +106,9 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
-    const ui64 volumeSize = blockCount * blockSize;
-    const ui64 regionsCount = AlignUp(volumeSize, RegionSize) / RegionSize;
-    TVector<std::shared_ptr<TRegion>> regions(regionsCount);
-    for (size_t i = 0; i < regionsCount; i++) {
+    const size_t regionCount = RegionCount(blockCount, blockSize);
+    TVector<std::shared_ptr<TRegion>> regions(regionCount);
+    for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
             counters->GetSubgroup("region", ToString(i));
 
@@ -138,8 +147,7 @@ TFastPathService::TFastPathService(
     , PartitionActorId(partitionActorId)
     , StorageConfig(std::move(storageConfig))
     , VChunkCleanupBounds(
-          (AlignUp(blockCount * blockSize, RegionSize) / RegionSize) *
-          (RegionSize / StorageConfig->GetVChunkSize()))
+          VChunkCount(blockCount, blockSize, StorageConfig->GetVChunkSize()))
     , DiskId(diskId)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
@@ -262,7 +270,7 @@ TFastPathService::WriteBlocksLocal(
 
     const ui64 lsn = GenerateSequenceNumber();
     RegisterOutstandingLsn(lsn);
-    MaybeTriggerPBCleanup(lsn);
+    MaybeTriggerPBufferCleanup(lsn);
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
@@ -271,7 +279,7 @@ TFastPathService::WriteBlocksLocal(
         span->GetTraceId());
 
     result.Subscribe(
-        [weakSelf = weak_from_this(), span = std::move(span), lsn]   //
+        [weakSelf = weak_from_this(), span = std::move(span)]   //
         (const TFuture<TWriteBlocksLocalResponse>& f)
         {
             const auto& response = f.GetValue();
@@ -280,7 +288,6 @@ TFastPathService::WriteBlocksLocal(
             }
 
             if (auto self = weakSelf.lock()) {
-                self->CompleteOutstandingLsn(lsn);
                 self->Counters.RequestFinished(
                     EBlockStoreRequest::WriteBlocks,
                     !HasError(response.Error));
@@ -357,16 +364,22 @@ void TFastPathService::RegisterOutstandingLsn(ui64 lsn)
     OutstandingLsns.insert(lsn);
 }
 
-void TFastPathService::CompleteOutstandingLsn(ui64 lsn)
+void TFastPathService::CompleteOutstandingLsns(const TVector<ui64>& lsns)
 {
     TGuard guard(OutstandingLock);
-    OutstandingLsns.erase(lsn);
+    for (const ui64 lsn: lsns) {
+        OutstandingLsns.erase(lsn);
+    }
 }
 
 ui64 TFastPathService::GetMinOutstandingLsn() const
 {
     TGuard guard(OutstandingLock);
-    return OutstandingLsns.empty() ? Max<ui64>() : *OutstandingLsns.begin();
+    ui64 minLsn = Max<ui64>();
+    for (const ui64 lsn: OutstandingLsns) {
+        minLsn = std::min(minLsn, lsn);
+    }
+    return minLsn;
 }
 
 void TFastPathService::ReportCleanupBound(ui32 vChunkIndex, ui64 bound)
@@ -375,22 +388,24 @@ void TFastPathService::ReportCleanupBound(ui32 vChunkIndex, ui64 bound)
     VChunkCleanupBounds[vChunkIndex].store(bound);
 }
 
-void TFastPathService::MaybeTriggerPBCleanup(ui64 lsn)
+void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
-    const ui64 step = StorageConfig->GetPBCleanupLsnStep();
+    const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
     if (!step) {
         return;
     }
-    const ui64 last = LastCleanupLsn.load();
+    ui64 last = LastCleanupLsn.load();
     Y_DEBUG_ABORT_UNLESS(lsn >= last);
     if (lsn - last < step) {
         return;
     }
-    LastCleanupLsn.store(lsn);
-    PBCleanup();
+    if (!LastCleanupLsn.compare_exchange_strong(last, lsn)) {
+        return;
+    }
+    PBufferCleanup();
 }
 
-void TFastPathService::PBCleanup()
+void TFastPathService::PBufferCleanup()
 {
     const ui64 minOutstanding = GetMinOutstandingLsn();
 
@@ -404,7 +419,7 @@ void TFastPathService::PBCleanup()
 
     if (cleanupBound != 0 && cleanupBound != Max<ui64>()) {
         for (const auto& dbg: DirectBlockGroups) {
-            dbg->IssueBarrierErase(cleanupBound);
+            dbg->BarrierEraseFromPBuffer(cleanupBound);
         }
     }
 }

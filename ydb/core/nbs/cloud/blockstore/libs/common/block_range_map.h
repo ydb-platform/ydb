@@ -55,7 +55,7 @@ private:
 
     ui64 MaxLength = 0;
     TMap<TItemKey, TValue> Ranges;
-    TMap<TKey, decltype(Ranges.begin())> RangeByKey;
+    THashMap<TKey, decltype(Ranges.begin())> RangeByKey;
 
 public:
     // Adds a block range to the collection. Returns false if the key already
@@ -216,10 +216,13 @@ public:
 
     [[nodiscard]] std::optional<TKey> GetMinKey() const
     {
-        if (RangeByKey.empty()) {
-            return std::nullopt;
+        std::optional<TKey> minKey;
+        for (const auto& [itemKey, value]: Ranges) {
+            if (!minKey || itemKey.Key < *minKey) {
+                minKey = itemKey.Key;
+            }
         }
-        return RangeByKey.begin()->first;
+        return minKey;
     }
 
     [[nodiscard]] size_t Size() const

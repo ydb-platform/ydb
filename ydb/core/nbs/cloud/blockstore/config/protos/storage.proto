@@ -122,5 +122,7 @@ message TStorageServiceConfig
     // at runtime by VhostThreadsCount.
     optional uint32 VhostQueuesCount = 25;
 
-    optional uint64 PBCleanupLsnStep = 26;
+    // Persistent buffer cleanup is triggered once the cleanup LSN advances by
+    // at least this many LSNs since the last cleanup. 0 disables cleanup.
+    optional uint64 PBufferCleanupLsnStep = 26;
 }

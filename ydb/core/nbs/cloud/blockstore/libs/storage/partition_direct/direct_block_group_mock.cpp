@@ -114,13 +114,6 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set BatchEraseFromPBufferHandler");
         return NThreading::TFuture<TDBGEraseResponse>();
     };
-    // Fire-and-forget default: callers MUST NOT depend on this future
-    // resolving in production code, and tests that don't exercise the
-    // barrier-erase path don't need a custom handler.
-    EraseFromPBufferHandler = [](const auto&...)
-    {
-        return NThreading::MakeFuture<TDBGEraseResponse>({});
-    };
     RestoreDBGPBuffersHandler = [](const auto&...)
     {
         Y_ABORT_UNLESS(false, "Should set RestoreDBGPBuffersHandler");
@@ -292,15 +285,7 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroupMock::EraseFromPBuffer(
-    THostIndex hostIndex,
-    ui64 lsn,
-    const NWilson::TTraceId& traceId)
-{
-    return EraseFromPBufferHandler(hostIndex, lsn, traceId);
-}
-
-void TDirectBlockGroupMock::IssueBarrierErase(ui64 lsn)
+void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
 {
     IssuedBarrierErases.push_back(lsn);
 }

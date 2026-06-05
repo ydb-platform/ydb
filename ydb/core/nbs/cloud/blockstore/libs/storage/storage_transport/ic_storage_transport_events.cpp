@@ -29,7 +29,7 @@ TEvTransportPrivate::TBatchEraseFromPBuffer::~TBatchEraseFromPBuffer()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
-TEvTransportPrivate::TEraseFromPBuffer::~TEraseFromPBuffer()
+TEvTransportPrivate::TBarrierEraseFromPBuffer::~TBarrierEraseFromPBuffer()
 {
     Y_ABORT_UNLESS(Promise.IsReady());
 }

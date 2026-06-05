@@ -112,12 +112,7 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
-        THostIndex hostIndex,
-        ui64 lsn,
-        const NWilson::TTraceId& traceId) override;
-
-    void IssueBarrierErase(ui64 lsn) override;
+    void BarrierEraseFromPBuffer(ui64 lsn) override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
@@ -175,6 +170,11 @@ private:
     TDBGFlushResponse HandleSyncWithPBufferResponse(
         const TEvSyncWithPersistentBufferResult& response,
         size_t segmentCount);
+
+    NThreading::TFuture<TDBGEraseResponse> DoBarrierEraseFromPBuffer(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,

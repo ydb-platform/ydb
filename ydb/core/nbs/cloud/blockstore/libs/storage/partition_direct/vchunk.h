@@ -88,7 +88,7 @@ private:
 
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
-    void PublishCleanupBound();
+    void PublishCleanupBound(const TVector<ui64>& completedLsns = {});
 
     void DoStart();
     void DoStop();

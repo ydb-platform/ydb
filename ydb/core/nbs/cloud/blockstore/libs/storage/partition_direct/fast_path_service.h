@@ -13,7 +13,7 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
-#include <util/generic/set.h>
+#include <util/generic/hash_set.h>
 #include <util/system/mutex.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -51,7 +51,7 @@ private:
     std::atomic<ui64> LastCleanupLsn{0};
 
     mutable TAdaptiveLock OutstandingLock;
-    TSet<ui64> OutstandingLsns;
+    THashSet<ui64> OutstandingLsns;
 
 public:
     TFastPathService(
@@ -99,6 +99,7 @@ public:
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
     void ReportCleanupBound(ui32 vChunkIndex, ui64 bound) override;
+    void CompleteOutstandingLsns(const TVector<ui64>& lsns) override;
 
 private:
     ui64 GenerateSequenceNumber();
@@ -106,11 +107,10 @@ private:
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
 
-    void MaybeTriggerPBCleanup(ui64 lsn);
-    void PBCleanup();
+    void MaybeTriggerPBufferCleanup(ui64 lsn);
+    void PBufferCleanup();
 
     void RegisterOutstandingLsn(ui64 lsn);
-    void CompleteOutstandingLsn(ui64 lsn);
     ui64 GetMinOutstandingLsn() const;
 };
 

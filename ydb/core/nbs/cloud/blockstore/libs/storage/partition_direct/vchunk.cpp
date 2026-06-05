@@ -237,7 +237,7 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
     return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
-void TVChunk::PublishCleanupBound()
+void TVChunk::PublishCleanupBound(const TVector<ui64>& completedLsns)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -247,13 +247,19 @@ void TVChunk::PublishCleanupBound()
         bound = minInflightLsn == 0 ? Max<ui64>() : minInflightLsn - 1;
     }
 
-    if (bound == LastReportedCleanupBound) {
-        return;
+    if (bound != LastReportedCleanupBound) {
+        LastReportedCleanupBound = bound;
+        PartitionDirectService->ReportCleanupBound(
+            VChunkConfig.GetVChunkIndex(),
+            bound);
     }
-    LastReportedCleanupBound = bound;
-    PartitionDirectService->ReportCleanupBound(
-        VChunkConfig.GetVChunkIndex(),
-        bound);
+
+    // Release the just-flushed lsns from OutstandingLsns only after the bound
+    // covering them is published, so the handoff stays gap-free. Done even when
+    // the bound is unchanged: the current bound already covers them.
+    if (!completedLsns.empty()) {
+        PartitionDirectService->CompleteOutstandingLsns(completedLsns);
+    }
 }
 
 TString TVChunk::DebugPrintDirtyMap()
@@ -301,8 +307,6 @@ void TVChunk::OnWriteBlocksResponse(
             response.RequestedWrites,
             response.CompletedWrites);
     }
-
-    PublishCleanupBound();
 
     bool ok = !HasError(response.Error);
     Counters.RequestFinished(EVChunkOperation::Write, ok);
@@ -535,6 +539,16 @@ void TVChunk::DoFlush(bool force)
         LogTitle.GetWithTime().c_str(),
         flushBatch.GetAllHints().size(),
         force ? "force" : "normal");
+
+    TVector<ui64> flushingLsns;
+    for (const auto& [route, hint]: flushBatch.GetAllHints()) {
+        for (const auto& segment: hint.Segments) {
+            flushingLsns.push_back(segment.Lsn);
+        }
+    }
+    if (!flushingLsns.empty()) {
+        PublishCleanupBound(flushingLsns);
+    }
 
     for (auto& [route, hint]: flushBatch.TakeAllHints()) {
         auto flushExecutor = std::make_shared<TFlushRequestExecutor>(

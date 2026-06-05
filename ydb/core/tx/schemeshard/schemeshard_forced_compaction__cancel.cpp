@@ -99,8 +99,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
     void DoComplete(const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxCancel DoComplete " << Request->Get()->Record.ShortDebugString());
         SideEffects.ApplyOnComplete(Self, ctx);
-        Self->ForcedCompactionProgressStartTime = ctx.Now();
-        Self->Execute(Self->CreateTxProgressForcedCompaction());
+        Self->ScheduleForcedCompactionProgress(ctx);
     }
 
 private:

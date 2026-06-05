@@ -166,7 +166,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
     void DoComplete(const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxCreate DoComplete " << Request->Get()->Record.ShortDebugString());
-        Self->ProcessForcedCompactionQueues();
+        Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

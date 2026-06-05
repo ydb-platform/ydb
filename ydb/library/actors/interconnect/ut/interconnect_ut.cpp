@@ -1,4 +1,5 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
+#include <ydb/library/actors/interconnect/interconnect_counters.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/logger/backend.h>
@@ -60,6 +61,42 @@ ui64 WaitForSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringB
     }
     UNIT_FAIL(TStringBuilder() << "failed to read session counter " << name << " from " << me << " to " << peer);
     return 0;
+}
+
+ui64 GetPeerCounterValue(
+        const NMonitoring::TDynamicCounterPtr& counters,
+        TStringBuf peerLabel,
+        TStringBuf name) {
+    auto peerCounters = counters->FindSubgroup("peer", TString(peerLabel));
+    UNIT_ASSERT_C(peerCounters, TStringBuilder() << "peer=" << peerLabel << " counters were not created");
+    auto counter = peerCounters->FindCounter(TString(name));
+    UNIT_ASSERT_C(counter, TStringBuilder() << name << " counter was not created for peer=" << peerLabel);
+    return counter->Val();
+}
+
+void RunScopeClassCounterRebindTest(TScopeId peerScopeId, TStringBuf expectedPeerLabel) {
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    common->LocalScopeId = TScopeId(1, 42);
+    common->Settings.MergePerScopeClassCounters = true;
+
+    auto counters = CreateInterconnectCounters(common);
+    counters->SetPeerInfo("peer-host:19001", "dc-1", "unknown");
+    counters->SetConnected(0);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Connected"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Disconnections"), 0);
+
+    counters->SetPeerScopeId(peerScopeId);
+    counters->SetConnected(1);
+    counters->IncDisconnections();
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, expectedPeerLabel, "Connected"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, expectedPeerLabel, "Disconnections"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Connected"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Disconnections"), 0);
+    UNIT_ASSERT_C(!common->MonCounters->FindSubgroup("peer", "peer-host:19001"),
+        "scope class aggregation must not publish counters under the original peer host label");
 }
 
 ui64 GetHistogramSamples(const NMonitoring::THistogramPtr& histogram) {
@@ -598,6 +635,12 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {
+
+    Y_UNIT_TEST(ScopeClassCountersRebindPeerLabel) {
+        RunScopeClassCounterRebindTest(TScopeId(0, 1), "system");
+        RunScopeClassCounterRebindTest(TScopeId(1, 42), "same_tenant");
+        RunScopeClassCounterRebindTest(TScopeId(2, 42), "other_tenant");
+    }
 
     Y_UNIT_TEST(SessionContinuation) {
         TTestICCluster cluster(2);

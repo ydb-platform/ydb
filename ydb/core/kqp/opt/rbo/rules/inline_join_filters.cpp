@@ -161,9 +161,13 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     // The join will be on the keys of lhs, we just need to check that all the keys are non-null
     // We don't support nullable keys at this stage
     auto keyColumns = join->GetLeftInput()->Props.Metadata->KeyColumns;
-    Y_ENSURE(!keyColumns.empty(), "Cannot inline a join filter because key columns are missing");
+    if (keyColumns.empty()) {
+        return input;
+    }
 
-    Y_ENSURE(CheckNonNullKeys(join->GetLeftInput(), keyColumns), "Key columns cannot be optional when inlining join filter");
+    if (!CheckNonNullKeys(join->GetLeftInput(), keyColumns)) {
+        return input;
+    }
 
     TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
     for (const auto & column : keyColumns) {

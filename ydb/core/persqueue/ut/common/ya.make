@@ -14,7 +14,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/persqueue
-    ydb/core/persqueue/public/schema
     ydb/core/testlib
 )
 

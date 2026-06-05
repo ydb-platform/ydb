@@ -283,7 +283,7 @@ message TFeatureFlags {
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
     optional bool EnableSnapshotsLocking = 254 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
-<<<<<<< HEAD
+    optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
     // Skip persisting partition rows that are not affected by a split/merge operation.
@@ -299,7 +299,4 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
     optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
-=======
-    optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
->>>>>>> 78242e20f03 (LOGBROKER-10375 Add split by mps (#38551))
 }

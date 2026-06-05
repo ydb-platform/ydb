@@ -29,15 +29,10 @@ TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytes
     NPersQueue::TTopicConverterPtr topicConverter;
     NKikimrPQ::TPQTabletConfig config;
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeedInBytesPerSecond);
-<<<<<<< HEAD
-    config.MutablePartitionConfig()->SetWriteMessageDeduplicationIdPerSecond(deduplicationIdQuota);
-
-=======
     config.MutablePartitionConfig()->SetBurstSize(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(writeSpeedInMessagesPerSecond);
     config.MutablePartitionConfig()->SetBurstSizeInMessages(burstSizeInMessages);
  
->>>>>>> e3f49bb58a4 (LOGBROKER-10375 Change write quoter for messages per second quota (#39509))
     TPartitionId partitionId;
     TActorId tabletActor = edgeActor;
     ui64 tabletId = 28739;

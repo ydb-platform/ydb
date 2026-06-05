@@ -60,10 +60,7 @@ bool TWriteQuoter::GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig
 }
 
 void TWriteQuoter::HandleWakeUpImpl() {
-<<<<<<< HEAD
-=======
     IncomingMessagesQuotaTracker.Update(ActorContext().Now());
->>>>>>> e3f49bb58a4 (LOGBROKER-10375 Change write quoter for messages per second quota (#39509))
 }
 
 void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {

@@ -146,8 +146,13 @@ namespace NKikimr::NSqsTopic::V1 {
         Ydb::Ymq::V1::Message ConvertMessage(NKikimr::NPQ::NMLP::TEvReadResponse::TMessage&& message, const TActorContext& ctx) const {
             Ydb::Ymq::V1::Message result;
 
-            result.set_body(std::move(message.Data));
-            AFL_ENSURE(message.Codec == Ydb::Topic::Codec::CODEC_RAW)("codec", Ydb::Topic::Codec_Name(message.Codec));
+            TString data;
+            if (message.Codec == Ydb::Topic::CODEC_RAW) {
+                data = std::move(message.Data);
+            } else {
+                data = Base64Encode(message.Data);
+            }
+            result.set_body(std::move(data));
             result.set_m_d_5_of_body(MD5::Calc(result.body()));
 
 
@@ -187,6 +192,10 @@ namespace NKikimr::NSqsTopic::V1 {
                         NKikimrServices::SQS,
                         "Unable to deserialize message attributes");
                 }
+            }
+
+            if (const auto codec = message.MessageMetaAttributes.FindPtr("__codec"); codec) {
+                result.mutable_attributes()->emplace("MessageBodyEncoding", *codec);
             }
 
             result.set_receipt_handle(SerializeReceipt(message.MessageId));

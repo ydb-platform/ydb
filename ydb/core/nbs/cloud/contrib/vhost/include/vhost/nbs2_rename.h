@@ -17,22 +17,31 @@
 // the external linkage name of a declared function or variable; it does not
 // rewrite source-level tokens, so struct/union/enum tags, local identifiers
 // and string literals that happen to share the same name are completely
-// unaffected. The pragma must appear before the declaration of the symbol
-// it renames; the rename header is therefore included at the very top of
-// vhost/types.h and platform.h, which are pulled in by every public header
-// and every internal .c/.h file in the library, well before any vhd_,
-// virtio_ or virtq_ declaration.
+// unaffected.
+//
+// IMPORTANT: each pragma applies only to declarations of the named symbol
+// that the compiler sees AFTER the pragma in the current translation unit.
+// To guarantee that holds in every TU, this header must be #include'd from
+// every internal header that declares an exported symbol BEFORE that
+// declaration. We do that directly from each such internal header (see the
+// `#include "vhost/nbs2_rename.h"` lines at the top of memmap.h, event.h,
+// memlog.h, bio.h, virtio/virt_queue.h, virtio/virtio_blk.h, etc.) so that
+// the ordering is not sensitive to the include order chosen by callers.
+// The public headers (vhost/types.h pulled by vhost/blockdev.h, server.h,
+// fs.h) and platform.h also include this header so that every public
+// consumer and every internal TU likewise sees the renames in scope before
+// any declaration.
 
 #pragma once
 
-#define _NBS2_STR_INNER(x) #x
-#define _NBS2_STR(x) _NBS2_STR_INNER(x)
+#define NBS2_STR_INNER(x) #x
+#define NBS2_STR(x) NBS2_STR_INNER(x)
 
 // NBS2_RENAME(sym) -- give the external (assembler) name of `sym` the
 // `nbs2_` prefix. Use exactly once per externally-visible symbol exported
 // by this library.
 #define NBS2_RENAME(sym) \
-    _Pragma(_NBS2_STR(redefine_extname sym nbs2_##sym))
+    _Pragma(NBS2_STR(redefine_extname sym nbs2_##sym))
 
 // ---- vhd_* functions -------------------------------------------------
 NBS2_RENAME(vhd_add_io_handler)
@@ -70,6 +79,8 @@ NBS2_RENAME(vhd_memmap_dup)
 NBS2_RENAME(vhd_memmap_dup_remap)
 NBS2_RENAME(vhd_memmap_max_memslots)
 NBS2_RENAME(vhd_memmap_new)
+NBS2_RENAME(vhd_memmap_ref)
+NBS2_RENAME(vhd_memmap_unref)
 NBS2_RENAME(vhd_register_blockdev)
 NBS2_RENAME(vhd_register_fs)
 NBS2_RENAME(vhd_register_fs_mq)
@@ -100,6 +111,7 @@ NBS2_RENAME(virtio_blk_dispatch_requests)
 NBS2_RENAME(virtio_blk_get_config)
 NBS2_RENAME(virtio_blk_get_features)
 NBS2_RENAME(virtio_blk_get_total_blocks)
+NBS2_RENAME(virtio_blk_handle_request)
 NBS2_RENAME(virtio_blk_has_feature)
 NBS2_RENAME(virtio_blk_init_dev)
 NBS2_RENAME(virtio_blk_is_readonly)
@@ -119,7 +131,9 @@ NBS2_RENAME(virtq_push)
 NBS2_RENAME(virtq_set_notify_fd)
 
 // ---- externals without a vhd_/virtio_/virtq_ prefix ------------------
+NBS2_RENAME(abort_request)
 NBS2_RENAME(g_log_fn)
+NBS2_RENAME(gpa_range_to_ptr)
 NBS2_RENAME(init_platform_page_size)
 NBS2_RENAME(mark_broken)
 NBS2_RENAME(platform_page_size)

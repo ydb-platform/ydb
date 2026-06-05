@@ -609,10 +609,7 @@ public:
     bool operator==(const TKafkaRecordBatchV0& other) const = default;
 };
 
-<<<<<<< HEAD
-=======
 TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version = 2);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
->>>>>>> ea647bfc756 (LOGBROKER-10406 Add kafka lib)
 } // namespace NKafka

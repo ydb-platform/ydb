@@ -9,8 +9,6 @@
 #include <google/protobuf/text_format.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 class TLogSettingsConfigurator : public TActorBootstrapped<TLogSettingsConfigurator> {
@@ -65,11 +63,13 @@ TLogSettingsConfigurator::TLogSettingsConfigurator(const TString &pathToConfigCa
 
 void TLogSettingsConfigurator::Bootstrap(const TActorContext &ctx)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "TLogSettingsConfigurator Bootstrap");
+    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "TLogSettingsConfigurator Bootstrap");
 
     Become(&TThis::StateWork);
 
-    YDB_LOG_CTX_DEBUG(ctx, "TLogSettingsConfigurator: subscribe for config updates.");
+    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "TLogSettingsConfigurator: subscribe for config updates.");
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -81,8 +81,9 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
 {
     auto &rec = ev->Get()->Record;
 
-    YDB_LOG_CTX_INFO(ctx, "TLogSettingsConfigurator: got new",
-        {"config", rec.GetConfig().ShortDebugString()});
+    LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS,
+               "TLogSettingsConfigurator: got new config: "
+               << rec.GetConfig().ShortDebugString());
 
     const auto& logConfig = rec.GetConfig().GetLogConfig();
 
@@ -94,8 +95,9 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-    YDB_LOG_CTX_TRACE(ctx, "TLogSettingsConfigurator: Send",
-        {"TEvConfigNotificationResponse", resp->Record.ShortDebugString()});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "TLogSettingsConfigurator: Send TEvConfigNotificationResponse: "
+                << resp->Record.ShortDebugString());
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -124,8 +126,9 @@ void TLogSettingsConfigurator::SaveLogSettingsConfigToCache(const NKikimrConfig:
             ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
 
     } catch (const yexception& ex) {
-        YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: failed to save log settings config to cache file ' '",
-            {"exception", ex.what()});
+        LOG_ERROR_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "TLogSettingsConfigurator: failed to save log settings config to cache file '"
+                    << ex.what() << "'");
     }
 }
 
@@ -153,8 +156,9 @@ TLogSettingsConfigurator::ComputeComponentSettings(const NKikimrConfig::TLogConf
         auto component = logSettings->FindComponent(entry.GetComponent());
 
         if (component == NLog::InvalidComponent) {
-            YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: ignoring entry for invalid component",
-                {"сomponent", entry.GetComponent()});
+            LOG_ERROR_S(ctx, NKikimrServices::CMS_CONFIGS,
+                        "TLogSettingsConfigurator: ignoring entry for invalid component '"
+                        << entry.GetComponent() << "'");
             continue;
         }
 
@@ -184,8 +188,8 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
             NLog::EPriority prio = static_cast<NLog::EPriority>(settings[i].Raw.X.Level);
             auto logPrio = logSettings->SetLevel(prio, i, msg)
                 ? NLog::PRI_ERROR : NLog::PRI_NOTICE;
-            YDB_LOG_CTX(ctx, logPrio, "",
-                {"TLogSettingsConfigurator", msg});
+            LOG_LOG_S(ctx, logPrio, NKikimrServices::CMS_CONFIGS,
+                      "TLogSettingsConfigurator: " << msg);
 
             if (i == NKikimrServices::GRPC_LIBRARY) {
                 NConsole::SetGRpcLibraryLogVerbosity(prio);
@@ -195,14 +199,14 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
             NLog::EPriority prio = static_cast<NLog::EPriority>(settings[i].Raw.X.SamplingLevel);
             auto logPrio = logSettings->SetSamplingLevel(prio, i, msg)
                 ? NLog::PRI_ERROR : NLog::PRI_NOTICE;
-            YDB_LOG_CTX(ctx, logPrio, "",
-                {"TLogSettingsConfigurator", msg});
+            LOG_LOG_S(ctx, logPrio, NKikimrServices::CMS_CONFIGS,
+                      "TLogSettingsConfigurator: " << msg);
         }
         if (curSettings.Raw.X.SamplingRate != settings[i].Raw.X.SamplingRate) {
             auto prio = logSettings->SetSamplingRate(settings[i].Raw.X.SamplingRate, i, msg)
                 ? NLog::PRI_ERROR : NLog::PRI_NOTICE;
-            YDB_LOG_CTX(ctx, prio, "",
-                {"TLogSettingsConfigurator", msg});
+            LOG_LOG_S(ctx, prio, NKikimrServices::CMS_CONFIGS,
+                      "TLogSettingsConfigurator: " << msg);
         }
     }
 }

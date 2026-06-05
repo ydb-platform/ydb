@@ -11,7 +11,15 @@
 
 #include <util/stream/zlib.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
+#error log macro definition clash
+#endif
+
+#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
+#define BLOG_NOTICE(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
+#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
+#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
+
 
 namespace NKikimr::NNetClassifierUpdater {
 
@@ -84,7 +92,7 @@ private:
     }
 
     void RequestCurrentConfigViaCookie() {
-        YDB_LOG_DEBUG("NetClassifierUpdater requested distributable config item via cookie");
+        BLOG_D("NetClassifierUpdater requested distributable config item via cookie");
 
         auto event = MakeHolder<TEvConsole::TEvGetConfigItemsRequest>();
 
@@ -95,7 +103,8 @@ private:
     }
 
     void InitDefaultConfiguration() {
-        YDB_LOG_INFO("NetClassifierUpdate is adding distributable config item with cookie");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,
+                        "NetClassifierUpdate is adding distributable config item with cookie");
 
         auto event = MakeHolder<TEvConsole::TEvConfigureRequest>();
 
@@ -113,11 +122,10 @@ private:
     void HandleWhileIniting(TEvConsole::TEvConfigureResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_DEBUG("NetClassifierUpdater created a new distributable config item");
+            BLOG_D("NetClassifierUpdater created a new distributable config item");
             CompleteInitialization();
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to add config",
-                {"item", record.ShortDebugString()});
+            BLOG_ERROR("NetClassifierUpdater failed to add config item: " << record.ShortDebugString());
             InitializeAgain();
         }
     }
@@ -131,13 +139,12 @@ private:
             } else {
                 Y_ABORT_UNLESS(record.ConfigItemsSize() == 1); // only one config item should have the cookie
 
-                YDB_LOG_DEBUG("NetClassifierUpdater found the distributable config via cookie");
+                BLOG_D("NetClassifierUpdater found the distributable config via cookie");
 
                 CompleteInitialization();
             }
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed get current distributable config",
-                {"version", record.ShortDebugString()});
+            BLOG_ERROR("NetClassifierUpdater failed get current distributable config version: " << record.ShortDebugString());
             InitializeAgain();
         }
     }
@@ -152,7 +159,7 @@ private:
     }
 
     void CompleteInitialization() {
-        YDB_LOG_DEBUG("NetClassifierUpdater has been initialized");
+        BLOG_D("NetClassifierUpdater has been initialized");
 
         Become(&TThis::Working);
         Send(SelfId(), new TEvents::TEvWakeup);
@@ -262,15 +269,13 @@ private:
                     RequestCurrentConfigViaCookie();
                     return;
                 } else {
-                    YDB_LOG_ERROR("NetClassifierUpdater failed to get subnets: got empty subnets list");
+                    BLOG_ERROR("NetClassifierUpdater failed to get subnets: got empty subnets list");
                 }
             } else {
-                YDB_LOG_ERROR("NetClassifierUpdater failed to get subnets:",
-                    {"http_status", ev->Get()->Response->Status});
+                BLOG_ERROR("NetClassifierUpdater failed to get subnets: http_status=" <<ev->Get()->Response->Status);
             }
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to get",
-                {"subnets", ev->Get()->Error});
+            BLOG_ERROR("NetClassifierUpdater failed to get subnets: " << ev->Get()->Error);
         }
         InitializeAgain();
     }
@@ -281,8 +286,7 @@ private:
             // hurray! the update is finished
             ScheduleNextUpdate();
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to update distributable",
-                {"config", record.ShortDebugString()});
+            BLOG_ERROR("NetClassifierUpdater failed to update distributable config: " << record.ShortDebugString());
             InitializeAgain();
         }
     }
@@ -306,8 +310,7 @@ private:
 
             Send(LocalConsole, event.Release());
         } else {
-            YDB_LOG_ERROR("NetClassifierUpdater failed to get current distributable config",
-                {"version", record.ShortDebugString()});
+            BLOG_ERROR("NetClassifierUpdater failed to get current distributable config version: " << record.ShortDebugString());
             InitializeAgain();
         }
     }

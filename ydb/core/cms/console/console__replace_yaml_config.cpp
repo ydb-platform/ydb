@@ -9,8 +9,6 @@
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/base/appdata.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -178,7 +176,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxReplaceMainYamlConfig Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceMainYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
@@ -361,7 +359,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxReplaceDatabaseYamlConfig Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceDatabaseYamlConfig Complete");
 
         ctx.Send(Response.Release());
 

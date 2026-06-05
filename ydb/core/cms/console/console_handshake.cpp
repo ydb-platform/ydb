@@ -12,8 +12,6 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
-
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TConsoleCommitActor : public TActorBootstrapped<TConsoleCommitActor> {
@@ -121,12 +119,12 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
         responseRecord.SetProposedConfigVersion(proposedConfigVersion);
         responseRecord.SetConsoleConfigVersion(YamlVersion);
         responseRecord.SetYAML(MainYamlConfig);
-        YDB_LOG_CTX_ALERT(ctx, "Unexpected proposed config.");
+        LOG_ALERT_S(ctx, NKikimrServices::CMS, "Unexpected proposed config.");
     } else if (proposedConfigHash != currentConfigHash) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch);
         responseRecord.SetProposedConfigHash(proposedConfigHash);
         responseRecord.SetConsoleConfigHash(currentConfigHash);
-        YDB_LOG_CTX_ALERT(ctx, "Config hash mismatch.");
+        LOG_ALERT_S(ctx, NKikimrServices::CMS, "Config hash mismatch.");
     } else {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded);
     }

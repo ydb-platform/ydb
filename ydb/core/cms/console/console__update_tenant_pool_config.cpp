@@ -1,8 +1,6 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
-
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdateTenantPoolConfig : public TTransactionBase<TTenantsManager> {
@@ -15,8 +13,7 @@ public:
 
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error, const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot update tenant pool",
-            {"config", error});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot update tenant pool config: " << error);
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_status(code);
@@ -35,8 +32,8 @@ public:
 
         auto &rec = Request->Get()->Record;
         auto &token = rec.GetUserToken();
-        YDB_LOG_CTX_DEBUG(ctx, "",
-            {"TTxUpdateTenantPoolConfig", rec.ShortDebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxUpdateTenantPoolConfig: "
+                    << rec.ShortDebugString());
 
         Response.Reset(new TEvConsole::TEvGetTenantStatusResponse);
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
@@ -77,11 +74,10 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateTenantPoolConfig Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxUpdateTenantPoolConfig Complete");
 
         Y_ABORT_UNLESS(Response);
-        YDB_LOG_CTX_TRACE(ctx, "",
-            {"Send", Response->ToString()});
+        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         Self->TxProcessor->TxCompleted(this, ctx);

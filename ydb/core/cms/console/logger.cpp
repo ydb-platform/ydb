@@ -3,8 +3,6 @@
 
 #include <util/generic/utility.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -21,13 +19,13 @@ bool TLogger::DbCleanupLog(ui32 remainEntries,
 
     ui64 fromId = NextLogItemId - remainEntries;
 
-    YDB_LOG_CTX_DEBUG(ctx, "Cleanup log records until",
-        {"fromId", fromId});
+    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "Cleanup log records until " << fromId);
 
     NIceDb::TNiceDb db(txc.DB);
 
-    YDB_LOG_CTX_DEBUG(ctx, "Removing log records",
-        {"count", (fromId - MinLogItemId + 1)});
+    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "Removing " << (fromId - MinLogItemId + 1) << " log records");
 
     for (ui64 id = MinLogItemId; id <= fromId; ++id)
         db.Table<Schema::LogRecords>().Key(id).Delete();
@@ -170,9 +168,10 @@ void TLogger::DbLogData(const TString &userSID,
 
     TString serializedData = data.SerializeAsString();
 
-    YDB_LOG_CTX_TRACE(ctx, "Add log record to local DB",
-        {"timestamp", timestamp},
-        {"data", data.ShortDebugString()});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "Add log record to local DB"
+                << " timestamp=" << timestamp
+                << " data=" << data.ShortDebugString());
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::LogRecords>().Key(NextLogItemId)

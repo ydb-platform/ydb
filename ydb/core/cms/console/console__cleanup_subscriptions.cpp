@@ -6,8 +6,6 @@
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/cms/console/validators/registry.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxCleanupSubscriptions : public TTransactionBase<TConfigsManager> {
@@ -21,7 +19,8 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxCleanupSubscriptions");
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "TConsole::TTxCleanupSubscriptions");
 
         THashSet<ui32> nodes;
         for (auto &node : Nodes->Get()->Nodes)
@@ -32,9 +31,9 @@ public:
             if (nodeId && !nodes.contains(nodeId)) {
                 Self->PendingSubscriptionModifications.RemovedSubscriptions.insert(pr.first);
 
-                YDB_LOG_CTX_DEBUG(ctx, "Subscription has subscriber from unknown node and will be removed",
-                    {"subscriber", pr.first},
-                    {"nodeId", nodeId});
+                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                            "Subscription " << pr.first << " has subscriber from unknown node "
+                            << nodeId << " and will be removed");
             }
         }
 
@@ -47,7 +46,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxCleanupSubscriptions Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS,
+                  "TConsole::TTxCleanupSubscriptions Complete");
 
         if (!Self->PendingSubscriptionModifications.IsEmpty())
             Self->ApplyPendingSubscriptionModifications(ctx);

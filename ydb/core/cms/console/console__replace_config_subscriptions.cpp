@@ -2,8 +2,6 @@
 
 #include <util/random/random.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxReplaceConfigSubscriptions : public TTransactionBase<TConfigsManager> {
@@ -19,8 +17,7 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot replace",
-            {"subscriptions", error});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Cannot replace subscriptions: " << error);
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -35,8 +32,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "TTxReplaceConfigSubscriptions",
-            {"Execute", rec.ShortDebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceConfigSubscriptions Execute: " << rec.ShortDebugString());
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -83,7 +79,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxReplaceConfigSubscriptions Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceConfigSubscriptions Complete");
 
         Y_ABORT_UNLESS(Response);
         if (!Self->PendingSubscriptionModifications.IsEmpty()) {
@@ -93,8 +89,8 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            YDB_LOG_CTX_TRACE(ctx, "Send",
-                {"TEvReplaceConfigSubscriptionsResponse", Response->Record.ShortDebugString()});
+            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                        "Send TEvReplaceConfigSubscriptionsResponse: " << Response->Record.ShortDebugString());
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

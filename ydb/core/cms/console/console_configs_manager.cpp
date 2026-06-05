@@ -20,8 +20,6 @@
 
 #include "console_configuration_info_collector.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 void TConfigsManager::ClearState()
@@ -236,7 +234,7 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "TConfigsManager::Bootstrap");
+    LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsManager::Bootstrap");
     Become(&TThis::StateWork);
 
     ClusterName = AppData(ctx)->ClusterName;
@@ -274,24 +272,20 @@ void TConfigsManager::Detach()
 void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
                                                       TAutoPtr<IEventHandle> ev)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "Applying pending config modifications");
+    LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "Applying pending config modifications");
 
     for (auto &pr : PendingConfigModifications.RemovedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Remove",
-            {"item", ConfigIndex.GetItem(pr.first)->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Remove " << ConfigIndex.GetItem(pr.first)->ToString());
     for (auto &pr : PendingConfigModifications.ModifiedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Remove modified",
-            {"item", pr.second->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Remove modified " << pr.second->ToString());
     for (auto &pr : PendingConfigModifications.ModifiedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Add modified",
-            {"item", pr.second->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Add modified " << pr.second->ToString());
     for (auto item : PendingConfigModifications.AddedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Add new",
-            {"item", item->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Add new " << item->ToString());
 
     PendingConfigModifications.ApplyTo(ConfigIndex);
 
-    YDB_LOG_CTX_TRACE(ctx, "Send configs update to configs provider.");
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "Send configs update to configs provider.");
     auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateConfigs>(PendingConfigModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
@@ -301,32 +295,32 @@ void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
 void TConfigsManager::ApplyPendingSubscriptionModifications(const TActorContext &ctx,
                                                             TAutoPtr<IEventHandle> ev)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "Applying pending subscription midifications");
+    LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "Applying pending subscription midifications");
 
     for (auto &id : PendingSubscriptionModifications.RemovedSubscriptions) {
-        YDB_LOG_CTX_DEBUG(ctx, "Remove subscription",
-            {"subscription", SubscriptionIndex.GetSubscription(id)->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "Remove subscription " << SubscriptionIndex.GetSubscription(id)->ToString());
         SubscriptionIndex.RemoveSubscription(id);
     }
     for (auto &subscription : PendingSubscriptionModifications.AddedSubscriptions) {
-        YDB_LOG_CTX_DEBUG(ctx, "Add subscription",
-            {"subscription", subscription->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "Add subscription " << subscription->ToString());
         SubscriptionIndex.AddSubscription(subscription);
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedLastProvided) {
-        YDB_LOG_CTX_DEBUG(ctx, "Modify last provided config for subscription",
-            {"id", pr.first},
-            {"lastprovidedconfig", pr.second.ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "Modify last provided config for subscription id=" << pr.first
+                    << " lastprovidedconfig=" << pr.second.ToString());
         SubscriptionIndex.GetSubscription(pr.first)->LastProvidedConfig = pr.second;
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedCookies) {
-        YDB_LOG_CTX_DEBUG(ctx, "Modify cookie for subscription",
-            {"id", pr.first},
-            {"cookie", pr.second});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "Modify cookie for subscription id=" << pr.first
+                    << " cookie=" << pr.second);
         SubscriptionIndex.GetSubscription(pr.first)->Cookie = pr.second;
     }
 
-    YDB_LOG_CTX_TRACE(ctx, "Send subscriptions update to configs provider.");
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "Send subscriptions update to configs provider.");
     auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateSubscriptions>(PendingSubscriptionModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
@@ -501,7 +495,7 @@ void TConfigsManager::DbApplyPendingSubscriptionModifications(TTransactionContex
 bool TConfigsManager::DbLoadState(TTransactionContext &txc,
                                   const TActorContext &ctx)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "Loading configs state");
+    LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "Loading configs state");
 
     NIceDb::TNiceDb db(txc.DB);
     auto nextConfigItemIdRow = db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextConfigItemId).Select<Schema::Config::Value>();
@@ -602,8 +596,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         item->Cookie = cookie;
         ConfigIndex.AddItem(item);
 
-        YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-            {"item", item->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Loaded " << item->ToString());
 
         if (!configItemRowset.Next())
             return false;
@@ -632,8 +625,8 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         subscription->LastProvidedConfig.ItemIds = std::move(configId);
         subscription->Cookie = RandomNumber<ui64>();
 
-        YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-            {"subscription", subscription->ToString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "Loaded subscription: " << subscription->ToString());
 
         SubscriptionIndex.AddSubscription(subscription);
 
@@ -651,8 +644,8 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         DisabledValidators.insert(name);
         registry->DisableValidator(name);
 
-        YDB_LOG_CTX_DEBUG(ctx, "Disable validator",
-            {"name", name});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "Disable validator " << name);
 
         if (!validatorsRowset.Next())
             return false;
@@ -665,8 +658,7 @@ void TConfigsManager::DbRemoveItem(ui64 id,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: removing config item",
-        {"id", id});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "Database: removing config item #" << id);
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigItems>().Key(id).Delete();
@@ -676,8 +668,7 @@ void TConfigsManager::DbRemoveSubscription(ui64 id,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: removing subscription",
-        {"id", id});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "Database: removing subscription id=" << id);
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id).Delete();
@@ -687,9 +678,8 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "",
-        {"Database", (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ")},
-        {"item", item->ToString()});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "Database: "
+                << (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ") << item->ToString());
 
     TString config;
     Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.SerializeToString(&config);
@@ -710,8 +700,8 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
 void TConfigsManager::DbUpdateNextConfigItemId(TTransactionContext &txc,
                                                const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update",
-        {"NextConfigItemId", NextConfigItemId});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "Database: update NextConfigItemId: " << NextConfigItemId);
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextConfigItemId)
@@ -721,8 +711,8 @@ void TConfigsManager::DbUpdateNextConfigItemId(TTransactionContext &txc,
 void TConfigsManager::DbUpdateNextSubscriptionId(TTransactionContext &txc,
                                                  const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update",
-        {"NextSubscriptionId", NextSubscriptionId});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "Database: update NextSubscriptionId: " << NextSubscriptionId);
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextSubscriptionId)
@@ -733,8 +723,8 @@ void TConfigsManager::DbUpdateSubscription(TSubscription::TPtr subscription,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update",
-        {"subscription", subscription->ToString()});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "Database: update subscription:" << subscription->ToString());
 
     TVector<ui32> kinds(subscription->ItemKinds.begin(), subscription->ItemKinds.end());
     NIceDb::TNiceDb db(txc.DB);
@@ -754,9 +744,10 @@ void TConfigsManager::DbUpdateSubscriptionLastProvidedConfig(ui64 id,
                                                              TTransactionContext &txc,
                                                              const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update last provided config for subscription",
-        {"id", id},
-        {"lastprovidedconfig", configId.ToString()});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "Database: "
+                << "update last provided config for subscription"
+                << " id=" << id
+                << " lastprovidedconfig=" << configId.ToString());
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id)
@@ -798,8 +789,8 @@ void TConfigsManager::Handle(TEvConsole::TEvListConfigValidatorsRequest::TPtr &e
         entry.SetEnabled(pr.second->IsEnabled());
     }
 
-    YDB_LOG_CTX_TRACE(ctx, "Send",
-        {"TEvListConfigValidatorsResponse", response->Record.ShortDebugString()});
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                "Send TEvListConfigValidatorsResponse: " << response->Record.ShortDebugString());
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }

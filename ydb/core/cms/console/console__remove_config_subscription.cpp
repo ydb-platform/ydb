@@ -1,7 +1,5 @@
 #include "console_configs_manager.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxRemoveConfigSubscription : public TTransactionBase<TConfigsManager> {
@@ -17,8 +15,7 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot remove",
-            {"subscription", error});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Cannot remove subscription: " << error);
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -33,8 +30,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscription",
-            {"Execute", rec.ShortDebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxRemoveConfigSubscription Execute: " << rec.ShortDebugString());
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -58,7 +54,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscription Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxRemoveConfigSubscription Complete");
 
         Y_ABORT_UNLESS(Response);
         if (!Self->PendingSubscriptionModifications.IsEmpty()) {
@@ -68,8 +64,8 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            YDB_LOG_CTX_TRACE(ctx, "Send",
-                {"TEvRemoveConfigSubscriptionResponse", Response->Record.ShortDebugString()});
+            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                        "Send TEvRemoveConfigSubscriptionResponse: " << Response->Record.ShortDebugString());
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

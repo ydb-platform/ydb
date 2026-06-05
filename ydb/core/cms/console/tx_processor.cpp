@@ -1,7 +1,5 @@
 #include "tx_processor.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 namespace NKikimr::NConsole {
 
 TTxProcessor::TTxProcessor(ITxExecutor &executor,
@@ -32,9 +30,7 @@ TTxProcessor::TPtr TTxProcessor::GetSubProcessor(const TString &name,
     if (it != SubProcessors.end())
         return it->second;
 
-    YDB_LOG_CTX_TRACE(ctx, "creating sub-processor",
-        {"LogPrefix", LogPrefix},
-        {"name", name});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "creating sub-processor " << name);
 
     TTxProcessor::TPtr subProcessor = new TTxProcessor(Executor,
                                                        name,
@@ -52,8 +48,7 @@ TTxProcessor::TPtr TTxProcessor::GetSubProcessor(const TString &name,
 void TTxProcessor::ProcessTx(ITransaction *tx,
                              const TActorContext &ctx)
 {
-    YDB_LOG_CTX_TRACE(ctx, "enqueue tx",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "enqueue tx");
 
     TxQueue.push_back(THolder<ITransaction>(tx));
     ProcessNextTx(ctx);
@@ -62,8 +57,7 @@ void TTxProcessor::ProcessTx(ITransaction *tx,
 void TTxProcessor::TxCompleted(ITransaction *tx,
                                const TActorContext &ctx)
 {
-    YDB_LOG_CTX_TRACE(ctx, "completed tx",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "completed tx");
 
     Y_ABORT_UNLESS(tx == ActiveTx);
     ActiveTx = nullptr;
@@ -82,9 +76,7 @@ void TTxProcessor::TxCompleted(ITransaction *tx,
 void TTxProcessor::RemoveSubProcessor(TTxProcessor::TPtr sub,
                                       const TActorContext &ctx)
 {
-    YDB_LOG_CTX_TRACE(ctx, "removing sub-processor",
-        {"LogPrefix", LogPrefix},
-        {"subName", sub->Name});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "removing sub-processor " << sub->Name);
 
     Y_ABORT_UNLESS(SubProcessors.contains(sub->Name));
     SubProcessors.erase(sub->Name);
@@ -107,8 +99,7 @@ void TTxProcessor::Clear()
 
 void TTxProcessor::Activate(const TActorContext &ctx)
 {
-    YDB_LOG_CTX_TRACE(ctx, "is now active",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "is now active");
 
     State = EState::ACTIVE;
     ProcessNextTx(ctx);
@@ -120,8 +111,7 @@ void TTxProcessor::ActivateChildren(const TActorContext &ctx)
     if (SubProcessors.empty())
         return;
 
-    YDB_LOG_CTX_TRACE(ctx, "is now locked by children",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "is now locked by children");
 
     State = EState::LOCKED_BY_CHILDREN;
     for (auto it = SubProcessors.begin(); it != SubProcessors.end(); ) {
@@ -138,8 +128,7 @@ bool TTxProcessor::Lock(const TActorContext &ctx)
     if (State == EState::LOCKED_BY_PARENT)
         return true;
 
-    YDB_LOG_CTX_TRACE(ctx, "is now locking",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "is now locking");
 
     State = EState::LOCKING;
 
@@ -151,8 +140,7 @@ bool TTxProcessor::Lock(const TActorContext &ctx)
         res = res && pr.second->Lock(ctx);
 
     if (res) {
-        YDB_LOG_CTX_TRACE(ctx, "is now locked by parent",
-            {"LogPrefix", LogPrefix});
+        LOG_TRACE_S(ctx, Service, LogPrefix << "is now locked by parent");
 
         State = EState::LOCKED_BY_PARENT;
         return true;
@@ -164,8 +152,7 @@ bool TTxProcessor::Lock(const TActorContext &ctx)
 void TTxProcessor::TryToLockChildren(const TActorContext &ctx)
 {
     Y_ABORT_UNLESS(State == EState::LOCKED_BY_CHILDREN);
-    YDB_LOG_CTX_TRACE(ctx, "trying to lock children",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "trying to lock children");
 
     bool res = true;
     for (auto &pr : SubProcessors)
@@ -212,8 +199,7 @@ void TTxProcessor::CheckLocks(const TActorContext &ctx)
         if (pr.second->State != EState::LOCKED_BY_PARENT)
             return;
 
-    YDB_LOG_CTX_TRACE(ctx, "is now locked by parent",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "is now locked by parent");
 
     State = EState::LOCKED_BY_PARENT;
     if (Parent)
@@ -228,8 +214,7 @@ bool TTxProcessor::CheckTemporary(const TActorContext &ctx)
     if (ActiveTx || !TxQueue.empty() || !SubProcessors.empty())
         return false;
 
-    YDB_LOG_CTX_TRACE(ctx, "unlink from parent",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "unlink from parent");
 
     Parent->RemoveSubProcessor(this, ctx);
     return true;
@@ -257,8 +242,7 @@ void TTxProcessor::ProcessNextTx(const TActorContext &ctx)
     ActiveTx = TxQueue.front().Release();
     TxQueue.pop_front();
 
-    YDB_LOG_CTX_TRACE(ctx, "starts new tx",
-        {"LogPrefix", LogPrefix});
+    LOG_TRACE_S(ctx, Service, LogPrefix << "starts new tx");
 
     Y_ABORT_UNLESS(ActiveTx);
     Executor.Execute(ActiveTx, ctx);

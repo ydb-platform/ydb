@@ -11,8 +11,10 @@
 namespace NKikimr::NKqp {
 namespace {
 
-constexpr size_t SQL_TEXT_MAX_SIZE = 10240;
-constexpr size_t QUERY_TEXT_LIMIT = 10240;
+// Default rsyslog $MaxMessageSize is 8 KB;
+constexpr size_t QUERY_TEXT_LIMIT = 6_KB;
+constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB;
+constexpr size_t ISSUES_TEXT_LIMIT = 1_KB;
 constexpr TStringBuf UI_QUERY_EXCLUDE_MARKER = "/*UI-QUERY-EXCLUDE*/";
 
 #define _KQP_REQ_LOG_AT(prio, stream) \
@@ -131,14 +133,23 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
             json.WriteKey("data").WriteString(requestText.SubStr(i * chunkSize, chunkSize));
         }
 
+        bool issuesTruncated = false;
         if (!issues.Empty()) {
-            json.WriteKey("issues").WriteString(issues.ToOneLineString());
+            TString issuesStr = issues.ToOneLineString();
+            if (issuesStr.size() > ISSUES_TEXT_LIMIT) {
+                issuesStr.resize(ISSUES_TEXT_LIMIT);
+                issuesTruncated = true;
+            }
+            json.WriteKey("issues").WriteString(issuesStr);
         }
 
         if (i == 0) {
             WriteCompletedFields(json, fields);
             if (wasTruncated) {
                 json.WriteKey("data_truncated").WriteBool(true);
+            }
+            if (issuesTruncated) {
+                json.WriteKey("issues_truncated").WriteBool(true);
             }
         }
 

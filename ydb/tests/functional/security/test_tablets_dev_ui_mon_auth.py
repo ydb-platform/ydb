@@ -4,7 +4,12 @@ import time
 import pytest
 import requests
 
-from security_test_helpers import _test_endpoints
+from security_test_helpers import (
+    _test_endpoints,
+    tablet_devui_expected_on_app,
+    tablet_devui_new_action_paths,
+    tablet_devui_sid_matrix,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -197,7 +202,7 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
         'monitoring@builtin': 403,
         'root@builtin': 200,
     }
-    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
     return {
         # New secure path for DataShard DevUI. Should be admin-only in both modes.
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
@@ -234,44 +239,18 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
     )
 
 
-def _schemeshard_sid_matrix():
-    all_forbidden = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 403,
-    }
-    monitoring_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    }
-    admin_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 200,
-    }
-    return all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok
 
 
 def _schemeshard_devui_mon_paths(tablet_id, secure_path_mode):
     q = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = _schemeshard_sid_matrix()
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
     return {
         f'/tablets/app?{q}': monitoring_allowed_sids_ok,
         f'/tablets?{q}': monitoring_allowed_sids_ok,
-        f'/tablets/app?{q}&Page=Admin': all_forbidden if secure_path_mode else monitoring_allowed_sids_ok,
+        f'/tablets/app?{q}&Page=Admin': tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden),
         f'/tablets/app/secure?{q}&Page=Admin': admin_allowed_sids_ok,
         f'/tablets/app?{q}&Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1': (
-            all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+            tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
         ),
         f'/tablets/app/secure?{q}&Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1': (
             admin_allowed_sids_ok
@@ -283,7 +262,7 @@ def _schemeshard_post_action_paths(tablet_id, action, extra_params=''):
     q = f'TabletID={tablet_id}&Action={action}'
     if extra_params:
         q = f'{q}&{extra_params}'
-    all_forbidden, _, admin_allowed_sids_ok = _schemeshard_sid_matrix()
+    all_forbidden, _, admin_allowed_sids_ok = tablet_devui_sid_matrix()
     return {
         f'/tablets/app?{q}': all_forbidden,
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
@@ -435,3 +414,22 @@ def test_schemeshard_force_drop_unsafe_form_uses_secure_path(
     assert response.status_code == 200, response.text
     assert "action='app/secure?" in response.text or 'action="app/secure?' in response.text
     assert 'Action=ForceDropUnsafe' in response.text
+
+def test_schemeshard_new_action_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_schemeshard,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_schemeshard.schemeshard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_schemeshard,
+        tablet_devui_new_action_paths(tid, 'Page=FuturePage', secure_path_mode=False),
+    )
+
+
+def test_schemeshard_new_action_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard,
+):
+    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard.schemeshard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard,
+        tablet_devui_new_action_paths(tid, 'Page=FuturePage', secure_path_mode=True),
+    )

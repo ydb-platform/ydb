@@ -201,26 +201,6 @@ bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi) {
     return false;
 }
 
-bool CheckSchemeShardDevUiAccess(
-    bool securePathMode,
-    TStringBuf pathInfo,
-    const TString& userToken,
-    const TCgiParameters& cgi,
-    const TActorId& sender)
-{
-    if (!securePathMode) {
-        return true;
-    }
-    if (IsPublicSchemeShardDevUiRequest(cgi)) {
-        return true;
-    }
-    if (!IsTabletDevUiSecurePath(pathInfo) || !IsAdministrator(AppData(), userToken)) {
-        TActivationContext::Send(new IEventHandle(sender, TActorId(), new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN)));
-        return false;
-    }
-    return true;
-}
-
 } // namespace
 
 class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
@@ -2131,7 +2111,14 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
 
     const TCgiParameters& cgi = ev->Get()->Cgi();
     const bool securePathMode = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (!CheckSchemeShardDevUiAccess(securePathMode, ev->Get()->PathInfo(), ev->Get()->GetUserToken(), cgi, ev->Sender)) {
+    if (!CheckTabletDevUiAccess(
+            AppData(),
+            securePathMode,
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            IsPublicSchemeShardDevUiRequest(cgi),
+            ev->Sender))
+    {
         return true;
     }
 

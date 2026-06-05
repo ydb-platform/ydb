@@ -568,7 +568,7 @@ void TDeltaWriter::Reset(bool withFreq, bool sign) {
 }
 
 void TDeltaWriter::Add(ui64 DocId, ui32 Freq) {
-    ui64 diff = DocId-MaxId;
+    ui64 diff = DocId - MaxId;
     Y_ENSURE(!Count || (Sign ? ((i64)DocId > (i64)MaxId) : (DocId > MaxId)));
     if (!Count && Sign) {
         // Encode first item as zigzag, same as in protobuf
@@ -630,7 +630,7 @@ void TMultiDeltaReader::Start() {
         OneLeft = true;
     } else {
         for (size_t i = 0; i < Readers.size(); i++) {
-            Consume(i+1, Readers[i]);
+            Consume(i + 1, Readers[i]);
         }
         if (Items.size() > 0) {
             SelectNext();
@@ -642,7 +642,7 @@ void TMultiDeltaReader::SelectNext() {
     std::pop_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
     NextItem = Items.back();
     Items.pop_back();
-    auto& rdr = Readers[NextItem.RdrId-1];
+    auto& rdr = Readers[NextItem.RdrId - 1];
     Consume(NextItem.RdrId, rdr);
 }
 

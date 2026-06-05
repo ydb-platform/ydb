@@ -335,7 +335,7 @@ public:
             std::sort(tokens.begin(), tokens.end());
             ui32 freq = 1;
             for (size_t i = 0; i < tokens.size(); i++) {
-                if (i < tokens.size()-1 && tokens[i] == tokens[i+1]) {
+                if (i < tokens.size() - 1 && tokens[i] == tokens[i + 1]) {
                     freq++;
                     continue;
                 }

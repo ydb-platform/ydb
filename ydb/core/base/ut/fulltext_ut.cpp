@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         ui64 docId;
         ui32 freq;
         for (ui64 i = 1; i <= 100; i++) {
-            if (i >= 5 && i <= 25 && !((i-5) % 2)) {
+            if (i >= 5 && i <= 25 && !((i - 5) % 2)) {
                 continue;
             }
             UNIT_ASSERT(rdr.Read(docId, freq));
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         ui64 docId;
         ui32 freq;
         for (i64 i = -50; i <= 50; i++) {
-            if (i >= -25 && i <= 25 && !((i+25) % 2)) {
+            if (i >= -25 && i <= 25 && !((i + 25) % 2)) {
                 continue;
             }
             UNIT_ASSERT(rdr.Read(docId, freq));

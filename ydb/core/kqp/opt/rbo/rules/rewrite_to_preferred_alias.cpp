@@ -313,6 +313,7 @@ bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOpe
     }
 
     filter->RenameIUs(renameMap, ctx.ExprCtx);
+    props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
     return true;
 }
 

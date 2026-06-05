@@ -51,11 +51,87 @@ TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius) {
     return result;
 }
 
+TInfoUnit RenameInfoUnit(const TInfoUnit& iu, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
+    const auto it = renameMap.find(iu);
+    return it == renameMap.end() ? iu : it->second;
+}
+
+bool RenameInfoUnitInPlace(TInfoUnit& iu, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
+    const auto renamed = RenameInfoUnit(iu, renameMap);
+    if (renamed == iu) {
+        return false;
+    }
+
+    iu = renamed;
+    return true;
+}
+
+bool RenameInfoUnits(TVector<TInfoUnit>& ius, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
+    bool changed = false;
+    for (auto& iu : ius) {
+        changed |= RenameInfoUnitInPlace(iu, renameMap);
+    }
+    return changed;
+}
+
+bool RenameExternalSubplanReferences(
+    const TIntrusivePtr<IOperator>& op,
+    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap,
+    TExprContext& ctx)
+{
+    if (!op) {
+        return false;
+    }
+
+    if (op->Kind == EOperator::AddDependencies) {
+        auto addDeps = CastOperator<TOpAddDependencies>(op);
+        return RenameInfoUnits(addDeps->Dependencies, renameMap);
+    }
+
+    bool hasRenamedExternalChild = false;
+    for (const auto& child : op->Children) {
+        hasRenamedExternalChild |= RenameExternalSubplanReferences(child, renameMap, ctx);
+    }
+
+    if (hasRenamedExternalChild) {
+        op->RenameIUs(renameMap, ctx);
+    }
+
+    return hasRenamedExternalChild;
+}
+
 } // namespace
 
 /**
  * Base class Operator methods
  */
+
+void TSubplans::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    if (renameMap.empty() || PlanMap.empty()) {
+        return;
+    }
+
+    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> renamedPlanMap;
+    TVector<TInfoUnit> renamedOrderedList;
+    renamedOrderedList.reserve(OrderedList.size());
+
+    for (const auto& iu : OrderedList) {
+        auto entry = PlanMap.at(iu);
+        const auto renamedIU = RenameInfoUnit(iu, renameMap);
+
+        entry.IU = RenameInfoUnit(entry.IU, renameMap);
+        RenameInfoUnits(entry.Tuple, renameMap);
+        RenameInfoUnits(entry.DependentIUs, renameMap);
+        RenameExternalSubplanReferences(CastOperator<IOperator>(entry.Plan), renameMap, ctx);
+
+        const auto inserted = renamedPlanMap.emplace(renamedIU, std::move(entry)).second;
+        Y_ENSURE(inserted, "Subplan rename produced duplicate binding " << renamedIU.GetFullName());
+        renamedOrderedList.push_back(renamedIU);
+    }
+
+    PlanMap = std::move(renamedPlanMap);
+    OrderedList = std::move(renamedOrderedList);
+}
 
 void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                           const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
@@ -616,6 +692,13 @@ TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
     auto ius = GetInput()->GetOutputIUs();
     ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
     return ius;
+}
+
+void TOpAddDependencies::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
+    RenameInfoUnits(Dependencies, renameMap);
 }
 
 TString TOpAddDependencies::ToString(TExprContext& ctx) {

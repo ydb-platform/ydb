@@ -350,19 +350,15 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 }
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
-    auto addEarlyProjectionCleanupRules = [](TVector<std::unique_ptr<IRule>>& rules) {
-        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
-        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
-    };
-
-    auto addProjectionNormalizationRules = [](TVector<std::unique_ptr<IRule>>& rules) {
+    auto addProjectionAndAliasSimplificationRules = [](TVector<std::unique_ptr<IRule>>& rules) {
         rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
         rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
         rules.emplace_back(std::make_unique<TPushAppendRule>());
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
         rules.emplace_back(std::make_unique<TPushRenameRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     };
 
     // Initial stages.
@@ -384,21 +380,24 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
     RBO.AddStage(std::make_unique<TConstantFoldingStage>());
 
-    // Clean up aliases and trivial projection maps before the broader logical rewrites start.
-    TVector<std::unique_ptr<IRule>> projectionNormalizationRules;
-    addEarlyProjectionCleanupRules(projectionNormalizationRules);
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize projection names", std::move(projectionNormalizationRules)));
+    TVector<std::unique_ptr<IRule>> inlineSimpleSubPlanStageRules;
+    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline in/exists subplans", std::move(inlineSimpleSubPlanStageRules)));
+
+    // Clean up aliases and trivial projections before the broader logical rewrites start.
+    TVector<std::unique_ptr<IRule>> projectionSimplificationRules;
+    addProjectionAndAliasSimplificationRules(projectionSimplificationRules);
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Simplify projections and aliases", std::move(projectionSimplificationRules)));
 
     // Logical stage.
     TVector<std::unique_ptr<IRule>> logicalStageRules;
-    addProjectionNormalizationRules(logicalStageRules);
+    addProjectionAndAliasSimplificationRules(logicalStageRules);
     logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
-    logicalStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
 
     // Physical stage.

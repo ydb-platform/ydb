@@ -3088,6 +3088,153 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("dead_value")) == readOutput.end());
     }
 
+    Y_UNIT_TEST(PushRenameUpdatesPendingSubplanTuple) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        const auto subplanIU = TInfoUnit("_rbo_arg_1", true);
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto filter = MakeIntrusive<TOpFilter>(
+            read,
+            pos,
+            MakeColumnAccess(subplanIU, pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a"});
+
+        auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
+        TSubplanEntry subplanEntry;
+        subplanEntry.Plan = subplanRead;
+        subplanEntry.Tuple = {TInfoUnit("a")};
+        subplanEntry.Type = ESubplanType::IN_SUBPLAN;
+        subplanEntry.IU = subplanIU;
+        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
+        filter->FilterExpr.PlanProps = &root.PlanProps;
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        TRuleBasedStage pushRename("Focused push rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushRename.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push semantic rename");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
+
+        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
+        UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("l_a"));
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
+        auto rewrittenRead = CastOperator<TOpRead>(rewrittenFilter->GetInput());
+        UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("l_a"));
+    }
+
+    Y_UNIT_TEST(PushRenameUpdatesPendingSubplanDependencies) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        const auto subplanIU = TInfoUnit("_rbo_arg_1", true);
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto outerFilter = MakeIntrusive<TOpFilter>(
+            read,
+            pos,
+            MakeColumnAccess(subplanIU, pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto aliasMap = MakeIntrusive<TOpMap>(outerFilter, pos, TVector<TMapElement>{
+            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a"});
+
+        auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
+        auto addDeps = MakeIntrusive<TOpAddDependencies>(
+            subplanRead,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("a")},
+            TVector<const TTypeAnnotationNode*>{nullptr}
+        );
+        auto subplanFilter = MakeIntrusive<TOpFilter>(
+            addDeps,
+            pos,
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+
+        TSubplanEntry subplanEntry;
+        subplanEntry.Plan = subplanFilter;
+        subplanEntry.Type = ESubplanType::EXISTS;
+        subplanEntry.IU = subplanIU;
+        subplanEntry.DependentIUs = {TInfoUnit("a")};
+        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
+        outerFilter->FilterExpr.PlanProps = &root.PlanProps;
+        subplanFilter->FilterExpr.PlanProps = &root.PlanProps;
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        TRuleBasedStage pushRename("Focused push rename", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushRename.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Push semantic rename");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
+
+        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.DependentIUs.size(), 1);
+        UNIT_ASSERT(rewrittenEntry.DependentIUs.front() == TInfoUnit("l_a"));
+        UNIT_ASSERT_VALUES_EQUAL(addDeps->Dependencies.size(), 1);
+        UNIT_ASSERT(addDeps->Dependencies.front() == TInfoUnit("l_a"));
+
+        const auto subplanFilterInputs = subplanFilter->FilterExpr.GetInputIUs(false, true);
+        UNIT_ASSERT(std::find(subplanFilterInputs.begin(), subplanFilterInputs.end(), TInfoUnit("l_a")) != subplanFilterInputs.end());
+        UNIT_ASSERT(std::find(subplanFilterInputs.begin(), subplanFilterInputs.end(), TInfoUnit("a")) == subplanFilterInputs.end());
+    }
+
+    Y_UNIT_TEST(RewritePreferredAliasUpdatesPendingSubplanTuple) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        const auto subplanIU = TInfoUnit("_rbo_arg_1", true);
+        auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto filter = MakeIntrusive<TOpFilter>(
+            aliasMap,
+            pos,
+            MakeColumnAccess(subplanIU, pos, &testContext.ExprCtx, &expressionProps)
+        );
+        TOpRoot root(filter, pos, {"a"});
+
+        auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
+        TSubplanEntry subplanEntry;
+        subplanEntry.Plan = subplanRead;
+        subplanEntry.Tuple = {TInfoUnit("b")};
+        subplanEntry.Type = ESubplanType::IN_SUBPLAN;
+        subplanEntry.IU = subplanIU;
+        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
+        filter->FilterExpr.PlanProps = &root.PlanProps;
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
+        ComputeLogicalTestProps(root);
+        rewriteAliases.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
+
+        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
+        UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("a"));
+    }
+
     Y_UNIT_TEST(PushRenameTreatsDeadAppendAliasAsRename) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;

@@ -296,6 +296,7 @@ bool TryPushRename(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const 
     RenameProducerOutput(path.Producer, from, to, ctx.ExprCtx);
     RewriteTransparentOps(path.TransparentOps, from, to, ctx.ExprCtx);
     RemoveTopRenameAndRewriteResiduals(topMap, renameIdx, from, to);
+    props.Subplans.RenameIUs({{from, to}}, ctx.ExprCtx);
 
     return true;
 }

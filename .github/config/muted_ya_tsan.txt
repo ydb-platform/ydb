@@ -193,7 +193,6 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[rest
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_stable-26-2-1_to_stable-26-1-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-26-3_to_prestable-26-3-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-26-3_to_stable-26-2-1-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-26-2-1_to_stable-26-2-1-row]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_prestable-26-3_to_stable-26-2-1-ROW]
@@ -225,8 +224,6 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1_and_stable-26-1-1-column]
 ydb/tests/compatibility test_system_tablet_backup.py.TestSystemTabletBackupRestartToAnotherVersion.test[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_schema_changes_in_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
@@ -774,7 +771,6 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[12]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[13]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[14]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[17]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[18]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
@@ -792,7 +788,6 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltp50.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py */*] chunk
-ydb/tests/functional/tpc/medium/tpch py3test.[test_s1.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s_float.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[10]
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[11]

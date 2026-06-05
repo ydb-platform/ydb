@@ -639,9 +639,10 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    // Rebuild the prefix bloom set from the full authoritative config the schemeshard sends. The
-    // last disjunct also fires when the table had prefixes but the delta clears them all (DROP of
-    // the last prefix bloom, or KEY_BLOOM_FILTER = DISABLED), which carries no explicit bloom field.
+    // The schemeshard sends the full, authoritative partition config, so the prefix bloom set is
+    // exactly configDelta.GetByKeyFilterPrefixes() (empty => none remain). Also rebuild when the
+    // table currently has prefixes but the delta clears them all (DROP INDEX of the last prefix
+    // bloom, or KEY_BLOOM_FILTER = DISABLED) — that case carries no explicit bloom field.
     if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0 || config.ByKeyFilterPrefixesSize() > 0) {
         using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
         const ui32 keyCount = KeyColumnIds.size();
@@ -674,7 +675,8 @@ void TUserTable::ApplyAlter(
             entry->SetFalsePositiveProbability(fpp);
             prefixes.push_back(TPrefix{len, fpp});
         }
-        // An empty list emits a clear sentinel, so the engine drops any previously-set filter.
+        // SetByKeyFilterPrefixes with an empty list emits a clear sentinel, so the engine
+        // correctly drops a previously-set filter even when `prefixes` is now empty.
         for (ui32 tid : tids) {
             alter.SetByKeyFilterPrefixes(tid, prefixes);
         }

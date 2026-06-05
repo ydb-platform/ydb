@@ -9,13 +9,17 @@ using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace Tests;
 
-// Datashard-level coverage for the bloom filter logic
+// Datashard-level coverage for the bloom filter logic in TUserTable::ApplyConfig/ApplyAlter
+// (datashard_user_table.cpp). These tests boot a real datashard, drive CREATE/ALTER/DROP through
+// SQL, and read the shard's OWN persisted table description via TEvGetInfoRequest (built from
+// TUserTable::GetSchema) — i.e. exactly what ApplyConfig/ApplyAlter wrote, not the schemeshard view.
 Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
 
     std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> CreateServer() {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -53,11 +57,11 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
         return out;
     }
 
-    // The engine ByKeyFilterPrefixes the shard persists must track CREATE / ALTER ADD INDEX, and
-    // must be cleared when KEY_BLOOM_FILTER=DISABLED wipes the whole config. The clear case is the
-    // important one: the shard had prefixes and ApplyAlter must drop them from the engine, not keep
-    // a stale filter.
     Y_UNIT_TEST(PrefixesUpdatedOnAlter) {
+        // The engine ByKeyFilterPrefixes the shard persists must track CREATE / ALTER ADD INDEX /
+        // DROP INDEX. In particular, dropping the LAST prefix must clear the filter entirely — the
+        // delta carries no explicit bloom field in that case, and before the fix it was ignored,
+        // leaving a stale filter on the shard until restart.
         auto [runtime, server, sender] = CreateServer();
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -83,22 +87,22 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
             )"), "SUCCESS");
         UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1, 2}));
 
-        // KEY_BLOOM_FILTER = DISABLED clears the whole bloom config -> ApplyAlter must drop every
-        // prefix from the engine.
+        // DROP one of two indexes -> ApplyAlter removes just that prefix.
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` SET (KEY_BLOOM_FILTER = DISABLED);"), "SUCCESS");
-        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{}));
+            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` DROP INDEX idx1;"), "SUCCESS");
+        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{2}));
 
-        // Re-adding a bloom index after disable should correctly re-establish bloom state.
+        // DROP the LAST index -> ApplyAlter must clear the filter entirely (regression target).
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` ADD INDEX idx3 LOCAL USING bloom_filter ON (Key1);"), "SUCCESS");
-        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1}));
+            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` DROP INDEX idx2;"), "SUCCESS");
+        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{}));
     }
 
-    // The EnableFilterByKey (whole-key KEY_BLOOM_FILTER) branch: the whole-key filter is unified
-    // into the engine prefix list as an entry of length == number of key columns, must coexist with
-    // shorter prefix blooms, and be cleared by KEY_BLOOM_FILTER=DISABLED.
     Y_UNIT_TEST(FullKeyCoexistsWithPrefix) {
+        // The EnableFilterByKey (whole-key KEY_BLOOM_FILTER) branch: the whole-key filter is unified
+        // into the engine prefix list as an entry of length == number of key columns, and must
+        // coexist with shorter prefix blooms, survive dropping the last shorter prefix, and be
+        // cleared by KEY_BLOOM_FILTER=DISABLED.
         auto [runtime, server, sender] = CreateServer();
 
         // (Key1, Key2) primary key => whole-key bloom has prefix length 2.
@@ -120,25 +124,20 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
             KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` SET (KEY_BLOOM_FILTER = ENABLED);"), "SUCCESS");
         UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1, 2}));
 
+        // Drop the only shorter prefix bloom -> whole-key (length 2) must remain, NOT clear to empty.
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` DROP INDEX idx1;"), "SUCCESS");
+        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{2}));
+
         // Disabling KEY_BLOOM_FILTER clears all bloom state on the shard.
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` SET (KEY_BLOOM_FILTER = DISABLED);"), "SUCCESS");
         UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{}));
-
-        // Re-enabling KEY_BLOOM_FILTER should correctly re-establish the whole-key filter.
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` SET (KEY_BLOOM_FILTER = ENABLED);"), "SUCCESS");
-        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{2}));
-
-        // Adding a new prefix bloom index after disable should also work correctly.
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` ADD INDEX idx3 LOCAL USING bloom_filter ON (Key1);"), "SUCCESS");
-        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1, 2}));
     }
 
-    // The per-prefix false-positive probability resolved by ApplyConfig
-    // (explicit value, or NTable::DefaultBloomFilterFpp when unspecified) must reach the shard.
     Y_UNIT_TEST(FppPropagatedToShard) {
+        // The per-prefix false-positive probability resolved by ApplyConfig/ApplyAlter
+        // (explicit value, or NTable::DefaultBloomFilterFpp when unspecified) must reach the shard.
         auto [runtime, server, sender] = CreateServer();
 
         UNIT_ASSERT_VALUES_EQUAL(

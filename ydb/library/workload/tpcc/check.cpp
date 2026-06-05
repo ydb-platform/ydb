@@ -24,7 +24,7 @@ using namespace NThreading;
 // waits all futures and returns either the one with exception,
 // or void future.
 TFuture<void> WaitAllAndCheck(const std::vector<TFuture<void>>& futures) {
-    auto result = WaitAll(futures).Apply([allFutures = std::move(futures)](const auto&) {
+    auto result = WaitAll(futures).Apply([allFutures = futures](const auto&) {
         // return any with error
         for (const auto& future: allFutures) {
             if (future.HasException()) {

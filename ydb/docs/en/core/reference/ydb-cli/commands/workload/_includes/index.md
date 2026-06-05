@@ -30,10 +30,10 @@ The following types of load tests are supported at the moment:
 * [Topic](../../../workload-topic.md): Topic load.
 * [Transfer](../../../workload-transfer.md): Transfer load.
 * [Query](../../../workload-query.md): Query load.
-* [Fulltext](../../../workload-fulltext.md) - Fulltext load.
+* [Fulltext](../../../workload-fulltext.md): Fulltext load.
 * [Vector](../../../workload-vector.md): Vector search workload.
 
-### Global parameters for all workloads {#global_workload_options}
+## Global parameters for all workloads {#global_workload_options}
 
 | Parameter name | Short name | Parameter description |
 ---|---|---

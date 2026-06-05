@@ -31,7 +31,7 @@
 * [Transfer](../../../workload-transfer.md) - Transfer нагрузка.
 * [Query](../../../workload-query.md) - Пользовательская нагрузка.
 * [Fulltext](../../../workload-fulltext.md) - Fulltext нагрузка.
-* [Vector](../../../workload-vector.md) - нагрузка векторного поиска.
+* [Vector](../../../workload-vector.md) - Нагрузка векторного поиска.
 
 ## Общие параметры для всех видов нагрузки {#global_workload_options}
 

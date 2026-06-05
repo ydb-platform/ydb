@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
 
             const auto& message = jsonReceived["Messages"][0];
-            UNIT_ASSERT_VALUES_EQUAL(message["Attributes"]["MessageBodyEncoding"].GetString(), "zstd");
+            UNIT_ASSERT_VALUES_EQUAL(message["Attributes"]["BodyEncoding"].GetString(), "zstd");
 
             const NYdb::NTopic::ICodec* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(
                 static_cast<uint32_t>(NYdb::NTopic::ECodec::ZSTD));

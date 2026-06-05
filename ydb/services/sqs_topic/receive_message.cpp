@@ -164,7 +164,7 @@ namespace NKikimr::NSqsTopic::V1 {
                             return "";
                     }
                 };
-                result.mutable_attributes()->emplace("MessageBodyEncoding", codecName(message.Codec));
+                result.mutable_attributes()->emplace("BodyEncoding", codecName(message.Codec));
 
             }
             result.set_m_d_5_of_body(MD5::Calc(result.body()));

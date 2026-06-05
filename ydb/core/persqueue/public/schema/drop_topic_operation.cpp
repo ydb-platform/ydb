@@ -140,7 +140,7 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        Send(ParentId, new TEvDropTopicResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
+        Send(ParentId, new TEvSchemaResponse(Settings.Path, errorCode, std::move(errorMessage)), 0, Settings.Cookie);
         PassAway();
     }
 

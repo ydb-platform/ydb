@@ -32,7 +32,7 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        Send(ParentId, new TEvAlterTopicResponse(Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
+        Send(ParentId, new TEvSchemaResponse(Settings.Strategy->GetTopicName(), Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
     }
 
 private:
@@ -196,7 +196,7 @@ private:
         if (errorCode == Ydb::StatusIds::SUCCESS && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }
-        Send(ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+        Send(ParentId, new TEvSchemaResponse(Settings.Strategy->GetTopicName(), errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
         PassAway();
     }
 

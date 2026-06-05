@@ -684,7 +684,7 @@ namespace NKikimr::NDDisk {
         // Persistent buffer services
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
+        std::map<TPersistentBufferId, TPersistentBuffer> PersistentBuffers;
         std::map<TInstant, std::unordered_set<TPersistentBufferRecordId>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
@@ -705,6 +705,11 @@ namespace NKikimr::NDDisk {
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
 
+        struct TEraseLsnId {
+            ui32 Generation;
+            ui64 Lsn;
+        };
+
         struct TPersistentBufferDiskOperationInFlight {
             TActorId Sender;
             ui64 Cookie;
@@ -722,7 +727,7 @@ namespace NKikimr::NDDisk {
             std::vector<TPersistentBufferSectorInfo> Sectors;
 
             // map operationCookie to <lsn, generation> pairs that were erased by this operation
-            std::unordered_map<ui64, std::vector<std::tuple<ui64, ui32>>> Erases;
+            std::unordered_map<ui64, std::vector<TEraseLsnId>> Erases;
 
             std::map<ui64, TRope> DataParts;
             ui32 PartsCount;
@@ -780,9 +785,9 @@ namespace NKikimr::NDDisk {
 
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();
-        void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);
-        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn);
-        void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, const TFastErase& fastErase);
+        void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);
+        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn);
+        void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, const TFastErase& fastErase);
         void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
         void HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
         void HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie, bool resultStatus);

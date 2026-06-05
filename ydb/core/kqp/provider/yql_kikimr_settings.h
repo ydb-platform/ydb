@@ -1,15 +1,16 @@
 #pragma once
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <util/generic/size_literals.h>
 
+#include <memory>
 
 namespace NYql {
 
@@ -227,17 +228,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         }
     }
 
-    void ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
-        if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
-            _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
-        }
-
-        CopyFrom(serviceConfig);
-
-        if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
-            _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
-        }
-    }
+    void ApplyServiceConfig(const TTableServiceConfig& serviceConfig);
 
     TKikimrSettings::TConstPtr Snapshot() const;
 

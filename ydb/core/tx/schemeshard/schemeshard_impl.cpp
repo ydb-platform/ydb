@@ -3452,6 +3452,15 @@ void TSchemeShard::PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const 
     }
 }
 
+void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ExternalTables.find(pathId);
+    Y_ABORT_UNLESS(it != ExternalTables.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistExternalTable(db, pathId, info);
+}
+
 void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTableInfo) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -3501,6 +3510,15 @@ void TSchemeShard::PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathI
     }
 
     db.Table<Schema::ExternalTable>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ExternalDataSources.find(pathId);
+    Y_ABORT_UNLESS(it != ExternalDataSources.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistExternalDataSource(db, pathId, info);
 }
 
 void TSchemeShard::PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSourceInfo) {
@@ -3605,6 +3623,15 @@ void TSchemeShard::PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId) {
     }
 
     db.Table<Schema::SysView>().Key(pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ResourcePools.find(pathId);
+    Y_ABORT_UNLESS(it != ResourcePools.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistResourcePool(db, pathId, info);
 }
 
 void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool) {
@@ -5353,6 +5380,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     }
 
     IndexBuildPipes.Shutdown(ctx);
+    SetColumnConstraintPipes.Shutdown(ctx);
     IncrementalRestorePipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);
@@ -5709,6 +5737,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
 
         //namespace NIndexBuilder {
+        HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
+        HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCancelRequest, Handle);
@@ -6488,6 +6518,8 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
         return;
     }
 
+    // TODO(flown4qqqq): add retry SetColumnConstraintPipes
+
     if (IncrementalRestorePipes.Has(clientId)) {
         RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
                                     IncrementalRestorePipes.GetTabletId(clientId), ctx);
@@ -6552,6 +6584,8 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
         Execute(CreatePipeRetry(IndexBuildPipes.GetOwnerId(clientId), IndexBuildPipes.GetTabletId(clientId)), ctx);
         return;
     }
+
+    // TODO(flown4qqqq): SetColumnConstraintPipes
 
     if (IncrementalRestorePipes.Has(clientId)) {
         RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
@@ -7584,6 +7618,8 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         return Execute(CreateTxProgressIncrementalRestoreAllocateResult(ev), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (SetColumnConstraintOperations.contains(TIndexBuildId(id))) {
+        return Execute(CreateTxReplyAllocateSetColumnConstraint(ev), ctx);
     }
 
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -7610,6 +7646,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+        return Execute(CreateTxReplyModifySetColumnConstraint(ev), ctx);
     } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         return HandleBackgroundCleaningTransactionResult(ev);
     }
@@ -7673,6 +7711,9 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
     if (FullBackups.contains(ui64(txId))) {
         // Control op completed; finalize the tracked record.
         Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
+    }
+    if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+        Execute(CreateTxReplyCompletedSetColumnConstraint(txId), ctx);
         executed = true;
     }
     if (BackgroundCleaningTxToDirPathId.contains(txId)) {
@@ -7780,6 +7821,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
                 *descr->MutableTypeInfo() = *columnType.TypeInfo;
             }
             descr->SetFamily(colInfo.Family);
+            descr->SetNotNull(colInfo.NotNull);
         }
     }
 

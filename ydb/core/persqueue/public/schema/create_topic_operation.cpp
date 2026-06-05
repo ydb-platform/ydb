@@ -70,15 +70,18 @@ private:
         LOG_D("DoCreate IfNotExists: " << Settings.IfNotExists);
         Become(&TCreateTopicOperationActor::CreateState);
 
+        auto database = CanonizePath(Settings.Database);
+        auto topicName = CanonizePath(Settings.Strategy->GetTopicName());
+
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
-        proposal->Record.SetDatabaseName(Settings.Database);
+        proposal->Record.SetDatabaseName(database);
         proposal->Record.SetPeerName(Settings.PeerName);
         if (Settings.UserToken) {
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
         }
 
-        auto path = NormalizePath(Settings.Database, Settings.Strategy->GetTopicName());
+        auto path = NormalizePath(database, topicName);
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
@@ -87,7 +90,7 @@ private:
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
 
         auto result = ProposeCreateTopic(modifyScheme, TProposeCreateTopicSettings{
-            .Database = Settings.Database,
+            .Database = std::move(database),
             .WorkingDir = workingDir,
             .Name = name,
             .ClustersList = ClustersList,

@@ -40,6 +40,10 @@ def _resolve_ch_type_name(sqla_type):
 
 
 class ChStatementCompiler(SQLCompiler):
+    def _raise_on_escape(self, binary, operator_name: str):
+        if binary.modifiers.get("escape") is not None:
+            raise CompileError(f"ClickHouse does not support the ESCAPE clause on {operator_name}")
+
     def visit_delete(self, delete_stmt, visiting_cte=None, **kw):
         table = delete_stmt.table
         text = f"DELETE FROM {format_table(table)}"
@@ -261,3 +265,23 @@ class ChStatementCompiler(SQLCompiler):
             if mods and alias in mods:
                 result += " " + mods[alias]
         return result
+
+    def visit_like_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "LIKE")
+        return super().visit_like_op_binary(binary, operator, **kw)
+
+    def visit_not_like_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "LIKE")
+        return super().visit_not_like_op_binary(binary, operator, **kw)
+
+    def visit_ilike_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "ILIKE")
+        left = self.process(binary.left, **kw)
+        right = self.process(binary.right, **kw)
+        return f"{left} ILIKE {right}"
+
+    def visit_not_ilike_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "ILIKE")
+        left = self.process(binary.left, **kw)
+        right = self.process(binary.right, **kw)
+        return f"{left} NOT ILIKE {right}"

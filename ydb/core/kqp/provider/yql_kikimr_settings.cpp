@@ -1,11 +1,12 @@
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 #include <util/generic/size_literals.h>
 #include <util/string/split.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 
@@ -25,7 +26,6 @@ EOptionalFlag GetOptionalFlagValue(const TMaybe<TType>& flag) {
 
     return EOptionalFlag::Disabled;
 }
-
 
 ui64 ParseEnableSpillingNodes(const TString &v) {
     ui64 res = 0;
@@ -273,6 +273,18 @@ NDq::EHashJoinMode TKikimrSettings::GetHashJoinMode() const {
     return maybeHashJoinMode ? *maybeHashJoinMode : NDq::EHashJoinMode::Off;
 }
 
+void TKikimrConfiguration::ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
+    if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
+        _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
+    }
+
+    CopyFrom(serviceConfig);
+
+    if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
+        _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
+    }
+}
+
 TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
     return std::make_shared<const TKikimrSettings>(*this);
 }
@@ -334,7 +346,6 @@ NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode()
             return NYql::EBackportCompatibleFeaturesMode::All;
     }
 }
-
 
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
     return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());

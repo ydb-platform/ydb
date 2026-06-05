@@ -37,8 +37,10 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/ydb_issue/proto
+    ydb/library/yql/dq/common
     ydb/library/yql/dq/constraints
     ydb/library/yql/dq/expr_nodes
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/expr_nodes
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/topic
@@ -64,6 +66,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/sql
+    yql/essentials/sql/settings
     yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi

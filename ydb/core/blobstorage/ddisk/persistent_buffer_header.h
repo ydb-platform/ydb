@@ -36,23 +36,23 @@ namespace NKikimr::NDDisk {
 
     static_assert(sizeof(TPersistentBufferHeader) == 128);
 
+    struct TPersistentBufferBarrierRecord {
+        ui64 TabletId;
+        ui32 Generation;
+        ui64 Lsn;
+    };
+
     struct TPersistentBufferBarriers {
-
-        struct TBarrierRecord {
-            ui64 TabletId;
-            ui64 Lsn;
-        };
-
-        static constexpr ui32 MaxBarriersPerHeader = (DataAlignment - sizeof(TPersistentBufferHeader)) / sizeof(TBarrierRecord);
+        static constexpr ui32 MaxBarriersPerHeader = (DataAlignment - sizeof(TPersistentBufferHeader)) / sizeof(TPersistentBufferBarrierRecord);
 
         TPersistentBufferHeader Header;
-        TBarrierRecord Barriers[MaxBarriersPerHeader];
+        TPersistentBufferBarrierRecord Barriers[MaxBarriersPerHeader];
     };
 
     static_assert(sizeof(TPersistentBufferBarriers) <= DataAlignment);
 
     struct TPersistentBufferFastErases {
-        static constexpr ui32 ErasesBufferSize = DataAlignment - sizeof(TPersistentBufferHeader) - sizeof(ui64);
+        static constexpr ui32 ErasesBufferSize = DataAlignment - sizeof(TPersistentBufferHeader) - sizeof(ui64) - sizeof(ui32);
         // Heuristic based on ErasesBufferSize, means that it's better to fallback on zeroing erases
         // If lsns count exeed this number - barrier was not moved for a long time and fast erases is not efficient in this case.
         // It is better to fall back to zeroing erases a little bit earlier,
@@ -61,13 +61,13 @@ namespace NKikimr::NDDisk {
 
         TPersistentBufferHeader Header;
         ui64 TabletId;
+        ui32 Generation;
         ui8 CompactLsns[ErasesBufferSize];
     };
 
     static_assert(sizeof(TPersistentBufferFastErases) <= DataAlignment);
 
     struct TPersistentBufferLsnRecordHeader {
-
         // Max lsn record data size is 128 sectors
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 

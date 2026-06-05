@@ -6462,15 +6462,17 @@ PRAGMA ydb.OptShuffleElimination = "true";
         // Preorder traversal: the left subtree keeps ColumnShard-preserved
         // id=k joins for several levels, then switches to default HashV2 k=k joins.
         // The right subtree also switches to HashV2 on e.k. At the final join both
-        // sides have compatible one-column HashV2 partitioning, so CBO preserves the
-        // larger right subtree and reshuffles the smaller left subtree on a.k.
+        // sides have compatible one-column HashV2 partitioning, so DPHyp must
+        // redundantly reshuffle exactly one side. The left subtree (a,b,c,i,d) is
+        // larger than the right (e,f,g,h), so CBO preserves the larger left subtree
+        // and reshuffles the smaller right subtree on e.k.
         const TVector<TString> expectedHashShuffles = {
             "HashV2(a.k)",
             "ColumnShardHashV1(b.k)",
             "ColumnShardHashV1(c.k)",
             "ColumnShardHashV1(i.k)",
             "HashV2(d.k)",
-            "HashV2(a.k)",
+            "HashV2(e.k)",
             "HashV2(e.k)",
             "ColumnShardHashV1(f.k)",
             "HashV2(g.k)",

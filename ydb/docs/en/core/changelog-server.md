@@ -1,5 +1,34 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 25.4 {#25-4}
+
+### Version 25.4.1.15 {#25-4-1-15}
+
+Release date: June 5, 2026.
+
+#### Functionality
+
+* YQL statements [`BATCH UPDATE`](./yql/reference/syntax/batch-update.md?version=v25.4) and [`BATCH DELETE FROM`](./yql/reference/syntax/batch-delete.md?version=v25.4) are available for bulk updates and deletes in tables.
+* The write execution path has changed substantially: writes now run in streaming mode without fully materializing data on the Query Processor side before sending it to DataShards, which improves performance for large write workloads. The change applies to a subset of scenarios; in some cases (for example, tables with secondary indexes) the previous approach is still used. For an overview of the execution pipeline, see [Query execution](./concepts/query_execution/index.md?version=v25.4).
+* Lookup Join execution was optimized: it uses a streaming mode without materializing one side of the join, which lowers peak memory use, speeds up queries over large datasets, and removes previous limits on join side sizes. See [Index lookup Join](./faq/yql.md?version=v25.4#index-lookup-join) and the [`JOIN`](./yql/reference/syntax/select/join.md?version=v25.4) operator syntax.
+* You can now configure access permissions for cluster and database [system views](./devops/observability/system-views.md?version=v25.4).
+* Row-oriented tables support configurable [cache modes](./concepts/datamodel/table.md?version=v25.4#cache-modes), including a new `in_memory` mode that preloads table data into RAM when sufficient memory is available.
+* Topic consumers gained an [`availability-period`](./reference/ydb-cli/topic-consumer-add.md?version=v25.4) parameter that extends retention of uncommitted messages beyond `retention-period`.
+* [Per-partition topic metrics and export to user shard quotas](./reference/observability/metrics/index.md?version=v25.4#topics_partitions) are available for accounting and observability.
+* Faster queries with `LIMIT` on column-oriented tables through early result limiting on storage nodes (for queries with no sort or with sort by primary key). See [`LIMIT` and `OFFSET`](./yql/reference/syntax/select/limit_offset.md?version=v25.4) in YQL.
+* Column-oriented tables support the `Bool` type in schema and queries — see [primitive YQL types](./yql/reference/types/primitive.md?version=v25.4#numeric).
+* A [filtered vector index](./dev/vector-indexes.md?version=v25.4#filtered) correctly returns rows inserted after the index was created when filter column values are new.
+* Stream processing and data delivery are more tightly integrated into the core: [topic → table transfer](./concepts/transfer.md?version=v25.4); [streaming queries](./dev/streaming-query/index.md?version=v25.4) are available to users when `EnableStreamingQueries` is enabled.
+* The `overlap_clusters` option substantially improves vector search quality by placing vectors in multiple index clusters (index settings) — see [Vector indexes](./dev/vector-indexes.md?version=v25.4).
+* Vector index search is significantly faster across all index types because distances are computed locally on each DataShard before data is sent over the network — see [VIEW (vector index)](./yql/reference/syntax/select/vector_index.md?version=v25.4) and [Vector indexes](./dev/vector-indexes.md?version=v25.4).
+* Full vector search without an ANN index is faster thanks to pushdown (vector search, KNN UDF) — see [Vector search](./concepts/query_execution/vector_search.md?version=v25.4) and the [KNN](./yql/reference/udf/list/knn.md?version=v25.4) module.
+* Database-stored secrets are fully supported (create, alter, drop, and use) — see [Secrets](./concepts/datamodel/secrets.md?version=v25.4). Note that the [legacy syntax](./concepts/datamodel/secrets.md?version=v25.3) is deprecated.
+* [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all) execution was improved with parallel execution, improving performance of analytical queries.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
+
 ## Version 25.3 {#25-3}
 
 ### Version 25.3.1.25 {#25-3-1-25}

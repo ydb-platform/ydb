@@ -9,6 +9,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 
 #include <util/folder/tempdir.h>
+#include <util/generic/scope.h>
+#include <util/stream/file.h>
 
 class TFsBackupTestFixture : public TBackupTestBaseFixture {
 public:
@@ -32,6 +34,41 @@ public:
             settings.DestinationPath(destinationPath);
         }
         return settings;
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NYdb::NImport::TImportFromFsSettings& importSettings) {
+        TString fullPath = TString(GetTempDir().Path()) + "/" + checksumFile;
+        TString original = TFileInput(fullPath).ReadAll();
+        Y_DEFER {
+            TFileOutput restore(fullPath);
+            restore.Write(original);
+            restore.Finish();
+        };
+
+        {
+            TFileOutput out(fullPath);
+            out.Write(ModifyHexEncodedString(original));
+            out.Finish();
+        }
+
+        auto res = YdbImportClient().ImportFromFs(importSettings).GetValueSync();
+        WaitOpStatus(res, NYdb::EStatus::CANCELLED);
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NYdb::NImport::TImportFromFsSettings& importSettings) {
+        auto copySettings = [&]() {
+            NYdb::NImport::TImportFromFsSettings settings = importSettings;
+            settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << RestoreAttempt++);
+            return settings;
+        };
+
+        // Check that settings are OK
+        auto res = YdbImportClient().ImportFromFs(copySettings()).GetValueSync();
+        WaitOpSuccess(res);
+
+        for (const TString& checksumFile : checksumFiles) {
+            ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
+        }
     }
 
     void ValidateFileList(const TSet<TString>& paths) {

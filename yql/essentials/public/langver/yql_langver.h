@@ -19,15 +19,15 @@ constexpr std::pair<ui32, ui32> Versions[] = {
 constexpr TLangVersion UnknownLangVersion = 0;
 
 constexpr inline TLangVersion MakeLangVersion(ui32 year, ui32 minor) {
-    return year * 100u + minor;
+    return year * 100U + minor;
 }
 
 constexpr inline ui32 GetYearFromLangVersion(TLangVersion ver) {
-    return ver / 100u;
+    return ver / 100U;
 }
 
 constexpr inline ui32 GetMinorFromLangVersion(TLangVersion ver) {
-    return ver % 100u;
+    return ver % 100U;
 }
 
 constexpr inline bool IsAvailableLangVersion(TLangVersion ver, TLangVersion max) {

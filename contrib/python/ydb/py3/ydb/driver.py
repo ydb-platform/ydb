@@ -6,7 +6,6 @@ from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
 from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
-from . import iam
 from . import _utilities
 
 if TYPE_CHECKING:
@@ -63,6 +62,7 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
         metadata_credentials = os.getenv("YDB_METADATA_CREDENTIALS", "0") == "1"
         if metadata_credentials:
             ctx.trace({"credentials.metadata": True})
+            from . import iam
 
             return iam.MetadataUrlCredentials(tracer=tracer)
 
@@ -84,6 +84,8 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
                 "credentials.metadata": True,
             }
         )
+        from . import iam
+
         return iam.MetadataUrlCredentials(tracer=tracer)
 
 

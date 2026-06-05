@@ -399,7 +399,7 @@ void THttpInput::FinishHeaders()
 void THttpInput::EnsureHeadersReceived()
 {
     if (!ReceiveHeaders()) {
-        THROW_ERROR(AnnotateError(TError("Connection was closed before the first byte of HTTP message")));
+        THROW_ERROR(AnnotateError(TError(NRpc::EErrorCode::TransportError, "Connection was closed before the first byte of HTTP message")));
     }
 }
 
@@ -624,7 +624,12 @@ const THeadersPtr& THttpOutput::GetHeaders()
 void THttpOutput::SetHost(TStringBuf host, TStringBuf port)
 {
     if (!port.empty()) {
-        HostHeader_ = Format("%v:%v", host, port);
+        auto parseResult = TNetworkAddress::TryParse(host);
+        if (parseResult.IsOK() && parseResult.Value().IsIP6()) {
+            HostHeader_ = Format("[%v]:%v", host, port);
+        } else {
+            HostHeader_ = Format("%v:%v", host, port);
+        }
     } else {
         HostHeader_ = std::string(host);
     }
@@ -842,36 +847,31 @@ TFuture<void> THttpOutput::FinishChunked()
         .Apply(OnWriteFinish_);
 }
 
-TFuture<void> THttpOutput::WriteBody(const TSharedRef& smallBody)
+TFuture<void> THttpOutput::WriteBody(const TSharedRef& body)
+{
+    return WriteBody({&body, 1});
+}
+
+TFuture<void> THttpOutput::WriteBody(TRange<TSharedRef> parts)
 {
     if (HeadersFlushed_ || MessageFinished_) {
         THROW_ERROR(AnnotateError(TError("Cannot write body to partially flushed HTTP message")));
     }
 
-    TSharedRefArray writeRefs;
+    TSharedRefArrayBuilder writeRefs(2 + static_cast<bool>(Trailers_) + parts.size());
+    writeRefs.Add(GetHeadersPart(GetByteSize(parts)));
     if (Trailers_) {
-        writeRefs = TSharedRefArray(
-            std::array<TSharedRef, 4>{
-                GetHeadersPart(smallBody.Size()),
-                GetTrailersPart(),
-                CrLfBuffer(),
-                smallBody,
-            },
-            TSharedRefArray::TCopyParts{});
-    } else {
-        writeRefs = TSharedRefArray(
-            std::array<TSharedRef, 3>{
-                GetHeadersPart(smallBody.Size()),
-                CrLfBuffer(),
-                smallBody,
-            },
-            TSharedRefArray::TCopyParts{});
+        writeRefs.Add(GetTrailersPart());
+    }
+    writeRefs.Add(CrLfBuffer());
+    for (const auto& p : parts) {
+        writeRefs.Add(p);
     }
 
     HeadersFlushed_ = true;
     MessageFinished_ = true;
     Connection_->SetWriteDeadline(TInstant::Now() + Config_->WriteIdleTimeout);
-    return Connection_->WriteV(writeRefs)
+    return Connection_->WriteV(writeRefs.Finish())
         .Apply(OnWriteFinish_);
 }
 

@@ -19,7 +19,7 @@ public:
     }
 
     TNodePtr Build(const TSQLv1ParserAST& ast);
-    TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast);
+    TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& statements);
 
     bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber);
 
@@ -35,6 +35,8 @@ private:
     bool AlterTableAlterFamily(const TRule_alter_table_alter_column_family& node, TAlterTableParameters& params);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
     bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
     void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);

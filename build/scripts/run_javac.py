@@ -58,13 +58,32 @@ def main():
         cmd = java_tmpdir.fix_tmpdir(cmd)
 
     if opts.error_prone:
-        cmd = java_error_prone.fix_cmd_line(opts.error_prone, cmd)
+        cmd = java_error_prone.add_error_prone_to_cmd(opts.error_prone, cmd)
 
     with open(opts.sources_list) as f:
         input_files = f.read().strip().split()
 
     if opts.kotlin:
         input_files = [i for i in input_files if i.endswith('.kt')]
+        # When ijar is active, compilation classpaths contain X-interface.jar instead of X.jar.
+        # Rewrite -Xfriend-paths=X.jar -> -Xfriend-paths=X-interface.jar when the interface
+        # jar exists, so that Kotlin grants 'internal' access from the correct classpath entry.
+
+        def _remap_friend_paths(arg):
+            prefix = '-Xfriend-paths='
+            if not arg.startswith(prefix):
+                return arg
+            parts = re.split(r'([:,])', arg[len(prefix) :])
+            remapped = []
+            for p in parts:
+                if p.endswith('.jar') and not p.endswith('-interface.jar'):
+                    ijar_path = p[: -len('.jar')] + '-interface.jar'
+                    if os.path.exists(ijar_path):
+                        p = ijar_path
+                remapped.append(p)
+            return prefix + ''.join(remapped)
+
+        cmd = [_remap_friend_paths(a) for a in cmd]
 
     if not input_files:
         if opts.verbose:

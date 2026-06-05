@@ -497,7 +497,18 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
                     auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
                     TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
                     if (PartCorruptionMask & (1 << partId.PartId())) {
-                        vput->Record.SetBuffer(MakeData(vput->GetBuffer().size(), 2));
+                        const size_t size = vput->GetBufferBytes();
+                        const size_t serializedBefore = vput->CalculateSerializedSize();
+                        const size_t cachedBefore = vput->GetCachedByteSize();
+                        vput->StripPayload();
+                        vput->AddPayload(TRope(MakeData(size, 2)));
+                        const size_t sizeAfter = vput->GetBufferBytes();
+                        const size_t serializedAfter = vput->CalculateSerializedSize();
+                        const size_t cachedAfter = vput->GetCachedByteSize();
+                        Y_ABORT_UNLESS(size == sizeAfter);
+                        Y_ABORT_UNLESS(serializedBefore == cachedBefore);
+                        Y_ABORT_UNLESS(serializedBefore == serializedAfter);
+                        Y_ABORT_UNLESS(serializedAfter == cachedAfter);
                         nodesWithCorruptedPartsMask |= (1 << (ev->Recipient.NodeId() - 1));
                     }
                 }

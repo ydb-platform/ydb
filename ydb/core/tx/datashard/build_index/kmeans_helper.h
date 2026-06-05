@@ -50,6 +50,7 @@ class TSampler {
     ui32 K = 0;
     TReallyFastRng32 Rng;
     ui64 MaxProbability = 0;
+    ui64 TotalSeen = 0;
 
     // We are using binary heap, because we don't want to do batch processing here,
     // serialization is more expensive than compare
@@ -66,6 +67,7 @@ public:
     {}
 
     void Add(const auto& getValue) {
+        ++TotalSeen;
         const auto probability = GetProbability();
         if (probability > MaxProbability) {
             return;
@@ -90,6 +92,7 @@ public:
 
     std::pair<TVector<TProbability>, TVector<TString>> Finish() {
         MaxProbability = Max<ui64>();
+        TotalSeen = 0;
         return {
             std::exchange(MaxRows, {}),
             std::exchange(DataRows, {})
@@ -100,8 +103,12 @@ public:
         return MaxProbability;
     }
 
+    ui64 GetTotalSeen() const {
+        return TotalSeen;
+    }
+
     TString Debug() const {
-        return TStringBuilder() << "Sample: " << DataRows.size();
+        return TStringBuilder() << "Sample: " << DataRows.size() << " TotalSeen: " << TotalSeen;
     }
 
 private:

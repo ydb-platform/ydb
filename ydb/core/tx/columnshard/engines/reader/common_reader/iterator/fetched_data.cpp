@@ -15,10 +15,8 @@ void TFetchedData::SyncTableColumns(
         if (GetTable().HasColumn(id)) {
             continue;
         }
-        MutableTable().AddVerified(id,
-            std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TThreadSimpleArraysCache::Get(i->type(), schema.GetExternalDefaultValueVerified(i->name()), recordsCount)),
-            true);
+        MutableTable().AddVerified(id, std::make_shared<NArrow::NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::Get(i->type(),
+                                           schema.GetExternalDefaultValueVerified(i->name()), recordsCount)), true);
     }
 }
 

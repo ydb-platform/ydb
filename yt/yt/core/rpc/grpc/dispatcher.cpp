@@ -223,6 +223,9 @@ private:
             case GPR_LOG_SEVERITY_ERROR:
                 level = NLogging::ELogLevel::Error;
                 break;
+            default:
+                level = NLogging::ELogLevel::Debug;
+                break;
         }
 
         auto minLogLevel = self.InternalMinLogLevel_.load(std::memory_order::relaxed);

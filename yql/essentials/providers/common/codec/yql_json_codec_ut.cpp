@@ -617,7 +617,7 @@ Y_UNIT_TEST(float) {
     TStringStream json;
     json << "0.0431";
     auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
-    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 0.0431f);
+    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 0.0431F);
 
     TStringStream exceededJson;
     exceededJson << ToString(std::numeric_limits<double>::max());
@@ -632,7 +632,7 @@ Y_UNIT_TEST(FloatFromInt) {
     TStringStream json;
     json << "1766718243";
     auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
-    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 1766718243.0f);
+    UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 1766718243.0F);
 }
 
 Y_UNIT_TEST(double) {
@@ -648,7 +648,7 @@ Y_UNIT_TEST(DoubleFromInt) {
     TStringStream json;
     json << "-667319001";
     auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv), ctx.HolderFactory);
-    UNIT_ASSERT_VALUES_EQUAL(value.Get<double>(), -667319001.0l);
+    UNIT_ASSERT_VALUES_EQUAL(value.Get<double>(), -667319001.0L);
 }
 
 } // Y_UNIT_TEST_SUITE(DeserializeNumbers)

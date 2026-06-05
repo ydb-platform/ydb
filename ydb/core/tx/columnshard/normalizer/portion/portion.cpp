@@ -14,7 +14,8 @@ class TPortionsNormalizer::TNormalizerResult: public INormalizerChanges {
 public:
     TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Portions(std::move(portions))
-        , Schemas(schemas) {
+        , Schemas(schemas)
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
@@ -60,7 +61,8 @@ TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController
         }
 
         while (!rowset.EndOfSet()) {
-            TPortionAddress portionAddr(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
+            TPortionAddress portionAddr(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()),
+                rowset.GetValue<Schema::IndexPortions::PortionId>());
             KnownPortions.insert(portionAddr);
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

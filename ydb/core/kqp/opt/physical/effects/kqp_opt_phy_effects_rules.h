@@ -40,4 +40,7 @@ NYql::NNodes::TExprBase KqpBuildInsertIndexStages(NYql::NNodes::TExprBase node, 
 NYql::NNodes::TExprBase KqpBuildDeleteIndexStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
+NYql::NNodes::TExprBase KqpBuildLockAndCheckStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 } // NKikimr::NKqp::NOpt

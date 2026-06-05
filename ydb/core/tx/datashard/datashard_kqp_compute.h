@@ -7,6 +7,10 @@
 #include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
     namespace NDataShard {
         class TExecuteKqpScanTxUnit;
@@ -88,13 +92,13 @@ public:
 };
 
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, NACLib::TUserContext::TPtr userCtx);
+    TKqpDatashardComputeContext& computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx);
 IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, NACLib::TUserContext::TPtr userCtx);
+    TKqpDatashardComputeContext& computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx);
 IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx, NACLib::TUserContext::TPtr userCtx);
+    TKqpDatashardComputeContext& computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx);
 
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, NACLib::TUserContext::TPtr userCtx);
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

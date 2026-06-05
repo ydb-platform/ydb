@@ -64,7 +64,12 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DESCRIBER;
     }
 
-    explicit TTargetDescriber(const TActorId& sender, const TActorId& parent, ui64 rid, const TActorId& proxy, THashMap<ui64, TString>&& targets)
+    explicit TTargetDescriber(
+            const TActorId& sender,
+            const TActorId& parent,
+            ui64 rid,
+            const TActorId& proxy,
+            THashMap<ui64, TString>&& targets)
         : Sender(sender)
         , Parent(parent)
         , ReplicationId(rid)
@@ -219,7 +224,9 @@ public:
                 auto& specific = replication->GetConfig().GetTransferSpecific();
 
                 auto& transferSpecific = *Result->Record.MutableTransferSpecific();
-                transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
+                transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName()
+                    ? target->GetStreamConsumerName()
+                    : specific.GetTarget().GetConsumerName());
 
                 if (auto* stats = target->GetStats()) {
                     stats->Serialize(Result->Record, includeDetailedStats);

@@ -45,6 +45,8 @@ items:
       href: commands/explain-plan.md
     - name: Streaming table reads
       href: commands/readtable.md
+    - name: Scan queries
+      href: commands/scan-query.md
   - name: Importing and exporting data
     include: { mode: link, path: export-import/toc_p.yaml }
   - name: Working with topics
@@ -138,6 +140,8 @@ items:
       href: workload-tpcds.md
     - name: Query load
       href: workload-query.md
+    - name: Fulltext load
+      href: workload-fulltext.md
   - name: Managing configuration
     href: configs.md
     include:

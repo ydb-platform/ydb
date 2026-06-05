@@ -28,7 +28,7 @@ FROM
         ,
             `/Root/test/ds/date_dim`
         WHERE
-            ss_sold_date_sk == d_date_sk AND d_month_seq BETWEEN 1212 AND 1212 + 11
+            ss_sold_date_sk == d_date_sk AND d_month_seq BETWEEN $to_decimal(1212) AND $to_decimal(1212 + 11)
         GROUP BY
             ss_store_sk,
             ss_item_sk
@@ -46,14 +46,14 @@ FROM
     ,
         `/Root/test/ds/date_dim`
     WHERE
-        ss_sold_date_sk == d_date_sk AND d_month_seq BETWEEN 1212 AND 1212 + 11
+        ss_sold_date_sk == d_date_sk AND d_month_seq BETWEEN $to_decimal(1212) AND $to_decimal(1212 + 11)
     GROUP BY
         ss_store_sk,
         ss_item_sk
 ) AS sc
 WHERE
     sb.ss_store_sk == sc.ss_store_sk
-    AND sc.revenue <= 0.1 * sb.ave
+    AND sc.revenue <= CAST("0.1" as decimal(35,2)) * sb.ave
     AND s_store_sk == sc.ss_store_sk
     AND i_item_sk == sc.ss_item_sk
 ORDER BY

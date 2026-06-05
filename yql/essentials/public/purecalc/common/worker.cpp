@@ -47,7 +47,8 @@ TWorkerGraph::TWorkerGraph(
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
     TLangVersion langver,
-    bool insideEvaluation)
+    bool insideEvaluation,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : ScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
     , Env(ScopedAlloc)
     , FuncRegistry(funcRegistry)
@@ -55,6 +56,7 @@ TWorkerGraph::TWorkerGraph(
     , TimeProvider(deterministicTimeProviderSeed ? CreateDeterministicTimeProvider(*deterministicTimeProviderSeed) : CreateDefaultTimeProvider())
     , LLVMSettings(LLVMSettings)
     , NativeYtTypeFlags(nativeYtTypeFlags)
+    , RuntimeSettings(std::move(runtimeSettings))
 {
     // Build the root MKQL node
     NCommon::TMemoizedTypesMap typeMemoization;
@@ -160,7 +162,8 @@ TWorkerGraph::TWorkerGraph(
         countersProvider,
         nullptr,
         nullptr,
-        langver);
+        langver,
+        RuntimeSettings);
 
     ComputationPattern = NKikimr::NMiniKQL::MakeComputationPattern(
         explorer,
@@ -218,11 +221,13 @@ TWorker<TBase>::TWorker(
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
-    TLangVersion langver)
+    TLangVersion langver,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
              inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false)
+             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false,
+             std::move(runtimeSettings))
 {
 }
 

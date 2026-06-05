@@ -27,6 +27,7 @@ public:
         TYtBlockIteratorSettings settings,
         std::vector<ESortOrder> sortOrders = {},
         TMaybe<bool> isFirstRowKeysInclusive = Nothing(),
+        TMaybe<bool> isLastRowKeysInclusive = Nothing(),
         TMaybe<TString> firstRowKeys = Nothing(),
         TMaybe<TString> lastRowKeys = Nothing()
     );
@@ -55,6 +56,7 @@ private:
     TMaybe<TFmrTableKeysBoundary> FirstBoundary_;
     TMaybe<TFmrTableKeysBoundary> LastBoundary_;
     bool IsFirstBoundInclusive_ = true;
+    bool IsLastBoundInclusive_ = true;
 };
 
 } // namespace NYql::NFmr

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "yql_yt_sorted_partitioner_base.h"
+
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface/yql_yt_coordinator_service_interface.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
@@ -14,124 +16,29 @@ struct TSortedPartitionSettings {
     TFmrPartitionerSettings FmrPartitionSettings;
 };
 
-struct TSortedPartitionerFilterBoundary {
-    TFmrTableKeysBoundary FilterBoundary;
-    bool IsInclusive;
-};
-
-class TSortedPartitioner {
+class TSortedPartitioner: public TSortedPartitionerBase {
 public:
     TSortedPartitioner(
         const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
         const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
-        TSortingColumns KeyColumns,
+        TSortingColumns keyColumns,
         const TSortedPartitionSettings& settings
     );
 
-    TPartitionResult PartitionTablesIntoTasksSorted(
-        const std::vector<TOperationTableRef>& inputTables
-    );
-
 private:
-    struct TChunkUnit {
-        TString TableId;
-        TString PartId;
-        ui64 ChunkIndex = 0;
-        ui64 DataWeight = 0;
-        TFmrTableKeysRange KeyRange;
-    };
+    TTaskTableInputRef CreateTaskInputFromSlices(const std::vector<TSlice>& slices, const std::vector<TFmrTableRef>& inputTables, bool isLastRange) override;
 
-    class TChunkContainer {
-    public:
-        TChunkContainer() = default;
+    TFmrTableKeysRange GetReadRangeFromSlices(const std::vector<TSlice>& slices, bool isLastRange) override;
 
-        void Push(TChunkUnit chunk);
-        bool IsEmpty() const;
-        const std::vector<TChunkUnit>& GetChunks() const;
-        void Clear();
+    void ChangeLeftKeyBoundaryIfNeeded(
+        TFmrTableKeysBoundary& leftKey,
+        bool& isLeftInclusive,
+        const TPartitionerFilterBoundary& filterBoundary
+    ) override;
 
-        const TFmrTableKeysRange& GetKeysRange() const;
-        void UpdateKeyRange(const TFmrTableKeysRange& KeyRange);
+    void ChangeRightKeyBoundaryIfNeeded(TFmrTableKeysBoundary& rightKey, const TFmrTableKeysBoundary& taskRangeLastKey) override;
 
-    private:
-        std::vector<TChunkUnit> Chunks_;
-        TFmrTableKeysRange KeysRange_;
-    };
-
-    class TFmrTablesChunkPool {
-    public:
-        TFmrTablesChunkPool(
-            const std::vector<TFmrTableRef>& inputTables,
-            const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
-            const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
-            const TSortingColumns& KeyColumns
-        );
-
-        void PutBack(TChunkUnit chunk);
-        void UpdateFilterBoundary(const TString& tableId, const TSortedPartitionerFilterBoundary& FilterBoundary);
-        bool IsNotEmpty() const;
-
-        const std::vector<TString>& GetTableOrder() const;
-        TMaybe<TChunkUnit> ReadNextChunk(const TString& tableId);
-
-        TMaybe<TSortedPartitionerFilterBoundary> GetFilterBoundary(const TString& tableId) const;
-        TSortedPartitionerFilterBoundary GetMaxFilterBoundary(const TString& tableId, const TSortedPartitionerFilterBoundary& FilterBoundary) const;
-        TFmrTableKeysRange GetEffectiveKeysRange(const TChunkUnit& chunk) const;
-
-        void SetError(TFmrError error);
-        TMaybe<TFmrError> GetError() const;
-
-    private:
-        void InitTableInputs(const std::vector<TFmrTableRef>& inputTables);
-
-        std::vector<TString> TableOrder_;
-        std::unordered_map<TString, std::deque<TChunkUnit>> TableInputs_;
-        std::unordered_map<TString, TSortedPartitionerFilterBoundary> FilterBoundaries_;
-        const std::unordered_map<TFmrTableId, std::vector<TString>>& PartIdsForTables_;
-        const std::unordered_map<TString, std::vector<TChunkStats>>& PartIdStats_;
-        const TSortingColumns& KeyColumns_;
-        TMaybe<TFmrError> Error_;
-    };
-
-    TPartitionResult PartitionFmrTables(
-        const std::vector<TFmrTableRef>& inputTables
-    );
-
-    struct TSlice {
-        std::unordered_map<TString, std::vector<TChunkUnit>> ChunksByTable;
-        TFmrTableKeysRange RangeForRead;
-        std::unordered_map<TString, TSortedPartitionerFilterBoundary> PerTableLeft;
-        ui64 Weight = 0;
-    };
-
-    struct TReadSliceResult {
-        TMaybe<TSlice> Slice;
-        TMaybe<TFmrError> Error;
-    };
-
-    TReadSliceResult ReadSlice(TFmrTablesChunkPool& chunkPool);
-    TTaskTableInputRef CreateTaskInputFromSlices(const std::vector<TSlice>& slices, const std::vector<TFmrTableRef>& inputTables) const;
-
-    std::unordered_map<TString, std::vector<TTableRange>> ProcessChunkForSlice(
-        TFmrTablesChunkPool& chunkPool,
-        const TChunkContainer& container,
-        const TFmrTableKeysRange& taskRange
-    );
-
-    ui64 CollectFmrTotalWeight(
-        const std::vector<TFmrTableRef>& inputTables
-    );
-
-private:
-    const std::unordered_map<TFmrTableId, std::vector<TString>> PartIdsForTables_;
-    const std::unordered_map<TString, std::vector<TChunkStats>> PartIdStats_;
-    const TSortingColumns KeyColumns_;
-    const TSortedPartitionSettings Settings_;
+    void ExtendChunksPerTable(std::unordered_map<TString, std::vector<TChunkUnit>>& chunksByTable) override;
 };
-
-TPartitionResult PartitionInputTablesIntoTasksSorted(
-    const std::vector<TOperationTableRef>& inputTables,
-    TSortedPartitioner& partitioner
-);
 
 } // namespace NYql::NFmr

@@ -121,13 +121,13 @@ Y_UNIT_TEST(Cast) {
     TestCast<double>("1.23E-20", 1.23E-20);
 
     // float
-    TestCast<float>("-0.1", -0.1f);
-    TestCast<float>("-0.23", -0.23f);
-    TestCast<float>("1.23", 1.23f);
-    TestCast<float>("-12.3", -12.3f);
-    TestCast<float>("-123.4", -123.4f);
-    TestCast<float>("-1.23E10", -1.23E10f);
-    TestCast<float>("-1.23E-10", -1.23E-10f);
+    TestCast<float>("-0.1", -0.1F);
+    TestCast<float>("-0.23", -0.23F);
+    TestCast<float>("1.23", 1.23F);
+    TestCast<float>("-12.3", -12.3F);
+    TestCast<float>("-123.4", -123.4F);
+    TestCast<float>("-1.23E10", -1.23E10F);
+    TestCast<float>("-1.23E-10", -1.23E-10F);
 
     // unsigned Max
     TestCast<ui8>(ToString(Max<ui8>()), Max<ui8>());

@@ -42,7 +42,8 @@ public:
         , HolderFactory_(Alloc_.Ref(), MemInfo_, FunctionRegistry_.Get())
         , Builder_(HolderFactory_, NUdf::EValidatePolicy::Exception)
         , TypeInfoHelper_(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, TSourcePosition())
+        , RuntimeSettings_(NYql::MakeRuntimeSettings())
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", nullptr, TSourcePosition())
     {
         BoolOid_ = NYql::NPg::LookupType("bool").TypeId;
     }
@@ -59,6 +60,7 @@ private:
     THolderFactory HolderFactory_;
     TDefaultValueBuilder Builder_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TFunctionTypeInfoBuilder FunctionTypeInfoBuilder_;
     ui32 BoolOid_ = 0;
 
@@ -265,7 +267,7 @@ private:
 
         {
             arrow::Datum d1(std::make_shared<arrow::UInt64Scalar>(123));
-            NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1));
+            NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1), NYql::DefaultDatumTestValidationMode);
             bool isScalar;
             ui64 length;
             auto chunks = Builder_.GetArrowBlockChunks(val1, isScalar, length);
@@ -290,7 +292,7 @@ private:
             std::shared_ptr<arrow::ArrayData> builderResult;
             UNIT_ASSERT(builder.FinishInternal(&builderResult).ok());
             arrow::Datum d1(builderResult);
-            NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1));
+            NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1), NYql::DefaultDatumTestValidationMode);
 
             bool isScalar;
             ui64 length;
@@ -330,7 +332,7 @@ private:
 
             auto chunked = arrow::ChunkedArray::Make({builder1Result, builder2Result}).ValueOrDie();
             arrow::Datum d1(chunked);
-            NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1));
+            NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1), NYql::DefaultDatumTestValidationMode);
 
             bool isScalar;
             ui64 length;

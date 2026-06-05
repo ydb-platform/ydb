@@ -2,9 +2,8 @@
 
 #include "abstract_scheme.h"
 
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -13,6 +12,7 @@ private:
     TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard IndexInfo;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
     TSnapshot Snapshot;
+
 protected:
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "("
@@ -49,4 +49,4 @@ public:
     ui64 GetVersion() const override;
 };
 
-}
+}   // namespace NKikimr::NOlap

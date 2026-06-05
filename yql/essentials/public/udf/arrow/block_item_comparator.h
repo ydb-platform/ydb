@@ -62,11 +62,7 @@ public:
                     return false;
                 }
             } else {
-                if (rhs) {
-                    return false;
-                } else {
-                    return true;
-                }
+                return !static_cast<bool>(rhs);
             }
         } else {
             return Derived()->DoEquals(lhs, rhs);
@@ -82,11 +78,7 @@ public:
                     return false;
                 }
             } else {
-                if (rhs) {
-                    return true;
-                } else {
-                    return false;
-                }
+                return static_cast<bool>(rhs);
             }
         } else {
             return Derived()->DoLess(lhs, rhs);
@@ -260,6 +252,47 @@ public:
         }
 
         return false;
+    }
+
+private:
+    const TVector<std::unique_ptr<IBlockItemComparator>> Children_;
+};
+
+class TVariantBlockItemComparator: public TBlockItemComparatorBase<TVariantBlockItemComparator, false> {
+public:
+    explicit TVariantBlockItemComparator(TVector<std::unique_ptr<IBlockItemComparator>>&& children)
+        : Children_(std::move(children))
+    {
+    }
+
+    i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex < rightIndex) {
+            return -1;
+        }
+        if (leftIndex > rightIndex) {
+            return 1;
+        }
+        return Children_[leftIndex]->Compare(lhs.GetVariantItem(), rhs.GetVariantItem());
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex != rightIndex) {
+            return false;
+        }
+        return Children_[leftIndex]->Equals(lhs.GetVariantItem(), rhs.GetVariantItem());
+    }
+
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        const ui32 leftIndex = lhs.GetVariantIndex();
+        const ui32 rightIndex = rhs.GetVariantIndex();
+        if (leftIndex != rightIndex) {
+            return leftIndex < rightIndex;
+        }
+        return Children_[leftIndex]->Less(lhs.GetVariantItem(), rhs.GetVariantItem());
     }
 
 private:

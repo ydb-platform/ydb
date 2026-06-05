@@ -16,6 +16,8 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 namespace NKikimr::NOlap::NReader {
 
 class TPartialSourceAddress;
@@ -31,6 +33,7 @@ public:
     }
 
     TComputeShardingPolicy() = default;
+
     bool DeserializeFromProto(const NKikimrTxDataShard::TComputeShardingPolicy& policy) {
         ShardsCount = policy.GetShardsCount();
         for (auto&& i : policy.GetColumnNames()) {
@@ -65,6 +68,7 @@ private:
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
     const NConveyorComposite::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
+    std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
 
 public:
     const NArrow::NSSA::IColumnResolver* GetResolver() const {
@@ -150,12 +154,16 @@ public:
         return ResourcesTaskContext;
     }
 
+    const std::shared_ptr<NLWTrace::TOrbit>& GetScanOrbit() const {
+        return ScanOrbit;
+    }
+
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
         const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
         const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId,
-        const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const NConveyorComposite::TCPULimitsConfig& cpuLimits, const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit);
 };
 
 class IDataReader {
@@ -178,6 +186,7 @@ public:
         Started = true;
         return DoStart();
     }
+
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) = 0;
 
     const TReadContext& GetContext() const {
@@ -224,6 +233,7 @@ public:
         sb << DoDebugString(verbose);
         return sb;
     }
+
     [[nodiscard]] TConclusion<bool> ReadNextInterval() {
         return DoReadNextInterval();
     }

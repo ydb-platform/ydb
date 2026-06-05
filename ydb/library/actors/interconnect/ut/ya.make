@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/actors/interconnect/ut/protos
     ydb/library/actors/testlib
     library/cpp/digest/md5
+    library/cpp/logger
     library/cpp/testing/unittest
 )
 

@@ -54,6 +54,7 @@ enum class EStreamLookupStrategyType {
     LookupUniqueRows,
     LookupJoinRows,
     LookupSemiJoinRows,
+    LockAndLookupRows,
 };
 
 struct TKqpStreamLookupSettings {
@@ -70,6 +71,7 @@ struct TKqpStreamLookupSettings {
     static constexpr std::string_view LookupUniqueStrategyName = "LookupUniqueRows"sv;
     static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
     static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
+    static constexpr std::string_view LockAndLookupStrategyName = "LockAndLookupRows"sv;
 
     TMaybe<ui32> AllowNullKeysPrefixSize;
     EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;

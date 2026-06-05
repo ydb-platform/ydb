@@ -13,7 +13,7 @@ links:
   - title: Concepts
     description: How YDB works, its features and available usage modes
     href: concepts/
-  - title: For DevOps
+  - title: For Database Administrators
     description: How to run production YDB clusters
     href: devops/
   - title: For Application Developers

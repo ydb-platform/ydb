@@ -514,6 +514,7 @@ private:
         auto reserveSize = Max(Buffer_.capacity() * 2, minReserveSize);
         if (minReserveSize > static_cast<size_t>(MemoryLimit_)) {
             THROW_ERROR_EXCEPTION(
+                EErrorCode::MemoryLimitExceeded,
                 "Memory limit exceeded while parsing YSON stream: allocated %v, limit %v",
                 minReserveSize,
                 MemoryLimit_);

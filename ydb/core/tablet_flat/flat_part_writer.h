@@ -63,13 +63,15 @@ namespace NTable {
                 Histories.emplace_back(scheme, conf, tags, NPage::TGroupId(group, true));
             }
 
-            for (ui32 prefixLen : conf.ByKeyFilterPrefixes) {
+            for (const auto& bloomPrefix : conf.ByKeyFilterPrefixes) {
+                ui32 prefixLen = bloomPrefix.PrefixLength;
+                double fpp = bloomPrefix.FalsePositiveProbability;
                 Y_ENSURE(prefixLen > 0 && prefixLen <= Scheme->Groups[0].ColsKeyData.size(),
                     "Bloom filter prefix " << prefixLen << " exceeds key column count " << Scheme->Groups[0].ColsKeyData.size());
                 if (MainPageCollectionEdge || SmallPageCollectionEdge || !conf.MaxRows) {
-                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TQueue>(0.0001));
+                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TQueue>(fpp));
                 } else {
-                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TWriter>(conf.MaxRows, 0.0001));
+                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TWriter>(conf.MaxRows, fpp));
                 }
             }
 

@@ -76,7 +76,7 @@ TSolomonExporter::TSolomonExporter(
 
     Registry_->SetWindowSize(Config_->WindowSize);
     Registry_->SetProducerCollectionBatchSize(Config_->ProducerCollectionBatchSize);
-    Registry_->SetGridFactor([config = Config_] (const std::string& name) -> int {
+    Registry_->SetGridFactor([config = Config_] (TStringBuf name) -> int {
         auto shard = config->MatchShard(name);
         if (!shard) {
             return 1;
@@ -119,22 +119,22 @@ TSolomonExporter::TSolomonExporter(
     }
 }
 
-void TSolomonExporter::Register(const std::string& prefix, const NYT::NHttp::IServerPtr& server)
+void TSolomonExporter::Register(TStringBuf prefix, const NYT::NHttp::IServerPtr& server)
 {
     Register(prefix, server->GetPathMatcher());
 }
 
-void TSolomonExporter::Register(const std::string& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers)
+void TSolomonExporter::Register(TStringBuf prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers)
 {
-    handlers->Add(prefix + "/", BIND(&TSolomonExporter::HandleIndex, MakeStrong(this), prefix));
-    handlers->Add(prefix + "/sensors", BIND(&TSolomonExporter::HandleDebugSensors, MakeStrong(this)));
-    handlers->Add(prefix + "/tags", BIND(&TSolomonExporter::HandleDebugTags, MakeStrong(this)));
-    handlers->Add(prefix + "/status", BIND(&TSolomonExporter::HandleStatus, MakeStrong(this)));
-    handlers->Add(prefix + "/all", BIND(&TSolomonExporter::HandleShard, MakeStrong(this), std::nullopt));
+    handlers->Add(Format("%v/", prefix), BIND(&TSolomonExporter::HandleIndex, MakeStrong(this), prefix));
+    handlers->Add(Format("%v/sensors", prefix), BIND(&TSolomonExporter::HandleDebugSensors, MakeStrong(this)));
+    handlers->Add(Format("%v/tags", prefix), BIND(&TSolomonExporter::HandleDebugTags, MakeStrong(this)));
+    handlers->Add(Format("%v/status", prefix), BIND(&TSolomonExporter::HandleStatus, MakeStrong(this)));
+    handlers->Add(Format("%v/all", prefix), BIND(&TSolomonExporter::HandleShard, MakeStrong(this), std::nullopt));
 
     for (const auto& [shardName, shard] : Config_->Shards) {
         handlers->Add(
-            prefix + "/shard/" + shardName,
+            Format("%v/shard/%v", prefix, shardName),
             BIND(&TSolomonExporter::HandleShard, MakeStrong(this), shardName));
     }
 }
@@ -283,9 +283,11 @@ constexpr auto IndexPage = R"EOF(
 </html>
 )EOF";
 
-void TSolomonExporter::HandleIndex(const std::string& prefix, const IRequestPtr& req, const IResponseWriterPtr& rsp)
+void TSolomonExporter::HandleIndex(TStringBuf prefix, const IRequestPtr& req, const IResponseWriterPtr& rsp)
 {
-    if (req->GetUrl().Path != prefix && req->GetUrl().Path != prefix + "/") {
+    auto prefixWithSlash = Format("%v/", prefix);
+
+    if (req->GetUrl().Path != prefix && req->GetUrl().Path != prefixWithSlash) {
         rsp->SetStatus(EStatusCode::NotFound);
         WaitFor(rsp->WriteBody(TSharedRef::FromString("Not found")))
             .ThrowOnError();
@@ -295,8 +297,8 @@ void TSolomonExporter::HandleIndex(const std::string& prefix, const IRequestPtr&
     rsp->SetStatus(EStatusCode::OK);
     rsp->GetHeaders()->Add("Content-Type", "text/html; charset=UTF-8");
 
-    auto prefixWithSlash = !prefix.empty() ? prefix + "/" : prefix;
-    auto indexPageFormatted = Format(IndexPage, prefixWithSlash, prefixWithSlash, prefixWithSlash, prefixWithSlash, prefixWithSlash);
+    auto prefixWithSlashOrEmpty = !prefix.empty() ? std::string(prefixWithSlash) : std::string(prefix);
+    auto indexPageFormatted = Format(IndexPage, prefixWithSlashOrEmpty, prefixWithSlashOrEmpty, prefixWithSlashOrEmpty, prefixWithSlashOrEmpty, prefixWithSlashOrEmpty);
 
     WaitFor(rsp->WriteBody(TSharedRef::FromString(indexPageFormatted)))
         .ThrowOnError();
@@ -449,11 +451,11 @@ bool TSolomonExporter::ReadSensors(
     }
 
     if (shard) {
-        readOptions.SensorFilter = [&, name = shard.value()] (const std::string& sensorName) {
+        readOptions.SensorFilter = [&, name = shard.value()] (TStringBuf sensorName) {
             return Config_->MatchShard(sensorName) == Config_->Shards[name];
         };
     } else {
-        readOptions.SensorFilter = [this] (const std::string& sensorName) {
+        readOptions.SensorFilter = [this] (TStringBuf sensorName) {
             return FilterDefaultGrid(sensorName);
         };
     }
@@ -658,12 +660,12 @@ void TSolomonExporter::DoHandleShard(
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;
 
         if (name) {
-            options.SensorFilter = [&] (const std::string& sensorName) {
+            options.SensorFilter = [&] (TStringBuf sensorName) {
                 return Config_->MatchShard(sensorName) == Config_->Shards[*name];
             };
             options.StripSensorsNamePrefix |= Config_->Shards[*name]->StripSensorsNamePrefix;
         } else {
-            options.SensorFilter = [this] (const std::string& sensorName) {
+            options.SensorFilter = [this] (TStringBuf sensorName) {
                 return FilterDefaultGrid(sensorName);
             };
         }
@@ -860,7 +862,7 @@ void TSolomonExporter::ValidateSummaryPolicy(ESummaryPolicy policy)
     }
 }
 
-bool TSolomonExporter::FilterDefaultGrid(const std::string& sensorName)
+bool TSolomonExporter::FilterDefaultGrid(TStringBuf sensorName)
 {
     auto shard = Config_->MatchShard(sensorName);
     if (shard && shard->GridStep) {

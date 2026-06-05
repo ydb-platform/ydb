@@ -409,10 +409,38 @@ void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);
 void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 
+} // namespace NYT::NYTree
+
+// Serialize and Deserialize for CExternallySerializable types are placed in NYT::NYson
+// to ensure ADL lookup via |consumer| and |cursor| arguments respectively,
+// since |value| may be declared outside of the NYT namespace.
+namespace NYT::NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NYTree::CExternallySerializable T>
+void Serialize(const T& value, IYsonConsumer* consumer);
+
+template <NYTree::CExternallySerializable T>
+void Deserialize(
+    T& value,
+    TYsonPullParserCursor* cursor,
+    bool postprocess = true,
+    bool setDefaults = true,
+    std::optional<NYTree::EUnrecognizedStrategy> strategy = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYson
+
+namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <CExternallySerializable T>
-void Serialize(const T& value, NYson::IYsonConsumer* consumer);
-template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
+void Deserialize(T& value, INodePtr node, bool postprocess = true, bool setDefaults = true, std::optional<EUnrecognizedStrategy> strategy = {});
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(

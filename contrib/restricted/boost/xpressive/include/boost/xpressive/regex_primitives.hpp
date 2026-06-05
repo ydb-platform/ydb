@@ -575,7 +575,7 @@ public:
 // would be preferable.
 /// INTERNAL ONLY
 #define BOOST_XPRESSIVE_GLOBAL_MARK_TAG(NAME, VALUE)                            \
-    boost::xpressive::mark_tag::proto_base_expr const NAME = {{VALUE}}          \
+    boost::xpressive::mark_tag::proto_base_expr const NAME = {{VALUE}} \
     /**/
 
 ///////////////////////////////////////////////////////////////////////////////

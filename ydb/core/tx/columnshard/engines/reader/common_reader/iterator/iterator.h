@@ -12,29 +12,30 @@ private:
     const NColumnShard::TConcreteScanCounters Counters;
     std::deque<std::unique_ptr<TPartialReadResult>> Data;
     i64 RecordsCount = 0;
+
 public:
     TString DebugString() const {
         TStringBuilder sb;
-        sb
-            << "count:" << Data.size() << ";"
-            << "records_count:" << RecordsCount << ";"
-            ;
+        sb << "count:" << Data.size() << ";"
+           << "records_count:" << RecordsCount << ";";
         if (Data.size()) {
             sb << "schema=" << Data.front()->GetResultSchema()->ToString() << ";";
         }
         return sb;
     }
+
     TReadyResults(const NColumnShard::TConcreteScanCounters& counters)
         : Counters(counters)
     {
-
     }
+
     const std::unique_ptr<TPartialReadResult>& emplace_back(std::unique_ptr<TPartialReadResult>&& v) {
         AFL_VERIFY(!!v);
         RecordsCount += v->GetRecordsCount();
         Data.emplace_back(std::move(v));
         return Data.back();
     }
+
     std::unique_ptr<TPartialReadResult> pop_front() {
         if (Data.empty()) {
             return {};
@@ -45,9 +46,11 @@ public:
         Data.pop_front();
         return std::move(result);
     }
+
     bool empty() const {
         return Data.empty();
     }
+
     size_t size() const {
         return Data.size();
     }
@@ -84,7 +87,7 @@ public:
 
     virtual void Apply(const std::shared_ptr<IApplyAction>& task) override;
 
-    bool Finished() const  override {
+    bool Finished() const override {
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
@@ -97,4 +100,4 @@ private:
     virtual void FillReadyResults() = 0;
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NCommon

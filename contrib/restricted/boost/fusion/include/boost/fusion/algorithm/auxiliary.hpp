@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_ALGORITHM_AUXILIARY_02192011_0907)
+#ifndef FUSION_ALGORITHM_AUXILIARY_02192011_0907
 #define FUSION_ALGORITHM_AUXILIARY_02192011_0907
 
 #include <boost/fusion/support/config.hpp>

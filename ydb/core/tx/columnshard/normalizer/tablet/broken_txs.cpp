@@ -28,4 +28,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TBrokenTxsNormalizer::DoInit(
     return std::vector<INormalizerTask::TPtr>();
 }
 
-}
+}   // namespace NKikimr::NOlap

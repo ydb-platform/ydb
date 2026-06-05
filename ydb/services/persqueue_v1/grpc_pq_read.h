@@ -38,7 +38,6 @@ private:
     ui64 NextCookie();
 
     bool TooMuchSessions();
-    TString AvailableLocalCluster();
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {

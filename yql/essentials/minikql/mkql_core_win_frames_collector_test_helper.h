@@ -150,7 +150,11 @@ void RunTestCase(const TTestCase<TElement, SortOrder>& testCase) {
 
     auto elementExtractor =
         []<typename T>(const TElement& value) -> T {
-        return *value;
+        if constexpr (std::is_convertible_v<TRangeElement, T>) {
+            return *value;
+        } else {
+            Y_ABORT("Unexpected element extraction for incompatible type");
+        }
     };
 
     TFakeContext fakeContext;

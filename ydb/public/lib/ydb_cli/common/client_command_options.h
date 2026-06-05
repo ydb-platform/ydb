@@ -65,8 +65,8 @@ public:
         return Opts;
     }
 
-    void SetHelpCommandVerbosiltyLevel(size_t level) {
-        HelpCommandVerbosiltyLevel = level;
+    void SetHelpCommandVerbosityLevel(size_t level) {
+        HelpCommandVerbosityLevel = level;
     }
 
     // Priority of parsing auth methods from env, from first to last.
@@ -95,7 +95,7 @@ private:
     NLastGetopt::TOpts Opts;
     std::vector<TIntrusivePtr<TClientCommandOption>> ClientOpts;
     std::vector<TIntrusivePtr<TAuthMethodOption>> EnvAuthPriority;
-    size_t HelpCommandVerbosiltyLevel = 1;
+    size_t HelpCommandVerbosityLevel = 1;
 };
 
 // YDB client command option
@@ -244,6 +244,8 @@ public:
 
     TClientCommandOption& SetSupportsProfile(bool supports = true);
 
+    TClientCommandOption& DisableImplicitSourcesIf(std::function<bool()> condition);
+
     // Log connection params at high verbosity level
     TClientCommandOption& LogToConnectionParams(const TString& paramName);
 
@@ -305,6 +307,7 @@ protected:
     TString ProfileParamName;
     bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;
+    std::function<bool()> ImplicitSourcesDisabled;
     TString ConnectionParamName;
     TString Documentation;
     bool HandlerIsSet = false;

@@ -10,7 +10,7 @@ void TPortionAccessorConstructor::ChunksValidation() const {
     CheckChunksOrder(Indexes);
     if (BlobIdxs.size()) {
         AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
-                                                           "indexes", Indexes.size());
+                                                       "indexes", Indexes.size());
     } else {
         std::set<ui32> blobIdxs;
         for (auto&& i : Records) {
@@ -108,8 +108,8 @@ void TPortionAccessorConstructor::AddBuildInfo(TColumnChunkLoadContextV2::TBuild
     BlobIds = buildInfo.DetachBlobIds();
     for (auto&& rec : buildInfo.DetachRecords()) {
         AFL_VERIFY(rec.GetBlobRange().GetBlobIdxVerified() < GetBlobIdsCount());
-        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())))(
-            "blobs", JoinSeq(",", GetBlobIds()))("range", rec.GetBlobRange().ToString());
+        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())))("blobs", JoinSeq(",", GetBlobIds()))(
+            "range", rec.GetBlobRange().ToString());
         Records.push_back(std::move(rec));
     }
 }
@@ -123,8 +123,8 @@ void TPortionAccessorConstructor::LoadIndex(TIndexChunkLoadContext&& loadContext
     }
 }
 
-std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoading(const TPortionInfo::TConstPtr& portion,
-    TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
+std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoading(
+    const TPortionInfo::TConstPtr& portion, TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
     AFL_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
     {
@@ -145,8 +145,7 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoadi
     }
     std::vector<TIndexChunk> indexChunks;
     {
-
-        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) ->bool {
+        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) -> bool {
             return l.GetAddress() < r.GetAddress();
         };
         bool needSort = false;

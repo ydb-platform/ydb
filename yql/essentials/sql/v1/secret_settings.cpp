@@ -70,11 +70,7 @@ TExternalDataSourceAuthFields::TExternalDataSourceAuthFields(
 bool TExternalDataSourceAuthFields::CheckMandatoryFields(
     TStringBuf authField,
     const std::map<TString, TDeferredAtom>& result) const {
-    if (MandatoryFields_.contains(authField) && !result.contains(TString{authField})) {
-        return false;
-    }
-
-    return true;
+    return !(MandatoryFields_.contains(authField) && !result.contains(TString{authField}));
 }
 
 bool TExternalDataSourceAuthFields::CheckSecretsFields(
@@ -120,10 +116,7 @@ bool TExternalDataSourceAuthFields::CheckSecretsFields(
 bool TExternalDataSourceAuthFields::CheckAllPossibleFields(
     TStringBuf authField,
     const std::map<TString, TDeferredAtom>& result) const {
-    if (!AllPossibleFields_.contains(authField) && result.contains(TString{authField})) {
-        return false;
-    }
-    return true;
+    return !(!AllPossibleFields_.contains(authField) && result.contains(TString{authField}));
 }
 
 bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>& result, TContext& ctx) {

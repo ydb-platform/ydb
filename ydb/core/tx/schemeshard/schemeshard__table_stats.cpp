@@ -523,26 +523,22 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    const auto& shardToPartition = table->GetShard2PartitionIdx();
-    if (table->IsTTLEnabled() && shardToPartition.contains(shardIdx)) {
-        const ui64 partitionIdx = shardToPartition.at(shardIdx);
-        const auto& partitions = table->GetPartitions();
+    if (table->IsTTLEnabled()) {
+        if (auto* p = table->GetPartitionStore().FindPtr(shardIdx)) {
+            auto& lag = p->LastCondEraseLag;
 
-        Y_ABORT_UNLESS(partitionIdx < partitions.size());
-        auto& shardInfo = partitions.at(partitionIdx);
-        auto& lag = shardInfo.LastCondEraseLag;
+            if (lag) {
+                Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+            }
 
-        if (lag) {
-            Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+            if (now >= p->LastCondErase) {
+                lag = now - p->LastCondErase;
+            } else {
+                lag = TDuration::Zero();
+            }
+
+            Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
         }
-
-        if (now >= shardInfo.LastCondErase) {
-            lag = now - shardInfo.LastCondErase;
-        } else {
-            lag = TDuration::Zero();
-        }
-
-        Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
     }
 
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();

@@ -22,7 +22,12 @@ class Meter;
 class MeterProvider
 {
 public:
-  virtual ~MeterProvider() = default;
+  MeterProvider()                                     = default;
+  MeterProvider(const MeterProvider &)                = default;
+  MeterProvider(MeterProvider &&) noexcept            = default;
+  MeterProvider &operator=(const MeterProvider &)     = default;
+  MeterProvider &operator=(MeterProvider &&) noexcept = default;
+  virtual ~MeterProvider()                            = default;
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
 

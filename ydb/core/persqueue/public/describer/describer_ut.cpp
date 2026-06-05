@@ -1,10 +1,10 @@
 #include "describer.h"
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ {
 using namespace NPersQueue;

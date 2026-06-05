@@ -31,4 +31,13 @@ using TVolumeConfigPtr = std::shared_ptr<TVolumeConfig>;
 
 using TStorageBuffer = std::shared_ptr<char>;
 
+struct TReadBlocksLocalRequest;
+struct TReadBlocksLocalResponse;
+
+struct TWriteBlocksLocalRequest;
+struct TWriteBlocksLocalResponse;
+
+struct TZeroBlocksLocalRequest;
+struct TZeroBlocksLocalResponse;
+
 }   // namespace NYdb::NBS::NBlockStore

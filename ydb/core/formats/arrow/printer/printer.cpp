@@ -107,6 +107,10 @@ TString ToString(const NKikimrSSA::TProgram::TGroupBy& groupBy) {
     return result;
 }
 
+TString ToString(const NKikimrSSA::TProgram::TDistinct& distinct) {
+    return TStringBuilder{} << "Distinct " << ToString(distinct.GetKeyColumn());
+}
+
 }
 
 TString SSAToPrettyString(const NKikimrSSA::TProgram& program) {
@@ -127,6 +131,10 @@ TString SSAToPrettyString(const NKikimrSSA::TProgram& program) {
             }
             case NKikimrSSA::TProgram::TCommand::LineCase::kGroupBy: {
                 result << ToString(command.GetGroupBy()) << Endl;
+                break;
+            }
+            case NKikimrSSA::TProgram::TCommand::LineCase::kDistinct: {
+                result << ToString(command.GetDistinct()) << Endl;
                 break;
             }
             case NKikimrSSA::TProgram::TCommand::LineCase::LINE_NOT_SET: {

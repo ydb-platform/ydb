@@ -62,13 +62,13 @@ public:
             : Mark(mark)
             , ListSize(listSize)
             , FreeLists(listCount)
-            , FreeListOffset(0u)
+            , FreeListOffset(0U)
         {
             Y_ASSERT(ListItem.As<TListHeader>() == this);
-            *reinterpret_cast<ui16*>(this + 1) = 0u; // Mark first list for initial usage
+            *reinterpret_cast<ui16*>(this + 1) = 0U; // Mark first list for initial usage
         }
         ~TListHeader() {
-            Mark = 0u; // Reset mark
+            Mark = 0U; // Reset mark
         }
     };
 
@@ -81,12 +81,12 @@ public:
         explicit TLargeListHeader(ui32 capacity)
             : Mark(LARGE_MARK)
             , Capacity(capacity)
-            , Size(0u)
+            , Size(0U)
         {
             Y_ASSERT(ListItem.As<TLargeListHeader>() == this);
         }
         ~TLargeListHeader() {
-            Mark = 0u; // Reset mark
+            Mark = 0U; // Reset mark
         }
         template <typename T>
         T* GetList() {
@@ -605,13 +605,13 @@ private:
         const size_t byteListSize = AlignUp<size_t>(sizeof(T) * listHeader->ListSize, sizeof(ui16));
         ui16* l = reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset);
         // Distinguish first (0) and repeatedly (0x8000u) used lists
-        if ((*l) & 0x8000u) {
+        if ((*l) & 0x8000U) {
             listHeader->FreeListOffset = ((*l) & 0x7FFF);
         } else {
             ++listHeader->FreeListOffset;
             if (!last) {
                 // Mark next free list as first used
-                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0u;
+                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0U;
             }
         }
         if (last) {
@@ -630,13 +630,13 @@ private:
         const size_t byteListSize = sizeof(T) * listHeader->ListSize + sizeof(ui16);
         ui16* l = reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset);
         // Distinguish first (0) and repeatedly (0x8000u) used lists
-        if ((*l) & 0x8000u) {
+        if ((*l) & 0x8000U) {
             listHeader->FreeListOffset = ((*l) & 0x7FFF);
         } else {
             ++listHeader->FreeListOffset;
             if (!last) {
                 // Mark next free list as first used
-                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0u;
+                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0U;
             }
         }
 
@@ -657,7 +657,7 @@ private:
         Y_ASSERT((reinterpret_cast<ui8*>(list) - reinterpret_cast<ui8*>(listHeader + 1)) % byteListSize == 0);
         const ui64 offset = (reinterpret_cast<ui8*>(list) - reinterpret_cast<ui8*>(listHeader + 1)) / byteListSize;
         Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE);
-        *reinterpret_cast<ui16*>(list) = listHeader->FreeListOffset | 0x8000u;
+        *reinterpret_cast<ui16*>(list) = listHeader->FreeListOffset | 0x8000U;
         listHeader->FreeListOffset = offset;
         ++listHeader->FreeLists;
         if (1 == listHeader->FreeLists) {
@@ -676,7 +676,7 @@ private:
         Y_ASSERT((reinterpret_cast<ui8*>(l) - reinterpret_cast<ui8*>(listHeader + 1)) % (listHeader->ListSize * sizeof(T) + sizeof(ui16)) == 0);
         ui64 offset = (reinterpret_cast<ui8*>(l) - reinterpret_cast<ui8*>(listHeader + 1)) / (listHeader->ListSize * sizeof(T) + sizeof(ui16));
         Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE);
-        *l = listHeader->FreeListOffset | 0x8000u;
+        *l = listHeader->FreeListOffset | 0x8000U;
         listHeader->FreeListOffset = offset;
         ++listHeader->FreeLists;
         if (1 == listHeader->FreeLists) {
@@ -1108,7 +1108,7 @@ public:
         other.BucketsCount_ = 0;
         other.Size_ = 0;
         other.UniqSize_ = 0;
-        other.MaxLoadFactor_ = 1.f;
+        other.MaxLoadFactor_ = 1.F;
     }
 
     ~TCompactHashBase() {
@@ -1455,7 +1455,7 @@ protected:
 protected:
     size_t Size_ = 0;
     size_t UniqSize_ = 0;
-    float MaxLoadFactor_ = 1.f;
+    float MaxLoadFactor_ = 1.F;
     TItemNode* Buckets_ = nullptr;
     size_t BucketsCount_ = 0;
     size_t BucketsMemory_ = 0;

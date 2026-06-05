@@ -43,7 +43,7 @@ public:
     void Start() const {
         auto request = ProtoRequest;
         using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
-        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, UserToken.SerializeAsString(), TActivationContext::ActorSystem());
+        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, UserToken.SerializeAsString(), TActivationContext::ActorSystem(), /*internalCall*/ true);
         auto extController = ExternalController;
         const auto replyCallback = [extController](const NThreading::TFuture<TResponse>& f) {
             TYDBOneRequestSender<TDialogPolicy>::OnInternalResult(f, extController);
@@ -214,6 +214,7 @@ class TYQLRequestExecutor {
 private:
     static TDialogYQLRequest::TRequest BuildRequest(const TString& request, const bool readOnly) {
         TDialogYQLRequest::TRequest pRequest;
+        pRequest.mutable_query_cache_policy()->set_keep_in_cache(true);
         pRequest.mutable_query()->set_yql_text(request);
         if (readOnly) {
             pRequest.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();

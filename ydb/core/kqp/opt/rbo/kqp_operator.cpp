@@ -9,6 +9,22 @@ namespace NKqp {
 using namespace NYql;
 using namespace NNodes;
 
+namespace {
+
+TString FormatSortElements(const TVector<TSortElement>& sortElements) {
+    TStringBuilder result;
+    for (size_t i = 0; i < sortElements.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+
+        result << sortElements[i].ToString();
+    }
+    return result;
+}
+
+} // namespace
+
 /**
  * Base class Operator methods
  */
@@ -33,6 +49,14 @@ void IOperator::ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TInt
         }
     }
     Y_ENSURE(false, "Did not find a child to replace");
+}
+
+NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
+{
+    Y_UNUSED(explainFlags);
+    auto res = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+    res["Name"] = GetExplainName();
+    return res;
 }
 
 /**
@@ -65,7 +89,7 @@ TOpRead::TOpRead(TExprNode::TPtr node)
 
 TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
                  const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
-                 const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , Columns(columns)
@@ -75,6 +99,7 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , OlapFilterLambda(olapFilterLambda)
     , Limit(limit)
     , Ranges(ranges)
+    , OriginalPredicate(originalPredicate)
     , SortDir(sortDir) {
 }
 
@@ -91,6 +116,7 @@ bool TOpRead::NeedsMap() const {
     return false;
 }
 
+// FIXME: why does this function belong to op read?
 void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
@@ -106,6 +132,49 @@ void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
 
 NYql::EStorageType TOpRead::GetTableStorageType() const {
     return StorageType;
+}
+
+static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
+    if (!node) {
+        return std::nullopt;
+    }
+
+    if (auto maybeUint64 = TExprBase(node).Maybe<TCoUint64>()) {
+        return TString(maybeUint64.Cast().Literal().Cast<TCoAtom>().Value());
+    }
+
+    return std::nullopt;
+}
+
+NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    // Tables are usually named in a path-like fashion, like "/<path>/<name>".
+    // In such case we extract the name of a table from a path,
+    // fallback to the whole name otherwise.
+    auto path = TKqpTable(TableCallable).Path().StringValue();
+    auto slash = path.rfind('/');
+    res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
+
+    NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& column : Columns) {
+        readColumns.AppendValue(column);
+    }
+    res["ReadColumns"] = readColumns;
+    res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
+
+    if (SortDir != ESortDir::None) {
+        res["SortDirection"] = SortDir == ESortDir::Asc ? "asc" : "desc";
+    }
+    if (const auto limit = GetUint64Literal(Limit)) {
+        res["Limit"] = *limit;
+    }
+
+    if (OriginalPredicate) {
+        res["Predicate"] = OriginalPredicate->ToExplainString();
+    }
+
+    return res;
 }
 
 TString TOpRead::ToString(TExprContext& ctx) {
@@ -132,6 +201,10 @@ TString TOpRead::ToString(TExprContext& ctx) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
         res << ")";
     }
+    if (OriginalPredicate.has_value()) {
+        res << " Original predicate: (" << PrintRBOExpression(OriginalPredicate->Node, ctx) << ")";
+    }
+
     return res;
 }
 
@@ -356,6 +429,33 @@ TString TOpMap::ToString(TExprContext& ctx) {
     return res;
 }
 
+NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    TStringBuilder name;
+    name << "Map [";
+    for (size_t i = 0, e = MapElements.size(); i < e; ++i) {
+        const auto& mapElement = MapElements[i];
+        name << mapElement.GetElementName().GetFullName() << ": ";
+        if (mapElement.IsRename()) {
+            name << mapElement.GetRename().GetFullName();
+        } else {
+            name << mapElement.GetExpression().ToExplainString();
+        }
+
+        if (i + 1 != e) {
+            name << ", ";
+        }
+    }
+    name << "]";
+    if (Project) {
+        name << " Project";
+    }
+
+    res["Name"] = name;
+    return res;
+}
+
 /**
  * OpAddDependencies methods
  */
@@ -513,6 +613,12 @@ TString TOpFilter::ToString(TExprContext& ctx) {
     return TStringBuilder() << "Filter :" << FilterExpr.ToString();
 }
 
+NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Predicate"] = FilterExpr.ToExplainString();
+    return res;
+}
+
 /**
  * OpJoin operator methods
  */
@@ -586,22 +692,42 @@ TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
     return result;
 }
 
-const THashMap<NKqp::EJoinAlgoType, TString> AlgoNames = {
-    {NKqp::EJoinAlgoType::Undefined, "Undefined"},
-    {NKqp::EJoinAlgoType::LookupJoin, "Lookup"},
-    {NKqp::EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
-    {NKqp::EJoinAlgoType::MapJoin, "Map"},
-    {NKqp::EJoinAlgoType::GraceJoin, "Shuffle"},
-    {NKqp::EJoinAlgoType::StreamLookupJoin, "StreamLookup"},
-    {NKqp::EJoinAlgoType::MergeJoin, "Merge"},
-};
+TString GetJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
+    switch (joinAlgo) {
+        case NKqp::EJoinAlgoType::Undefined:
+            return "Undefined";
+        case NKqp::EJoinAlgoType::LookupJoin:
+            return "Lookup";
+        case NKqp::EJoinAlgoType::LookupJoinReverse:
+            return "ReverseLookup";
+        case NKqp::EJoinAlgoType::MapJoin:
+            return "Map";
+        case NKqp::EJoinAlgoType::GraceJoin:
+            return "Shuffle";
+        case NKqp::EJoinAlgoType::ReverseBlockJoin:
+            return "ReverseBlock";
+        case NKqp::EJoinAlgoType::StreamLookupJoin:
+            return "StreamLookup";
+        case NKqp::EJoinAlgoType::MergeJoin:
+            return "Merge";
+    }
+    Y_ENSURE(false, "Unknown join algo type");
+    return "Unknown";
+}
+
+TString GetExplainJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
+    if (joinAlgo == NKqp::EJoinAlgoType::GraceJoin) {
+        return "Grace";
+    }
+    return GetJoinAlgoName(joinAlgo);
+}
 
 TString TOpJoin::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder res;
     res << "Join, Kind: " << JoinKind;
     if (Props.JoinAlgo.has_value()) {
-        res << ", Algo: " << AlgoNames.at(*Props.JoinAlgo);
+        res << ", Algo: " << GetJoinAlgoName(*Props.JoinAlgo);
     }
     res << " [";
     for (size_t i = 0; i < JoinKeys.size(); i++) {
@@ -622,6 +748,45 @@ TString TOpJoin::ToString(TExprContext& ctx) {
     return res;
 }
 
+static TString FormatJoinKeys(const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys) {
+    TStringBuilder result;
+    for (size_t i = 0; i < joinKeys.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+
+        const auto& [leftKey, rightKey] = joinKeys[i];
+        result << leftKey.GetFullName() << " = " << rightKey.GetFullName();
+    }
+    return result;
+}
+
+NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    const auto joinAlgo = Props.JoinAlgo.value_or(NKqp::EJoinAlgoType::Undefined);
+    const auto joinAlgoName = GetExplainJoinAlgoName(joinAlgo);
+
+    if (JoinKind == "Cross") {
+        res["Name"] = "CrossJoin";
+    } else {
+        res["Name"] = TStringBuilder() << JoinKind << "Join (" << joinAlgoName << ")";
+    }
+    res["JoinKind"] = JoinKind;
+    res["JoinAlgo"] = joinAlgoName;
+    if (!JoinKeys.empty()) {
+        res["Condition"] = FormatJoinKeys(JoinKeys);
+    }
+    if (!JoinFilters.empty()) {
+        NJson::TJsonValue filters(NJson::EJsonValueType::JSON_ARRAY);
+        for (const auto& filter : JoinFilters) {
+            filters.AppendValue(filter.ToExplainString());
+        }
+        res["Filters"] = filters;
+    }
+
+    return res;
+}
+
 /**
  * OpUnionAll operator methods
  */
@@ -636,6 +801,12 @@ TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
 TString TOpUnionAll::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx); 
     return "UnionAll";
+}
+
+NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Ordered"] = Ordered;
+    return res;
 }
 
 /**
@@ -689,6 +860,18 @@ TString TOpLimit::ToString(TExprContext& ctx) {
     }
     builder << "Phase: " << ToStringPhase(LimitPhase);
     return builder;
+}
+
+NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    res["Limit"] = LimitCond.ToExplainString();
+    if (OffsetCond) {
+        res["Offset"] = OffsetCond->ToExplainString();
+    }
+    if (LimitPhase != EOpPhase::Undefined) {
+        res["Phase"] = ToStringPhase(LimitPhase);
+    }
+    return res;
 }
 
 TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
@@ -775,10 +958,25 @@ TString TOpSort::ToString(TExprContext& ctx) {
     return res;
 }
 
+NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    if (IsTopSort()) {
+        res["TopSortBy"] = FormatSortElements(SortElements);
+        if (LimitCond) {
+            res["Limit"] = LimitCond->ToExplainString();
+        }
+    } else {
+        res["SortBy"] = FormatSortElements(SortElements);
+    }
+    if (SortPhase != EOpPhase::Undefined) {
+        res["Phase"] = ToStringPhase(SortPhase);
+    }
+    return res;
+}
+
 /**
  * OpAggregate operator methods
  */
-
 TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
                            const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos)
     : IUnaryOperator(EOperator::Aggregate, pos, input)
@@ -788,9 +986,21 @@ TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggr
     , DistinctAll(distinctAll) {
 }
 
+TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
+                           const EOpPhase aggPhase, bool distinctAll, const TPhysicalOpProps& props, TPositionHandle pos)
+    : IUnaryOperator(EOperator::Aggregate, pos, props, input)
+    , AggregationTraitsList(aggTraitsList)
+    , KeyColumns(keyColumns)
+    , AggregationPhase(aggPhase)
+    , DistinctAll(distinctAll) {
+}
+
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     // We assume that aggregation returns column is order [keys, states]
-    TVector<TInfoUnit> outputIU = KeyColumns;
+    TVector<TInfoUnit> outputIU;
+    if (!DistinctAll) {
+        outputIU = KeyColumns;
+    }
     for (const auto& aggTraits : AggregationTraitsList) {
         outputIU.push_back(aggTraits.ResultColName);
     }
@@ -833,8 +1043,8 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     TStringBuilder strBuilder;
     strBuilder << "Aggregate [";
     for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
-        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ") as "
-                   << AggregationTraitsList[i].ResultColName.GetFullName();
+        strBuilder << AggregationTraitsList[i].ResultColName.GetFullName() << ": " << AggregationTraitsList[i].AggFunction << "("
+                   << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
         if (i + 1 != AggregationTraitsList.size()) {
             strBuilder << ", ";
         }
@@ -850,6 +1060,47 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     strBuilder << "]] ";
     strBuilder << ToStringPhase(AggregationPhase);
     return strBuilder;
+}
+
+static TString FormatInfoUnits(const TVector<TInfoUnit>& infoUnits) {
+    TStringBuilder result;
+    for (size_t i = 0; i < infoUnits.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+        result << infoUnits[i].GetFullName();
+    }
+    return result;
+}
+
+NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    if (!KeyColumns.empty()) {
+        res["GroupBy"] = FormatInfoUnits(KeyColumns);
+    }
+
+    if (!AggregationTraitsList.empty()) {
+        TStringBuilder aggregation;
+        aggregation << "{";
+        for (size_t i = 0; i < AggregationTraitsList.size(); ++i) {
+            if (i != 0) {
+                aggregation << ", ";
+            }
+            aggregation << AggregationTraitsList[i].ResultColName.GetFullName()
+                << ": " << AggregationTraitsList[i].AggFunction
+                << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        }
+        aggregation << "}";
+        res["Aggregation"] = aggregation;
+    }
+
+    res["Phase"] = ToStringPhase(AggregationPhase);
+    if (DistinctAll) {
+        res["Distinct"] = "All";
+    }
+
+    return res;
 }
 
 /***

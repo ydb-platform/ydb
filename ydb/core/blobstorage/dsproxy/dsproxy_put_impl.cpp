@@ -84,6 +84,9 @@ void TPutImpl::FillInterpilePut(TEvInterpilePut& ev) {
         if (item.AlreadyEncrypted) {
             pb->SetAlreadyEncrypted(item.AlreadyEncrypted);
         }
+        if (item.IsZeroEntry) {
+            pb->SetIsZeroEntry(item.IsZeroEntry);
+        }
         for (const auto& [tabletId, generation] : item.ExtraBlockChecks) {
             auto *check = pb->AddExtraBlockChecks();
             check->SetTabletId(tabletId);
@@ -119,6 +122,7 @@ void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx
         DSP_LOG_LOG_SX(logCtx, priority, "BPP12", "Result# " << ev->Print(false) << " GroupId# " << Info->GroupID);
         ResultPriority = std::min(ResultPriority, PriorityForStatusResult(status));
         outPutResults.emplace_back(blobIdx, std::move(ev));
+        Blackboard.MoveBlobToDone(Blobs[blobIdx].BlobId);
     }
 }
 

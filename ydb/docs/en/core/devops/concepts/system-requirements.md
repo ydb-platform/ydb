@@ -10,7 +10,17 @@ The fault-tolerance requirements determine the necessary number of servers and d
 
 A {{ ydb-short-name }} server can only run on x86-64 processors with AVX2 instruction support: Intel Haswell (4th generation) and later, AMD EPYC and later.
 
-The ARM architecture is currently not supported.
+The ARM architecture is currently not supported for production {{ ydb-short-name }} server deployments. For local development on Apple Silicon Macs, you can run {{ ydb-short-name }} in Docker with x86_64 instruction emulation (Rosetta); see the Docker tab in [{#T}](../../quickstart.md).
+
+{% note info %}
+
+CPU power-saving modes (C-states, P-states, and the cpufreq scaling governor) can increase latency due to delays when leaving idle states.
+
+For production workloads, use the **performance** cpufreq governor (and equivalent BIOS settings).
+
+See [{#T}](./cpu-production-settings.md) for details.
+
+{% endnote %}
 
 ### RAM
 

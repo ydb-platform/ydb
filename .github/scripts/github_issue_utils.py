@@ -6,6 +6,7 @@ Used by both the muted test analytics and issue management scripts.
 """
 
 import datetime as dt
+import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -229,6 +230,69 @@ def parse_body(body: str) -> ParsedIssueBody:
     return result
 
 
+def _decode_issues_json_column(val):
+    """YDB ``Json`` / UTF8 JSON / scan row → Python ``dict`` / ``list`` or ``None``."""
+    if val is None:
+        return None
+    if isinstance(val, (dict, list)):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def issue_label_names_lower(raw_labels) -> frozenset:
+    """Parse ``issues.labels`` JSON (export schema) → frozenset of lowercase label names."""
+    decoded = _decode_issues_json_column(raw_labels)
+    if not decoded:
+        return frozenset()
+    names = []
+    for item in decoded:
+        if isinstance(item, dict):
+            n = item.get('name')
+            if n:
+                names.append(str(n).strip().lower())
+    return frozenset(names)
+
+
+def build_github_issue_mapping_info_snapshot(issue_row: dict) -> dict:
+    """JSON payload for ``github_issue_mapping.info`` (assignees, labels, project fields, …)."""
+    assignees = _decode_issues_json_column(issue_row.get('assignees')) or []
+    labels = _decode_issues_json_column(issue_row.get('labels')) or []
+    milestone = _decode_issues_json_column(issue_row.get('milestone'))
+    project_fields = _decode_issues_json_column(issue_row.get('project_fields'))
+    raw_info = issue_row.get('info')
+    if isinstance(raw_info, str):
+        try:
+            info_extra = json.loads(raw_info) if raw_info.strip() else {}
+        except json.JSONDecodeError:
+            info_extra = {}
+    elif isinstance(raw_info, dict):
+        info_extra = raw_info
+    else:
+        info_extra = {}
+
+    out = {
+        'assignees': assignees,
+        'labels': labels,
+        'issue_type': issue_row.get('issue_type'),
+        'author_login': issue_row.get('author_login'),
+        'repository_name': issue_row.get('repository_name'),
+        'project_status': issue_row.get('project_status'),
+        'project_owner': issue_row.get('project_owner'),
+        'project_priority': issue_row.get('project_priority'),
+        'info': info_extra,
+    }
+    if milestone is not None:
+        out['milestone'] = milestone
+    if project_fields is not None:
+        out['project_fields'] = project_fields
+    return out
+
+
 def make_profile_id(branch: str, build_type: str) -> str:
     """Canonical profile_id used by digest_queue and notification config.
 
@@ -243,7 +307,7 @@ def create_test_issue_mapping(issues_data):
     """Create a mapping from test names to GitHub issue information
 
     Args:
-        issues_data (list): List of issue dictionaries with 'body', 'url', 'title', 'issue_number' fields
+        issues_data (list): Rows from YDB ``issues`` (or compatible dicts with body, url, labels, …).
 
     Returns:
         dict: Mapping from test name to list of issue information
@@ -259,6 +323,7 @@ def create_test_issue_mapping(issues_data):
 
         try:
             parsed = parse_body(body)
+            snapshot = build_github_issue_mapping_info_snapshot(issue)
 
             for test in parsed.tests:
                 if test not in test_to_issue:
@@ -268,9 +333,11 @@ def create_test_issue_mapping(issues_data):
                     'title': issue.get('title', ''),
                     'issue_number': issue.get('issue_number', 0),
                     'state': issue.get('state', ''),
+                    'state_reason': issue.get('state_reason'),
                     'created_at': issue.get('created_at', 0),
                     'branches': parsed.branches,
                     'build_type': parsed.build_type,
+                    'mapping_info': snapshot,
                 })
         except Exception as e:
             print(f"Warning: Could not parse issue body for issue {url}: {e}")

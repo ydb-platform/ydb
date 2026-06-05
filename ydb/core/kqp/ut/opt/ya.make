@@ -21,6 +21,7 @@ SRCS(
     kqp_sqlin_ut.cpp
     kqp_union_ut.cpp
     kqp_peephole_ut.cpp
+    kqp_partitions_by_keys_sort_ut.cpp
     kqp_constant_folding_ut.cpp
 )
 

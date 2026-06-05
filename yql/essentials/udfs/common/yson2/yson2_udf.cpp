@@ -791,6 +791,16 @@ SIMPLE_STRICT_UDF(TIsString, bool(TAutoMap<TNodeResource>)) {
     return IsTypeImpl<ENodeType::String>(*args);
 }
 
+SIMPLE_UDF_OPTIONS(TIsUtf8, bool(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2026, 1));) {
+    Y_UNUSED(valueBuilder);
+    auto x = *args;
+    if (IsNodeType<ENodeType::Attr>(x)) {
+        x = x.GetVariantItem().Release();
+    }
+
+    return TUnboxedValuePod(IsUtf8Node(x));
+}
+
 SIMPLE_STRICT_UDF(TIsInt64, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Int64>(*args);
@@ -942,6 +952,12 @@ public:
         return Name;
     }
 
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([[[];{type=[CallableType;[];[[ResourceType;Yson2.Node]];[[[UniversalType]]]]}]])");
+        return Config;
+    }
+
     TFrom(TSourcePosition pos, const ITypeInfoHelper::TPtr typeHelper, const TType* shape)
         : TBase(pos, typeHelper, shape)
     {
@@ -1018,6 +1034,12 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("ConvertTo");
         return Name;
+    }
+
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([[[];{type=[CallableType;[1u];[[UniversalType]];[[[ResourceType;Yson2.Node];1u];[[OptionalType;[ResourceType;Yson2.Options]]]]]}]])");
+        return Config;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -1097,6 +1119,8 @@ public:
     }
 
     static const TStringRef& Name();
+
+    static const TStringRef& BuildPolyArgs();
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
         if (Name() == name) {
@@ -1212,6 +1236,45 @@ template <>
 const TStringRef& TParse<TJson, true>::Name() {
     static auto Name = TStringRef::Of("ParseJsonDecodeUtf8");
     return Name;
+}
+
+template <>
+const TStringRef& TParse<TYson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Yson]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Yson]]}
+         ]};{args=[[DataType;Yson]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, false>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
+}
+
+template <>
+const TStringRef& TParse<TJson, true>::BuildPolyArgs() {
+    static auto Config = TStringRef::Of(R"([
+        [{cmd=or;value=[
+            {cmd=kind;arg=T0;value=Resource};
+            {cmd=type;arg=T0;value=[DataType;Json]};
+            {cmd=type;arg=T0;value=[OptionalType;[DataType;Json]]}
+         ]};{args=[[DataType;Json]]}];
+        [[];{args=[[DataType;String]]}]
+    ])");
+    return Config;
 }
 
 class TIterate: public TBoxedValue {
@@ -1555,66 +1618,12 @@ private:
     const TFields Fields_;
 };
 
-template <ENodeType NodeType, bool IsStrict>
-TUnboxedValuePod AsScalar(TUnboxedValuePod value, TStringBuf name) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<NodeType>(value)) {
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsList(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<ENodeType::List>(value)) {
-        if (!value.IsBoxed()) {
-            return valueBuilder->NewEmptyList().Release();
-        }
-
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected list, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
-template <bool IsStrict>
-TUnboxedValuePod AsDict(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
-    if (IsNodeType<ENodeType::Attr>(value)) {
-        value = value.GetVariantItem().Release();
-    }
-
-    if (IsNodeType<ENodeType::Dict>(value)) {
-        if (!value.IsBoxed()) {
-            // it implements empty dict protocol too
-            return valueBuilder->NewEmptyList().Release();
-        }
-
-        return value;
-    } else if constexpr (IsStrict) {
-        throw yexception() << "Expected dict, but got: " << TDebugPrinter(value);
-    } else {
-        return {};
-    }
-}
-
 SIMPLE_UDF_OPTIONS(TAsBool, bool(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Bool, true>(args[0], "boolean");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsBool, TOptional<bool>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsBool, TOptional<bool>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Bool, false>(args[0], "boolean");
 }
@@ -1624,7 +1633,7 @@ SIMPLE_UDF_OPTIONS(TAsInt64, i64(TAutoMap<TNodeResource>), builder.SetMinLangVer
     return AsScalar<ENodeType::Int64, true>(args[0], "int64");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsInt64, TOptional<i64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsInt64, TOptional<i64>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Int64, false>(args[0], "int64");
 }
@@ -1634,7 +1643,7 @@ SIMPLE_UDF_OPTIONS(TAsUint64, ui64(TAutoMap<TNodeResource>), builder.SetMinLangV
     return AsScalar<ENodeType::Uint64, true>(args[0], "uint64");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsUint64, TOptional<ui64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsUint64, TOptional<ui64>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Uint64, false>(args[0], "uint64");
 }
@@ -1644,26 +1653,36 @@ SIMPLE_UDF_OPTIONS(TAsDouble, double(TAutoMap<TNodeResource>), builder.SetMinLan
     return AsScalar<ENodeType::Double, true>(args[0], "double");
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsDouble, TOptional<double>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDouble, TOptional<double>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
     return AsScalar<ENodeType::Double, false>(args[0], "double");
 }
 
 SIMPLE_UDF_OPTIONS(TAsString, char*(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    return AsScalar<ENodeType::String, true>(args[0], "string");
+    return AsString<true>(args[0]);
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsString, TOptional<char*>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsString, TOptional<char*>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     Y_UNUSED(valueBuilder);
-    return AsScalar<ENodeType::String, false>(args[0], "string");
+    return AsString<false>(args[0]);
+}
+
+SIMPLE_UDF_OPTIONS(TAsUtf8, TUtf8(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2026, 1));) {
+    Y_UNUSED(valueBuilder);
+    return AsUtf8<true>(args[0]);
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsUtf8, TOptional<TUtf8>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2026, 1));) {
+    Y_UNUSED(valueBuilder);
+    return AsUtf8<false>(args[0]);
 }
 
 SIMPLE_UDF_OPTIONS(TAsList, TListType<TNodeResource>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     return AsList<true>(args[0], valueBuilder);
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     return AsList<false>(args[0], valueBuilder);
 }
 
@@ -1671,7 +1690,7 @@ SIMPLE_UDF_OPTIONS(TAsDict, TDictType(TAutoMap<TNodeResource>), builder.SetMinLa
     return AsDict<true>(args[0], valueBuilder);
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TTryAsDict, TOptional<TDictType>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDict, TOptional<TDictType>(TAutoMap<TNodeResource>), builder.IsStrict().SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
     return AsDict<false>(args[0], valueBuilder);
 }
 
@@ -2210,6 +2229,7 @@ SIMPLE_MODULE(TYson2Module,
               TSerializeJson,
               TWithAttributes,
               TIsString,
+              TIsUtf8,
               TIsInt64,
               TIsUint64,
               TIsBool,
@@ -2232,6 +2252,8 @@ SIMPLE_MODULE(TYson2Module,
               TTryAsDouble,
               TAsString,
               TTryAsString,
+              TAsUtf8,
+              TTryAsUtf8,
               TAsList,
               TTryAsList,
               TAsDict,

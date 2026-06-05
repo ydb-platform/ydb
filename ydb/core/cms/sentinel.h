@@ -3,6 +3,9 @@
 #include "defs.h"
 #include "cms_state.h"
 
+#include <util/generic/hash_set.h>
+#include <util/generic/vector.h>
+
 namespace NKikimr::NCms {
 
 struct TEvSentinel {

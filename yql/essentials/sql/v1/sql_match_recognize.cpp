@@ -12,8 +12,8 @@ TSqlMatchRecognizeClause::TSqlMatchRecognizeClause(class TSqlTranslation& that)
 {
 }
 
-TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause& matchRecognizeClause) {
-    auto pos = GetPos(matchRecognizeClause.GetToken1());
+TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause& node) {
+    auto pos = GetPos(node.GetToken1());
     if (!Ctx_.FeatureR010) {
         Ctx_.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";
         return {};
@@ -21,33 +21,33 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
 
     auto [partitionKeySelector, partitionColumns] = ParsePartitionBy(
         pos,
-        matchRecognizeClause.HasBlock3()
-            ? std::addressof(matchRecognizeClause.GetBlock3().GetRule_window_partition_clause1())
+        node.HasBlock3()
+            ? std::addressof(node.GetBlock3().GetRule_window_partition_clause1())
             : nullptr);
 
     auto sortSpecs = ParseOrderBy(
-        matchRecognizeClause.HasBlock4()
-            ? std::addressof(matchRecognizeClause.GetBlock4().GetRule_order_by_clause1())
+        node.HasBlock4()
+            ? std::addressof(node.GetBlock4().GetRule_order_by_clause1())
             : nullptr);
     if (!sortSpecs) {
         return {};
     }
 
     auto measures = ParseMeasures(
-        matchRecognizeClause.HasBlock5()
-            ? std::addressof(matchRecognizeClause.GetBlock5().GetRule_row_pattern_measures1().GetRule_row_pattern_measure_list2())
+        node.HasBlock5()
+            ? std::addressof(node.GetBlock5().GetRule_row_pattern_measures1().GetRule_row_pattern_measure_list2())
             : nullptr);
 
     auto rowsPerMatch = ParseRowsPerMatch(
         pos,
-        matchRecognizeClause.HasBlock6()
-            ? std::addressof(matchRecognizeClause.GetBlock6().GetRule_row_pattern_rows_per_match1())
+        node.HasBlock6()
+            ? std::addressof(node.GetBlock6().GetRule_row_pattern_rows_per_match1())
             : nullptr);
     if (!rowsPerMatch) {
         return {};
     }
 
-    const auto& commonSyntax = matchRecognizeClause.GetRule_row_pattern_common_syntax7();
+    const auto& commonSyntax = node.GetRule_row_pattern_common_syntax7();
 
     if (commonSyntax.HasBlock2()) {
         const auto& initialOrSeek = commonSyntax.GetBlock2().GetRule_row_pattern_initial_or_seek1();

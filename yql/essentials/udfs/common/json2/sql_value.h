@@ -33,7 +33,7 @@ template <>
 TUnboxedValue TryConvertJson<TUtf8>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
     Y_UNUSED(valueBuilder);
     if (IsNodeType(source, ENodeType::String)) {
-        return source;
+        return ClearUtf8Mark(source);
     }
     return {};
 }
@@ -42,7 +42,7 @@ template <>
 TUnboxedValue TryConvertJson<TUtf8, true>(const IValueBuilder* valueBuilder, const TUnboxedValue& source) {
     switch (GetNodeType(source)) {
         case ENodeType::String:
-            return source;
+            return ClearUtf8Mark(source);
         case ENodeType::Uint64:
             return valueBuilder->NewString(ToString(source.Get<ui64>())).Release();
         case ENodeType::Int64:

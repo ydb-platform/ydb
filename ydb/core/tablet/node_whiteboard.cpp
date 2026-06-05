@@ -80,7 +80,7 @@ protected:
     std::unordered_map<std::pair<TTabletId, TFollowerId>, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo;
     std::unordered_map<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
-    std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo;
+    std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
 
     i64 MaxClockSkewWithPeerUs = 0;

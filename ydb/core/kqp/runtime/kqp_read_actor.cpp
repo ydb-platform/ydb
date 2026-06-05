@@ -79,7 +79,7 @@ public:
         size_t RetryAttempt = 0;
         size_t SuccessBatches = 0;
 
-        TMaybe<ui32> NodeId = {};
+        TMaybe<ui32> NodeId;
         bool IsFirst = false;
         bool IsFake = false;
 
@@ -752,26 +752,31 @@ public:
         return state->RetryAttempt + 1 > MaxShardRetries();
     }
 
-    void RetryRead(ui64 id, bool allowInstantRetry = true) {
+    void RetryRead(ui64 id, bool allowInstantRetry = true, std::optional<TDuration> throttleDelay = std::nullopt) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 
-        auto state = Reads[id].Shard;
+        auto* state = Reads[id].Shard;
 
-        if (CheckTotalRetriesExeeded()) {
-            return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
-                NDqProto::StatusIds::UNAVAILABLE);
+        TDuration delay;
+        if (!throttleDelay) {
+            if (CheckTotalRetriesExeeded()) {
+                return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
+                    NDqProto::StatusIds::UNAVAILABLE);
+            }
+            ++TotalRetries;
+
+            if (CheckShardRetriesExeeded(id)) {
+                ResetRead(id);
+                return ResolveShard(state);
+            }
+            ++state->RetryAttempt;
+            delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
-        ++TotalRetries;
 
-        if (CheckShardRetriesExeeded(id)) {
-            ResetRead(id);
-            return ResolveShard(state);
-        }
-        ++state->RetryAttempt;
-
-        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }
@@ -890,6 +895,11 @@ public:
 
         if (Settings->HasVectorTopK()) {
             *record.MutableVectorTopK() = Settings->GetVectorTopK();
+        }
+
+        if (Settings->HasPoolId()) {
+            record.SetDatabaseId(Settings->GetDatabase());
+            record.SetPoolId(Settings->GetPoolId());
         }
 
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
@@ -1024,12 +1034,15 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!throttleDelay && (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id))) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
                 }
-                return RetryRead(id, false);
+                return RetryRead(id, false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
                 if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {

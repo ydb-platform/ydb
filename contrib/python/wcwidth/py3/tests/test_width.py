@@ -1,10 +1,11 @@
 """Tests for width() function."""
+
 # 3rd party
 import pytest
 
 # local
 import wcwidth
-from wcwidth.escape_sequences import ZERO_WIDTH_PATTERN
+from wcwidth.escape_sequences import ZERO_WIDTH_PATTERN, INDETERMINATE_EFFECT_SEQUENCE
 
 BASIC_WIDTH_CASES = [
     ('', 0, 'empty'),
@@ -29,7 +30,7 @@ IGNORE_MODE_CASES = [
     ('\x1b[31mred\x1b[0m', 3, 'SGR_sequence'),
     ('hello\x80world', 10, 'C1_control'),
     ('\x1b', 0, 'lone_ESC'),
-    ('a\x1bb', 2, 'lone_ESC_between'),
+    ('a\x1bb', 1, 'fs_sequence_between'),
 ]
 
 
@@ -45,8 +46,10 @@ STRICT_RAISES_CASES = [
     ('hello\x7fworld', 'DEL'),
     ('hello\x80world', 'C1_control'),
     ('hello\nworld', 'LF'),
+    ('hello\rworld', 'CR'),
     ('hello\x1b[Hworld', 'cursor_home'),
     ('hello\x1b[Aworld', 'cursor_up'),
+    ('hello\x1b[5Gworld', 'hpa'),
 ]
 
 
@@ -61,11 +64,11 @@ STRICT_ALLOWED_CASES = [
     ('hello\x07world', 10, 'BEL'),
     ('hello\x00world', 10, 'NUL'),
     ('abc\bd', 3, 'backspace'),
-    ('abc\rxy', 3, 'CR'),
     ('\x1b[31mred\x1b[0m', 3, 'SGR_sequence'),
     ('a\x1b[2Cb', 4, 'cursor_right'),
+    ('ab\x1b[Db', 2, 'cursor_left'),
     ('\x1b', 0, 'lone_ESC'),
-    ('a\x1bb', 2, 'lone_ESC_between'),
+    ('a\x1bb', 1, 'fs_sequence_between'),
     ('\x1b!', 1, 'ESC_unrecognized'),
 ]
 
@@ -88,6 +91,7 @@ STRICT_INDETERMINATE_SEQUENCES = [
     ('\x1b[1X', 'erase_chars'),
     ('\x1b[1S', 'parm_index'),
     ('\x1b[1T', 'parm_rindex'),
+    ('\x1bc', 'full_reset'),
 ]
 
 
@@ -106,6 +110,11 @@ PARSE_MODE_CASES = [
     ('abcd\x1b[2De', 4, 'cursor_left'),
     ('\x1b[31mred\x1b[0m', 3, 'SGR'),
     ('ab\x1b[Hcd', 4, 'indeterminate'),
+    ('def\x1b[3Dabc', 3, 'cursor_left_overwrite'),
+    ('def\x1b[10Dabc', 3, 'cursor_left_past_start'),
+    ('abc\x1b[5Gde', 6, 'hpa_parse'),
+    ('abc\x1b[Gde', 3, 'hpa_no_param'),
+    ('\x1b[5Gabc', 7, 'hpa_before_text'),
 ]
 
 
@@ -190,29 +199,26 @@ def test_vs16_selector():
 
 
 def test_zwj_with_non_emoji_chars():
-    """ZWJ with non-emoji characters and trailing VS16."""
-    # ZWJ (Zero Width Joiner) skips both itself and the following character, treating them as a
-    # failed emoji ZWJ sequence. When followed by VS16, the VS16 should NOT apply to the earlier
-    # emoji because VS16 must immediately follow the character it modifies.
-    #
-    # In the full parse loop, VS16 checks `last_measured_idx == idx - 1` (immediate adjacency).
-    # The ZWJ+char skip means VS16 is not adjacent to the smiley, so VS16 has no effect.
-    #
+    """
+    ZWJ with non-emoji characters and trailing VS16.
+
+    These are invalid Unicode sequences (ZWJ followed by non-emoji), so behavior is implementation-
+    defined.  The emoji base (smiley, width 1) is narrow, and VS16 looks back to it across the ZWJ-
+    consumed characters, adding 1 cell for a total width of 2.
+    """
     # Control test,
     assert wcwidth.width("\u263A\uFE0F") == 2  # smiley + VS16 = 2
 
-    # ZWJ followed by non-emoji, VS16 does not apply (not adjacent)
-    assert wcwidth.width("\u263A\u200Da\uFE0F") == 1
-    assert wcwidth.width("\u263A\u200Dx\uFE0F") == 1
-    assert wcwidth.width("\u263A\u200Da\u200Db\uFE0F") == 1
+    # ZWJ followed by non-emoji: VS16 applies to the smiley base
+    assert wcwidth.width("\u263A\u200Da\uFE0F") == 2
+    assert wcwidth.width("\u263A\u200Dx\uFE0F") == 2
+    assert wcwidth.width("\u263A\u200Da\u200Db\uFE0F") == 2
 
     # ZWJ at end of string
     assert wcwidth.width("\u263A\u200D") == 1  # smiley + ZWJ = 1
 
     # Long strings (>20 chars) use fast path which routes to wcswidth().
-    # wcswidth() has more lenient VS16 handling, causing VS16 to incorrectly apply (!)
-    # Multiply by 10 to exceed threshold: "\u263A\u200Da\uFE0F" (4 chars) * 10 = 40 chars
-    assert wcwidth.width("\u263A\u200Da\uFE0F" * 10) == 20  # (smiley(1) + ZWJ+a(0) + VS16(+1)) * 10 (!)
+    assert wcwidth.width("\u263A\u200Da\uFE0F" * 10) == 20
 
 
 def test_vs16_after_control_chars():
@@ -228,10 +234,9 @@ def test_vs16_after_control_chars():
     assert wcwidth.width("\u263A\x0d\uFE0F") == 1  # smiley(1) + CR(reset) + VS16(0), extent=1
 
     # Long strings (>20 chars) use fast path which routes to wcswidth().
-    # wcswidth() has more lenient VS16 handling (`last_measured_idx >= 0` vs `== idx - 1`),
-    # causing VS16 to incorrectly apply when separated by control chars (!)
+    # In ignore mode, BEL is stripped, so VS16 is adjacent to the smiley and applies correctly.
     # Multiply by 10 to exceed threshold
-    assert wcwidth.width(("\u263A\x07\uFE0F") * 10) == 20  # (smiley(1) + BEL(0) + VS16(+1)) * 10 (!)
+    assert wcwidth.width(("\u263A\x07\uFE0F") * 10) == 20  # (smiley(1) + BEL-stripped(0) + VS16(+1)) * 10
 
 
 def test_width_long_horizontal_fastpath():
@@ -264,6 +269,42 @@ def test_carriage_return_resets_column():
     """CR resets column, max extent is preserved."""
     assert wcwidth.width('abc\rd') == 3
     assert wcwidth.width('abc\rde') == 3
+
+
+def test_carriage_return_strict_raises():
+    """CR in strict mode raises ValueError (indeterminate starting column)."""
+    with pytest.raises(ValueError, match='Horizontal movement'):
+        wcwidth.width('hello\rworld', control_codes='strict')
+
+
+def test_hpa_parse_best_effort():
+    """HPA in parse mode assumes string begins at column 0."""
+    assert wcwidth.width('abc\x1b[5Gde') == 6
+    assert wcwidth.width('abc\x1b[Gde') == 3
+    assert wcwidth.width('\x1b[10Ghi') == 11
+
+
+def test_hpa_strict_raises():
+    """HPA in strict mode raises ValueError (indeterminate starting column)."""
+    with pytest.raises(ValueError, match='horizontal position'):
+        wcwidth.width('abc\x1b[5Gde', control_codes='strict')
+
+
+def test_cursor_left_strict_out_of_bounds():
+    """Cursor-left beyond string start raises ValueError in strict mode."""
+    with pytest.raises(ValueError, match='Cursor left movement'):
+        wcwidth.width('a\x1b[5Da', control_codes='strict')
+
+
+def test_cursor_left_out_of_bounds_parse_no_raise():
+    """Cursor-left beyond string start is silently clamped in parse mode."""
+    assert wcwidth.width('a\x1b[5Da') == 1
+    assert wcwidth.width('abc\x1b[99Ddef') == 3  # 99D clamped to col 0, then b,c,d overwritten
+
+
+def test_cursor_left_out_of_bounds_ignore_mode():
+    """Cursor-left beyond string start is zero-width in ignore mode."""
+    assert wcwidth.width('a\x1b[5Da', control_codes='ignore') == 2
 
 
 def test_iter_sequences_lone_esc():
@@ -449,3 +490,88 @@ def test_fitzpatrick_modifier_standalone_width():
     """Standalone Fitzpatrick modifier, however, is wide character in width()."""
     result = wcwidth.width('\U0001F3FB')
     assert result == 2
+
+
+FS_SEQUENCE_CASES = [
+    ('\x1bc', 'ris'),
+    ('\x1bl', 'memory_lock'),
+    ('\x1bm', 'memory_unlock'),
+    ('\x1bn', 'ls2'),
+    ('\x1bo', 'ls3'),
+    ('\x1b|', 'ls3r'),
+    ('\x1b}', 'ls2r'),
+    ('\x1b~', 'ls1r'),
+]
+
+
+@pytest.mark.parametrize('seq,name', FS_SEQUENCE_CASES)
+def test_fs_sequences_matched(seq, name):
+    """Fs (independent function) sequences are matched as zero-width."""
+    segments = list(wcwidth.iter_sequences(seq))
+    assert segments == [(seq, True)]
+    assert wcwidth.width(seq) == 0
+
+
+FP_SEQUENCE_CASES = [
+    ('\x1b7', 'decsc'),
+    ('\x1b8', 'decrc'),
+    ('\x1b=', 'deckpam'),
+    ('\x1b>', 'deckpnm'),
+    ('\x1b0', 'fp_0'),
+    ('\x1b1', 'fp_1'),
+    ('\x1b9', 'fp_9'),
+]
+
+
+@pytest.mark.parametrize('seq,name', FP_SEQUENCE_CASES)
+def test_fp_sequences_matched(seq, name):
+    """Fp (private use) sequences are matched as zero-width."""
+    segments = list(wcwidth.iter_sequences(seq))
+    assert segments == [(seq, True)]
+    assert wcwidth.width(seq) == 0
+
+
+NF_SEQUENCE_CASES = [
+    ('\x1b F', 's7c1t'),
+    ('\x1b G', 's8c1t'),
+    ('\x1b#3', 'decdhl_top'),
+    ('\x1b#4', 'decdhl_bottom'),
+    ('\x1b#5', 'decswl'),
+    ('\x1b#6', 'decdwl'),
+    ('\x1b#8', 'decaln'),
+    ('\x1b%G', 'utf8_designate'),
+    ('\x1b%@', 'iso2022_return'),
+]
+
+
+@pytest.mark.parametrize('seq,name', NF_SEQUENCE_CASES)
+def test_nf_sequences_matched(seq, name):
+    """NF (multi-byte) escape sequences are matched as zero-width."""
+    segments = list(wcwidth.iter_sequences(seq))
+    assert segments == [(seq, True)]
+    assert wcwidth.width(seq) == 0
+
+
+def test_fs_sequence_embedded_in_text():
+    """Fs sequence surrounded by text is correctly segmented."""
+    segments = list(wcwidth.iter_sequences('abc\x1bcdef'))
+    assert segments == [('abc', False), ('\x1bc', True), ('def', False)]
+    assert wcwidth.width('abc\x1bcdef') == 6
+
+
+def test_nf_sequence_embedded_in_text():
+    """NF sequence surrounded by text is correctly segmented."""
+    segments = list(wcwidth.iter_sequences('abc\x1b#8def'))
+    assert segments == [('abc', False), ('\x1b#8', True), ('def', False)]
+    assert wcwidth.width('abc\x1b#8def') == 6
+
+
+def test_screen_title_sequences():
+    """Screen/tmux title sequence ESC k hello ST."""
+    segments = list(wcwidth.iter_sequences('\x1bkhello\x1b\\'))
+    assert segments[0] == ('\x1bk', True)
+
+
+def test_ris_indeterminate():
+    """RIS (ESC c) is flagged as indeterminate effect."""
+    assert INDETERMINATE_EFFECT_SEQUENCE.match('\x1bc')

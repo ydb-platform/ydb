@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 /* custom error: Range frame for multiple expressions is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW. */
 $data = [

@@ -1,7 +1,7 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
-/* custom error: Error while processing RANGE bound: Expected data or optional, but got EmptyList */
+/* custom error: Error while processing RANGE bound */
+/* custom error: Expected data or optional, but got EmptyList */
 $data = [
     <|a: 1, count: 1|>,
     <|a: 2, count: 1|>,

@@ -41,16 +41,35 @@ public:
                 }
                 tablet->LastNodeId = 0;
             }
+
+            tablet->AddRestartTimestamp(TActivationContext::Now());
+
             // increase generation
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 BootingSuppressed = leader.IsBootingSuppressed();
+
+                if (BootingSuppressed && External && leader.ChannelProfileNewGroup.any()) {
+                    if (leader.State != ETabletState::GroupAssignment) {
+                        leader.InitiateAssignTabletGroups();
+                    }
+                    SideEffects.Send(Local,
+                        new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER),
+                        0,
+                        Cookie);
+                    return true;
+                }
+
                 if (leader.IsStarting() || BootingSuppressed && External) {
                     leader.IncreaseGeneration();
                     db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute Tablet " << leader.ToString() << " (" << leader.StateString() << ") skipped generation increment " << (ui64)leader.State);
                 }
+
+                db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::Statistics>(leader.Statistics);
+            } else {
+                db.Table<Schema::TabletFollowerTablet>().Key(TabletId.first, TabletId.second).Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
             }
             // reset usage impact estimate on each tablet restart
             tablet->UsageImpact = 0;

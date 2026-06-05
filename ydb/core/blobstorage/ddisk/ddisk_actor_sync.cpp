@@ -113,10 +113,12 @@ namespace NKikimr::NDDisk {
         }
 
         const ui64 syncId = NextSyncId++;
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("sync_id", static_cast<long>(syncId)));
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
+            .Attribute("tablet_id", static_cast<i64>(creds.TabletId))
+            .Attribute("sync_id", static_cast<i64>(syncId));
 
         syncIt = SyncsInFlight.emplace(syncId, TSyncInFlight{
             .Sender=ev->Sender,
@@ -132,7 +134,10 @@ namespace NKikimr::NDDisk {
         sync.Span = std::move(span);
 
         const auto& ddiskId = record.GetDDiskId();
-        const TQueryCredentials sourceCreds(creds.TabletId, creds.Generation, record.GetDDiskInstanceGuid(), true);
+        const TQueryCredentials sourceCreds = TQueryCredentials::ForInternal(
+            creds.TabletId,
+            creds.Generation,
+            std::make_optional(record.GetDDiskInstanceGuid()));
         const TActorId sourceDDiskId = TPolicy::MakeSourceActorId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
         std::optional<ui64> vChunkIndex;
 
@@ -194,6 +199,7 @@ namespace NKikimr::NDDisk {
                 }
             }
 
+            Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
             Send(sourceDDiskId,
                 TPolicy::MakeReadQuery(sourceCreds, selector, segment),
                 IEventHandle::FlagTrackDelivery,
@@ -221,6 +227,9 @@ namespace NKikimr::NDDisk {
         ui64 syncId = SegmentManager.GetSync(ev->Cookie);
 
         if (syncId == Max<ui64>()) {
+            if (SyncReadCookiesInFlight.erase(ev->Cookie)) {
+                return;
+            }
             STLOG(PRI_ERROR, BS_DDISK, BSDD24,
                 "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
                 (DDiskId, DDiskId),
@@ -230,11 +239,13 @@ namespace NKikimr::NDDisk {
 
         auto it = SyncsInFlight.find(syncId);
         if (it == SyncsInFlight.end()) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             return;
         }
         auto& sync = it->second;
 
         if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             STLOG(PRI_ERROR, BS_DDISK, BSDD25,
                 "TDDiskActor::InternalSyncReadResult request cookie out of range",
                 (DDiskId, DDiskId),
@@ -247,11 +258,13 @@ namespace NKikimr::NDDisk {
         auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
 
         if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             return;
         }
 
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
             request.Status = record.GetStatus();
             request.ErrorReason << "[" << request.Selector.OffsetInBytes << ';'
                 << request.Selector.OffsetInBytes + request.Selector.Size
@@ -281,6 +294,7 @@ namespace NKikimr::NDDisk {
 
         std::vector<TSegmentManager::TSegment> segments;
         SegmentManager.PopRequest(ev->Cookie, &segments);
+        SyncReadCookiesInFlight.erase(ev->Cookie);
         Y_VERIFY(segments.size());
 
         TRope data = ev->Get()->GetPayload(0);

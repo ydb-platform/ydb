@@ -2,17 +2,86 @@
 
 #include <ydb/core/util/stlog.h>
 
+#include <algorithm>
+
 namespace NKikimr::NDDisk {
 
-    TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::TChunkSpaceOccupation(TPersistentBufferSpaceAllocator::TChunksQueue& ownerChunksQueue, ui32 chunkIdx, ui32 first, ui32 last)
+    bool TPersistentBufferSpaceAllocator::ChunksByFreeSpaceLess(const TChunkInfo& a, const TChunkInfo& b) {
+        return a.FreeSpace < b.FreeSpace
+            || (a.FreeSpace == b.FreeSpace && a.ChunkIdx > b.ChunkIdx);
+    }
+
+    void TPersistentBufferSpaceAllocator::UpdateChunkInSortedQueue(ui32 chunkIdx, ui32 freeSpace, ui32 oldFreeSpace) {
+        // Search backwards:
+        //  * N is relatively small (at most 256 chunks per PB and TChunkInfo is just 8 bytes);
+        //  * in the Occupy() path this is O(1) since the chunk was just taken from back().
+        //  * in case of Free() might be any item, but for this size both linear and binary search
+        //  should be almost equal.
+
+        const auto isOccupy = freeSpace < oldFreeSpace;
+
+        TChunksByFreeSpace::iterator chunkIter;
+        if (isOccupy || ChunksByFreeSpace.size() < 64) {
+            auto rit = std::find_if(ChunksByFreeSpace.rbegin(), ChunksByFreeSpace.rend(),
+                [chunkIdx](const TChunkInfo& c) { return c.ChunkIdx == chunkIdx; });
+            Y_ABORT_UNLESS(rit != ChunksByFreeSpace.rend());
+            chunkIter = std::prev(rit.base());
+        } else {
+            // Binary search by the old key; {chunkIdx, oldFreeSpace} is unique in the vector.
+            chunkIter = std::lower_bound(ChunksByFreeSpace.begin(), ChunksByFreeSpace.end(),
+                TChunkInfo{chunkIdx, oldFreeSpace}, ChunksByFreeSpaceLess);
+            Y_ABORT_UNLESS(chunkIter != ChunksByFreeSpace.end()
+                && chunkIter->ChunkIdx == chunkIdx && chunkIter->FreeSpace == oldFreeSpace);
+        }
+
+        const TChunkInfo updatedInfo{chunkIdx, freeSpace};
+
+        const size_t pos = chunkIter - ChunksByFreeSpace.begin();
+        const bool okBefore = pos == 0
+            || ChunksByFreeSpaceLess(ChunksByFreeSpace[pos - 1], updatedInfo);
+        const bool okAfter = pos + 1 == ChunksByFreeSpace.size()
+            || ChunksByFreeSpaceLess(updatedInfo, ChunksByFreeSpace[pos + 1]);
+
+        if (okBefore && okAfter) {
+            *chunkIter = updatedInfo;
+            return;
+        }
+
+        if (!okBefore) {
+            // Free space decreased; chunk moves left.
+            auto newIt = std::upper_bound(ChunksByFreeSpace.begin(), chunkIter, updatedInfo, ChunksByFreeSpaceLess);
+            *chunkIter = updatedInfo;
+            if (newIt != chunkIter) {
+                std::rotate(newIt, chunkIter, chunkIter + 1);
+            }
+        } else {
+            // Free space increased; chunk moves right.
+            Y_ABORT_UNLESS(!okAfter);
+            auto newIt = std::upper_bound(chunkIter + 1, ChunksByFreeSpace.end(), updatedInfo, ChunksByFreeSpaceLess);
+            *chunkIter = updatedInfo;
+            if (newIt != chunkIter + 1) {
+                std::rotate(chunkIter, chunkIter + 1, newIt);
+            }
+        }
+    }
+
+    void TPersistentBufferSpaceAllocator::AddChunkToSortedQueue(ui32 chunkIdx, ui32 freeSpace) {
+        TChunkInfo info{chunkIdx, freeSpace};
+        if (ChunksByFreeSpace.empty() || freeSpace > ChunksByFreeSpace.back().FreeSpace) {
+            ChunksByFreeSpace.push_back(info);
+        } else {
+            auto insertIt = std::upper_bound(ChunksByFreeSpace.begin(), ChunksByFreeSpace.end(), info, ChunksByFreeSpaceLess);
+            ChunksByFreeSpace.insert(insertIt, info);
+        }
+    }
+
+    TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::TChunkSpaceOccupation(TPersistentBufferSpaceAllocator& owner, ui32 chunkIdx, ui32 first, ui32 last)
         : ChunkIdx(chunkIdx)
-        , OwnerChunksQueue(ownerChunksQueue) {
+        , Owner(owner) {
         Y_ABORT_UNLESS(last >= first);
         FreeSectors.insert({first, last});
         FreeSectorsPriorityQueue.insert({first, last});
         FreeSpace = last - first + 1;
-        OwnerChunksQueue.insert(GetRank());
-
     }
 
     std::vector<std::vector<std::tuple<ui32, ui32>>> TPersistentBufferSpaceAllocator::DescribeFreeSpace() {
@@ -55,8 +124,8 @@ namespace NKikimr::NDDisk {
 
     TString TPersistentBufferSpaceAllocator::ToString() const {
         TStringBuilder sb;
-        sb << "FreeSpace: " << FreeSpace << ", ChunksPriority: [";
-        for (auto s : ChunksPriorityQueue) {
+        sb << "FreeSpace: " << FreeSpace << ", ChunksByFreeSpace: [";
+        for (auto s : ChunksByFreeSpace) {
             sb << s.ChunkIdx << ":" << s.FreeSpace << " ";
         }
         sb << "], Chunks: [\n";
@@ -69,7 +138,8 @@ namespace NKikimr::NDDisk {
 
     void TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::Occupy(ui32 sectorsCount, std::vector<TPersistentBufferSectorInfo>& result) {
         Y_ABORT_UNLESS(sectorsCount > result.size());
-        OwnerChunksQueue.erase(GetRank());
+
+        auto oldFreeSpace = FreeSpace;
 
         auto process = [&](auto it) {
             TSpaceRange freeRange = *it;
@@ -98,12 +168,14 @@ namespace NKikimr::NDDisk {
                 process(FreeSectorsPriorityQueue.begin());
             }
         }
-        OwnerChunksQueue.insert(GetRank());
+        // Chunk was just taken from ChunksByFreeSpace.back(), so backward lookup is O(1).
+        Owner.UpdateChunkInSortedQueue(ChunkIdx, FreeSpace, oldFreeSpace);
     }
 
     void TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::Free(ui32 fromSectorIdx, ui32 toSectorIdx) {
         Y_ABORT_UNLESS(toSectorIdx >= fromSectorIdx);
-        OwnerChunksQueue.erase(GetRank());
+
+        auto oldFreeSpace = FreeSpace;
 
         auto [it, inserted] = FreeSectors.insert({fromSectorIdx, toSectorIdx});
         auto [_, inserted2] = FreeSectorsPriorityQueue.insert({fromSectorIdx, toSectorIdx});
@@ -133,12 +205,13 @@ namespace NKikimr::NDDisk {
                 replace({it->First, next->Last}, it, next);
             }
         }
-        OwnerChunksQueue.insert(GetRank());
+        Owner.UpdateChunkInSortedQueue(ChunkIdx, FreeSpace, oldFreeSpace);
     }
 
     TPersistentBufferSpaceAllocator::TPersistentBufferSpaceAllocator(ui32 sectorsInChunk)
-        : SectorsInChunk(sectorsInChunk)
-    {}
+        : SectorsInChunk(sectorsInChunk) {
+        ChunksByFreeSpace.reserve(64);
+    }
 
     std::vector<TPersistentBufferSectorInfo> TPersistentBufferSpaceAllocator::Occupy(ui32 sectorsCount) {
         std::vector<TPersistentBufferSectorInfo> result;
@@ -147,8 +220,8 @@ namespace NKikimr::NDDisk {
             return result;
         }
         while (result.size() != sectorsCount) {
-            Y_ABORT_UNLESS(!ChunksPriorityQueue.empty());
-            ui32 chunkIdx = ChunksPriorityQueue.begin()->ChunkIdx;
+            Y_ABORT_UNLESS(!ChunksByFreeSpace.empty());
+            ui32 chunkIdx = ChunksByFreeSpace.back().ChunkIdx;
             auto it = FreeSpaceMap.find(chunkIdx);
             Y_ABORT_UNLESS(it != FreeSpaceMap.end());
             it->second.Occupy(sectorsCount, result);
@@ -159,10 +232,9 @@ namespace NKikimr::NDDisk {
         return result;
     }
 
-
     void TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::MarkOccupied(ui32 fromSectorIdx, ui32 toSectorIdx) {
-        OwnerChunksQueue.erase(GetRank());
         Y_ABORT_UNLESS(FreeSpace >= toSectorIdx - fromSectorIdx + 1);
+        auto oldFreeSpace = FreeSpace;
         FreeSpace -= toSectorIdx - fromSectorIdx + 1;
         TSpaceRange searchSpace{fromSectorIdx, toSectorIdx};
         auto it = FreeSectors.lower_bound(searchSpace);
@@ -186,7 +258,7 @@ namespace NKikimr::NDDisk {
             auto [_, inserted2] = FreeSectorsPriorityQueue.insert(*it2);
             Y_ABORT_UNLESS(inserted2);
         }
-        OwnerChunksQueue.insert(GetRank());
+        Owner.UpdateChunkInSortedQueue(ChunkIdx, FreeSpace, oldFreeSpace);
     }
 
     void TPersistentBufferSpaceAllocator::Free(const std::vector<TPersistentBufferSectorInfo>& locations) {
@@ -205,8 +277,12 @@ namespace NKikimr::NDDisk {
     }
 
     void TPersistentBufferSpaceAllocator::AddNewChunk(ui32 chunkIdx) {
-        auto [it, inserted] = FreeSpaceMap.insert({chunkIdx, TChunkSpaceOccupation{ChunksPriorityQueue, chunkIdx, 0, SectorsInChunk - 1}});
+        auto [it, inserted] = FreeSpaceMap.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(chunkIdx),
+            std::forward_as_tuple(*this, chunkIdx, 0, SectorsInChunk - 1));
         Y_ABORT_UNLESS(inserted);
+        AddChunkToSortedQueue(chunkIdx, SectorsInChunk);
         OwnedChunks.push_back(chunkIdx);
         FreeSpace += SectorsInChunk;
         Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());

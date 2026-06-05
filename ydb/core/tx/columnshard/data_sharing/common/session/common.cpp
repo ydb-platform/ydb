@@ -24,11 +24,10 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
     for (auto&& i : GetPathIdsForStart()) {
         const auto& g = index.GetGranuleVerified(i);
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
-            if (shard.GetDataLocksManager()->IsLocked(
-                    *p.second, NDataLocks::ELockCategory::Sharing, { "sharing_session:" + GetSessionId() })) {
+            if (shard.GetDataLocksManager()->IsLocked(*p.second, NDataLocks::ELockCategory::Sharing, { "sharing_session:" + GetSessionId() })) {
                 return TConclusionStatus::Fail("failed to start cursor: portion is locked");
             }
-//            portionsByPath[i].emplace_back(p.second);
+            //            portionsByPath[i].emplace_back(p.second);
         }
     }
 
@@ -61,4 +60,4 @@ void TCommonSession::Finish(const NColumnShard::TColumnShard& shard, const std::
     LockGuard->Release(*dataLocksManager);
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

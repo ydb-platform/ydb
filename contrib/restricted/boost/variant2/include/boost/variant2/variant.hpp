@@ -1,12 +1,9 @@
 #ifndef BOOST_VARIANT2_VARIANT_HPP_INCLUDED
 #define BOOST_VARIANT2_VARIANT_HPP_INCLUDED
 
-// Copyright 2017-2019 Peter Dimov.
-//
+// Copyright 2017-2026 Peter Dimov.
 // Distributed under the Boost Software License, Version 1.0.
-//
-// See accompanying file LICENSE_1_0.txt or copy at
-// http://www.boost.org/LICENSE_1_0.txt
+// https://www.boost.org/LICENSE_1_0.txt
 
 #if defined(_MSC_VER) && _MSC_VER < 1910
 # pragma warning( push )
@@ -93,7 +90,7 @@ struct monostate
 {
 };
 
-#if !BOOST_WORKAROUND(BOOST_MSVC, < 1950)
+#if !BOOST_WORKAROUND(BOOST_MSVC, < 1960)
 
 constexpr bool operator<(monostate, monostate) noexcept { return false; }
 constexpr bool operator>(monostate, monostate) noexcept { return false; }
@@ -324,11 +321,40 @@ constexpr std::size_t variant_npos = ~static_cast<std::size_t>( 0 );
 
 // holds_alternative
 
+#if !defined(BOOST_MP11_HAS_CXX14_CONSTEXPR)
+
 template<class U, class... T> constexpr bool holds_alternative( variant<T...> const& v ) noexcept
 {
-    static_assert( mp11::mp_count<variant<T...>, U>::value == 1, "The type must occur exactly once in the list of variant alternatives" );
-    return v.index() == mp11::mp_find<variant<T...>, U>::value;
+    static_assert( mp11::mp_contains<variant<T...>, U>::value, "The type must be present in the list of variant alternatives" );
+
+    using A = bool[];
+    return A{ std::is_same<U, T>::value... }[ v.index() ];
 }
+
+#else
+
+namespace detail
+{
+
+template<class U, class V> struct holds_alternative_L
+{
+    template<class I> constexpr bool operator()( I ) const noexcept
+    {
+        return std::is_same< U, mp11::mp_at<V, I> >::value;
+    }
+};
+
+} // namespace detail
+
+template<class U, class... T> constexpr bool holds_alternative( variant<T...> const& v ) noexcept
+{
+    using V = variant<T...>;
+    static_assert( mp11::mp_contains<V, U>::value, "The type must be present in the list of variant alternatives" );
+
+    return mp11::mp_with_index<sizeof...(T)>( v.index(), detail::holds_alternative_L<U, V>() );
+}
+
+#endif
 
 // get (index)
 
@@ -422,61 +448,106 @@ template<std::size_t I, class... T> constexpr variant_alternative_t<I, variant<T
 
 // get (type)
 
+namespace detail
+{
+
+template<class U, class V> struct get_if_impl_L1
+{
+    V& v_;
+
+    template<class I> constexpr U* fn( I, mp11::mp_true ) const noexcept
+    {
+        return &v_._get_impl( I() );
+    }
+
+    template<class I> constexpr U* fn( I, mp11::mp_false ) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<class I> constexpr U* operator()( I ) const noexcept
+    {
+        return this->fn( I(), std::is_same<U, mp11::mp_at<V, I>>() );
+    }
+};
+
+template<class U, class... T> constexpr U* get_if_impl( variant<T...>& v ) noexcept
+{
+    return mp11::mp_with_index<sizeof...(T)>( v.index(), get_if_impl_L1< U, variant<T...> >{ v } );
+}
+
+template<class U, class V> struct get_if_impl_L2
+{
+    V const& v_;
+
+    template<class I> constexpr U const* fn( I, mp11::mp_true ) const noexcept
+    {
+        return &v_._get_impl( I() );
+    }
+
+    template<class I> constexpr U const* fn( I, mp11::mp_false ) const noexcept
+    {
+        return nullptr;
+    }
+
+    template<class I> constexpr U const* operator()( I ) const noexcept
+    {
+        return this->fn( I(), std::is_same<U, mp11::mp_at<V, I>>() );
+    }
+};
+
+template<class U, class... T> constexpr U const* get_if_impl( variant<T...> const& v ) noexcept
+{
+    return mp11::mp_with_index<sizeof...(T)>( v.index(), get_if_impl_L2< U, variant<T...> >{ v } );
+}
+
+} // namespace detail
+
 template<class U, class... T> constexpr U& get(variant<T...>& v)
 {
-    static_assert( mp11::mp_count<variant<T...>, U>::value == 1, "The type must occur exactly once in the list of variant alternatives" );
-
-    using I = mp11::mp_find<variant<T...>, U>;
-
-    return ( v.index() != I::value? detail::throw_bad_variant_access(): (void)0 ), v._get_impl( I() );
+    static_assert( mp11::mp_contains<variant<T...>, U>::value, "The type must be present in the list of variant alternatives" );
+    return ( !holds_alternative<U>( v )? detail::throw_bad_variant_access(): (void)0 ), *detail::get_if_impl<U>( v );
 }
 
 template<class U, class... T> constexpr U&& get(variant<T...>&& v)
 {
-    static_assert( mp11::mp_count<variant<T...>, U>::value == 1, "The type must occur exactly once in the list of variant alternatives" );
-
-    using I = mp11::mp_find<variant<T...>, U>;
+    static_assert( mp11::mp_contains<variant<T...>, U>::value, "The type must be present in the list of variant alternatives" );
 
 #if !BOOST_WORKAROUND(BOOST_MSVC, < 1930)
 
-    return ( v.index() != I::value? detail::throw_bad_variant_access(): (void)0 ), std::move( v._get_impl( I() ) );
+    return ( !holds_alternative<U>( v )? detail::throw_bad_variant_access(): (void)0 ), std::move( *detail::get_if_impl<U>( v ) );
 
 #else
 
-    if( v.index() != I::value ) detail::throw_bad_variant_access();
-    return std::move( v._get_impl( I() ) );
+    if( !holds_alternative<U>( v ) ) detail::throw_bad_variant_access();
+    return std::move( *detail::get_if_impl<U>( v ) );
 
 #endif
 }
 
 template<class U, class... T> constexpr U const& get(variant<T...> const& v)
 {
-    static_assert( mp11::mp_count<variant<T...>, U>::value == 1, "The type must occur exactly once in the list of variant alternatives" );
-
-    using I = mp11::mp_find<variant<T...>, U>;
-
-    return ( v.index() != I::value? detail::throw_bad_variant_access(): (void)0 ), v._get_impl( I() );
+    static_assert( mp11::mp_contains<variant<T...>, U>::value, "The type must be present in the list of variant alternatives" );
+    return ( !holds_alternative<U>( v )? detail::throw_bad_variant_access(): (void)0 ), *detail::get_if_impl<U>( v );
 }
 
 template<class U, class... T> constexpr U const&& get(variant<T...> const&& v)
 {
-    static_assert( mp11::mp_count<variant<T...>, U>::value == 1, "The type must occur exactly once in the list of variant alternatives" );
-
-    using I = mp11::mp_find<variant<T...>, U>;
+    static_assert( mp11::mp_contains<variant<T...>, U>::value, "The type must be present in the list of variant alternatives" );
 
 #if !BOOST_WORKAROUND(BOOST_MSVC, < 1930)
 
-    return ( v.index() != I::value? detail::throw_bad_variant_access(): (void)0 ), std::move( v._get_impl( I() ) );
+    return ( !holds_alternative<U>( v )? detail::throw_bad_variant_access(): (void)0 ), std::move( *detail::get_if_impl<U>( v ) );
 
 #else
 
-    if( v.index() != I::value ) detail::throw_bad_variant_access();
-    return std::move( v._get_impl( I() ) );
+    if( !holds_alternative<U>( v ) ) detail::throw_bad_variant_access();
+    return std::move( *detail::get_if_impl<U>( v ) );
 
 #endif
 }
 
-// get_if
+// get_if (index)
 
 template<std::size_t I, class... T> constexpr typename std::add_pointer<variant_alternative_t<I, variant<T...>>>::type get_if(variant<T...>* v) noexcept
 {
@@ -490,22 +561,18 @@ template<std::size_t I, class... T> constexpr typename std::add_pointer<const va
     return v && v->index() == I? &v->_get_impl( mp11::mp_size_t<I>() ): 0;
 }
 
+// get_if (type)
+
 template<class U, class... T> constexpr typename std::add_pointer<U>::type get_if(variant<T...>* v) noexcept
 {
-    static_assert( mp11::mp_count<variant<T...>, U>::value == 1, "The type must occur exactly once in the list of variant alternatives" );
-
-    using I = mp11::mp_find<variant<T...>, U>;
-
-    return v && v->index() == I::value? &v->_get_impl( I() ): 0;
+    static_assert( mp11::mp_contains<variant<T...>, U>::value, "The type must be present in the list of variant alternatives" );
+    return v && holds_alternative<U>( *v )? detail::get_if_impl<U>( *v ): 0;
 }
 
-template<class U, class... T> constexpr typename std::add_pointer<U const>::type get_if(variant<T...> const * v) noexcept
+template<class U, class... T> constexpr typename std::add_pointer<U const>::type get_if(variant<T...> const* v) noexcept
 {
-    static_assert( mp11::mp_count<variant<T...>, U>::value == 1, "The type must occur exactly once in the list of variant alternatives" );
-
-    using I = mp11::mp_find<variant<T...>, U>;
-
-    return v && v->index() == I::value? &v->_get_impl( I() ): 0;
+    static_assert( mp11::mp_contains<variant<T...>, U>::value, "The type must be present in the list of variant alternatives" );
+    return v && holds_alternative<U>( *v )? detail::get_if_impl<U>( *v ): 0;
 }
 
 //
@@ -558,9 +625,21 @@ template<class T1, class... T> union variant_storage_impl<mp11::mp_false, T1, T.
     T1 first_;
     variant_storage<T...> rest_;
 
+#if defined(BOOST_GCC) && (__GNUC__ >= 7)
+// false positive, see https://github.com/boostorg/variant2/issues/55
+// ... and https://github.com/boostorg/variant2/pull/57
+// ... and https://github.com/boostorg/variant2/pull/58
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
     template<class... A> constexpr variant_storage_impl( mp11::mp_size_t<0>, A&&... a ): first_( std::forward<A>(a)... )
     {
     }
+
+#if defined(BOOST_GCC) && (__GNUC__ >= 7)
+# pragma GCC diagnostic pop
+#endif
 
     template<std::size_t I, class... A> constexpr variant_storage_impl( mp11::mp_size_t<I>, A&&... a ): rest_( mp11::mp_size_t<I-1>(), std::forward<A>(a)... )
     {
@@ -675,9 +754,21 @@ template<class T1, class... T> union variant_storage_impl<mp11::mp_true, T1, T..
     T1 first_;
     variant_storage<T...> rest_;
 
+#if defined(BOOST_GCC) && (__GNUC__ >= 7)
+// false positive, see https://github.com/boostorg/variant2/issues/55
+// ... and https://github.com/boostorg/variant2/pull/57
+// ... and https://github.com/boostorg/variant2/pull/58
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
     template<class... A> constexpr variant_storage_impl( mp11::mp_size_t<0>, A&&... a ): first_( std::forward<A>(a)... )
     {
     }
+
+#if defined(BOOST_GCC) && (__GNUC__ >= 7)
+# pragma GCC diagnostic pop
+#endif
 
     template<std::size_t I, class... A> constexpr variant_storage_impl( mp11::mp_size_t<I>, A&&... a ): rest_( mp11::mp_size_t<I-1>(), std::forward<A>(a)... )
     {
@@ -704,6 +795,7 @@ template<class T1, class... T> union variant_storage_impl<mp11::mp_true, T1, T..
 # pragma GCC diagnostic ignored "-Wuninitialized"
 #endif
 #endif
+
         *this = variant_storage_impl( mp11::mp_size_t<I>(), std::forward<A>(a)... );
 
 #if defined(BOOST_GCC) && (__GNUC__ >= 7)
@@ -1071,7 +1163,18 @@ template<class... T> struct variant_base_impl<false, true, T...>
         template<class I> BOOST_CXX14_CONSTEXPR void operator()( I ) const noexcept
         {
             using U = mp11::mp_at<mp11::mp_list<none, T...>, I>;
+
+#if defined(BOOST_GCC) && (__GNUC__ >= 12)
+// false positive, see https://github.com/boostorg/variant2/issues/55
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
             this_->st_.get( I() ).~U();
+
+#if defined(BOOST_GCC) && (__GNUC__ >= 12)
+# pragma GCC diagnostic pop
+#endif
         }
     };
 
@@ -1119,7 +1222,17 @@ template<class... T> struct variant_base_impl<false, true, T...>
 
         static_assert( std::is_nothrow_move_constructible<U>::value, "Logic error: U must be nothrow move constructible" );
 
+#if defined(BOOST_GCC) && (__GNUC__ >= 12)
+// false positive, see https://github.com/boostorg/variant2/issues/55
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
         U tmp( std::forward<A>(a)... );
+
+#if defined(BOOST_GCC) && (__GNUC__ >= 12)
+# pragma GCC diagnostic pop
+#endif
 
         _destroy();
 
@@ -1689,7 +1802,7 @@ public:
         class Ud = typename std::decay<U>::type,
         class E1 = typename std::enable_if< !std::is_same<Ud, variant>::value && !std::is_base_of<variant, Ud>::value && !detail::is_in_place_index<Ud>::value && !detail::is_in_place_type<Ud>::value >::type,
 
-#if BOOST_WORKAROUND(BOOST_MSVC, < 1950)
+#if BOOST_WORKAROUND(BOOST_MSVC, < 1960)
 
         class V = mp11::mp_apply_q< mp11::mp_bind_front<detail::resolve_overload_type, U&&>, variant >,
 

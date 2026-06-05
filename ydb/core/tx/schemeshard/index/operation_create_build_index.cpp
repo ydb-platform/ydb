@@ -64,7 +64,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             // no feature flag, everything is fine
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            if (!context.SS->EnableInitialUniqueIndex) {
+            if (!context.SS->EnableAddUniqueIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
             }
             break;

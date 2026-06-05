@@ -13,9 +13,9 @@ SELECT
     profit
 FROM (
     SELECT
-        ss_ticket_number,
-        ss_customer_sk,
-        store.s_city,
+        store_sales.ss_ticket_number AS ss_ticket_number,
+        store_sales.ss_customer_sk AS ss_customer_sk,
+        store.s_city AS s_city,
         Sum(ss_coupon_amt) AS amt,
         Sum(ss_net_profit) AS profit
     FROM

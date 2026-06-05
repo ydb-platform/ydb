@@ -125,6 +125,7 @@ std::vector<size_t> GetCurrentProcessThreadIds();
 bool IsUserspaceThread(size_t tid);
 
 std::string GetCurrentProcessName();
+std::string GetCurrentProcessCommandLine();
 
 void ChownChmodDirectory(
     const std::string& path,

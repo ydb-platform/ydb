@@ -29,7 +29,7 @@ FROM (
             GROUP BY
                 ss_item_sk
             HAVING
-                Avg(ss_net_profit) > 0.9 * (
+                Avg(ss_net_profit) > cast("0.9" as decimal(7,2)) * (
                     SELECT
                         Avg(ss_net_profit) AS rank_col
                     FROM
@@ -66,7 +66,7 @@ FROM (
             GROUP BY
                 ss_item_sk
             HAVING
-                Avg(ss_net_profit) > 0.9 * (
+                Avg(ss_net_profit) > cast("0.9" as decimal(7,2)) * (
                     SELECT
                         Avg(ss_net_profit) AS rank_col
                     FROM

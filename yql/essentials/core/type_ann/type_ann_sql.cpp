@@ -10,22 +10,6 @@
 
 namespace NYql::NTypeAnnImpl {
 
-struct TInput {
-    enum EInputPriority {
-        External,
-        Current,
-        Projection
-    };
-
-    TString Alias;
-    const TStructExprType* Type = nullptr;
-    TMaybe<TColumnOrder> Order;
-    EInputPriority Priority = External;
-    TSet<TString> UsedExternalColumns;
-};
-
-using TInputs = TVector<TInput>;
-
 using TProjectionOrders = TVector<TMaybe<std::pair<TColumnOrder, bool>>>;
 
 struct TGroupExpr {
@@ -705,11 +689,7 @@ bool ReplaceProjectionRefs(
 
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChecker = [](const TExprNode& node) {
-        if (node.IsCallable({"PgSubLink", "YqlSubLink"})) {
-            return false;
-        }
-
-        return true;
+        return !node.IsCallable({"PgSubLink", "YqlSubLink"});
     };
 
     auto status = OptimizeExpr(lambda, lambda, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
@@ -768,6 +748,45 @@ const TItemExprType* RenameOnOrder(TExprContext& ctx, TColumnOrder& order, const
     return item;
 }
 
+bool UpdateUsingColumnTypes(
+    const TItemExprType* item,
+    bool isVirtual,
+    TVector<const TItemExprType*>& items,
+    const THashMap<TString, TString>& usedInUsing,
+    THashSet<TString>& present,
+    TExprContext& ctx)
+{
+    TString lower = to_lower(TString(item->GetCleanName(isVirtual)));
+
+    const auto* it = usedInUsing.FindPtr(lower);
+    if (!it) {
+        return false;
+    }
+
+    if (!present.contains(lower)) {
+        items.push_back(ctx.MakeType<TItemExprType>(*it, item->GetItemType()));
+        present.emplace(lower);
+        return true;
+    }
+
+    if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+        return true;
+    }
+
+    for (auto& existing : items) {
+        if (existing->GetName() != *it) {
+            continue;
+        }
+
+        if (existing->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+            existing = ctx.MakeType<TItemExprType>(*it, item->GetItemType());
+            break;
+        }
+    }
+
+    return true;
+}
+
 void AddColumns(
     const TInputs& inputs,
     const bool* hasStar,
@@ -795,14 +814,10 @@ void AddColumns(
                 for (ui32 i = 0; i < x.Type->GetSize(); ++i) {
                     auto item = x.Type->GetItems()[i];
                     if (!item->GetName().StartsWith("_yql_")) {
-                        TString lcase = to_lower(TString(item->GetName()));
-                        if (auto it = usedInUsing.find(lcase); it != usedInUsing.end()) {
-                            if (!present.contains(lcase)) {
-                                items.push_back(ctx.MakeType<TItemExprType>(it->second, item->GetItemType()));
-                                present.emplace(lcase);
-                            }
+                        if (UpdateUsingColumnTypes(item, /*isVirtual=*/false, items, usedInUsing, present, ctx)) {
                             continue;
                         }
+
                         item = AddAlias(x.Alias, item, ctx);
                         items.push_back(item);
                     }
@@ -820,11 +835,7 @@ void AddColumns(
                 auto pos = x.Type->FindItemI(ref, &isVirtual);
                 if (pos) {
                     auto item = x.Type->GetItems()[*pos];
-                    TString lcase = to_lower(TString(item->GetCleanName(isVirtual)));
-                    if (auto it = usedInUsing.find(lcase); it != usedInUsing.end() && !present.contains(lcase)) {
-                        items.push_back(ctx.MakeType<TItemExprType>(it->second, item->GetItemType()));
-                        present.emplace(lcase);
-                    }
+                    UpdateUsingColumnTypes(item, isVirtual, items, usedInUsing, present, ctx);
                     item = AddAlias(x.Alias, item, ctx);
                     items.push_back(item);
                     usedRefs.insert(TString(item->GetCleanName(isVirtual)));
@@ -872,15 +883,24 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     }
 
     TOptimizeExprSettings optSettings(nullptr);
+    optSettings.VisitChanges = true;
     optSettings.VisitChecker = [](const TExprNode& node) {
-        if (node.IsCallable({"PgSubLink", "YqlSubLink"})) {
-            return false;
-        }
-
-        return true;
+        return !node.IsCallable({"PgSubLink", "YqlSubLink"});
     };
 
     return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+        if (node->IsCallable("YqlAgg") && node->ChildrenSize() > 2U && node->Child(2U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 2U, TExprNode::TPtr(argNode));
+        }
+
+        if (node->IsCallable("YqlAggWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
+        }
+
+        if (node->IsCallable("YqlWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
+        }
+
         if (node->IsCallable({"YqlStar", "PgStar"})) {
             TVector<std::pair<TString, TString>> aliased;
             TExprNode::TListType orderAtoms;
@@ -1733,11 +1753,11 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
                 } else {
                     // generate 2**N sets
                     YQL_ENSURE(indices.size() <= 5, "Too many CUBE components");
-                    ui32 count = (1u << indices.size());
+                    ui32 count = (1U << indices.size());
                     for (ui32 i = 0; i < count; ++i) {
                         TExprNode::TListType oneSetItems;
                         for (ui32 j = 0; j < indices.size(); ++j) {
-                            if ((1u << j) & i) {
+                            if ((1U << j) & i) {
                                 oneSetItems.push_back(indices[j]);
                             }
                         }
@@ -3260,7 +3280,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 bool leftSideIsOptional = (joinType == "right" || joinType == "full");
                                 bool rightSideIsOptional = (joinType == "left" || joinType == "full");
                                 if (leftSideIsOptional) {
-                                    for (ui32 j = 0; j < inputIndex; ++j) {
+                                    for (ui32 j = 0; j + 1 < inputIndex; ++j) {
                                         MakeOptionalColumns(joinInputs[j].Type, ctx.Expr);
                                     }
                                 }
@@ -3285,14 +3305,44 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                         repeatedColumnsInUsing.emplace(lcase, columnNames->Child(i)->Content());
                                     }
                                 } else {
-                                    const auto& quals = child->Tail();
-                                    if (!quals.IsCallable({"YqlWhere", "PgWhere"})) {
-                                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(quals.Pos()),
+                                    const auto quals = child->ChildPtr(1);
+                                    if (!quals->IsCallable({"YqlWhere", "PgWhere"})) {
+                                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(quals->Pos()),
                                                                     TStringBuilder() << "Expected " << sqlWhere));
                                         return IGraphTransformer::TStatus::Error;
                                     }
 
-                                    needRewrite = needRewrite || quals.Child(0)->IsCallable("Void");
+                                    needRewrite = needRewrite || quals->Child(0)->IsCallable("Void");
+
+                                    if (3 <= child->ChildrenSize()) {
+                                        YQL_ENSURE(child->ChildrenSize() <= 3);
+                                        YQL_ENSURE(isYql);
+
+                                        auto implicitUsing = child->Child(2);
+                                        if (!EnsureTuple(*implicitUsing, ctx.Expr)) {
+                                            return IGraphTransformer::TStatus::Error;
+                                        }
+
+                                        for (const auto& entry : implicitUsing->Children()) {
+                                            if (!EnsureTupleSize(*entry, 2, ctx.Expr)) {
+                                                return IGraphTransformer::TStatus::Error;
+                                            }
+                                            if (!EnsureTupleOfAtoms(*entry, ctx.Expr)) {
+                                                return IGraphTransformer::TStatus::Error;
+                                            }
+
+                                            TStringBuf name = RemoveAlias(entry->Child(0)->Content());
+                                            if (usedInUsingBefore.contains(name)) {
+                                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
+                                                    TStringBuilder() << "Duplicated column in USING clause: " << name));
+                                                return IGraphTransformer::TStatus::Error;
+                                            }
+
+                                            isUsing = true;
+                                            usedInUsingInThatGroup.emplace(name);
+                                            repeatedColumnsInUsing.emplace(name, name);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3364,6 +3414,30 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                         return IGraphTransformer::TStatus::Error;
                                     }
 
+                                    TVector<std::pair<TString, TString>> implicitUsing;
+
+                                    if (isYql) {
+                                        TVector<std::pair<TString, TString>> implicitUsingAll;
+                                        if (auto status = InferYqlImplicitUsingJoinColumns(
+                                            child->Tail().Child(1)->TailPtr(),
+                                            groupInputs, leftSide, rightSide,
+                                            implicitUsingAll, ctx);
+                                            status != IGraphTransformer::TStatus::Ok)
+                                        {
+                                            return status;
+                                        }
+
+                                        for (auto& [lhs, rhs] : implicitUsingAll) {
+                                            auto lhsName = RemoveAlias(lhs);
+                                            if (usingNames.back().contains(lhsName)) {
+                                                continue;
+                                            }
+
+                                            usingNames.back()[lhsName] = lhsName;
+                                            implicitUsing.emplace_back(std::move(lhs), std::move(rhs));
+                                        }
+                                    }
+
                                     if (!scanColumnsOnly) {
                                         TVector<const TItemExprType*> items;
                                         AddColumns(groupInputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr);
@@ -3388,7 +3462,28 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                         newChildren[0] = typeNode;
                                         newChildren[1] = newLambda;
                                         auto newWhere = ctx.Expr.NewCallable(quals.Pos(), sqlWhere, std::move(newChildren));
-                                        newGroupItems.push_back(ctx.Expr.ChangeChild(*child, 1, std::move(newWhere)));
+
+                                        TExprNode::TListType newGroupItem = child->ChildrenList();
+                                        newGroupItem[1] = std::move(newWhere);
+
+                                        if (!implicitUsing.empty()) {
+                                            TExprNode::TListType entries;
+                                            entries.reserve(implicitUsing.size());
+                                            for (auto [lhs, rhs] : implicitUsing) {
+                                                entries.push_back(ctx.Expr.NewList(child->Pos(), {
+                                                    ctx.Expr.NewAtom(child->Pos(), lhs),
+                                                    ctx.Expr.NewAtom(child->Pos(), rhs),
+                                                }));
+                                            }
+
+                                            if (newGroupItem.size() == 2) {
+                                                newGroupItem.emplace_back();
+                                            }
+
+                                            newGroupItem[2] = ctx.Expr.NewList(child->Pos(), std::move(entries));
+                                        }
+
+                                        newGroupItems.push_back(ctx.Expr.NewList(child->Pos(), std::move(newGroupItem)));
                                     } else if (needRewriteUsing) {
                                         newGroupItems.push_back(data.Child(joinGroupNo)->ChildPtr(i));
                                     }
@@ -3633,7 +3728,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     bool hasChanges = false;
                     for (ui32 i = 0; i < data.ChildrenSize(); ++i) {
                         auto x = data.ChildPtr(i);
-                        if (!x->IsCallable("PgWindow")) {
+                        if (!x->IsCallable({"PgWindow", "YqlWindow"})) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected PgWindow"));
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -4185,7 +4280,7 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
         for (size_t j = 0; j < tupleSize; ++j) {
             auto* item = value->Child(j);
             if (item->GetTypeAnn()->Cast<TPgExprType>()->GetId() == commonTypes[j]) {
-                rowValues.push_back(item);
+                rowValues.emplace_back(item);
             } else {
                 rowValues.push_back(WrapWithPgCast(std::move(item), commonTypes[j], ctx.Expr));
             }
@@ -4846,6 +4941,9 @@ IGraphTransformer::TStatus SqlGroupRefWrapper(const TExprNode::TPtr& input, TExp
 }
 
 IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    YQL_ENSURE(input->IsCallable({"YqlGrouping", "PgGrouping"}));
+    const bool isYql = input->IsCallable("YqlGrouping");
+
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -4855,8 +4953,9 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    // TODO: check types for YQL
     bool needRetype = false;
-    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+    for (ui32 i = 0; i < input->ChildrenSize() && !isYql; ++i) {
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
@@ -4880,8 +4979,14 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
-    input->SetTypeAnn(result);
+    YQL_TYPE_ANN_PTR result;
+    if (isYql) {
+        result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+    } else {
+        result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
+    }
+
+    input->SetTypeAnn(result.Get());
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -4926,6 +5031,199 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
     }
 
     input->SetTypeAnn(ctx.Expr.MakeType<TVoidExprType>());
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus SqlWindowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (input->Child(1)->Content()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Window reference is not supported"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureTuple(*input->Child(2), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& x : input->Child(2)->Children()) {
+        if (!x->IsCallable({"YqlGroup", "PgGroup"})) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected YqlGroup or PgGroup"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (input->Child(3)->GetTypeAnn() && input->Child(3)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(3)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureTuple(*input->Child(3), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& x : input->Child(3)->Children()) {
+        if (!x->IsCallable({"YqlSort", "PgSort"})) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected YqlSort or PgSort"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(4)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool hasType = false;
+    bool hasFrom = false;
+    bool hasTo = false;
+    bool hasFromValue = false;
+    bool hasToValue = false;
+    bool needFromValue = false;
+    bool needToValue = false;
+
+    for (const auto& x : input->Child(4)->Children()) {
+        if (!EnsureTupleMinSize(*x, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(x->Head(), ctx.Expr, isUniversal)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        auto optionName = x->Head().Content();
+        if (optionName == "exclude") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Excludes are not supported"));
+            return IGraphTransformer::TStatus::Error;
+        } else if (optionName == "from_value" || optionName == "to_value") {
+            hasFromValue = hasFromValue || (optionName == "from_value");
+            hasToValue = hasToValue || (optionName == "to_value");
+            if (!EnsureTupleSize(*x, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (x->Tail().GetTypeAnn() && x->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(x->Tail().GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
+            if (!x->Tail().IsCallable("Int32")) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected Int32 as frame offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto val = FromString<i32>(x->Tail().Head().Content());
+            if (val < 0) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected non-negative value as frame offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (optionName == "type") {
+            hasType = true;
+            if (!EnsureTupleSize(*x, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(x->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto type = x->Tail().Content();
+            if (!IsIn({"rows", "range"}, type)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Unsupported frame type: " << type));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (optionName == "from" || optionName == "to") {
+            hasFrom = hasFrom || (optionName == "from");
+            hasTo = hasTo || (optionName == "to");
+            if (!EnsureTupleSize(*x, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(x->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto bound = x->Tail().Content();
+            if (!(bound == "up" || bound == "p" || bound == "c" || bound == "f" || bound == "uf")) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Unsupported frame bound: " << bound));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (bound == "p" || bound == "f") {
+                needFromValue = needFromValue || (optionName == "from");
+                needToValue = needToValue || (optionName == "to");
+            }
+
+            if (optionName == "from" && bound == "uf") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Unbounded following is unsupported as start offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (optionName == "to" && bound == "up") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Unbounded preceding is unsupported as end offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Unknown option: " << optionName));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (hasType) {
+        if (!hasFrom || !hasTo) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Missing offset specification in the frame"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    } else {
+        if (hasFrom || hasTo) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Unexpected offset specification in the frame"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (needFromValue != hasFromValue || needToValue != hasToValue) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Wrong offset value in the frame"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
     return IGraphTransformer::TStatus::Ok;
 }
 

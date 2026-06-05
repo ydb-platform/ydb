@@ -295,6 +295,13 @@ void TQueryBase::ReadNextStreamPart() {
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev) {
+    if (Finished) {
+        // Next TEvStreamQueryResultPart can be already in the mailbox (added by
+        // the StreamQueryProcessor callback) after we called Finish() to cancel the query.
+        // In this case we are not interested in processing it anymore.
+        return;
+    }
+
     Y_ABORT_UNLESS(RunningQuery);
     Y_ABORT_UNLESS(StreamQueryProcessor);
     NumberRequests++;

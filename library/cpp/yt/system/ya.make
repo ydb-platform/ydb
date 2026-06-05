@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/yt/exception
     library/cpp/yt/misc
 )
 

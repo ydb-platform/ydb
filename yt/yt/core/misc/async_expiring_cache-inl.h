@@ -270,7 +270,7 @@ std::optional<TErrorOr<TValue>> TAsyncExpiringCache<TKey, TValue>::Find(const TK
         if (!entry->IsExpired(now) && entry->Promise.IsSet()) {
             HitCounter_.Increment();
             entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
-            return entry->Future.GetOrCrash();
+            return entry->Promise.GetOrCrash();
         }
     }
 
@@ -298,7 +298,7 @@ std::vector<std::optional<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::
                 const auto& entry = it->second;
                 if (!entry->IsExpired(now) && entry->Promise.IsSet()) {
                     HitCounter_.Increment();
-                    results[requestIndex] = entry->Future.GetOrCrash();
+                    results[requestIndex] = entry->Promise.GetOrCrash();
                     entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
                 } else {
                     MissedCounter_.Increment();

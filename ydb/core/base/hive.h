@@ -53,6 +53,7 @@ namespace NKikimr {
             EvConfigureScaleRecommender,
             EvRequestDrainInfo,
             EvSetDown,
+            EvShrinkStoragePool,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -93,6 +94,8 @@ namespace NKikimr {
             EvDrainNodeAck,
             EvResponseDrainInfo,
             EvSetDownReply,
+            EvShrinkStoragePoolReply,
+            EvShrinkStoragePoolDone,
 
             EvEnd
         };
@@ -950,6 +953,12 @@ namespace NKikimr {
             }
         };
         struct TEvSetDownReply : TEventPB<TEvSetDownReply, NKikimrHive::TEvSetDownReply, EvSetDownReply> {};
+
+        struct TEvShrinkStoragePool : TEventPB<TEvShrinkStoragePool, NKikimrHive::TEvShrinkStoragePool, EvShrinkStoragePool> {};
+
+        struct TEvShrinkStoragePoolReply : TEventPB<TEvShrinkStoragePoolReply, NKikimrHive::TEvShrinkStoragePoolReply, EvShrinkStoragePoolReply> {};
+
+        struct TEvShrinkStoragePoolDone : TEventPB<TEvShrinkStoragePoolDone, NKikimrHive::TEvShrinkStoragePoolDone, EvShrinkStoragePoolDone> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

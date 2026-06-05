@@ -28,7 +28,7 @@ namespace boost { namespace property_tree { namespace xml_parser
     /**
      * Reads XML from an input stream and translates it to property tree.
      * @note Clears existing contents of property tree.  In case of error the
-     *       property tree unmodified.
+     *       property tree is not modified.
      * @note XML attributes are placed under keys named @c \<xmlattr\>.
      * @throw xml_parser_error In case of error deserializing the property tree.
      * @param stream Stream from which to read in the property tree.
@@ -56,12 +56,12 @@ namespace boost { namespace property_tree { namespace xml_parser
      * Reads XML from a file using the given locale and translates it to
      * property tree.
      * @note Clears existing contents of property tree.  In case of error the
-     *       property tree unmodified.
+     *       property tree is not modified.
      * @note XML attributes are placed under keys named @c \<xmlattr\>.
      * @throw xml_parser_error In case of error deserializing the property tree.
      * @param filename The file from which to read in the property tree.
      * @param[out] pt The property tree to populate.
-     * @param flags Flags controlling the bahviour of the parser.
+     * @param flags Flags controlling the behaviour of the parser.
      *              The following flags are supported:
      * @li @c no_concat_text -- Prevents concatenation of text nodes into
      *                          datastring of property tree.  Puts them in
@@ -86,13 +86,13 @@ namespace boost { namespace property_tree { namespace xml_parser
     }
 
     /**
-     * Translates the property tree to XML and writes it the given output
+     * Translates the property tree to XML and writes it to the given output
      * stream.
      * @throw xml_parser_error In case of error translating the property tree to
      *                         XML or writing to the output stream.
      * @param stream The stream to which to write the XML representation of the 
      *               property tree.
-     * @param pt The property tree to tranlsate to XML and output.
+     * @param pt The property tree to translate to XML and output.
      * @param settings The settings to use when writing out the property tree as
      *                 XML.
      */
@@ -110,12 +110,12 @@ namespace boost { namespace property_tree { namespace xml_parser
     }
 
     /**
-     * Translates the property tree to XML and writes it the given file.
+     * Translates the property tree to XML and writes it to the given file.
      * @throw xml_parser_error In case of error translating the property tree to
      *                         XML or writing to the output stream.
      * @param filename The file to which to write the XML representation of the 
      *                 property tree.
-     * @param pt The property tree to tranlsate to XML and output.
+     * @param pt The property tree to translate to XML and output.
      * @param loc The locale to use when writing the output to file.
      * @param settings The settings to use when writing out the property tree as
      *                 XML.

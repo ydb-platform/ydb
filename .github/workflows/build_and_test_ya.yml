@@ -65,7 +65,7 @@ jobs:
     runs-on: [ self-hosted, "${{ inputs.runner_label }}", "${{ inputs.runner_additional_label || inputs.runner_label }}"]
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ inputs.commit_sha }}
 
@@ -73,6 +73,7 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya

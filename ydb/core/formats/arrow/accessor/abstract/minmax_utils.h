@@ -43,8 +43,6 @@ struct TMinMax {
     static TMinMax Compute(std::shared_ptr<arrow::ChunkedArray> arr);
 
     TString ToBinaryString() const;
-
-    NJson::TJsonValue ToJson() const;
 };
 
 namespace NArrowCompare {

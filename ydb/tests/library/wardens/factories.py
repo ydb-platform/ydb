@@ -3,7 +3,7 @@ from ydb.tests.library.nemesis.safety_warden import AggregateSafetyWarden, Remot
 
 from ydb.tests.library.wardens.base import AggregateLivenessWarden
 from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
-from ydb.tests.library.wardens.logs import kikimr_grep_dmesg_safety_warden_factory
+from ydb.tests.library.wardens.logs import kikimr_grep_kernel_log_safety_warden_factory
 from ydb.tests.library.wardens.logs import kikimr_start_logs_safety_warden_factory
 from ydb.tests.library.wardens.logs import kikimr_crit_and_alert_logs_safety_warden_factory
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
@@ -15,7 +15,7 @@ def safety_warden_factory(cluster, ssh_username, lines_after=5, cut=True, modifi
     list_of_host_names = [node.host for node in cluster.nodes.values()]
     executor = RemoteCommandExecutor(list_of_host_names, username=ssh_username)
     wardens = [AllPDisksAreInValidStateSafetyWarden(cluster)]
-    wardens.extend(kikimr_grep_dmesg_safety_warden_factory(executor=executor))
+    wardens.extend(kikimr_grep_kernel_log_safety_warden_factory(executor=executor))
     by_directory = {}
     for node in list(cluster.slots.values()) + list(cluster.nodes.values()):
         if node.logs_directory not in by_directory:

@@ -22,6 +22,7 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #include <util/stream/length.h>
 
@@ -137,14 +138,36 @@ public:
             },
             State_->Types->RuntimeLogLevel);
 
-        TComputationPatternOpts patternOpts(alloc.Ref(), env, compFactory, State_->FunctionRegistry,
-                                            State_->Types->ValidateMode, NUdf::EValidatePolicy::Exception, State_->Types->OptLLVM.GetOrElse(TString()),
-                                            EGraphPerProcess::Multi, nullptr, nullptr, nullptr, logProvider.Get());
+        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(State_->Setting.SecureParams);
+
+        TComputationPatternOpts patternOpts(alloc.Ref(),
+                                            env,
+                                            compFactory,
+                                            State_->FunctionRegistry,
+                                            State_->Types->ValidateMode,
+                                            NUdf::EValidatePolicy::Exception,
+                                            State_->Types->OptLLVM.GetOrElse(TString()),
+                                            EGraphPerProcess::Multi,
+                                            nullptr,
+                                            nullptr,
+                                            secureParamsProvider.get(),
+                                            logProvider.Get(),
+                                            State_->Types->LangVer,
+                                            State_->Types->RuntimeSettings);
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
-        const TComputationOptsFull computeOpts(nullptr, alloc.Ref(), env,
-                                               *State_->Types->RandomProvider, *State_->Types->TimeProvider,
-                                               NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get(), State_->Types->LangVer);
+
+        const TComputationOptsFull computeOpts(nullptr,
+                                               alloc.Ref(),
+                                               env,
+                                               *State_->Types->RandomProvider,
+                                               *State_->Types->TimeProvider,
+                                               NUdf::EValidatePolicy::Exception,
+                                               secureParamsProvider.get(),
+                                               nullptr,
+                                               logProvider.Get(),
+                                               State_->Types->LangVer,
+                                               State_->Types->RuntimeSettings);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();
@@ -255,8 +278,8 @@ TIntrusivePtr<IDataProvider> CreatePureProvider(const TPureState::TPtr& state) {
     return MakeIntrusive<TPureProvider>(state);
 }
 
-TDataProviderInitializer GetPureDataProviderInitializer() {
-    return [](
+TDataProviderInitializer GetPureDataProviderInitializer(TPureProviderSettings settings) {
+    return [settings = std::move(settings)](
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -283,6 +306,7 @@ TDataProviderInitializer GetPureDataProviderInitializer() {
         auto state = MakeIntrusive<TPureState>();
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
+        state->Setting = std::move(settings);
 
         info.Source = CreatePureProvider(state);
         info.OpenSession = [state](

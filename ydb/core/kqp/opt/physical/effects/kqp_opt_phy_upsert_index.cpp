@@ -2,6 +2,8 @@
 #include "kqp_opt_phy_effects_impl.h"
 #include "kqp_opt_phy_uniq_helper.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -611,7 +613,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
     }
 }
 
-} // namespace
+} // anonymous namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
     const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults,
@@ -1024,6 +1026,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalMinMax:
                     break;
             }
 
@@ -1099,6 +1102,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalMinMax:
                     break;
             }
 

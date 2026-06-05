@@ -19,6 +19,8 @@ public:
         bool SupportsBlocks = false;
         TLangVersion MinLangVer = UnknownLangVersion;
         TLangVersion MaxLangVer = UnknownLangVersion;
+        TString PolyArgs;
+        TString ResolvedCallableTypes;
     };
 
     // module & function should be lowercased

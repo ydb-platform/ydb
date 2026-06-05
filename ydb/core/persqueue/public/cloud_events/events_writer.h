@@ -27,16 +27,25 @@ private:
     TFileOutput OutStream;
 };
 
+class IUaEventsSession {
+public:
+    using TPtr = THolder<IUaEventsSession>;
+    virtual ~IUaEventsSession() = default;
+    virtual void Send(const TString& data) = 0;
+    virtual void Close() = 0;
+};
+
 class TUaEventsWriter : public IEventsWriter {
 public:
     TUaEventsWriter(const TString& uri, const NMonitoring::TDynamicCounterPtr& counters);
-    void Write(const TString& data);
+    explicit TUaEventsWriter(IUaEventsSession::TPtr session);
+    void Write(const TString& data) override;
     void Close();
     ~TUaEventsWriter();
 
 private:
     NUnifiedAgent::TClientPtr Client;
-    NUnifiedAgent::TClientSessionPtr Session;
+    IUaEventsSession::TPtr Session;
     THolder<TLog> Logger;
     bool Closed = false;
 };

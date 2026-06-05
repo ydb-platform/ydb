@@ -11,6 +11,7 @@ const TString TEST_MON_PATH = "test_mon";
 const TString TEST_RESPONSE = "Test actor";
 const TString AUTHORIZATION_HEADER = "Authorization";
 const TString VALID_TOKEN = "Bearer token";
+const TString ROOT_TOKEN = "root@builtin";
 const TVector<TString> DEFAULT_TICKET_PARSER_GROUPS = {"group_name"};
 
 void TTestActorPage::Bootstrap() {
@@ -68,6 +69,10 @@ void TFakeTicketParserActor::Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& e
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
     ++AuthorizeTicketRequests;
 
+    if (ev->Get()->Ticket == ROOT_TOKEN) {
+        return Success(ev);
+    }
+
     if (ev->Get()->Database != "/Root") {
         Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
         return;
@@ -122,8 +127,12 @@ void TFakeTicketParserActor::Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev,
 void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
     ++AuthorizeTicketSuccesses;
     NACLib::TUserToken::TUserTokenInitFields args;
-    args.UserSID = "username";
-    args.GroupSIDs = GroupSIDs;
+    if (ev->Get()->Ticket == ROOT_TOKEN) {
+        args.UserSID = ROOT_TOKEN;
+    } else {
+        args.UserSID = "username";
+        args.GroupSIDs = GroupSIDs;
+    }
     TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
     userToken->SaveSerializationInfo();
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,

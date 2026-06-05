@@ -40,12 +40,6 @@ const NYson::ETokenType RangeSeparatorToken = NYson::ETokenType::Comma;
 
 namespace {
 
-void ThrowUnexpectedToken(const TToken& token)
-{
-    THROW_ERROR_EXCEPTION("Unexpected token %Qv",
-        token);
-}
-
 TStringBuf ParseAttributes(TStringBuf str, const IAttributeDictionaryPtr& attributes)
 {
     {
@@ -60,9 +54,7 @@ TStringBuf ParseAttributes(TStringBuf str, const IAttributeDictionaryPtr& attrib
 
     NYson::TTokenizer tokenizer(str);
     tokenizer.ParseNext();
-    if (tokenizer.CurrentToken().GetType() != NYson::ETokenType::LeftAngle) {
-        ThrowUnexpectedToken(tokenizer.CurrentToken());
-    }
+    tokenizer.CurrentToken().ExpectType(NYson::ETokenType::LeftAngle);
 
     int depth = 0;
     int attrStartPosition = tokenizer.GetPosition();
@@ -176,8 +168,7 @@ void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes
                 tokenizer.ParseNext();
                 break;
             default:
-                ThrowUnexpectedToken(tokenizer.CurrentToken());
-                YT_ABORT();
+                tokenizer.CurrentToken().ThrowUnexpected();
         }
 
         columns.push_back(begin);
@@ -189,8 +180,7 @@ void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes
             case EndColumnSelectorToken:
                 break;
             default:
-                ThrowUnexpectedToken(tokenizer.CurrentToken());
-                YT_ABORT();
+                tokenizer.CurrentToken().ThrowUnexpected();
         }
     }
     tokenizer.ParseNext();
@@ -239,8 +229,7 @@ void ParseKeyPart(
         }
 
         default:
-            ThrowUnexpectedToken(tokenizer.CurrentToken());
-            break;
+            tokenizer.CurrentToken().ThrowUnexpected();
     }
     rowBuilder->AddValue(value);
     tokenizer.ParseNext();
@@ -323,8 +312,7 @@ void ParseRowLimit(
                     case EndTupleToken:
                         break;
                     default:
-                        ThrowUnexpectedToken(tokenizer.CurrentToken());
-                        YT_ABORT();
+                        tokenizer.CurrentToken().ThrowUnexpected();
                 }
             }
             tokenizer.ParseNext();
@@ -400,14 +388,25 @@ void ParseRowRanges(NYson::TTokenizer& tokenizer, IAttributeDictionary* attribut
     }
 }
 
-void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& attributes, EYsonFormat ysonFormat)
+void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
     TString attrString;
     TStringOutput output(attrString);
     TYsonWriter writer(&output, ysonFormat, EYsonType::MapFragment);
 
-    BuildYsonAttributesFluently(&writer)
-        .Items(attributes);
+    if (sortAttributes) {
+        auto attributePairs = attributes.ListPairs();
+        std::ranges::sort(attributePairs, [] (const auto& lhs, const auto& rhs) {
+            return lhs.first < rhs.first;
+        });
+        for (const auto& [key, value] : attributePairs) {
+            writer.OnKeyedItem(key);
+            writer.OnRaw(value);
+        }
+    } else {
+        BuildYsonAttributesFluently(&writer)
+            .Items(attributes);
+    }
 
     if (!attrString.empty()) {
         builder->AppendChar(TokenTypeToChar(NYson::ETokenType::LeftAngle));
@@ -485,10 +484,10 @@ std::pair<TYPath, IAttributeDictionaryPtr> ParseRichYPathImpl(TStringBuf str)
     return {std::move(path), attributes};
 }
 
-TString ConvertToStringImpl(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat)
+TString ConvertToString(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
     TStringBuilder builder;
-    AppendAttributes(&builder, attributes, ysonFormat);
+    AppendAttributes(&builder, attributes, ysonFormat, sortAttributes);
     builder.AppendString(path);
     return builder.Flush();
 }

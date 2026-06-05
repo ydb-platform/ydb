@@ -70,12 +70,12 @@ TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)
 
 INode::TPtr TObjectProcessorImpl::BuildKeys() const {
     auto keys = Y("Key");
-    keys = L(keys, Q(Y(Q("objectId"), Y("String", BuildQuotedAtom(Pos_, ObjectId_)))));
+    keys = L(keys, Q(Y(Q("objectId"), Y("String", ObjectId_.Build()))));
     keys = L(keys, Q(Y(Q("typeId"), Y("String", BuildQuotedAtom(Pos_, TypeId_)))));
     return keys;
 }
 
-TObjectProcessorImpl::TObjectProcessorImpl(TPosition pos, TString objectId, TString typeId, const TObjectOperatorContext& context)
+TObjectProcessorImpl::TObjectProcessorImpl(TPosition pos, TDeferredAtom objectId, TString typeId, const TObjectOperatorContext& context)
     : TBase(pos)
     , TObjectOperatorContext(context)
     , ObjectId_(std::move(objectId))
@@ -100,7 +100,7 @@ bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
     return TAstListNode::DoInit(ctx, src);
 }
 
-TObjectProcessorWithFeatures::TObjectProcessorWithFeatures(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+TObjectProcessorWithFeatures::TObjectProcessorWithFeatures(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                                                            TNodePtr features)
     : TBase(pos, objectId, typeId, context)
     , Features_(std::move(features))
@@ -137,7 +137,7 @@ INode::TPtr TCreateObject::BuildOptions() const {
     return Y(Q(Y(Q("mode"), Q(mode))));
 }
 
-TCreateObject::TCreateObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+TCreateObject::TCreateObject(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                              TNodePtr features, bool existingOk, bool replaceIfExists)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , ExistingOk_(existingOk)
@@ -157,7 +157,7 @@ TNodePtr TUpsertObject::DoClone() const {
     return new TUpsertObject(Pos_, ObjectId_, TypeId_, TObjectOperatorContext(Scoped_), SafeClone(Features_));
 }
 
-TAlterObject::TAlterObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+TAlterObject::TAlterObject(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                            TNodePtr features, std::set<TString>&& featuresToReset, bool missingOk)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , FeaturesToReset_(std::move(featuresToReset))
@@ -187,7 +187,7 @@ TNodePtr TAlterObject::DoClone() const {
     return new TAlterObject(Pos_, ObjectId_, TypeId_, TObjectOperatorContext(Scoped_), SafeClone(Features_), std::set(FeaturesToReset_), MissingOk_);
 }
 
-TDropObject::TDropObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+TDropObject::TDropObject(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                          TNodePtr features, bool missingOk)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , MissingOk_(missingOk)

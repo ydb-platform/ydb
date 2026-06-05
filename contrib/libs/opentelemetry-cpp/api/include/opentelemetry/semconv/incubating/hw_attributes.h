@@ -20,7 +20,7 @@ namespace hw
 {
 
 /**
-  Design capacity in Watts-hours or Amper-hours
+  Design capacity in Watts-hours or Ampere-hours
  */
 static constexpr const char *kHwBatteryCapacity = "hw.battery.capacity";
 

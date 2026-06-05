@@ -2,11 +2,13 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+
 #include <ydb/library/conclusion/status.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap {
@@ -14,20 +16,25 @@ namespace NKikimr::NOlap {
 class IMerger {
 public:
     using TYdbConclusionStatus = TConclusionSpecialStatus<Ydb::StatusIds::StatusCode, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::BAD_REQUEST>;
+
 private:
     NArrow::NMerger::TRWSortableBatchPosition IncomingPosition;
 
-    virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
+    virtual TYdbConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
+
 protected:
     std::shared_ptr<ISnapshotSchema> Schema;
     NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     bool IncomingFinished = false;
+
 public:
     IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
         : IncomingPosition(incoming.GetContainer(), 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
         , Schema(actualSchema)
-        , IncomingData(incoming) {
+        , IncomingData(incoming)
+    {
         IncomingFinished = !IncomingPosition.InitPosition(0);
     }
 
@@ -43,23 +50,26 @@ public:
 class TInsertMerger: public IMerger {
 private:
     using TBase = IMerger;
-    virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+
+    virtual TYdbConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         std::vector<NScheme::TTypeInfo> pkTypes;
         for (auto&& nt : Schema->GetIndexInfo().GetPrimaryKeyColumns()) {
             pkTypes.emplace_back(nt.second);
         }
 
-        return TYdbConclusionStatus::Fail(
-            Ydb::StatusIds::PRECONDITION_FAILED,
+        return TYdbConclusionStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Conflict with existing key. "
-                             << exists.GetSorting()->DebugJson(exists.GetPosition(), pkTypes).GetStringRobust()
-        );
+                             << exists.GetSorting()->DebugJson(exists.GetPosition(), pkTypes).GetStringRobust());
     }
+
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         return TYdbConclusionStatus::Success();
     }
+
 public:
     using TBase::TBase;
+
     virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override {
         return IncomingData;
     }
@@ -69,14 +79,18 @@ class TReplaceMerger: public IMerger {
 private:
     using TBase = IMerger;
     NArrow::TColumnFilter Filter = NArrow::TColumnFilter::BuildDenyFilter();
-    virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& /*exists*/, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+
+    virtual TYdbConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& /*exists*/, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         Filter.Add(true);
         return TYdbConclusionStatus::Success();
     }
+
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         Filter.Add(false);
         return TYdbConclusionStatus::Success();
     }
+
 public:
     using TBase::TBase;
 
@@ -95,7 +109,9 @@ private:
     std::vector<std::shared_ptr<arrow::BooleanArray>> HasIncomingDataFlags;
     const std::optional<NArrow::NMerger::TSortableBatchPosition> DefaultExists;
     const TString InsertDenyReason;
-    virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) override;
+    virtual TYdbConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) override;
+
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) override {
         if (!!InsertDenyReason) {
             return TYdbConclusionStatus::Fail("insertion is impossible: " + InsertDenyReason);
@@ -106,6 +122,7 @@ private:
             return OnEqualKeys(*DefaultExists, incoming);
         }
     }
+
 public:
     virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override;
 
@@ -113,4 +130,4 @@ public:
         const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});
 };
 
-}
+}   // namespace NKikimr::NOlap

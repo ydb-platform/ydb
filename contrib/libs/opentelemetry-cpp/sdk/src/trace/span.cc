@@ -60,8 +60,7 @@ Span::Span(std::shared_ptr<Tracer> &&tracer,
     : tracer_{std::move(tracer)},
       recordable_{tracer_->GetProcessor().MakeRecordable()},
       start_steady_time{options.start_steady_time},
-      span_context_(std::move(span_context)),
-      has_ended_{false}
+      span_context_(std::move(span_context))
 {
   if (recordable_ == nullptr)
   {

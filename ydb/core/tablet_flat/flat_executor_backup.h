@@ -32,6 +32,8 @@ enum EEv {
     EvSnapshotStats,
     EvChangelogStats,
 
+    EvStop,
+
     EvEnd
 };
 
@@ -83,14 +85,6 @@ struct TEvWriteChangelog : public TEventLocal<TEvWriteChangelog, EvWriteChangelo
         , CreatedAt(createdAt)
     {}
 
-    ui64 GetTotalSize() const {
-        ui64 totalSize = EmbeddedLogBody.size();
-        for (const auto& ref : References) {
-            totalSize += ref.Buffer.size();
-        }
-        return totalSize;
-    }
-
     ui32 Step;
     TString EmbeddedLogBody;
     TVector<TEvTablet::TLogEntryReference> References;
@@ -98,11 +92,11 @@ struct TEvWriteChangelog : public TEventLocal<TEvWriteChangelog, EvWriteChangelo
 };
 
 struct TEvWriteChangelogAck : public TEventLocal<TEvWriteChangelogAck, EvWriteChangelogAck> {
-    TEvWriteChangelogAck(ui64 processedBytes)
-        : ProcessedBytes(processedBytes)
+    TEvWriteChangelogAck(ui64 bytes)
+        : Bytes(bytes)
     {}
 
-    ui64 ProcessedBytes;
+    ui64 Bytes;
 };
 
 struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFailed> {
@@ -124,15 +118,23 @@ struct TEvSnapshotStats : public TEventLocal<TEvSnapshotStats, EvSnapshotStats> 
 };
 
 struct TEvChangelogStats : public TEventLocal<TEvChangelogStats, EvChangelogStats> {
-    TEvChangelogStats(ui64 bytesWritten, TDuration flushLatency, TDuration lag)
+    TEvChangelogStats(ui64 bytesWritten, TDuration latency, TDuration lag)
         : BytesWritten(bytesWritten)
-        , FlushLatency(flushLatency)
+        , Latency(latency)
         , Lag(lag)
     {}
 
     ui64 BytesWritten;
-    TDuration FlushLatency;
+    TDuration Latency;
     TDuration Lag;
+};
+
+struct TEvStop : public TEventLocal<TEvStop, EvStop> {
+    TEvStop(bool flush = false)
+        : Flush(flush)
+    {}
+
+    bool Flush;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
@@ -141,7 +143,8 @@ IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletB
                              TAutoPtr<NTable::TSchemeChanges> schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns,
-                                  TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
+                                  TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion,
+                                  ui32 workBudgetPercent);
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,

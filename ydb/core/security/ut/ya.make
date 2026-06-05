@@ -3,10 +3,10 @@ UNITTEST_FOR(ydb/core/security)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
+
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ELSE()
-    REQUIREMENTS(cpu:2)
+    SUPPRESSIONS(tsan.supp)
 ENDIF()
 
 PEERDIR(
@@ -23,6 +23,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     audit_ut.cpp
+    secure_request_ut.cpp
     ticket_parser_ut.cpp
     ut_common.cpp
 )

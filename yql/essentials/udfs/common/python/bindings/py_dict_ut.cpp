@@ -551,16 +551,16 @@ Y_UNIT_TEST(ToPyAndBackSetAsIs) {
     TPythonTestEngine engine;
     engine.ToPythonAndBack<NUdf::TDict<float, void>>(
         [](const TType* type, const NUdf::IValueBuilder& vb) {
-            return vb.NewDict(type, NUdf::TDictFlags::Sorted)->Add(NUdf::TUnboxedValuePod(0.1f), NUdf::TUnboxedValuePod::Void()).Add(NUdf::TUnboxedValuePod(0.2f), NUdf::TUnboxedValuePod::Void()).Add(NUdf::TUnboxedValuePod(0.3f), NUdf::TUnboxedValuePod::Void()).Build();
+            return vb.NewDict(type, NUdf::TDictFlags::Sorted)->Add(NUdf::TUnboxedValuePod(0.1F), NUdf::TUnboxedValuePod::Void()).Add(NUdf::TUnboxedValuePod(0.2F), NUdf::TUnboxedValuePod::Void()).Add(NUdf::TUnboxedValuePod(0.3F), NUdf::TUnboxedValuePod::Void()).Build();
         },
         "def Test(value): return value",
         [](const NUdf::TUnboxedValuePod& value) {
             UNIT_ASSERT(value.HasDictItems());
             UNIT_ASSERT_EQUAL(value.GetDictLength(), 3);
-            UNIT_ASSERT(!value.Contains(NUdf::TUnboxedValuePod(0.0f)));
-            UNIT_ASSERT(value.Contains(NUdf::TUnboxedValuePod(0.3f)));
-            UNIT_ASSERT(value.Lookup(NUdf::TUnboxedValuePod(0.2f)));
-            UNIT_ASSERT(!value.Lookup(NUdf::TUnboxedValuePod(0.4f)));
+            UNIT_ASSERT(!value.Contains(NUdf::TUnboxedValuePod(0.0F)));
+            UNIT_ASSERT(value.Contains(NUdf::TUnboxedValuePod(0.3F)));
+            UNIT_ASSERT(value.Lookup(NUdf::TUnboxedValuePod(0.2F)));
+            UNIT_ASSERT(!value.Lookup(NUdf::TUnboxedValuePod(0.4F)));
 
             std::vector<float> keys;
             const auto kit = value.GetKeysIterator();
@@ -569,9 +569,9 @@ Y_UNIT_TEST(ToPyAndBackSetAsIs) {
             }
 
             UNIT_ASSERT_EQUAL(keys.size(), 3);
-            UNIT_ASSERT_EQUAL(keys[0], 0.1f);
-            UNIT_ASSERT_EQUAL(keys[1], 0.2f);
-            UNIT_ASSERT_EQUAL(keys[2], 0.3f);
+            UNIT_ASSERT_EQUAL(keys[0], 0.1F);
+            UNIT_ASSERT_EQUAL(keys[1], 0.2F);
+            UNIT_ASSERT_EQUAL(keys[2], 0.3F);
         });
 }
 
@@ -581,7 +581,7 @@ Y_UNIT_TEST(ToPyAsThinList_FromPyAsDict) {
         [](const TType*, const NUdf::IValueBuilder& vb) {
             NUdf::TUnboxedValue* items = nullptr;
             const auto a = vb.NewArray(9U, items);
-            const auto f = std::to_array<float>({0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f});
+            const auto f = std::to_array<float>({0.1F, 0.2F, 0.3F, 0.4F, 0.5F, 0.6F, 0.7F, 0.8F, 0.9F});
             std::transform(f.data(), f.data() + 9U, items, [](float v) { return NUdf::TUnboxedValuePod(v); });
             return a;
         },
@@ -591,7 +591,7 @@ Y_UNIT_TEST(ToPyAsThinList_FromPyAsDict) {
             UNIT_ASSERT_EQUAL(value.GetDictLength(), 9U);
             UNIT_ASSERT(value.Contains(NUdf::TUnboxedValuePod(i8(0))));
             UNIT_ASSERT(!value.Contains(NUdf::TUnboxedValuePod(i8(10))));
-            UNIT_ASSERT_EQUAL(value.Lookup(NUdf::TUnboxedValuePod(i8(5))).Get<float>(), 0.6f);
+            UNIT_ASSERT_EQUAL(value.Lookup(NUdf::TUnboxedValuePod(i8(5))).Get<float>(), 0.6F);
             UNIT_ASSERT(!value.Lookup(NUdf::TUnboxedValuePod(i8(13))));
 
             std::vector<std::pair<i8, float>> items;
@@ -603,8 +603,8 @@ Y_UNIT_TEST(ToPyAsThinList_FromPyAsDict) {
             UNIT_ASSERT_EQUAL(items.size(), 9U);
             UNIT_ASSERT_EQUAL(items.front().first, 0);
             UNIT_ASSERT_EQUAL(items.back().first, 8);
-            UNIT_ASSERT_EQUAL(items.front().second, 0.1f);
-            UNIT_ASSERT_EQUAL(items.back().second, 0.9f);
+            UNIT_ASSERT_EQUAL(items.front().second, 0.1F);
+            UNIT_ASSERT_EQUAL(items.back().second, 0.9F);
 
             std::vector<i8> keys;
             const auto kit = value.GetKeysIterator();
@@ -623,8 +623,8 @@ Y_UNIT_TEST(ToPyAsThinList_FromPyAsDict) {
             }
 
             UNIT_ASSERT_EQUAL(values.size(), 9U);
-            UNIT_ASSERT_EQUAL(values.front(), 0.1f);
-            UNIT_ASSERT_EQUAL(values.back(), 0.9f);
+            UNIT_ASSERT_EQUAL(values.front(), 0.1F);
+            UNIT_ASSERT_EQUAL(values.back(), 0.9F);
         });
 }
 

@@ -75,9 +75,38 @@ struct TIndexDescription {
 
     struct TLocalBloomNgramFilterDescription {
         std::optional<ui32> NgramSize;
-        std::optional<double> FalsePositiveProbability;
         std::optional<bool> CaseSensitive;
+        std::optional<double> FalsePositiveProbability;
     };
+
+private:
+    // Helper function to extract bloom filter description from NKikimrSchemeOp::TBloomFilter
+    static TLocalBloomFilterDescription ExtractBloomFilterDescription(
+        const NKikimrSchemeOp::TBloomFilter& bloomFilter) {
+        TLocalBloomFilterDescription desc;
+        if (bloomFilter.HasFalsePositiveProbability()) {
+            desc.FalsePositiveProbability = bloomFilter.GetFalsePositiveProbability();
+        }
+        return desc;
+    }
+
+    // Helper function to extract bloom ngram filter description from NKikimrSchemeOp::TBloomNGrammFilter
+    static TLocalBloomNgramFilterDescription ExtractBloomNgramFilterDescription(
+        const NKikimrSchemeOp::TBloomNGrammFilter& bloomNGrammFilter) {
+        TLocalBloomNgramFilterDescription desc;
+        if (bloomNGrammFilter.HasNGrammSize()) {
+            desc.NgramSize = bloomNGrammFilter.GetNGrammSize();
+        }
+        if (bloomNGrammFilter.HasCaseSensitive()) {
+            desc.CaseSensitive = bloomNGrammFilter.GetCaseSensitive();
+        }
+        if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+            desc.FalsePositiveProbability = bloomNGrammFilter.GetFalsePositiveProbability();
+        }
+        return desc;
+    }
+
+public:
 
     enum class EType : ui32 {
         GlobalSync = 0,
@@ -89,6 +118,7 @@ struct TIndexDescription {
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
         GlobalJson = 8,
+        LocalMinMax = 9,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -145,6 +175,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -162,8 +193,18 @@ struct TIndexDescription {
                 break;
             }
             case EType::LocalBloomFilter:
+                if (index.HasBloomFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomFilterDescription(index.GetBloomFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                }
+                break;
             case EType::LocalBloomNgramFilter:
-                YQL_ENSURE(false, << "Local bloom index type is not represented by NKikimrSchemeOp::TIndexDescription");
+                if (index.HasBloomNGrammFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomNgramFilterDescription(index.GetBloomNGrammFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
+                }
                 break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
@@ -185,6 +226,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -196,10 +238,18 @@ struct TIndexDescription {
                 SpecializedIndexDescription = message->GetFulltextIndexDescription();
                 break;
             case EType::LocalBloomFilter:
-                SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                if (message->HasBloomFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomFilterDescription(message->GetBloomFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                }
                 break;
             case EType::LocalBloomNgramFilter:
-                SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
+                if (message->HasBloomNGrammFilterDescription()) {
+                    SpecializedIndexDescription = ExtractBloomNgramFilterDescription(message->GetBloomNGrammFilterDescription());
+                } else {
+                    SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
+                }
                 break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
@@ -222,6 +272,12 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalFulltextRelevance;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
                 return TIndexDescription::EType::GlobalJson;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter:
+                return TIndexDescription::EType::LocalBloomFilter;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter:
+                return TIndexDescription::EType::LocalBloomNgramFilter;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax:
+                return TIndexDescription::EType::LocalMinMax;
             default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
@@ -244,9 +300,11 @@ struct TIndexDescription {
             case NYql::TIndexDescription::EType::GlobalJson:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
             case NYql::TIndexDescription::EType::LocalBloomFilter:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter;
             case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
-                YQL_ENSURE(false, << "Local bloom index type can't be converted to NKikimrSchemeOp::EIndexType");
-                break;
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter;
+            case NYql::TIndexDescription::EType::LocalMinMax:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(indexType));
         }
@@ -277,6 +335,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
@@ -323,6 +382,7 @@ struct TIndexDescription {
                 return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return false;
         }
     }
@@ -339,6 +399,7 @@ struct TIndexDescription {
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return {};
         }
         return {};
@@ -787,6 +848,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         for(auto& [_, name]: orderMap) {
             ColumnOrder.emplace_back(name);
         }
+
     }
 
     bool IsSameTable(const TKikimrTableMetadata& other) {
@@ -854,12 +916,13 @@ struct TKikimrTableMetadata : public TThrRefBase {
                 implTable = implTable->Next;
             } while (implTable);
         }
+
     }
 
-    TString SerializeToString() const {
+    TString DebugString() const {
         NKikimrKqp::TKqpTableMetadataProto proto;
         ToMessage(&proto);
-        return proto.SerializeAsString();
+        return proto.DebugString();
     }
 
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {
@@ -996,6 +1059,13 @@ struct TAlterTopicSettings {
     TString Name;
     TString WorkDir;
     bool MissingOk;
+};
+
+struct TCreateTopicSettings {
+    Ydb::Topic::CreateTopicRequest Request;
+    TString Name;
+    TString WorkDir;
+    bool ExistingOk;
 };
 
 struct TSequenceSettings {
@@ -1443,9 +1513,11 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) = 0;
 
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) = 0;
 
-    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) = 0;
 

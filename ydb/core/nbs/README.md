@@ -71,12 +71,12 @@ code workspace/workspace.code-workspace
 2) Create partition:
     ```
     cd ydb_bg/ydb/apps/dstool/
-    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 1048576 --pool ddp1 --type=ssd --disk-id disk1
     ```
     On Remote:
     ```
     cd ydb_bg/ydb/apps/dstool/
-    ./ydb-dstool -d -e grpc://vla5-8296.search.yandex.net:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
+    ./ydb-dstool -d -e grpc://vla5-8296.search.yandex.net:2135 nbs partition create --block-size 4096 --blocks-count 1048576 --pool ddp1 --type=ssd --disk-id disk1
     ```
 
 3) Get load actor adapter id:
@@ -105,7 +105,7 @@ code workspace/workspace.code-workspace
     ```
     sudo fio --name=randomreadwritetest --blocksize=4096 --rw=randrw --direct=1 --buffered=0 --ioengine=libaio --iodepth=32 --runtime=30 --time_based --filename=/dev/vdb
 
-    sudo fio --rw=randwrite --name=test --filename=/dev/vdb --direct=1 --blocksize=4096 --ioengine=libaio --iodepth=32 --runtime=30 --numjobs=1 --time_based --group_reporting --verify_fatal=1 --verify_dump=1 --verify_async=2 --do_verify=1 --verify=sha1 --verify_backlog=500
+    sudo fio --rw=randwrite --name=test --filename=/dev/vdb --direct=1 --bssplit=4k/20:8k/20:64k/50:1M/10 --ioengine=libaio --iodepth=32 --runtime=30 --numjobs=1 --time_based --group_reporting --verify_fatal=1 --verify_dump=1 --verify_async=2 --do_verify=1 --verify=sha1 --verify_backlog=500
     ```
 
 ## Slice deployment

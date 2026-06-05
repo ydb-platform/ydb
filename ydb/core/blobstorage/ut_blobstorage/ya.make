@@ -63,6 +63,7 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
+    ydb/core/blobstorage/vdisk/synclog
 )
 
 END()
@@ -78,6 +79,7 @@ RECURSE_FOR_TESTS(
     ut_donor
     ut_group_reconfiguration
     ut_huge
+    ut_startup_brokers
     ut_read_only_vdisk
     ut_osiris
     ut_phantom_blobs
@@ -91,4 +93,5 @@ RECURSE_FOR_TESTS(
     ut_cluster_balancing
     ut_move_pdisk
     ut_vdisk_internals
+    ut_oos
 )

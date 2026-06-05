@@ -544,4 +544,31 @@ void TBalanceTabletCellsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TCheckClusterLivenessCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("check_cypress_root", &TThis::CheckCypressRoot)
+        .Default(false);
+    registrar.Parameter("check_secondary_master_cells", &TThis::CheckSecondaryMasterCells)
+        .Default(false);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "check_tablet_cell_bundle",
+        [] (TThis* command) -> auto& {
+            return command->Options.CheckTabletCellBundle;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TCheckClusterLivenessCommand::DoExecute(ICommandContextPtr context)
+{
+    Options.CheckCypressRoot = CheckCypressRoot;
+    Options.CheckSecondaryMasterCells = CheckSecondaryMasterCells;
+
+    WaitFor(context->GetClient()->CheckClusterLiveness(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

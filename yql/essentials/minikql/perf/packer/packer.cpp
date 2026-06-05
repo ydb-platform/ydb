@@ -12,7 +12,7 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NUdf;
 
-static const size_t LIST_SIZE = 5000000ul;
+static const size_t LIST_SIZE = 5000000UL;
 
 int main(int, char**) {
     try {

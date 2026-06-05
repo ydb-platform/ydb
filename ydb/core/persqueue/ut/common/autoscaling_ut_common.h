@@ -46,11 +46,15 @@ ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TStr
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight);
 
+/** Alter topic через `CreateAlterTopicOperationActor` с кастомным `IAlterTopicStrategy` (лимит сообщений/сек на партицию, см. pqconfig WriteSpeedInMessagesPerSecond). */
+void AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond);
+
 TWriteMessage Msg(const TString& data, ui64 seqNo);
 
 TTopicSdkTestSetup CreateSetup(
     NActors::NLog::EPriority priority = NActors::NLog::PRI_DEBUG,
-    bool enableTopicPartitionSplitBasedOnKllSketch = false);
+    bool enableTopicPartitionSplitBasedOnKllSketch = false,
+    bool enableTopicPartitionSplitBasedOnMessages = false);
 
 std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TString{TEST_TOPIC}, bool useCodec = true);
 

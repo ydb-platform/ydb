@@ -38,13 +38,8 @@ bool IsEmptyQuery(google::protobuf::Message* message) {
     auto ast = static_cast<const TSQLv1ParserAST&>(*message);
     const auto& sqlQuery = ast.GetRule_sql_query();
 
-    if (sqlQuery.GetAltCase() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1 &&
-        !sqlQuery.GetAlt_sql_query1().GetRule_sql_stmt_list1().HasBlock2())
-    {
-        return true;
-    }
-
-    return false;
+    return sqlQuery.GetAltCase() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1 &&
+           !sqlQuery.GetAlt_sql_query1().GetRule_sql_stmt_list1().HasBlock2();
 }
 
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {
@@ -147,9 +142,9 @@ bool IsSelect(const TRule_expr& msg) {
     return IsSelect(*parenthesis);
 }
 
-bool IsOnlySubExpr(const TRule_select_subexpr& node) {
-    return node.GetBlock2().empty() &&
-           node.GetRule_select_subexpr_intersect1().GetBlock2().empty();
+bool IsOnlySubExpr(const TRule_select_subexpr& msg) {
+    return msg.GetBlock2().empty() &&
+           msg.GetRule_select_subexpr_intersect1().GetBlock2().empty();
 }
 
 bool IsOnlySelect(const TRule_select_stmt& rule) {

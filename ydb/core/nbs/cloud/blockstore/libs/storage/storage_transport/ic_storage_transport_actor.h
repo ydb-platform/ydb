@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ddisk_helpers.h"
 #include "ic_storage_transport_events.h"
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
@@ -35,28 +36,32 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvEraseFromPBuffer>>
         EraseFromPBufferRequests;
 
-    TMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
-    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>>
-        WriteToManyPBuffersRequests;
+    struct TWriteToManyPBuffersReqInfo
+    {
+        std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers> Request;
+        TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> WaitingReplies;
+    };
+
+    THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
 public:
     TICStorageTransportActor() = default;
 
-    ~TICStorageTransportActor();
+    ~TICStorageTransportActor() override;
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
-    using TEvWriteToManyPersistentBuffers =
-        NKikimr::NDDisk::TEvWritePersistentBuffers;
-    using TEvWriteToManyPersistentBuffersResult =
-        NKikimr::NDDisk::TEvWritePersistentBuffersResult;
     STFUNC(StateWork);
 
     void HandleConnect(
         const TEvTransportPrivate::TEvConnect::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleConnectUndelivery(
+        const NKikimr::NDDisk::TEvConnect::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleConnectResult(
@@ -76,7 +81,7 @@ private:
         const NActors::TActorContext& ctx);
 
     void HandleWriteToManyPersistentBuffersResult(
-        const TEvWriteToManyPersistentBuffersResult::TPtr& ev,
+        const NKikimr::NDDisk::TEvWritePersistentBuffersResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleWriteToDDisk(

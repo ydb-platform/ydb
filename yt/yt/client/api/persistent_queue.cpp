@@ -275,7 +275,7 @@ private:
             YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
             stateRow.RowIndex = row[rowIndexColumnId].Data.Int64;
 
-            YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
+            YT_ASSERT(row[stateColumnId].Type == EValueType::Int64);
             stateRow.State = ERowState(row[stateColumnId].Data.Int64);
 
             rows.push_back(stateRow);
@@ -448,7 +448,6 @@ private:
             for (i64 index = batchBeginRowIndex; index < batchEndRowIndex; ++index) {
                 batch.DataWeight += GetDataWeight(rows[index - tablet.FetchRowIndex]);
             }
-            batches.emplace_back(std::move(batch));
 
             YT_LOG_DEBUG("Rows fetched (TabletIndex: %v, RowIndexes: %v-%v, DataWeight: %v)",
                 tabletIndex,
@@ -456,6 +455,7 @@ private:
                 batchEndRowIndex - 1,
                 batch.DataWeight);
 
+            batches.emplace_back(std::move(batch));
             batchBeginRowIndex = -1;
         };
 
@@ -557,12 +557,11 @@ private:
 
         State_->BatchesRowCount += batch.RowCount;
         State_->BatchesDataWeight += batch.DataWeight;
-        State_->Batches.emplace_back(std::move(batch));
-
         YT_LOG_DEBUG("Rows reclaimed (TabletIndex: %v RowIndexes: %v-%v)",
             batch.TabletIndex,
             batch.BeginRowIndex,
             batch.EndRowIndex - 1);
+        State_->Batches.emplace_back(std::move(batch));
 
         TryFulfillPromises(state, &guard);
     }
@@ -946,7 +945,7 @@ TFuture<THashMap<int, TPersistentQueueTabletState>> ReadPersistentQueueTabletsSt
                 YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
                 i64 rowIndex = row[rowIndexColumnId].Data.Int64;
 
-                YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
+                YT_ASSERT(row[stateColumnId].Type == EValueType::Int64);
                 auto state = ERowState(row[stateColumnId].Data.Int64);
 
                 auto& tabletState = tabletMap[tabletIndex];

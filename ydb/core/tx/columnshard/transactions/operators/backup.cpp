@@ -1,4 +1,6 @@
 #include "backup.h"
+
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
@@ -18,10 +20,12 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_id")("problem", id.GetErrorMessage());
         return false;
     }
-    auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(NKikimr::NOlap::TSnapshot{txBody.GetBackupTask().GetSnapshotStep(), txBody.GetBackupTask().GetSnapshotTxId()});
+    auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(
+        NKikimr::NOlap::TSnapshot{ txBody.GetBackupTask().GetSnapshotStep(), txBody.GetBackupTask().GetSnapshotTxId() });
     auto columns = schema->GetIndexInfo().GetColumns();
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), columns, txBody.GetBackupTask(), GetTxId());
-    NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
+    NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()),
+        std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
@@ -34,7 +38,8 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     return true;
 }
 
-TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
+TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartProposeOnExecute(
+    TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
     if (!TaskExists && TxAddTask) {
         AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
     }
@@ -51,19 +56,37 @@ void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*
 bool TBackupTransactionOperator::ProgressOnExecute(
     TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
     AFL_VERIFY(!TxRemove);
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
-    owner.LastCompletedBackupTransaction.SetTxId(GetTxId());
-    auto& opResult = *owner.LastCompletedBackupTransaction.MutableOpResult();
+    const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
+
+    NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
+    backupTx.SetTxId(GetTxId());
+    auto& opResult = *backupTx.MutableOpResult();
     opResult.SetSuccess(status.Success);
     opResult.SetExplain(status.ErrorMessage);
-    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
+
+    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
     NIceDb::TNiceDb db(txc.DB);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedBackupTransaction, owner.LastCompletedBackupTransaction.SerializeAsString());
-    return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext()); 
+
+    const auto tableId = owner.TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
+    if (const auto* previousBackupTx = owner.LastCompletedBackupTransactions.FindPtr(schemeShardLocalPathId)) {
+        owner.LastCompletedBackupTransactionsByTxId.erase(previousBackupTx->GetTxId());
+    }
+    const TString serializedBackupTx = backupTx.SerializeAsString();
+    owner.LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
+    owner.LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
+    owner.TablesManager.SetLastCompletedBackupTransaction(schemeShardLocalPathId, serializedBackupTx);
+
+    db.Table<Schema::TableInfoV1>()
+        .Key(tableId.GetRawValue(), schemeShardLocalPathId.GetRawValue())
+        .Update(NIceDb::TUpdate<Schema::TableInfoV1::LastCompletedBackupTransaction>(serializedBackupTx));
+
+    return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
 bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(
+        ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()));
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         auto& opResult = *event->Record.MutableOpResult();
@@ -85,32 +108,32 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
 }
 
 bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
-    if (TxAbort) { 
-        TxAbort->Complete(ctx); 
+    if (TxAbort) {
+        TxAbort->Complete(ctx);
     }
     return true;
 }
 
-void TBackupTransactionOperator::RegisterSubscriber(const TActorId &actorId) {
+void TBackupTransactionOperator::RegisterSubscriber(const TActorId& actorId) {
     NotifySubscribers.insert(actorId);
 }
 
-TString TBackupTransactionOperator::DoDebugString() const { 
-    return "BACKUP"; 
+TString TBackupTransactionOperator::DoDebugString() const {
+    return "BACKUP";
 }
 
-bool TBackupTransactionOperator::DoIsAsync() const { 
-    return true; 
+bool TBackupTransactionOperator::DoIsAsync() const {
+    return true;
 }
 
-TString TBackupTransactionOperator::DoGetOpType() const { 
-    return "Backup"; 
+TString TBackupTransactionOperator::DoGetOpType() const {
+    return "Backup";
 }
 
-void TBackupTransactionOperator::DoFinishProposeOnComplete(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
+void TBackupTransactionOperator::DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
 }
 
-void TBackupTransactionOperator::DoFinishProposeOnExecute(TColumnShard & /*owner*/, NTabletFlatExecutor::TTransactionContext & /*txc*/) {
+void TBackupTransactionOperator::DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
 }
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

@@ -10,12 +10,14 @@ TEndSpanWithError::TEndSpanWithError(
     std::shared_ptr<NWilson::TSpan> span,
     const NProto::TError& error)
     : Span(std::move(span))
-    , ErrorMessage(*Span ? FormatError(error) : TString())
+    , ErrorMessage(Span && *Span ? FormatError(error) : TString())
 {}
 
 TEndSpanWithError::~TEndSpanWithError()
 {
-    Span->EndError(std::move(ErrorMessage));
+    if (Span) {
+        Span->EndError(std::move(ErrorMessage));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

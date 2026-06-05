@@ -18,212 +18,214 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   - Native SDK
 
-  {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
+    {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "os"
+    import (
+      "context"
+      "fmt"
+      "os"
+      "time"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
     )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    type logMessage struct {
-      App       string
-      Host      string
-      Timestamp time.Time
-      HTTPCode  uint32
-      Message   string
-    }
-    // prepare native go data
-    const batchSize = 10000
-    logs := make([]logMessage, 0, batchSize)
-    for i := 0; i < batchSize; i++ {
-      message := logMessage{
-        App: fmt.Sprintf("App_%d", i/256),
-        Host: fmt.Sprintf("192.168.0.%d", i%256),
-        Timestamp: time.Now().Add(time.Millisecond * time.Duration(i%1000)),
-        HTTPCode: 200,
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
       }
-      if i%2 == 0 {
-        message.Message = "GET / HTTP/1.1"
-      } else {
-        message.Message = "GET /images/logo.png HTTP/1.1"
+      defer db.Close(ctx)
+      type logMessage struct {
+        App       string
+        Host      string
+        Timestamp time.Time
+        HTTPCode  uint32
+        Message   string
       }
-      logs = append(logs, message)
-    }
-    // execute bulk upsert with native ydb data
-    err = db.Table().Do( // Do retry operation on errors with best effort
-      ctx, // context manage exiting from Do
-      func(ctx context.Context, s table.Session) (err error) { // retry operation
-        rows := make([]types.Value, 0, len(logs))
-        for _, msg := range logs {
-          rows = append(rows, types.StructValue(
-            types.StructFieldValue("App", types.UTF8Value(msg.App)),
-            types.StructFieldValue("Host", types.UTF8Value(msg.Host)),
-            types.StructFieldValue("Timestamp", types.TimestampValueFromTime(msg.Timestamp)),
-            types.StructFieldValue("HTTPCode", types.Uint32Value(msg.HTTPCode)),
-            types.StructFieldValue("Message", types.UTF8Value(msg.Message)),
-          ))
+      // prepare native go data
+      const batchSize = 10000
+      logs := make([]logMessage, 0, batchSize)
+      for i := 0; i < batchSize; i++ {
+        message := logMessage{
+          App:       fmt.Sprintf("App_%d", i/256),
+          Host:      fmt.Sprintf("192.168.0.%d", i%256),
+          Timestamp: time.Now().Add(time.Millisecond * time.Duration(i%1000)),
+          HTTPCode:  200,
         }
-        return s.BulkUpsert(ctx, "/local/bulk_upsert_example", types.ListValue(rows...))
-      },
+        if i%2 == 0 {
+          message.Message = "GET / HTTP/1.1"
+        } else {
+          message.Message = "GET /images/logo.png HTTP/1.1"
+        }
+        logs = append(logs, message)
+      }
+      // execute bulk upsert with native ydb data
+      err = db.Table().Do( // Do retry operation on errors with best effort
+        ctx, // context manage exiting from Do
+        func(ctx context.Context, s table.Session) (err error) { // retry operation
+          rows := make([]types.Value, 0, len(logs))
+          for _, msg := range logs {
+            rows = append(rows, types.StructValue(
+              types.StructFieldValue("App", types.UTF8Value(msg.App)),
+              types.StructFieldValue("Host", types.UTF8Value(msg.Host)),
+              types.StructFieldValue("Timestamp", types.TimestampValueFromTime(msg.Timestamp)),
+              types.StructFieldValue("HTTPCode", types.Uint32Value(msg.HTTPCode)),
+              types.StructFieldValue("Message", types.UTF8Value(msg.Message)),
+            ))
+          }
+          return s.BulkUpsert(ctx, "/local/bulk_upsert_example", types.ListValue(rows...))
+        },
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    {% cut "Bulk upsert `CSV` data" %}
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
     )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+
+      csv := `skip row
+
+    id,val
+    42,"text42"
+    43,"text43"
+    44,hello
+    `
+
+      err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataCsv(
+        []byte(csv),
+        table.WithCsvHeader(),
+        table.WithCsvSkipRows(2),
+        table.WithCsvNullValue([]byte("hello")), // "hello" would be interpreted as NULL
+      ))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-  }
-  ```
+    ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "Bulk upsert `CSV` data" %}
+    {% cut "Bulk upsert `Apache Arrow` data" %}
 
-  ```go
-  package main
+    In the following example, the [arrow package](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow) is used to prepare the data.
 
-  import (
-    "context"
-    "fmt"
-    "os"
+    ```go
+    package main
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
-  )
+    import (
+      "bytes"
+      "context"
+      "fmt"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/apache/arrow-go/v18/arrow"
+      "github.com/apache/arrow-go/v18/arrow/array"
+      "github.com/apache/arrow-go/v18/arrow/ipc"
+      "github.com/apache/arrow-go/v18/arrow/memory"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx := context.Background()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx) // cleanup resources
+
+      mem := memory.NewGoAllocator()
+
+      schema := arrow.NewSchema([]arrow.Field{
+        {Name: "id", Type: arrow.PrimitiveTypes.Int64},
+        {Name: "val", Type: arrow.BinaryTypes.String},
+      }, nil)
+
+      b := array.NewRecordBuilder(mem, schema)
+      defer b.Release()
+
+      b.Field(0).(*array.Int64Builder).AppendValues(
+        []int64{123, 234}, nil)
+
+      b.Field(1).(*array.StringBuilder).AppendValues(
+        []string{"data1", "data2"}, nil)
+
+      rec := b.NewRecordBatch()
+      defer rec.Release()
+
+      schemaPayload := ipc.GetSchemaPayload(rec.Schema(), mem)
+      defer schemaPayload.Release()
+
+      dataPayload, err := ipc.GetRecordBatchPayload(rec)
+      if err != nil {
+        panic(err)
+      }
+      defer dataPayload.Release()
+
+      var schemaBuf bytes.Buffer
+      _, err = schemaPayload.WritePayload(&schemaBuf)
+      if err != nil {
+        panic(err)
+      }
+
+      var dataBuf bytes.Buffer
+      _, err = dataPayload.WritePayload(&dataBuf)
+      if err != nil {
+        panic(err)
+      }
+
+      err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataArrow(
+        dataBuf.Bytes(),
+        table.WithArrowSchema(schemaBuf.Bytes()), // schema is required
+      ))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-    defer db.Close(ctx)
+    ```
 
-    csv := `skip row
-
-  id,val
-  42,"text42"
-  43,"text43"
-  44,hello
-  `
-
-    // execute bulk upsert from CSV data
-    err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataCsv(
-      []byte(csv),
-      table.WithCsvHeader(),
-      table.WithCsvSkipRows(2),
-      table.WithCsvNullValue([]byte("hello")), // "hello" would be interpreted as NULL
-    ))
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-  }
-  ```
-
-  {% endcut %}
-
-  {% cut "Bulk upsert `Apache Arrow` data" %}
-
-  In the following example, the [arrow package](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow) is used to prepare the data.
-
-  ```go
-  package main
-
-  import (
-    "bytes"
-    "context"
-    "fmt"
-
-    "github.com/apache/arrow-go/v18/arrow"
-    "github.com/apache/arrow-go/v18/arrow/array"
-    "github.com/apache/arrow-go/v18/arrow/ipc"
-    "github.com/apache/arrow-go/v18/arrow/memory"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
-  )
-
-  func main() {
-    ctx := context.Background()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx) // cleanup resources
-
-    mem := memory.NewGoAllocator()
-
-    schema := arrow.NewSchema([]arrow.Field{
-      {Name: "id", Type: arrow.PrimitiveTypes.Int64},
-      {Name: "val", Type: arrow.BinaryTypes.String},
-    }, nil)
-
-    b := array.NewRecordBuilder(mem, schema)
-    defer b.Release()
-
-    b.Field(0).(*array.Int64Builder).AppendValues(
-      []int64{123, 234}, nil)
-
-    b.Field(1).(*array.StringBuilder).AppendValues(
-      []string{"data1", "data2"}, nil)
-
-    rec := b.NewRecordBatch()
-    defer rec.Release()
-
-    schemaPayload := ipc.GetSchemaPayload(rec.Schema(), mem)
-    defer schemaPayload.Release()
-
-    dataPayload, err := ipc.GetRecordBatchPayload(rec)
-    if err != nil {
-      panic(err)
-    }
-    defer dataPayload.Release()
-
-    var schemaBuf bytes.Buffer
-    _, err = schemaPayload.WritePayload(&schemaBuf)
-    if err != nil {
-      panic(err)
-    }
-
-    var dataBuf bytes.Buffer
-    _, err = dataPayload.WritePayload(&dataBuf)
-    if err != nil {
-      panic(err)
-    }
-
-    err = db.Table().BulkUpsert(ctx, "/local/bulk_upsert_example", table.BulkUpsertDataArrow(
-      dataBuf.Bytes(),
-      table.WithArrowSchema(schemaBuf.Bytes()), // schema is required
-    ))
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-  }
-  ```
-
-  {% endcut %}
+    {% endcut %}
 
   - database/sql
 
@@ -238,7 +240,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   - Native SDK
 
-  ```java
+    ```java
     private static final String TABLE_NAME = "bulk_upsert";
     private static final int BATCH_SIZE = 1000;
 
@@ -288,11 +290,11 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
             session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
         ).join().expectSuccess("bulk upsert problem");
     }
-  ```
+    ```
 
   - JDBC
 
-  ```java
+    ```java
     private static final int BATCH_SIZE = 1000;
 
     public static void main(String[] args) {
@@ -306,7 +308,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
                     ps.setString(1, "App_" + String.valueOf(i / 256));
                     ps.setTimestamp(2, Timestamp.from(Instant.now().plusSeconds(i)));
                     ps.setString(3, "192.168.0." + i % 256);
-                    ps.setLong(4,i % 113 == 0 ? 404 : 200);
+                    ps.setLong(4, i % 113 == 0 ? 404 : 200);
                     ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
                     ps.addBatch();
                 }
@@ -317,7 +319,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
             e.printStackTrace();
         }
     }
-  ```
+    ```
 
     In Spring Boot, Hibernate, JOOQ, and other ORM stacks on JDBC you can run native YQL (including from repositories and `@Query`). The driver tries to optimize large inserts; `UPDATE`, `INSERT`, `DELETE`, `UPSERT` through JDBC are batched on the driver side when appropriate.
 
@@ -408,8 +410,72 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  ```rust
+  use ydb::{ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let rows: Vec<Value> = vec![
+          ydb_struct!(
+              "id" => 1_u64,
+              "val" => Value::Text("1".into()),
+          ),
+          ydb_struct!(
+              "id" => 2_u64,
+              "val" => Value::Text("2".into()),
+          ),
+          ydb_struct!(
+              "id" => 3_u64,
+              "val" => Value::Text("3".into()),
+          ),
+      ];
+
+      client
+          .table_client()
+          .retry_execute_bulk_upsert("/local/tablename".into(), rows)
+          .await?;
+
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $rows = [
+      ['id' => 1, 'val' => '1'],
+      ['id' => 2, 'val' => '2'],
+      ['id' => 3, 'val' => '3'],
+  ];
+
+  $ydb->table()->bulkUpsert('tablename', $rows, [
+      'id'  => 'UINT64',
+      'val' => 'UTF8',
+  ]);
+  ```
 
 {% endlist %}

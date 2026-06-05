@@ -2,6 +2,7 @@ LIBRARY(common)
 
 SRCS(
     aws.cpp
+    build_info.cpp
     cert_format_converter.cpp
     client_command_options.cpp
     colors.cpp
@@ -9,6 +10,7 @@ SRCS(
     command_utils.cpp
     common.cpp
     completion_generator.cpp
+    completion_graph_json.cpp
     completion.cpp
     config.cpp
     log.cpp
@@ -21,6 +23,8 @@ SRCS(
     ftxui.cpp
     interactive.cpp
     interruptable.cpp
+    lazy_driver.cpp
+    local_paths.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp
@@ -33,6 +37,8 @@ SRCS(
     progress_indication.cpp
     query_stats.cpp
     query_utils.cpp
+    scheme_query_utils.cpp
+    tx_mode_utils.cpp
     recursive_list.cpp
     recursive_remove.cpp
     retry_func.cpp

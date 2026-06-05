@@ -7,6 +7,7 @@
 #include "datashard_integrity_trails.h"
 
 #include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -41,10 +42,7 @@ public:
         return !op->HasRuntimeConflicts();
     }
 
-    void FillDeferredFields(ui64 lockTxId, NKikimrQueryStats::TTxStats* txStats) {
-        if (auto victimSpanId = DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId)) {
-            txStats->SetDeferredVictimQuerySpanId(*victimSpanId);
-        }
+    void FillDeferredBreakerInfo(ui64 lockTxId, NKikimrQueryStats::TTxStats* txStats) {
         auto lockInfo = DataShard.SysLocksTable().GetRawLock(lockTxId);
         if (!lockInfo || !lockInfo->GetBreakVersion()) {
             return;
@@ -254,7 +252,7 @@ public:
                                               lockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId) : Nothing(),
                                               querySpanId ? TMaybe<ui64>(querySpanId) : Nothing());
             if (lockTxId) {
-                FillDeferredFields(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
+                FillDeferredBreakerInfo(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
             }
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
@@ -483,7 +481,7 @@ public:
                     NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
                                                       DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId),
                                                       guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
-                    FillDeferredFields(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+                    FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
                     return EExecutionStatus::Executed;
                 };
 
@@ -546,7 +544,7 @@ public:
                 {
                     auto* txStats = writeOp->GetWriteResult()->Record.MutableTxStats();
                     for (const auto& brokenLock : brokenLocks) {
-                        FillDeferredFields(brokenLock.GetLockId(), txStats);
+                        FillDeferredBreakerInfo(brokenLock.GetLockId(), txStats);
                     }
                 }
 
@@ -746,7 +744,7 @@ public:
                                               guardLocks.LockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId) : Nothing(),
                                               guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
             if (guardLocks.LockTxId) {
-                FillDeferredFields(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+                FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
             }
 
             ResetChanges(userDb, txc);

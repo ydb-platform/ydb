@@ -315,11 +315,20 @@ struct TPDiskTest : public TPerfTest {
     TActorId PDiskId;
     ui64 PDiskGuid;
 
+    // Actor system NodeId for this instance. Standalone tests run as node 1; in the
+    // client/server setup the server may run with a different ID and must call
+    // SetSelfNodeId() before Init() so PDisk actor IDs and the logger get registered
+    // under the correct node, otherwise local sends are misrouted as remote.
+    ui32 SelfNodeId = 1;
+
     TDuration InitialSleep = TDuration::Seconds(10);
 
     TPDiskTest(const TPerfTestConfig& cfg, const NDevicePerfTest::TPDiskTest& testProto)
         : TPerfTest(cfg)
         , Setup(new TActorSystemSetup())
+        // SelfNodeId is declared after LogSettings so it isn't initialized yet here;
+        // use the same literal as its NSDMI (1). SetSelfNodeId() rebinds LoggerActorId
+        // when the server runs with a different NodeId.
         , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(1, "logger"),
                                                    NActorsServices::LOGGER,
                                                    NActors::NLog::PRI_ERROR,
@@ -343,11 +352,22 @@ struct TPDiskTest : public TPerfTest {
         PDiskActorIds.resize(numDevices);
         PDiskGuids.resize(numDevices);
         for (ui32 i = 0; i < numDevices; ++i) {
-            PDiskActorIds[i] = MakeBlobStoragePDiskID(1, i + 1);
+            PDiskActorIds[i] = MakeBlobStoragePDiskID(SelfNodeId, i + 1);
             PDiskGuids[i] = 12345 + i;
         }
         PDiskId = PDiskActorIds[0];
         PDiskGuid = PDiskGuids[0];
+    }
+
+    void SetSelfNodeId(ui32 nodeId) {
+        SelfNodeId = nodeId;
+        for (ui32 i = 0; i < PDiskActorIds.size(); ++i) {
+            PDiskActorIds[i] = MakeBlobStoragePDiskID(SelfNodeId, i + 1);
+        }
+        if (!PDiskActorIds.empty()) {
+            PDiskId = PDiskActorIds[0];
+        }
+        LogSettings->LoggerActorId = NActors::TActorId(SelfNodeId, "logger");
     }
 
     void FormatPDiskForTest() {
@@ -407,10 +427,10 @@ struct TPDiskTest : public TPerfTest {
 
         TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
 
-        Setup->NodeId = 1;
+        Setup->NodeId = SelfNodeId;
         Setup->ExecutorsCount = 4;
         Setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
-        Setup->Executors[0].Reset(new TBasicExecutorPool(0, 2, 20, "nameservice"));
+        Setup->Executors[0].Reset(new TBasicExecutorPool(0, 4, 20, "nameservice"));
         Setup->Executors[1].Reset(new TBasicExecutorPool(1, std::max(1u, Cfg.NumDevices()), 20, "pdisk_actors"));
         Setup->Executors[2].Reset(new TBasicExecutorPool(2, std::max(4u, Cfg.NumDevices() + 1), 20, "perf_actors"));
         Setup->Executors[3].Reset(new TIOExecutorPool(3, 1, "IO"));
@@ -468,14 +488,14 @@ struct TPDiskTest : public TPerfTest {
 
         TString explanation;
         LogSettings->SetLevel(NLog::PRI_EMERG, NKikimrServices::BS_DEVICE, explanation);
-        LogSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_LOAD_TEST, explanation);
-        LogSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_PDISK, explanation);
-        LogSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_DDISK, explanation);
+        LogSettings->SetLevel(Cfg.LogLevel, NKikimrServices::BS_LOAD_TEST, explanation);
+        LogSettings->SetLevel(NLog::PRI_WARN, NKikimrServices::BS_PDISK, explanation);
+        LogSettings->SetLevel(Cfg.LogLevel, NKikimrServices::BS_DDISK, explanation);
 
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, NActors::CreateStderrBackend(),
             GetServiceCounters(Counters, "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 3);
-        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(NActors::TActorId(1, "logger"),
+        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(NActors::TActorId(SelfNodeId, "logger"),
             std::move(loggerActorCmd));
         Setup->LocalServices.push_back(std::move(loggerActorPair));
     }

@@ -126,7 +126,7 @@ class UploadClusterBase(UploadSuiteBase):
     def __stats_ready_for_table(cls,  table_full_path: str) -> bool:
         def __max_e_rows(node: dict):
             if node.get('Name') == 'TableFullScan' and node.get('Path') == table_full_path:
-                return int(node.get('E-Rows', 0))
+                return float(node.get('E-Rows', 0))
             children = [__max_e_rows(o) for o in node.get('Operators', [])] + [__max_e_rows(p) for p in node.get('Plans', [])]
             return max(children) if len(children) > 0 else 0
 

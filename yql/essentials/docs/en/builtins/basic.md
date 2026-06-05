@@ -1184,6 +1184,20 @@ SELECT
   Just("my_string"); --  String?
 ```
 
+## AsOptional {#asoptional}
+
+Available since version [2026.01](../changelog/2026.01.md). Adds the ability to contain `NULL` to the passed value. If the value's type is already optional, PostgreSQL type or `NULL`, it returns the value unchanged. Otherwise, it wraps the value in [Just](#optional-ops). Unlike [Just](#optional-ops), it does not add an additional level of nesting for already optional values.
+
+#### Examples
+
+```yql
+SELECT 
+  AsOptional(42), -- Just(42)
+  AsOptional(NULL), -- NULL
+  AsOptional(Just(42)), -- Just(42)
+  AsOptional(1p); -- 1p
+```
+
 ## Unwrap {#unwrap}
 
 `Unwrap()`: Converting the [optional](../types/optional.md) value of the data type to the relevant non-optional type, raising a runtime error if the data is `NULL`. This means that `T?` becomes `T`.

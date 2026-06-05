@@ -29,51 +29,36 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     auto deps = CastOperator<TOpAddDependencies>(filter->GetInput());
 
     auto conjuncts = filter->FilterExpr.SplitConjunct();
-    TVector<TExpression> joinConditions;
-    TVector<TExpression> otherFilters;
-    for (auto const & conj : conjuncts) {
-        if (conj.MaybeJoinCondition()) {
-            joinConditions.push_back(conj);
-        } else {
-            otherFilters.push_back(conj);
-        }
-    }
-    
-    if (joinConditions.empty()) {
-        return false;
-    }
 
-    // Select a subset of join conditions that cover all dependencies
+    // Select a subset of conditions that cover all dependencies
     TVector<TExpression> dependentSubset;
     TVector<TExpression> remainderSubset;
     THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> covered;
 
-    for (const auto & jc : joinConditions) {
-        TJoinCondition cond(jc);
-        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.GetLeftIU()) != deps->Dependencies.end()) {
-            dependentSubset.push_back(jc);
-            correlated.insert(cond.GetRightIU());
-        }
-        else if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.GetRightIU()) != deps->Dependencies.end()) {
-            dependentSubset.push_back(jc);
-            correlated.insert(cond.GetLeftIU());
+    for (auto const& conj : conjuncts) {
+        auto conjIUs = conj.GetInputIUs();
+        auto conjDeps = IUSetIntersect(conjIUs, deps->Dependencies);
+        if (!conjDeps.empty()) {
+            auto corrIUs = IUSetDiff(conjIUs, deps->Dependencies);
+            correlated.insert(corrIUs.begin(), corrIUs.end());
+            covered.insert(conjDeps.begin(), conjDeps.end());
+            dependentSubset.push_back(conj);
         } else {
-            remainderSubset.push_back(jc);
+            remainderSubset.push_back(conj);
         }
     }
 
     // Make sure all dependencies are covered in this filter
     // FIXME: This is a current limitation
-    if (correlated.size() != deps->Dependencies.size()) {
+    if (covered.size() != deps->Dependencies.size()) {
         return false;
     }
 
     // Split the predicate into a remaining and new part with only dependent conditions
     TIntrusivePtr<IOperator> remainingFilter = deps->GetInput();
-    if (!otherFilters.empty() || !remainderSubset.empty()) {
-        auto newConjuncts = otherFilters;
-        newConjuncts.insert(newConjuncts.end(), remainderSubset.begin(), remainderSubset.end());
-        auto expr = MakeConjunction(newConjuncts, props.PgSyntax);
+    if (!remainderSubset.empty()) {
+        auto expr = MakeConjunction(remainderSubset, props.PgSyntax);
         remainingFilter = MakeIntrusive<TOpFilter>(deps->GetInput(), remainingFilter->Pos, expr);
     }
 
@@ -119,6 +104,13 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     } else if (input->Kind == EOperator::Aggregate) {
         auto aggregate = CastOperator<TOpAggregate>(input);
+
+        // Check that all filter conditions are pure equi-join conditions
+        for (const auto& cond : dependentSubset) {
+            if (!cond.MaybeEquiJoinCondition()) {
+                Y_ENSURE(false, "Only equi-join conditions are supported before aggregates in correlated subqueries");
+            }
+        }
 
         // Add all missing dependent columns to the group by list
         for (const auto & corr : correlated) {

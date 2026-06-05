@@ -48,6 +48,14 @@ The following describes the settings necessary to enable database node authentic
 
 ## Enabling Database Node Authentication and Authorization
 
+{% note info %}
+
+Starting from [version 25.2](../../../changelog-server.md#25-2), properly configured database node authentication is mandatory.
+
+Node registration in the cluster is impossible without successful authentication.
+
+{% endnote %}
+
 To enable mandatory database node authorization, the following configuration blocks must be added to the [cluster configuration file](../../../reference/configuration/index.md):
 
 1. At the root level of the configuration, add a `client_certificate_authorization` block specifying requirements for filling the "Subject" field of trusted certificates of connecting nodes, for example:
@@ -66,21 +74,28 @@ To enable mandatory database node authorization, the following configuration blo
 
     After the certificate is verified and its "Subject" field is confirmed to comply with the requirements established in the `subject_terms` block, the connection will be assigned access subjects from the `member_groups` parameter. To distinguish such access subjects, the `@cert` suffix is added to their names.
 
-2. In the `security_config` section of the cluster configuration, add the `register_dynamic_node_allowed_sids` element with a list of access subjects allowed to register database nodes. For technical reasons, this list must also include the access subject `root@builtin`. Example:
+2. In the `security_config` section of the cluster configuration, add the `register_dynamic_node_allowed_sids` element with a list of access subjects allowed to register database nodes. Example:
 
     ```yaml
     security_config:
       enforce_user_token_requirement: true
       ...
       register_dynamic_node_allowed_sids:
-      - "root@builtin" # required for technical reasons
       - "registerNode@cert"
     ```
 
     For more information on configuring cluster authentication parameters, see [{#T}](../../../reference/configuration/security_config.md#security-access-levels).
 
-3. Update the static configuration files on all cluster nodes manually or using the [Ansible playbook](../../deployment-options/ansible/update-config.md).
+3. In the `auth_config` section of the cluster configuration, add the `node_registration_token` as an empty string. Example:
 
-4. Perform a rolling restart of cluster storage nodes [using ydbops](../../../reference/ydbops/rolling-restart-scenario.md) or using the [Ansible playbook](../../deployment-options/ansible/restart.md).
+    ```yaml
+    auth_config:
+      ...
+      node_registration_token: ""
+    ```
 
-5. Perform a rolling restart of cluster database nodes using ydbops or using the Ansible playbook.
+4. Update the static configuration files on all cluster nodes manually or using the [Ansible playbook](../../deployment-options/ansible/update-config.md).
+
+5. Perform a rolling restart of cluster storage nodes [using ydbops](../../../reference/ydbops/rolling-restart-scenario.md) or using the [Ansible playbook](../../deployment-options/ansible/restart.md).
+
+6. Perform a rolling restart of cluster database nodes using ydbops or using the Ansible playbook.

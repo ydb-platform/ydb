@@ -32,15 +32,20 @@ class TestIncorrectCompression(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     COMPRESSION_CASES = [
-        ("just_text",         'qwerty',                         "mismatched input"),
-        ("unknown_key",       'codec=lz4',                      "Only algorithm and level settings supported"),
-        ("unknown_algorithm", 'algorithm=rar',                  "Unknown compression algorithm"),
-        ("only_level",        'level=3',                        "specified without an algorithm"),
-        ("negative_level",    'algorithm=zstd, level=-1',       "extraneous input"),
-        ("too_big_level",     'algorithm=zstd, level=99',       "annot parse serializer"),
-        ("double_algorithm",  'algorithm=lz4,algorithm=zstd',   "algorithm\\\' setting can be specified only once"),
-        ("double_level",      'algorithm=zstd,level=1,level=9', "level\\\' setting can be specified only once"),
+        ("just_text", 'qwerty', "mismatched input"),
+        ("unknown_key", 'codec=lz4', "Only algorithm and level settings supported"),
+        ("unknown_algorithm", 'algorithm=rar', "Unknown compression algorithm"),
+        ("only_level", 'level=3', "specified without an algorithm"),
+        ("negative_level", 'algorithm=zstd, level=-1', "extraneous input"),
+        ("too_big_level", 'algorithm=zstd, level=99', "annot parse serializer"),
+        ("double_algorithm", 'algorithm=lz4,algorithm=zstd', "algorithm\\\' setting can be specified only once"),
+        ("double_level", 'algorithm=zstd,level=1,level=9', "level\\\' setting can be specified only once"),
     ]
 
     @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)

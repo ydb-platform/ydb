@@ -17,7 +17,8 @@ class TChunksV0MetaNormalizer::TNormalizerResult: public INormalizerChanges {
 
 public:
     TNormalizerResult(std::vector<TChunksV0MetaNormalizer::TChunkInfo>&& chunks)
-        : Chunks(std::move(chunks)) {
+        : Chunks(std::move(chunks))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {

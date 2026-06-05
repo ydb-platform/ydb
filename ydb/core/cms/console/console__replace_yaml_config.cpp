@@ -307,7 +307,7 @@ public:
                 DoInternalAudit(txc, ctx);
 
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version + 1)
-                    .Update<Schema::DatabaseYamlConfigs::Config>(Config);
+                    .Update<Schema::DatabaseYamlConfigs::Config>(UpdatedDatabaseConfig);
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::DatabaseYamlConfigs>().Key(TargetDatabase, Version)

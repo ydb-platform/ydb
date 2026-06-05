@@ -37,7 +37,7 @@ std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TDataReceivedEvent& da
 
 TMessageInformation::TMessageInformation(
     uint64_t offset,
-    std::string producerId,
+    std::string_view producerId,
     uint64_t seqNo,
     TInstant createTime,
     TInstant writeTime,
@@ -54,7 +54,7 @@ TMessageInformation::TMessageInformation(
     , Meta(meta)
     , MessageMeta(messageMeta)
     , UncompressedSize(uncompressedSize)
-    , MessageGroupId(messageGroupId)
+    , MessageGroupId(std::move(messageGroupId))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

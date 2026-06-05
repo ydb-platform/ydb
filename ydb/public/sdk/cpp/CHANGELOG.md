@@ -1,3 +1,23 @@
+## v3.19.0
+
+* Added metric buffer for batched metric writes to reduce OpenTelemetry hot-path overhead.
+
+* Added a helper to detect specific issue codes within a TStatus (including nested sub-issues) and introduces the CONSTRAINT_VIOLATION issue code constant, intended to make it easier for SDK users to detect primary key / unique index conflicts.
+
+* Added `PartitionWriteSpeedMessagesPerSecond` and `PartitionWriteBurstMessages` to topic create/alter settings and corresponding getters in `TTopicDescription`.
+
+## v3.18.0
+
+* Fixed self thread join core dump in IAM credentials provider
+
+* Fixed some data races in Producer (concurrent access to `PartitionsIndex`)
+
+* Added interface for export of metrics and spans, supported plugin for OpenTelemetry
+
+* Supported gRPC compression option on client side
+
+## v3.17.0
+
 * Added support of describe for scheme objects with type 'secret' via new TSecretClient
 
 * Added support for METRICS_LEVEL for the CreateTable/AlterTable requests.

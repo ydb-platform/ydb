@@ -67,6 +67,12 @@ IDataBatcherPtr CreateColumnDataBatcher(
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr,
     std::vector<ui32> readIndex = {});
 
+IDataBatcherPtr CreateStructOfRowsDataBatcher(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> columns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
+    std::vector<ui32> writeIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+
 class IDataBatchProjection : public TThrRefBase {
 public:
     virtual void AddRow(TConstArrayRef<TCell> row) = 0;
@@ -143,7 +149,7 @@ public:
     virtual void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        const std::shared_ptr<const TPartitioning>& partitioning) = 0;
+        const TPartitioning::TCPtr& partitioning) = 0;
 
     using TWriteToken = ui64;
 

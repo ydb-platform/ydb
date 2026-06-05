@@ -20,7 +20,7 @@ public:
     void RaiseIssue(const TIssue& issue);
     void RaiseIssues(const TIssues& issues);
     bool RaiseWarning(TIssue issue);
-    void AddIssues(const TIssues& errors);
+    void AddIssues(const TIssues& issues);
     void AddIssues(const TPosition& pos, const TIssues& issues);
 
     TIssues GetIssues();

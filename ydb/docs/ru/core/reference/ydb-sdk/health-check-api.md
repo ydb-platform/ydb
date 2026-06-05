@@ -6,10 +6,6 @@
 
 {% list tabs group=lang %}
 
-- Go
-
-  Функциональность на данный момент не поддерживается
-
 - C++
 
   Пример кода приложения для создания клиента:
@@ -20,11 +16,15 @@
 
   Вызов метода `SelfCheck`:
 
-  ```c++
-  auto settings = TSelfCheckSettings();
+  ```cpp
+  auto settings =  NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
+
+- Go
+
+  Функциональность на данный момент не поддерживается
 
 - Java
 
@@ -33,6 +33,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -85,19 +89,19 @@
 
 {% list tabs group=lang %}
 
-- Go
-
-  Функциональность на данный момент не поддерживается
-
 - C++
 
-  ```c++
+  ```cpp
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
       FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Go
+
+  Функциональность на данный момент не поддерживается
 
 - Java
 
@@ -106,6 +110,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 

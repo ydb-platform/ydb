@@ -70,7 +70,7 @@ const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, co
             const auto& items = structType->GetItems();
             types.reserve(items.size());
 
-            std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
+            std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind_front(&TItemExprType::GetItemType));
             if (blockInputAppliedSetting) {
                 std::transform(types.begin(), types.end(), types.begin(), [&](auto type) {
                     return ctx.MakeType<TBlockExprType>(type);
@@ -1129,7 +1129,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::ReplaceParentCache, ctx)) {
             return TStatus::Error;
         }
 

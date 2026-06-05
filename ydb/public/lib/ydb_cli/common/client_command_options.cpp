@@ -298,6 +298,11 @@ TClientCommandOption& TClientCommandOption::SetSupportsProfile(bool supports) {
     return *this;
 }
 
+TClientCommandOption& TClientCommandOption::DisableImplicitSourcesIf(std::function<bool()> condition) {
+    ImplicitSourcesDisabled = std::move(condition);
+    return *this;
+}
+
 TClientCommandOption& TClientCommandOption::LogToConnectionParams(const TString& paramName) {
     ConnectionParamName = paramName;
     return *this;
@@ -329,7 +334,7 @@ void TClientCommandOption::RebuildHelpMessage() {
     NColorizer::TColors& colors = NConsoleClient::AutoColors(Cout);
     TStringBuilder helpMessage;
     helpMessage << Help;
-    const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosiltyLevel >= 2 && NeedPrintDefinitionsPriority();
+    const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosityLevel >= 2 && NeedPrintDefinitionsPriority();
 
     if (!needDefinitionsPriority && (DefaultOptionValue || ManualDefaultOptionValueDescription)) {
         helpMessage << " (default: " << colors.Cyan()
@@ -349,7 +354,7 @@ void TClientCommandOption::RebuildHelpMessage() {
         helpMessage << Endl;
     };
 
-    TString indent = ClientOptions->HelpCommandVerbosiltyLevel >= 2 ? "  " : "";
+    TString indent = ClientOptions->HelpCommandVerbosityLevel >= 2 ? "  " : "";
     if (Documentation) {
         makeMultiline();
         helpMessage << indent << "For more info go to: " << Documentation << Endl;
@@ -721,6 +726,9 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             continue;
         }
         if (clientOption->IsMainAuthOption() && !AuthMethodOpts.empty()) { // Parsed from command line or from profile
+            continue;
+        }
+        if (clientOption->ImplicitSourcesDisabled && clientOption->ImplicitSourcesDisabled()) {
             continue;
         }
 

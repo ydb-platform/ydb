@@ -58,31 +58,46 @@ public:
         String,
         Boolean,
         Object,
+        Array,
     };
 
     TJsonSchemaBuilder() = default;
 
     explicit TJsonSchemaBuilder(TJsonSchemaBuilder* parent);
 
+    TJsonSchemaBuilder& Done();
+
+    NJson::TJsonValue Build() const;
+
+    // Common
+
     TJsonSchemaBuilder& Type(EType type);
 
     TJsonSchemaBuilder& Description(const TString& description);
 
-    TJsonSchemaBuilder& Property(const TString& name, bool required = true);
+    TJsonSchemaBuilder& Enum(const std::vector<TString>& allowedValues);
 
-    TJsonSchemaBuilder& Done();
+    // Object
+
+    TJsonSchemaBuilder& Property(const TString& name, bool required = true);
 
     TJsonSchemaBuilder& Required(const TString& name);
 
-    NJson::TJsonValue Build() const;
+    // Array
+
+    TJsonSchemaBuilder& Items();
 
 private:
+    void SetupTypeIfUndefined(EType type);
+
     TJsonSchemaBuilder* Parent = nullptr;
 
     EType TypeValue = EType::Undefined;
     std::unordered_map<TString, std::shared_ptr<TJsonSchemaBuilder>> Properties;
     std::vector<TString> RequiredProperties;
+    std::vector<TString> AllowedValues;
     std::optional<TString> DescriptionValue;
+    std::shared_ptr<TJsonSchemaBuilder> ArrayItemSchema;
 };
 
 TString FormatJsonValue(const NJson::TJsonValue& value);

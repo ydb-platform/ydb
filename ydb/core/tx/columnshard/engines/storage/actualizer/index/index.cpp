@@ -1,11 +1,13 @@
 #include "index.h"
-#include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
+
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
-void TGranuleActualizationIndex::ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
+void TGranuleActualizationIndex::ExtractActualizationTasks(
+    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
     TInternalTasksContext internalContext;
     for (auto&& i : Actualizers) {
         i->ExtractTasks(tasksContext, externalContext, internalContext);
@@ -36,7 +38,8 @@ void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& contex
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshScheme();
 }
 
-TGranuleActualizationIndex::TGranuleActualizationIndex(const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
+TGranuleActualizationIndex::TGranuleActualizationIndex(
+    const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
     : PathId(pathId)
     , VersionedIndex(versionedIndex)
     , StoragesManager(storagesManager)
@@ -52,12 +55,11 @@ void TGranuleActualizationIndex::Start() {
     Actualizers.emplace_back(SchemeActualizer);
 }
 
-std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(
-    const THashMap<ui64, TPortionInfo::TPtr>& portions) {
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {
     if (!TieringActualizer) {
         return {};
     }
     return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
 }
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

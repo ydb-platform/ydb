@@ -1,16 +1,14 @@
 #include "impl.h"
 #include "group_layout_checker.h"
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxAllocateDDiskBlockGroup : public TTransactionBase<TBlobStorageController> {
         std::unique_ptr<TEventHandle<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>> RequestEv;
         std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult> Result;
         bool CompatReply = false;
-
-        struct TExError : std::exception, TStringBuilder {
-            const char *what() const noexcept override { return TString::c_str(); }
-        };
 
         class TStoragePoolRecord {
             using TEntityId = NLayoutChecker::TEntityId;
@@ -21,7 +19,18 @@ namespace NKikimr::NBsController {
             THashMap<TCommonId, THashMap<TDistinctId, std::vector<TNodeId>>> Trie; // CommonId -> DistinctId -> NodeIds
             std::map<TDDiskId, std::tuple<ui32, ui32>> ClaimPerDDisk;
             std::set<std::tuple<ui32, TDDiskId>> DDiskPerClaim;
-            THashMap<TNodeId, TDDiskId> PersistentBufferPerNode;
+
+            THashMap<TNodeId, std::set<std::tuple<ui32, TDDiskId>>> PersistentBuffersPerNode;
+
+            struct TNodeClaim {
+                struct TPDiskClaim {
+                    ui32 Count;
+                    THashMap<TDDiskId, ui32> DDisks;
+                };
+                ui32 Count;
+                THashMap<TPDiskId, TPDiskClaim> PDisks;
+            };
+            THashMap<TNodeId, TNodeClaim> NodeClaims;
 
         public:
             TStoragePoolRecord(TBlobStorageController *self, TBoxStoragePoolId poolId, const TStoragePoolInfo& pool) {
@@ -40,22 +49,24 @@ namespace NKikimr::NBsController {
                             NodeMap.try_emplace(nodeId, commonId, distinctId);
                             Trie[commonId][distinctId].push_back(nodeId);
                         }
-                        ClaimPerDDisk.try_emplace(vslotId.GetKey(), vslot->DDiskNumVChunksClaimed, Max<ui32>());
-                        DDiskPerClaim.emplace(vslot->DDiskNumVChunksClaimed, vslotId.GetKey());
-                        if (vslot->PersistentBufferRefs) {
-                            PersistentBufferPerNode[nodeId] = vslotId.GetKey();
-                        } else {
-                            PersistentBufferPerNode.emplace(nodeId, vslotId.GetKey());
-                        }
+                        const TDDiskId ddiskId = vslotId.GetKey();
+                        ClaimPerDDisk.try_emplace(ddiskId, vslot->DDiskNumVChunksClaimed, Max<ui32>());
+                        DDiskPerClaim.emplace(vslot->DDiskNumVChunksClaimed, ddiskId);
+                        PersistentBuffersPerNode[nodeId].insert({vslot->PersistentBufferRefs, ddiskId});
+                        NodeClaims[nodeId].Count = 0;
+                        NodeClaims[nodeId].PDisks[vslotId.ComprisingPDiskId()].Count = 0;
+                        NodeClaims[nodeId].PDisks[vslotId.ComprisingPDiskId()].DDisks.emplace(ddiskId, 0);
                     }
                 }
             }
 
-            bool AllocateDDisk(std::vector<TDDiskId>& group, ui32 numChunks) {
+            bool AllocateDDisk(std::vector<TDDiskId>& group, ui32 numChunks, TString* errorReason = nullptr) {
                 std::optional<TCommonId> commonId;
                 THashSet<TDistinctId> distinctIds;
                 ParseGroup(group, commonId, distinctIds);
-
+                TDDiskId bestDDiskId;
+                std::tuple<ui32, ui32, ui32> bestChoice = {Max<ui32>(), Max<ui32>(), Max<ui32>()};
+                auto bestIt = DDiskPerClaim.begin();
                 // TODO(alexvru): optimize semi-linear search
                 for (auto it = DDiskPerClaim.begin(); it != DDiskPerClaim.end(); ++it) {
                     auto& [_, candidateDDiskId] = *it;
@@ -70,18 +81,71 @@ namespace NKikimr::NBsController {
                         if (numChunks > chunksMax - chunksClaimed) {
                             continue; // not enough capacity to claim here
                         }
-                        chunksClaimed += numChunks;
-
-                        auto nh = DDiskPerClaim.extract(it);
-                        auto& [revChunksClaimed, _] = nh.value();
-                        revChunksClaimed += numChunks;
-                        DDiskPerClaim.insert(std::move(nh));
-
-                        group.push_back(candidateDDiskId);
-                        return true;
+                        auto pdiskId = candidateDDiskId.ComprisingPDiskId();
+                        std::tuple<ui32, ui32, ui32> choice = {
+                            NodeClaims[candidateDDiskId.NodeId].Count,
+                            NodeClaims[candidateDDiskId.NodeId].PDisks[pdiskId].Count,
+                            NodeClaims[candidateDDiskId.NodeId].PDisks[pdiskId].DDisks[candidateDDiskId],
+                        };
+                        if (choice < bestChoice) {
+                            bestChoice = choice;
+                            bestDDiskId = candidateDDiskId;
+                            bestIt = it;
+                        }
+                        if (std::get<0>(bestChoice) == 0 && std::get<1>(bestChoice) == 0 && std::get<2>(bestChoice) == 0) {
+                            break;
+                        }
                     }
                 }
 
+                if (std::get<0>(bestChoice) != Max<ui32>()) {
+                    auto& [chunksClaimed, chunksMax] = ClaimPerDDisk[bestDDiskId];
+                    chunksClaimed += numChunks;
+                    auto nh = DDiskPerClaim.extract(bestIt);
+                    auto& [revChunksClaimed, _] = nh.value();
+                    revChunksClaimed += numChunks;
+                    DDiskPerClaim.insert(std::move(nh));
+                    group.push_back(bestDDiskId);
+                    auto pdiskId = bestDDiskId.ComprisingPDiskId();
+                    NodeClaims[bestDDiskId.NodeId].Count++;
+                    NodeClaims[bestDDiskId.NodeId].PDisks[pdiskId].Count++;
+                    NodeClaims[bestDDiskId.NodeId].PDisks[pdiskId].DDisks[bestDDiskId]++;
+                    return true;
+                }
+
+                if (errorReason) {
+                    size_t eligibleDisks = 0;
+                    THashSet<TDistinctId> eligibleDistinctDomains;
+                    for (const auto& [_, candidateDDiskId] : DDiskPerClaim) {
+                        const auto jt = NodeMap.find(candidateDDiskId.NodeId);
+                        if (jt == NodeMap.end()) {
+                            continue;
+                        }
+                        const auto& [diskCommonId, diskDistinctId] = jt->second;
+                        if (commonId.value_or(diskCommonId) != diskCommonId || distinctIds.contains(diskDistinctId)) {
+                            continue;
+                        }
+                        const auto it = ClaimPerDDisk.find(candidateDDiskId);
+                        if (it == ClaimPerDDisk.end()) {
+                            continue;
+                        }
+                        const auto& [chunksClaimed, chunksMax] = it->second;
+                        if (numChunks > chunksMax - chunksClaimed) {
+                            continue;
+                        }
+                        ++eligibleDisks;
+                        eligibleDistinctDomains.insert(diskDistinctId);
+                    }
+                    TStringStream ss;
+                    ss << "can't allocate DDisk"
+                        << " NumChunks# " << numChunks
+                        << " GroupSize# " << group.size()
+                        << " UsedDistinctDomains# " << distinctIds.size()
+                        << " EligibleDisks# " << eligibleDisks
+                        << " EligibleDistinctDomains# " << eligibleDistinctDomains.size()
+                        << " TotalDisks# " << DDiskPerClaim.size();
+                    *errorReason = ss.Str();
+                }
                 return false;
             }
 
@@ -92,7 +156,7 @@ namespace NKikimr::NBsController {
             void UpdateDDisk(TDDiskId ddiskId, ui32 currentNumChunks, ui32 newNumChunks) {
                 auto it = ClaimPerDDisk.find(ddiskId);
                 if (it == ClaimPerDDisk.end()) {
-                    throw TExError() << "DDiskId# " << ddiskId.ToString() << " not found";
+                    ythrow yexception() << "DDiskId# " << ddiskId.ToString() << " not found";
                 }
                 auto& [chunksClaimed, chunksMax] = it->second;
                 auto nh = DDiskPerClaim.extract({chunksClaimed, it->first});
@@ -101,7 +165,7 @@ namespace NKikimr::NBsController {
                 if (currentNumChunks < newNumChunks) {
                     const ui32 incr = newNumChunks - currentNumChunks;
                     if (incr > chunksMax - chunksClaimed) {
-                        throw TExError() << "not enough capacity for DDiskId# " << ddiskId.ToString();
+                        ythrow yexception() << "not enough capacity for DDiskId# " << ddiskId.ToString();
                     }
                     chunksClaimed += incr;
                     revChunksClaimed += incr;
@@ -114,32 +178,57 @@ namespace NKikimr::NBsController {
 
                 DDiskPerClaim.insert(std::move(nh));
             }
+            TDDiskId GetPreferredPersistentBuffer(ui32 node) {
+                const TNodeId nodeId(node);
+                const auto it = PersistentBuffersPerNode.find(nodeId);
+                Y_ABORT_UNLESS(it != PersistentBuffersPerNode.end());
+                Y_ABORT_UNLESS(!it->second.empty());
+                return std::get<1>(*it->second.begin());
+            }
 
-            bool AllocatePersistentBuffer(std::vector<TDDiskId>& group, const std::vector<TNodeId>& preferredNodeIds) {
+            bool AllocatePersistentBuffer(std::vector<TDDiskId>& group, const THashSet<TDDiskId>& ddisks, const std::vector<TNodeId>& preferredNodes) {
                 std::optional<TCommonId> commonId;
                 THashSet<TDistinctId> distinctIds;
                 ParseGroup(group, commonId, distinctIds);
                 auto tryNode = [&](TNodeId nodeId) -> std::optional<TDDiskId> {
-                    const auto it = PersistentBufferPerNode.find(nodeId);
-                    if (it == PersistentBufferPerNode.end()) {
+                    const auto it = PersistentBuffersPerNode.find(nodeId);
+                    if (it == PersistentBuffersPerNode.end()) {
                         return std::nullopt;
                     }
 
                     const auto jt = NodeMap.find(nodeId);
                     Y_ABORT_UNLESS(jt != NodeMap.end());
                     const auto& [diskCommonId, diskDistinctId] = jt->second;
-
-                    return commonId.value_or(diskCommonId) == diskCommonId && !distinctIds.contains(diskDistinctId)
-                        ? std::make_optional(it->second)
-                        : std::nullopt;
+                    if (commonId.value_or(diskCommonId) == diskCommonId && !distinctIds.contains(diskDistinctId)) {
+                        auto candidatePbIt = it->second.begin();
+                        for (auto pbIt = it->second.begin(); pbIt != it->second.end(); pbIt++) {
+                            if (!ddisks.contains(std::get<1>(*pbIt))) {
+                                candidatePbIt = pbIt;
+                                break;
+                            }
+                        }
+                        auto nh = it->second.extract(candidatePbIt);
+                        auto& [cnt, ddId] = nh.value();
+                        auto ddiskId = ddId;
+                        cnt++;
+                        it->second.insert(std::move(nh));
+                        return std::make_optional(ddiskId);
+                    }
+                    return std::nullopt;
                 };
-                for (TNodeId nodeId : preferredNodeIds) {
+                for (TDDiskId ddId : ddisks) {
+                    if (auto ddiskId = tryNode(ddId.NodeId)) {
+                        group.push_back(*ddiskId);
+                        return true;
+                    }
+                }
+                for (TNodeId nodeId : preferredNodes) {
                     if (auto ddiskId = tryNode(nodeId)) {
                         group.push_back(*ddiskId);
                         return true;
                     }
                 }
-                for (const auto& [nodeId, _] : PersistentBufferPerNode) {
+                for (const auto& [nodeId, _] : PersistentBuffersPerNode) {
                     if (auto ddiskId = tryNode(nodeId)) {
                         group.push_back(*ddiskId);
                         return true;
@@ -156,17 +245,17 @@ namespace NKikimr::NBsController {
                 for (const TDDiskId& ddiskId : group) {
                     const auto it = NodeMap.find(ddiskId.NodeId);
                     if (it == NodeMap.end()) {
-                        throw TExError() << "incorrect DDiskId# " << ddiskId.ToString() << ": no containing node found";
+                        ythrow yexception() << "incorrect DDiskId# " << ddiskId.ToString() << ": no containing node found";
                     }
                     const auto& [diskCommonId, diskDistinctId] = it->second;
 
                     if (!commonId) {
                         commonId.emplace(diskCommonId);
                     } else if (*commonId != diskCommonId) {
-                        throw TExError() << "DDisks do not share common prefix";
+                        ythrow yexception() << "DDisks do not share common prefix";
                     }
                     if (!distinctIds.insert(diskDistinctId).second) {
-                        throw TExError() << "DDisks have repeating distinct infix";
+                        ythrow yexception() << "DDisks have repeating distinct infix";
                     }
                 }
             }
@@ -218,16 +307,16 @@ namespace NKikimr::NBsController {
                     continue;
                 }
                 if (pool) {
-                    throw TExError() << "ambigous pool name " << ddiskPoolName;
+                    ythrow yexception() << "ambigous pool name " << ddiskPoolName;
                 }
                 pool = &storagePool;
                 poolId = storagePoolId;
             }
             if (!pool) {
-                throw TExError() << "pool not found by name " << ddiskPoolName;
+                ythrow yexception() << "pool not found by name " << ddiskPoolName;
             }
             if (!pool->DDisk) {
-                throw TExError() << "incorrect type for pool " << ddiskPoolName;
+                ythrow yexception() << "incorrect type for pool " << ddiskPoolName;
             }
 
             return {Self, poolId, *pool};
@@ -298,7 +387,7 @@ namespace NKikimr::NBsController {
                         const bool success = allocation.ParseFromString(row.GetValue<Table::Allocation>());
                         Y_DEBUG_ABORT_UNLESS(success);
                         if (!success) {
-                            throw TExError() << "failed to parse TDirectBlockGroupAllocation"
+                            ythrow yexception() << "failed to parse TDirectBlockGroupAllocation"
                                 << " TabletId# " << tabletId
                                 << " DirectBlockGroupId# " << directBlockGroupId;
                         }
@@ -341,8 +430,9 @@ namespace NKikimr::NBsController {
 
                             if (!currentNumChunks && numChunks) { // allocate new DDisk
                                 // allocate DDisk through allocator, serialize it to entity and update neighbour list
-                                if (!pool.AllocateDDisk(ddiskIds, numChunks)) {
-                                    throw TExError() << "can't allocate DDisk";
+                                TString allocError;
+                                if (!pool.AllocateDDisk(ddiskIds, numChunks, &allocError)) {
+                                    ythrow yexception() << allocError;
                                 }
                                 ddiskIds.back().Serialize(item->MutableDDiskId());
                                 ddiskId.emplace(ddiskIds.back());
@@ -384,15 +474,15 @@ namespace NKikimr::NBsController {
 
                         int numPersistentBuffers = cmd.GetNumPersistentBuffers();
                         while (persistentBufferDDiskId->size() < numPersistentBuffers) { // create missing persistent buffers
-                            std::vector<TNodeId> preferredNodeIds;
+                            THashSet<TDDiskId> ddisks;
                             if (persistentBufferDDiskId->size() < ddiskRecord->size()) {
                                 const auto& rec = ddiskRecord->Get(persistentBufferDDiskId->size());
                                 if (rec.HasDDiskId()) {
-                                    preferredNodeIds.push_back(rec.GetDDiskId().GetNodeId());
+                                    ddisks.insert(rec.GetDDiskId());
                                 }
                             }
-                            if (!getPersistentBufferPool().AllocatePersistentBuffer(persistentBufferIds, preferredNodeIds)) {
-                                throw TExError() << "failed to allocate persistent buffer";
+                            if (!getPersistentBufferPool().AllocatePersistentBuffer(persistentBufferIds, ddisks, {})) {
+                                ythrow yexception() << "failed to allocate persistent buffer";
                             }
                             persistentBufferIds.back().Serialize(persistentBufferDDiskId->Add());
                             auto& [chunks, refs] = vslotUpdates[persistentBufferIds.back().GetKey()];
@@ -427,7 +517,7 @@ namespace NKikimr::NBsController {
                     for (const auto& cmd : op.GetReassignPersistentBuffers()) {
                         size_t index = cmd.GetPersistentBufferIndex();
                         if (persistentBufferIds.size() <= index) {
-                            throw TExError() << "PersistentBufferIndex is out of bounds";
+                            ythrow yexception() << "PersistentBufferIndex is out of bounds";
                         }
                         std::swap(persistentBufferIds[index], persistentBufferIds.back());
                         getPersistentBufferPool().ReleasePersistentBuffer(persistentBufferIds.back());
@@ -436,9 +526,9 @@ namespace NKikimr::NBsController {
                             --refs;
                         }
                         persistentBufferIds.pop_back();
-                        const auto& nodeIds = cmd.GetPreferredNodeIds();
-                        if (!getPersistentBufferPool().AllocatePersistentBuffer(persistentBufferIds, {nodeIds.begin(), nodeIds.end()})) {
-                            throw TExError() << "failed to reallocate persistent buffer";
+                        auto nodes = cmd.GetPreferredNodeIds();
+                        if (!getPersistentBufferPool().AllocatePersistentBuffer(persistentBufferIds, {}, {nodes.begin(), nodes.end()})) {
+                            ythrow yexception() << "failed to reallocate persistent buffer";
                         }
                         {
                             auto& [chunks, refs] = vslotUpdates[persistentBufferIds.back().GetKey()];
@@ -483,9 +573,13 @@ namespace NKikimr::NBsController {
                         updates.emplace_back(key, std::move(allocation));
                     }
                 }
-            } catch (std::exception& e) {
+            } catch (const std::exception& e) {
                 rr.SetStatus(NKikimrProto::ERROR);
                 rr.SetErrorReason(e.what());
+                return true;
+            } catch (...) {
+                rr.SetStatus(NKikimrProto::ERROR);
+                rr.SetErrorReason("unexpected exception while allocating direct block group");
                 return true;
             }
 

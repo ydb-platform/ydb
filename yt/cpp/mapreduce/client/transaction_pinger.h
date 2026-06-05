@@ -13,6 +13,10 @@ namespace NYT {
 
 class TPingableTransaction;
 
+// Don't want to include public.h to avoid polluting header with TIntrusivePtr
+template <typename>
+class TFuture;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Each registered transaction must be removed from pinger
@@ -30,9 +34,11 @@ public:
     virtual bool HasTransaction(const TPingableTransaction& pingableTx) = 0;
 
     virtual void RemoveTransaction(const TPingableTransaction& pingableTx) = 0;
+
+    virtual TFuture<void> AsyncAbortTransaction(const TTransactionId& transactionId) = 0;
 };
 
-ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config);
+ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, IRawClientPtr rawClient);
 
 ////////////////////////////////////////////////////////////////////////////////
 

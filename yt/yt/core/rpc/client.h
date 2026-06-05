@@ -361,6 +361,7 @@ public:
     //! Note: complex channels choose destination dynamically (hedging, roaming), so the address is not known beforehand.
     const std::string& GetAddress() const;
 
+    NProto::TResponseHeader& Header();
     const NProto::TResponseHeader& Header() const;
 
     TSharedRefArray GetResponseMessage() const;

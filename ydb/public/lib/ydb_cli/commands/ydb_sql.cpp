@@ -53,6 +53,16 @@ void TCommandSql::Config(TConfig& config) {
         .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&ExecSettings.DiagnosticsFile);
+    if (config.HelpCommandVerbosityLevel >= 2) {
+        config.Opts->AddLongOption("resource-pool", "Explicit resource pool for workload manager")
+            .RequiredArgument("[String]")
+            .StoreResult(&ResourcePool);
+    } else {
+        config.Opts->AddLongOption("resource-pool")
+            .RequiredArgument("[String]")
+            .Hidden()
+            .StoreResult(&ResourcePool);
+    }
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]")
         .Hidden()
@@ -87,8 +97,8 @@ void TCommandSql::Parse(TConfig& config) {
     ParseInputFormats();
     ParseOutputFormats();
     if (Query && QueryFile) {
-        throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
-            << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+        throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
+            << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
     if (ExecSettings.ExplainMode && ExecSettings.ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
@@ -169,6 +179,10 @@ int TCommandSql::RunCommand(TConfig& config) {
     }
 
     ExecSettings.Settings.Syntax(SyntaxType);
+
+    if (!ResourcePool.empty()) {
+        ExecSettings.Settings.ResourcePool(std::string(ResourcePool));
+    }
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters

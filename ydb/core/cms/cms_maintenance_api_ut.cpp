@@ -354,11 +354,25 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     Y_UNIT_TEST(TestCordonAction) {
         TCmsTestEnv env(8);
 
-        auto observer = env.AddObserver([&](auto&& ev) {
-            if (ev->Type == TEvHive::EvSetDown) {
-                env.Send(new IEventHandle(ev->Sender, env.GetSender(), new TEvHive::TEvSetDownReply(), 0, ev->Cookie), 0);
+        struct TMockHive {
+            TCmsTestEnv& Runtime;
+            bool Alive = true;
+
+            TMockHive(TCmsTestEnv& env) : Runtime(env) {}
+
+            void Observe(IEventHandle::TPtr& ev) {
+                if (ev->Type == TEvHive::EvSetDown) {
+                    if (Alive) {
+                        Runtime.Send(new IEventHandle(ev->Sender, Runtime.GetSender(), new TEvHive::TEvSetDownReply(), 0, ev->Cookie), 0);
+                    } else {
+                        Runtime.Send(new IEventHandle(ev->Sender, Runtime.GetSender(), new TEvTabletPipe::TEvClientDestroyed(0, {}, {}), 0, ev->Cookie), 0);
+                    }
+                }
             }
-        });
+        };
+
+        TMockHive hive(env);
+        auto observer = env.AddObserver([&](auto&& ev) { hive.Observe(ev); });
 
         env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
             MakeActionGroup(
@@ -370,6 +384,11 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         const auto& actionState = getResult.action_group_states(0).action_states(0);
         UNIT_ASSERT_VALUES_EQUAL(actionState.status(), ActionState::ACTION_STATUS_PERFORMED);
         UNIT_ASSERT(actionState.action().has_cordon_action());
+
+        hive.Alive = false;
+        env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::UNAVAILABLE);
+        hive.Alive = true;
+        env.CheckMaintenanceTaskDrop("task-1", Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(DisableMaintenance) {

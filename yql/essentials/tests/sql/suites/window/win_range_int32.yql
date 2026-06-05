@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: int32('-50000'), b: 1, sum1: int32('-50000'), count1: 1, sum2: NULL, count2: 0|>,

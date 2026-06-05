@@ -390,6 +390,7 @@ class YdbTenant(BaseTenant):
             compute_services=True,
             dc_mapping={},
             extra_feature_flags=None,  # list[str]
+            disabled_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
     ):
         assert node_count == 1
@@ -397,6 +398,8 @@ class YdbTenant(BaseTenant):
         assert compute_services is True
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
 
@@ -420,6 +423,7 @@ class YdbTenant(BaseTenant):
                 enable_pqcd=False,
                 dc_mapping=dc_mapping,
                 extra_feature_flags=extra_feature_flags,
+                disabled_feature_flags=disabled_feature_flags,
                 extra_grpc_services=extra_grpc_services
             ))
 
@@ -441,10 +445,13 @@ class YqTenant(BaseTenant):
             compute_services=True,
             dc_mapping={},
             extra_feature_flags=None,  # list[str]
+            disabled_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
 
@@ -470,6 +477,7 @@ class YqTenant(BaseTenant):
                 dc_mapping=dc_mapping,
                 public_http_config=public_http_config,
                 extra_feature_flags=extra_feature_flags,
+                disabled_feature_flags=disabled_feature_flags,
                 extra_grpc_services=extra_grpc_services
             ))
 
@@ -565,15 +573,19 @@ class TenantConfig:
                  node_count,  # int
                  tenant_type=TenantType.YQ,  # TenantType
                  extra_feature_flags=None,  # list[str]
+                 disabled_feature_flags=None,  # list[str]
                  extra_grpc_services=None  # list[str]
                  ):
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
         self.node_count = node_count
         self.tenant_type = tenant_type
         self.extra_feature_flags = extra_feature_flags
+        self.disabled_feature_flags = disabled_feature_flags
         self.extra_grpc_services = extra_grpc_services
 
 
@@ -626,6 +638,7 @@ class StreamingOverKikimr(object):
                                       compute_services=compute_services,
                                       dc_mapping=configuration.dc_mapping,
                                       extra_feature_flags=tenant_config.extra_feature_flags,
+                                      disabled_feature_flags=tenant_config.disabled_feature_flags,
                                       extra_grpc_services=tenant_config.extra_grpc_services)
                 else:
                     tenant = YdbTenant(tenant_name=name,
@@ -634,6 +647,7 @@ class StreamingOverKikimr(object):
                                        compute_services=compute_services,
                                        dc_mapping=configuration.dc_mapping,
                                        extra_feature_flags=tenant_config.extra_feature_flags,
+                                       disabled_feature_flags=tenant_config.disabled_feature_flags,
                                        extra_grpc_services=tenant_config.extra_grpc_services)
                 tenant.uuid = self.uuid
                 tenant.cloud_mode = configuration.cloud_mode

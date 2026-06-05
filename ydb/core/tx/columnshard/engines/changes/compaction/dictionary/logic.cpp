@@ -1,14 +1,15 @@
 #include "logic.h"
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
-
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
 
 namespace NKikimr::NOlap::NCompaction::NDictionary {
 
@@ -50,9 +51,8 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
             arrList.emplace_back(arr);
             return false;
         });
-        Iterators.emplace_back(
-            TIterator(std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(arrList), i->GetRecordsCount(), i->GetDataType()),
-                Context.GetLoader()));
+        Iterators.emplace_back(TIterator(std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(
+                                             std::move(arrList), i->GetRecordsCount(), i->GetDataType()), Context.GetLoader()));
     }
 
     RemapIndexes.resize(input.size());
@@ -68,8 +68,10 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
                         const auto* dict = static_cast<const NArrow::NAccessor::TDictionaryArray*>(&Iterators[idx].GetCurrentDataChunk());
                         const auto* arrDictionary = type.CastArray(dict->GetDictionary().get());
                         for (ui32 r = 0; r < (ui32)arrDictionary->length(); ++r) {
-                            auto it = globalDecoder.emplace(arrDictionary->IsNull(r) ? ValueType(std::nullopt) : type.GetValue(*arrDictionary, r),
-                                                            globalDecoder.size()).first;
+                            auto it = globalDecoder
+                                          .emplace(arrDictionary->IsNull(r) ? ValueType(std::nullopt) : type.GetValue(*arrDictionary, r),
+                                              globalDecoder.size())
+                                          .first;
                             RemapIndexes[idx].emplace_back(it->second);
                         }
                         if (!Iterators[idx].MoveFurther(Iterators[idx].GetCurrentDataChunk().GetRecordsCount())) {
@@ -234,10 +236,9 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         NArrow::NAccessor::NDictionary::TConstructor(), Context.GetColumnId());
     auto accContext = Context.GetLoader()->BuildAccessorContext(dictArr->GetRecordsCount());
     auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(dictArr, accContext);
-    col.AddPreparedChunk(std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), dictArr,
-        TChunkAddress(Context.GetColumnId(), 0),
-        Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()),
-        std::move(blobAndMeta.Meta)));
+    col.AddPreparedChunk(
+        std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), dictArr, TChunkAddress(Context.GetColumnId(), 0),
+            Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()), std::move(blobAndMeta.Meta)));
     return col;
 }
 

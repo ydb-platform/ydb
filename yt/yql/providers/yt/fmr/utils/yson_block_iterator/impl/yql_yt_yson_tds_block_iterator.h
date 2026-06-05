@@ -24,6 +24,7 @@ public:
         std::vector<TString> neededColumns,
         TString serializedColumnGroupsSpec = {},
         TMaybe<bool> isFirstRowKeysInclusive = Nothing(),
+        TMaybe<bool> isLastRowKeysInclusive = Nothing(),
         TMaybe<TString> firstRowKeys = Nothing(),
         TMaybe<TString> lastRowKeys = Nothing(),
         ui64 readAheadChunks = 4
@@ -67,6 +68,7 @@ private:
     TMaybe<TFmrTableKeysBoundary> FirstBoundary_;
     TMaybe<TFmrTableKeysBoundary> LastBoundary_;
     bool IsFirstBoundInclusive_ = true;
+    bool IsLastBoundInclusive_ = true;
 
     std::vector<TString> GroupNamesToRead_;
 

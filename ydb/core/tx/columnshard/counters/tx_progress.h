@@ -40,7 +40,8 @@ private:
             , AbortTx(TBase::GetDeriviative("AbortTx"))
             , HistogramTxExecuteDuration(TBase::GetHistogram("TxProgress/Execution/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
             , HistogramTxLiveDuration(TBase::GetHistogram("TxProgress/Live/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
-            , HistogramTxProgressLag(TBase::GetHistogram("TxProgress/LagOnComplete/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5))) {
+            , HistogramTxProgressLag(TBase::GetHistogram("TxProgress/LagOnComplete/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
+        {
         }
     };
 
@@ -92,7 +93,8 @@ public:
     }
 
     TTxProgressCounters(TCommonCountersOwner& owner)
-        : TBase(owner, "TxProgress") {
+        : TBase(owner, "TxProgress")
+    {
     }
 
 private:
@@ -107,4 +109,4 @@ private:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

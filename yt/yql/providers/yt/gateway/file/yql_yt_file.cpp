@@ -167,9 +167,11 @@ struct TFileYtLambdaBuilder: public TLambdaBuilder {
     TFileYtLambdaBuilder(TScopedAlloc& alloc, const TSession& /*session*/,
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
-        TLangVersion langver)
+        TLangVersion langver,
+        TRuntimeSettings::TConstPtr runtimeSettings
+    )
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider, nullptr, langver)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings)
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -452,11 +454,12 @@ public:
                     TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                         Services_->GetFunctionRegistry()->SupportsSizedAllocators());
                     alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+                    options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
                         MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -785,11 +788,12 @@ public:
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+            options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -839,7 +843,7 @@ public:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles),
-                nullptr, UnknownLangVersion);
+                nullptr, UnknownLangVersion, MakeRuntimeSettings());
 
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), builder.GetFunctionRegistry());
             TMkqlBuildContext ctx(*MkqlCompiler_, pgmBuilder, exprCtx);
@@ -1303,11 +1307,12 @@ private:
         TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
             Services_->GetFunctionRegistry()->SupportsSizedAllocators());
         alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+        options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
             MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1385,11 +1390,12 @@ private:
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+            options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
-                externalFiles), secureParamsProvider.get(), options.LangVer());
+                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1665,6 +1671,13 @@ private:
 
     NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
         return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        TUploadFilesToCacheResult res;
+        res.SetSuccess();
+        res.Files = options.Files();
+        return MakeFuture(std::move(res));
     }
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {

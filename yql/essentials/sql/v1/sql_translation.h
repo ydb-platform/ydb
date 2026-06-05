@@ -186,7 +186,7 @@ protected:
     TNodePtr IfStatement(const TRule_if_stmt& stmt);
     TNodePtr ForStatement(const TRule_for_stmt& stmt);
     TSQLResult<TTableArg> TableArgImpl(const TRule_table_arg& node);
-    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery);
+    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString* effectiveProvider = nullptr, bool* isAnonymous = nullptr);
     TMaybe<TSourcePtr> AsTableImpl(const TRule_table_ref& node);
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, TString& service, TDeferredAtom& cluster);
     bool ClusterExprOrBinding(const TRule_cluster_expr& node, TString& service, TDeferredAtom& cluster, bool& isBinding);
@@ -263,7 +263,7 @@ protected:
     bool OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
     bool SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
-    bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
+    [[nodiscard]] bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const;
 
     bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);
@@ -315,7 +315,9 @@ protected:
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
 
-    TMaybe<TString> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
+    TMaybe<TDeferredAtom> ParseObjectPathIgnoreAt(const TRule_object_ref& node, TObjectOperatorContext& context, bool useTablePrefix);
+    TMaybe<TDeferredAtom> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
+    TMaybe<TDeferredAtom> ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context);
     bool ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings);
     bool ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings);
     bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
@@ -332,6 +334,7 @@ protected:
         TMaybe<TPosition> position = Nothing());
 
 private:
+    TMaybe<TDeferredAtom> DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix);
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
     static TString FrameSettingsToString(EFrameSettings settings, bool isUnbounded);

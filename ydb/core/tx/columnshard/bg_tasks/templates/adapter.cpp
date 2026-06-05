@@ -1,5 +1,3 @@
 #include "adapter.h"
 
-namespace NKikimr::NColumnShard::NBackground {
-
-}
+namespace NKikimr::NColumnShard::NBackground {}

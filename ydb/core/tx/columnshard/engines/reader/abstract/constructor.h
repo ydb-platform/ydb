@@ -20,7 +20,8 @@ public:
     TScannerConstructorContext(const TSnapshot& snapshot, const ui32 itemsLimit, const TReadMetadataBase::ESorting sorting)
         : Snapshot(snapshot)
         , ItemsLimit(itemsLimit)
-        , Sorting(sorting) {
+        , Sorting(sorting)
+    {
     }
 };
 
@@ -34,7 +35,8 @@ public:
     }
 
     TProgramParsingContext(const TVersionedPresetSchemas& schemas)
-        : VersionedSchemas(schemas) {
+        : VersionedSchemas(schemas)
+    {
     }
 };
 
@@ -58,7 +60,8 @@ public:
     IScannerConstructor(const TScannerConstructorContext& context)
         : Snapshot(context.GetSnapshot())
         , ItemsLimit(context.GetItemsLimit())
-        , Sorting(context.GetSorting()) {
+        , Sorting(context.GetSorting())
+    {
     }
 
     TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) const;

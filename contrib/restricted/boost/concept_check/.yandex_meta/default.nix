@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_concept_check = stdenv.mkDerivation rec {
     pname = "boost_concept_check";
-    version = "1.90.0";
+    version = "1.91.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "concept_check";
       rev = "boost-${version}";
-      hash = "sha256-nsf7frCia0fgBpfimW+IqznnVfMSmar9KEKB5sccPPI=";
+      hash = "sha256-xXBkNTd+1j2jkPsczcslqd8MO7LLrOl7LrFVaRLXYjY=";
     };
   };
 }

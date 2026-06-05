@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: Timestamp64("2017-11-27T13:24:00.123454Z"), b: 1, count: 1|>,

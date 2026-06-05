@@ -563,10 +563,10 @@ class TOrderingStatesAssigner {
 public:
     TOrderingStatesAssigner(
         TJoinHypergraph<TNodeSet>& graph,
-        TTableAliasMap*
+        TTableAliasMap* tableAliases
     )
         : Graph_(graph)
-        , TableAliases_(nullptr)
+        , TableAliases_(tableAliases)
     {}
 
     void Assign(TOrderingsStateMachine& fsm) {

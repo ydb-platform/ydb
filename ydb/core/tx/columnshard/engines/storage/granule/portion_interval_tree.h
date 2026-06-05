@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/range_treap/range_treap.h>
 
@@ -27,11 +28,17 @@ struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::sh
     }
 };
 
-
 class TPositionView {
-    enum EPositionType { LeftInf = 0, RightInf = 1, StartPortionInfo = 2, EndPortionInfo = 3, SimpleRow = 4 };
+    enum EPositionType {
+        LeftInf = 0,
+        RightInf = 1,
+        StartPortionInfo = 2,
+        EndPortionInfo = 3,
+        SimpleRow = 4
+    };
 
-    using TPositionVariant = std::variant<std::monostate, std::monostate, std::shared_ptr<TPortionInfo>, std::shared_ptr<TPortionInfo>, NArrow::TSimpleRow>;
+    using TPositionVariant =
+        std::variant<std::monostate, std::monostate, std::shared_ptr<TPortionInfo>, std::shared_ptr<TPortionInfo>, NArrow::TSimpleRow>;
 
     TPositionVariant Position;
 
@@ -59,7 +66,6 @@ public:
     std::partial_ordering Compare(const TPositionView& rhs) const;
 };
 
-
 class TPositionViewBorderComparator {
     using TBorder = NRangeTreap::TBorder<TPositionView>;
 
@@ -68,7 +74,7 @@ public:
     static void ValidateKey(const TPositionView& /*key*/);
 };
 
+using TPortionIntervalTree = NRangeTreap::TRangeTreap<TPositionView, std::shared_ptr<TPortionInfo>, TPositionView,
+    TPortionIntervalTreeValueTraits, TPositionViewBorderComparator>;
 
-using TPortionIntervalTree = NRangeTreap::TRangeTreap<TPositionView, std::shared_ptr<TPortionInfo>, TPositionView, TPortionIntervalTreeValueTraits, TPositionViewBorderComparator>;
-
-} // namespace NKikimr::NOlap::PortionIntervalTree
+}   // namespace NKikimr::NOlap::PortionIntervalTree

@@ -5,25 +5,9 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-const THashSet<TString> CmpOperators{"=", "<", ">", "<=", ">="};
-
-TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
-    if (node->IsCallable("ToPg") || node->IsCallable("PgCast")) {
-        return node->Child(0);
-    }
-    return node;
-}
-
-bool IsNullRejectingPredicate(const TExpression &filter) {
-#ifdef DEBUG_PREDICATE
-    YQL_CLOG(TRACE, CoreDq) << "IsNullRejectingPredicate: " << filter.ToString();
-#endif
-    auto predicate = filter.GetExpressionBody();
-    if (predicate->IsCallable("PgResolvedOp") && CmpOperators.contains(TString(predicate->Child(0)->Content()))) {
-        auto left = PruneCast(predicate->Child(2));
-        auto right = PruneCast(predicate->Child(3));
-        return (left->IsCallable("PgConst") || right->IsCallable("PgConst"));
-    }
+bool IsNullRejectingPredicate(const TExpression& filter) {
+    // FIXME: Add proper analysis.
+    Y_UNUSED(filter);
     return false;
 }
 }
@@ -33,7 +17,6 @@ namespace NKqp {
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
 TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -76,8 +59,8 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
     for (const auto& conj : conjuncts) {
-        if (conj.MaybeJoinCondition()) {
-            TJoinCondition cond(conj);
+        if (conj.MaybeEquiJoinCondition()) {
+            TEquiJoinCondition cond(conj);
 
             if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
                 joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
@@ -126,7 +109,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
                     topLevelPreds.push_back(predicate);
                 }
             }
-            if (predicatesForRightSide.size()) {
+            if (!predicatesForRightSide.empty()) {
                 auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
                 rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);
                 join->JoinKind = "Inner";

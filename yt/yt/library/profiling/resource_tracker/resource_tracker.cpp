@@ -166,10 +166,10 @@ private:
     std::atomic<i64> TotalMemoryLimit_ = 0;
     std::atomic<i64> AnonymousMemoryLimit_ = 0;
 
-    i64 SafeGetAnonymousMemoryLimit(const std::string& cgroupPath, i64 totalMemoryLimit)
+    i64 SafeGetAnonymousMemoryLimit(TStringBuf cgroupPath, i64 totalMemoryLimit)
     {
         try {
-            auto anonymousLimit = GetCgroupAnonymousMemoryLimit(cgroupPath);
+            auto anonymousLimit = GetCgroupAnonymousMemoryLimit(std::string(cgroupPath));
             auto result = anonymousLimit.value_or(totalMemoryLimit);
             result = std::min(result, totalMemoryLimit);
             return result != 0 ? result : totalMemoryLimit;

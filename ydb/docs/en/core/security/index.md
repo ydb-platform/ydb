@@ -24,15 +24,9 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
     For more information about access rights, see [{#T}](./authorization.md#right).
 
-- **Access levels** in {{ ydb-short-name }} are used to determine the list of additional cluster management operations permitted for a given user or group. {{ ydb-short-name }} uses three access levels:
+- **Access levels** in {{ ydb-short-name }} are used to determine the list of additional cluster management operations permitted for a given user or group. {{ ydb-short-name }} uses hierarchical access levels: database, viewer, monitoring, and administration. Higher levels automatically include all lower level privileges. In addition, there are two special non-hierarchical lists: bootstrap (for initial cluster bootstrap) and register node (for dynamic node registration).
 
-    - **Viewer** allows viewing the cluster state, which is not publicly accessible.
-    - **Operator** grants additional privileges to monitor and modify the cluster state.
-    - **Administrator** grants privileges to administer the {{ ydb-short-name }} cluster and its databases.
-
-    Similarly to access rights, one or more access levels can be granted to a user or a group. An access subject that does not have any access levels can view only publicly available information about the cluster. Each access level adds privileges to the access subject. For the maximum level of privileges, an access subject must have all three access levels.
-
-    For more information about access levels, see [{#T}](../reference/configuration/security_config.md#security-access-levels).
+    For more information about access levels, see [{#T}](./authorization.md#access-level-lists).
 
 - **[Authentication](./authentication.md) and [authorization](./authorization.md)**. The access control system in {{ ydb-short-name }} provides data protection in a {{ ydb-short-name }} cluster. Due to the access system, only authorized [access subjects](../concepts/glossary.md#access-subject) (users and groups) can work with data. Access to data can be restricted.
 

@@ -7,8 +7,6 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-
 namespace {
 
 using namespace NKikimr;
@@ -293,8 +291,8 @@ public:
             TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
             txState.State = TTxState::ConfigureParts;
 
-            for (const auto& shard : table->GetPartitions()) {
-                auto shardIdx = shard.ShardIdx;
+            for (const auto* shard : table->GetPartitions()) {
+                auto shardIdx = shard->ShardIdx;
                 context.MemChanges.GrabShard(context.SS, shardIdx);
                 context.DbChanges.PersistShard(shardIdx);
 
@@ -445,6 +443,11 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                                // Bloom filter scheme objects are not supported yet in row tables
+                                break;
                         }
 
                         break;

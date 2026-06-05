@@ -243,12 +243,15 @@ public:
         YDB_READONLY(ui32, ColumnId, 0);
         YDB_READONLY_DEF(TString, SubColumnName);
         TIndexCheckOperation Operation;
+        YDB_READONLY_DEF(TString, ColumnName);
 
     public:
-        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation)
+        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation,
+            const TString& columnName = {})
             : ColumnId(columnId)
             , SubColumnName(subColumnName)
-            , Operation(operation) {
+            , Operation(operation)
+            , ColumnName(columnName) {
         }
 
         const TIndexCheckOperation& GetOperation() const {

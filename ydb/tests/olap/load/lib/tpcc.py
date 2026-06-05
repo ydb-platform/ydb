@@ -32,6 +32,9 @@ class TpccSuiteBase(LoadSuiteBase):
     warehouses: int = 4500
     threads: int = 4
     time_s: float = 60 * float(getenv('TPCC_TIME_MINUTES', 30))
+    # Legacy compaction timeout must not depend solely on low warehouse counts
+    # (e.g. functional tests with 5 warehouses), otherwise setup becomes flaky.
+    legacy_compaction_min_timeout_s: int = 60
     tx_mode: TxMode = TxMode.SerializableRW
     compaction_mode: CompactionMode = CompactionMode.get()
     _remote_cli_path: str = ''
@@ -76,7 +79,11 @@ class TpccSuiteBase(LoadSuiteBase):
                     'customer/idx_customer_name/indexImplTable',
                     'oorder/idx_order/indexImplTable'
                 ]
-                force_datashard_compact_legacy([f'{cls.get_tpcc_path()}/{t}' for t in tables], timeout=cls.warehouses)
+                compaction_timeout = max(cls.legacy_compaction_min_timeout_s, cls.warehouses)
+                force_datashard_compact_legacy(
+                    [f'{cls.get_tpcc_path()}/{t}' for t in tables],
+                    timeout=compaction_timeout,
+                )
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:

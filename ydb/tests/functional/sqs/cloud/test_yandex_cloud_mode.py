@@ -46,6 +46,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
             fl.write("root@builtin")
 
         config_generator.yaml_config['sqs_config']['auth_config'] = {'oauth_token': {'token_file': temp_token_file}}
+        config_generator.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True
         return config_generator
 
     def _before_test_start(self):

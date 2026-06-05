@@ -206,7 +206,7 @@ protected:
 public:
     using TPtr = std::shared_ptr<IExternalStorageConfig>;
     virtual ~IExternalStorageConfig() = default;
-    IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
+    IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = false) const;
     template <typename TSettings>
     static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const TSettings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
 };

@@ -45,3 +45,7 @@ message TEvMetricsReadError {
 
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
+
+message TEvConsumerFinished {
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}

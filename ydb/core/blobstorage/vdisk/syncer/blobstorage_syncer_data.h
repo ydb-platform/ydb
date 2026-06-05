@@ -31,8 +31,6 @@ namespace NKikimr {
 
     namespace NSyncer {
 
-        class TSyncerJobTask;
-
         ////////////////////////////////////////////////////////////////////////
         // TPeerSyncState
         // This structure stores status of communication with other neighbor
@@ -98,6 +96,29 @@ namespace NKikimr {
 
     } // NSyncer
 
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvSyncerFullSyncFinished
+    ////////////////////////////////////////////////////////////////////////////
+    struct TEvSyncerFullSyncFinished :
+            public TEventLocal<TEvSyncerFullSyncFinished, TEvBlobStorage::EvSyncerFullSyncFinished>
+    {
+        std::unordered_map<TVDiskID, NSyncer::TPeerSyncState> PeerSyncStates;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvSyncerFullSyncCancelled
+    ////////////////////////////////////////////////////////////////////////////
+    struct TEvSyncerFullSyncDiskCancelled :
+            public TEventLocal<TEvSyncerFullSyncDiskCancelled, TEvBlobStorage::EvSyncerFullSyncDiskCancelled>
+    {
+        TVDiskID VDiskId;
+        NSyncer::TPeerSyncState PeerSyncState;
+
+        TEvSyncerFullSyncDiskCancelled(const TVDiskID& vdiskId, const NSyncer::TPeerSyncState& peerSyncState)
+            : VDiskId(vdiskId)
+            , PeerSyncState(peerSyncState)
+        {}
+    };
 
     ////////////////////////////////////////////////////////////////////////////
     // TSyncNeighbors
@@ -159,9 +180,12 @@ namespace NKikimr {
         void Parse(IInputStream &str);
         void Parse(const TString &data);
         void Parse(const NKikimrVDiskData::TSyncerEntryPoint &pb);
-        void ApplyChanges(const TActorContext &ctx,
-                          const NSyncer::TSyncerJobTask *task,
-                          TDuration syncTimeInterval);
+
+        void ApplyChanges(
+            const TVDiskID& vDiskId,
+            const NSyncer::TPeerSyncState& peerSyncState,
+            TDuration syncTimeInterval);
+
         void RecoverLocally(const TVDiskIdShort &vdisk, const TSyncState &syncState);
     };
 

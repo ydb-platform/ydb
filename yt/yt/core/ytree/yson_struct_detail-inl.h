@@ -97,36 +97,6 @@ concept CSupportsDontSerializeDefault =
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-T DeserializeMapKey(TStringBuf value)
-{
-    if constexpr (TEnumTraits<T>::IsEnum) {
-        return ParseEnum<T>(value);
-    } else if constexpr (std::is_same_v<T, TGuid>) {
-        return TGuid::FromString(value);
-    } else if constexpr (TStrongTypedefTraits<T>::IsStrongTypedef) {
-        return T(DeserializeMapKey<typename TStrongTypedefTraits<T>::TUnderlying>(value));
-    } else {
-        return FromString<T>(value);
-    }
-}
-
-template <class T>
-TString SerializeMapKey(const T& value)
-{
-    if constexpr (TEnumTraits<T>::IsEnum) {
-        return FormatEnum(value);
-    } else if constexpr (std::is_same_v<T, TGuid>) {
-        return ToString(value);
-    } else if constexpr (TStrongTypedefTraits<T>::IsStrongTypedef) {
-        return SerializeMapKey<typename TStrongTypedefTraits<T>::TUnderlying>(value.Underlying());
-    } else {
-        return ToString(value);
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T>
 concept CNodePtr = requires (T node) {
     [] (INodePtr) { } (node);
 };
@@ -479,7 +449,7 @@ void LoadFromSource(
                     return pathGetter() + "/" + NYPath::ToYPathLiteral(key);
                 },
                 unrecognizedStrategy);
-            map[DeserializeMapKey<TKey>(key)] = std::move(value);
+            map[TAssociativeContainerKeyHelper<TKey>::Deserialize(key)] = std::move(value);
         });
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
@@ -597,7 +567,7 @@ inline void PostprocessRecursive(
         PostprocessRecursive(
             value,
             [&pathGetter, &key = key] {
-                return pathGetter() + "/" + NYPath::ToYPathLiteral(SerializeMapKey(key));
+                return pathGetter() + "/" + NYPath::ToYPathLiteral(TAssociativeContainerKeyHelper<std::decay_t<decltype(key)>>::Serialize(key));
             });
     }
 }
@@ -1298,7 +1268,7 @@ DEFINE_POSTPROCESSOR(
 
 DEFINE_POSTPROCESSOR(
     NonEmpty(),
-    actual.size() > 0,
+    !actual.empty(),
     TError("Value must not be empty")
 )
 

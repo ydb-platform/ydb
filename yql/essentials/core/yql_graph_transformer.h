@@ -465,7 +465,7 @@ using TSyncMap = std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash>;
 
 template<>
 inline void Out<NYql::IGraphTransformer::TStatus>(
-    IOutputStream &out, const NYql::IGraphTransformer::TStatus& status)
+    IOutputStream &out, const NYql::IGraphTransformer::TStatus& value)
 {
-    status.Out(out);
+    value.Out(out);
 }

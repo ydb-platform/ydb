@@ -78,6 +78,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.http_proxy_port = None
+        self.kafka_api_port = None
+        if configurator.kafka_proxy_enabled:
+            self.kafka_api_port = port_allocator.kafka_api_port
         if not configurator.simple_config and configurator.http_proxy_enabled:
             self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
@@ -115,7 +118,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "stdout_file": "/dev/stdout",
                 "stderr_file": "/dev/stderr"
                 }
-
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
 
     def is_port_listening(self, port):
@@ -224,6 +226,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--key=%s" % self.__configurator.grpc_tls_key_path
             )
 
+        if self.__configurator.domain_name:
+            command.append(
+                "--node-domain=%s" % self.__configurator.domain_name
+            )
+
         if self.__role == 'slot' or (self.__configurator.node_kind == "yq" and self._tenant_affiliation is not None):
             command.append(
                 "--tenant=%s" % self._tenant_affiliation
@@ -244,6 +251,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__log_file_name is not None:
             command.append(
                 "--log-file-name=%s" % self.__log_file_name,
+            )
+
+        if self.kafka_api_port is not None:
+            command.append(
+                "--kafka-port=%s" % self.kafka_api_port,
             )
 
         command.extend(
@@ -334,6 +346,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def pid(self):
         return self.daemon.process.pid
+
+    def get_kafka_api_port(self):
+        return self.kafka_api_port
 
     def start(self):
         try:

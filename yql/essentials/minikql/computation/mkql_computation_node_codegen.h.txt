@@ -1058,8 +1058,11 @@ public:
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final MKQL_NO_SANITIZE_LLVM_CALL {
         if (FirstCall) {
-            FirstCall = false;
-            return FetchFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+            const auto status = FetchFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
+            if (status == NUdf::EFetchStatus::Ok) {
+                FirstCall = false;
+            }
+            return status;
         } else {
             return FetchFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
         }

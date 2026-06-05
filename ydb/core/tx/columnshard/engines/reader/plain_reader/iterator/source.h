@@ -48,6 +48,7 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         AFL_VERIFY(false);
@@ -59,25 +60,30 @@ private:
         AFL_VERIFY(false);
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
+
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
         const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
+
     virtual void DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
     }
+
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*address*/) override {
         AFL_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
+
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
         AFL_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
+
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
         AFL_VERIFY(false);
@@ -91,9 +97,11 @@ protected:
     bool IsReadyFlag = false;
 
     virtual void DoAbort() = 0;
+
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
+
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
@@ -104,6 +112,7 @@ public:
     virtual bool NeedAccessorsForRead() const = 0;
     virtual bool NeedAccessorsFetching() const = 0;
     virtual ui64 PredictAccessorsMemory() const = 0;
+
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
@@ -114,6 +123,7 @@ public:
     const NArrow::TSimpleRow& GetStartReplaceKey() const {
         return StartReplaceKey;
     }
+
     const NArrow::TSimpleRow& GetFinishReplaceKey() const {
         return FinishReplaceKey;
     }
@@ -123,6 +133,7 @@ public:
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
         return Finish.BuildSortingCursor().ExtractSortingPosition(Finish.GetSortFields());
     }
+
     void IncIntervalsCount() {
         ++IntervalsCount;
     }
@@ -203,6 +214,7 @@ private:
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
+
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -224,7 +236,9 @@ private:
         result.InsertValue("read_memory", GetColumnRawBytes(GetPortionAccessor().GetColumnIds()));
         return result;
     }
+
     virtual void DoAbort() override;
+
     virtual TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }

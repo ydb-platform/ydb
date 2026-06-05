@@ -21,6 +21,12 @@ struct TWithScale {
     TValue Value = {};
 };
 
+template <>
+struct TWithScale<TPlainNumericTag{}, NYql::NDecimal::TInt128> {
+    NYql::NDecimal::TInt128 Value = {};
+    ui8 Precision = {};
+};
+
 template <typename T>
 using TNoScaledType = TWithScale<TPlainNumericTag{}, T>;
 
@@ -77,11 +83,13 @@ public:
 template <typename TContext, typename TElement>
 using TBlackboxType = std::variant<TNoScaledType<typename TBlackboxTypeData<TContext, TElement>::TPtr>>;
 
-template <typename TContext, typename TElement>
-using TColumnTypeWithScale = std::variant<TNumericTypeWithScale, TDateTypeWithScale, TBlackboxType<TContext, TElement>>;
+using TNumericDecimalWithScale = std::variant<TNoScaledType<NYql::NDecimal::TInt128>>;
 
 template <typename TContext, typename TElement>
-using TRangeTypeWithScale = std::variant<TRangeNumericTypeWithScale, TRangeIntervalTypeWithScale, TBlackboxType<TContext, TElement>>;
+using TColumnTypeWithScale = std::variant<TNumericTypeWithScale, TDateTypeWithScale, TBlackboxType<TContext, TElement>, TNumericDecimalWithScale>;
+
+template <typename TContext, typename TElement>
+using TRangeTypeWithScale = std::variant<TRangeNumericTypeWithScale, TRangeIntervalTypeWithScale, TBlackboxType<TContext, TElement>, TNumericDecimalWithScale>;
 
 // Custom visit function need only to reduce code bloat due to dead branches of std::visit.
 template <typename TContext, typename TElement>
@@ -98,6 +106,8 @@ decltype(auto) VisitColumnTypeWithScale(const auto& lambda, TRangeTypeWithScale<
         } else if constexpr (std::is_same_v<TRange, TRangeIntervalTypeWithScale> && std::is_same_v<TColumn, TDateTypeWithScale>) {
             return std::visit(lambda, rangeInner, columnInner);
         } else if constexpr (std::is_same_v<TRange, TBlackbox> && std::is_same_v<TColumn, TBlackbox>) {
+            return std::visit(lambda, rangeInner, columnInner);
+        } else if constexpr (std::is_same_v<TRange, TNumericDecimalWithScale> && std::is_same_v<TColumn, TNumericDecimalWithScale>) {
             return std::visit(lambda, rangeInner, columnInner);
         } else {
             ythrow yexception() << "Not appropriate visiting for window range and column types";

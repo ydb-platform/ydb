@@ -629,6 +629,15 @@ void TViewerPipeClient::ApplyForceMode(TEvBlobStorage::TEvControllerConfigReques
     }
 }
 
+bool TViewerPipeClient::RequireAdminIfForce(bool& force, TStringBuf forceParamName) {
+    force = FromStringWithDefault<bool>(Params.Get(forceParamName), force);
+    if (force && !Viewer->CheckAccessAdministration(GetRequest())) {
+        ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Administration access required when force=true"));
+        return false;
+    }
+    return true;
+}
+
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();

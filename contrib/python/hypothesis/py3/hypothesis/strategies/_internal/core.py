@@ -18,7 +18,14 @@ import string
 import sys
 import typing
 import warnings
-from collections.abc import Callable, Collection, Hashable, Iterable, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Hashable,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 from contextvars import ContextVar
 from decimal import Context, Decimal, localcontext
 from fractions import Fraction
@@ -364,7 +371,7 @@ def lists(
             and (elements.end - elements.start) <= 255
         ):
             elements = SampledFromStrategy(
-                sorted(range(elements.start, elements.end + 1), key=abs)  # type: ignore
+                sorted(range(elements.start, elements.end + 1), key=abs)
                 if elements.end < 0 or elements.start > 0
                 else (
                     list(range(elements.end + 1))
@@ -454,6 +461,14 @@ class PrettyIter:
 
     def __repr__(self) -> str:
         return f"iter({self._values!r})"
+
+    def _repr_pretty_(self, printer, cycle):
+        if cycle:
+            printer.text("iter(...)")
+        else:
+            printer.text("iter(")
+            printer.pretty(self._values)
+            printer.text(")")
 
 
 @defines_strategy()
@@ -877,7 +892,7 @@ def from_regex(
     regex: str | Pattern[str],
     *,
     fullmatch: bool = False,
-    alphabet: str | SearchStrategy[str] = characters(codec="utf-8"),
+    alphabet: str | SearchStrategy[str] | None = characters(codec="utf-8"),
 ) -> SearchStrategy[str]:  # pragma: no cover
     ...
 
@@ -1572,9 +1587,9 @@ def _from_type(thing: type[Ex]) -> SearchStrategy[Ex]:
             )
         try:
             hints = get_type_hints(thing)
-            params = get_signature(thing).parameters
+            params: Mapping[str, Parameter] = get_signature(thing).parameters
         except Exception:
-            params = {}  # type: ignore
+            params = {}
 
         posonly_args = []
         kwargs = {}

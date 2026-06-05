@@ -1235,4 +1235,66 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
+    /* Test that multiple bloom filter prefixes are preserved during split and merge operations */
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitMergePreservesMultipleBloomPrefixes, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                // Create table with multiple bloom filter prefixes
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key1"       Type: "Utf8"}
+                    Columns { Name: "key2"       Type: "Uint32"}
+                    Columns { Name: "key3"       Type: "Utf8"}
+                    Columns { Name: "Value"      Type: "Utf8"}
+                    KeyColumnNames: ["key1", "key2", "key3"]
+                    PartitionConfig {
+                        PartitioningPolicy {
+                            MinPartitionsCount: 0
+                        }
+                        ByKeyFilterPrefixes { PrefixLength: 1 }
+                        ByKeyFilterPrefixes { PrefixLength: 3 FalsePositiveProbability: 0.001 }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify multiple bloom filters are configured
+                auto cfg = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable().GetPartitionConfig();
+                UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+                UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+            }
+
+            // Perform split operation - split the single partition
+            {
+                TInactiveZone inactive(activeZone);
+                TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
+                    SourceTabletId: 72075186233409546
+                    SplitBoundary {
+                        KeyPrefix {
+                            Tuple { Optional { Text: "M" } }
+                        }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // Verify all bloom filter prefixes are preserved after split
+            {
+                TInactiveZone inactive(activeZone);
+                auto tableDescr = DescribePath(runtime, "/MyRoot/Table", true);
+                const auto& table = tableDescr.GetPathDescription().GetTable();
+
+                // Check that all bloom filter configurations are preserved at table level
+                const auto& partitionConfig = table.GetPartitionConfig();
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+                UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+            }
+
+        });
+    }
+
 }

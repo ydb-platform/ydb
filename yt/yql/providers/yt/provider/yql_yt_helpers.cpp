@@ -15,7 +15,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
@@ -960,6 +960,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .SecureParams(secureParams)
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
             .LangVer(state->Types->LangVer)
+            .RuntimeSettings(state->Types->RuntimeSettings)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());
@@ -2487,6 +2488,57 @@ TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TS
         finalCypressPaths.emplace_back(std::move(loc.Path));
     }
     return finalCypressPaths;
+}
+
+bool CanReplaceParentOutputHash(const TExprNode& node) {
+    if (!node.IsCallable(TYtMerge::CallableName())) {
+        return false;
+    }
+
+    TYtMerge opMerge(&node);
+    if (!HasSetting(opMerge.Settings().Ref(), EYtSettingType::CombineChunks)) {
+        return false;
+    }
+    if (!HasSetting(opMerge.Settings().Ref(), EYtSettingType::ReplaceParentCache)) {
+        return false;
+    }
+    if (HasSettingsExcept(opMerge.Settings().Ref(), EYtSettingType::CombineChunks | EYtSettingType::ReplaceParentCache)) {
+        return false;
+    }
+
+    const auto sections = opMerge.Input();
+    if (sections.Size() != 1) {
+        return false;
+    }
+
+    const auto section = sections.Item(0);
+    if (!section.Settings().Empty()) {
+        return false;
+    }
+
+    const auto paths = section.Paths();
+    if (paths.Size() != 1) {
+        return false;
+    }
+
+    const auto path = paths.Item(0);
+    if (!path.Ranges().Maybe<TCoVoid>()
+        || !path.QLFilter().Maybe<TCoVoid>()
+        || !path.Columns().Maybe<TCoVoid>()
+        || path.AdditionalAttributes())
+    {
+        return false;
+    }
+
+    const TYtPathInfo pathInfo(path);
+    if (pathInfo.RequiresRemap()) {
+        return false;
+    }
+    if (pathInfo.Table->Meta && (pathInfo.Table->Meta->IsDynamic || pathInfo.Table->Meta->HasRLS)) {
+        return false;
+    }
+
+    return true;
 }
 
 } // NYql

@@ -80,22 +80,26 @@ namespace NKikimr {
                 if (!SwapSnap || SwapSnap->Empty()) {
                     GenerateCommit(ctx);
                 } else {
-                    // append to
-                    ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
+                    // append to the chunk, but only if the chunk has free pages and is not being deleted
+                    const ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
                     ui32 chunkIdx = 0;
                     ui32 offset = 0;
+                    ui32 pages = PagesInChunk;
+
                     if (lastChunkFreePages > 0) {
-                        // append to the chunk
-                        Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
-                        chunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
-                        offset = (PagesInChunk - lastChunkFreePages) * PageSize;
-                        FillInPortion(lastChunkFreePages);
-                    } else {
-                        // fill in the new chunk
-                        chunkIdx = 0;
-                        offset = 0;
-                        FillInPortion(PagesInChunk);
+                        ui32 lastChunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
+                        const auto& delChunks = CommitRecord.DeleteChunks;
+                        bool lastChunkDeletedByThisCommit = Find(delChunks.begin(), delChunks.end(), lastChunkIdx) != delChunks.end();
+
+                        if (!lastChunkDeletedByThisCommit) {
+                            Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
+                            chunkIdx = lastChunkIdx;
+                            offset = (PagesInChunk - lastChunkFreePages) * PageSize;
+                            pages = lastChunkFreePages;
+                        }
                     }
+
+                    FillInPortion(pages);
 
                     // generate write
                     Parts->GenRefs();
@@ -115,6 +119,24 @@ namespace NKikimr {
             void Handle(NPDisk::TEvChunkWriteResult::TPtr &ev, const TActorContext &ctx) {
                 LOG_DEBUG(ctx, BS_SYNCLOG,
                         VDISKP(SlCtx->VCtx->VDiskLogPrefix, "COMMITTER: write done"));
+
+                if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                    // We tried to allocate a new chunk for the sync log, but PDisk is out
+                    // of space (only fresh chunk allocation, i.e. chunkIdx == 0, can return
+                    // this status). The persistent sync log is not essential for data
+                    // persistence: peers requesting old lsns will simply fall back to full
+                    // sync. So instead of switching the VDisk to a terminal state, ask the
+                    // keeper to dispose of the whole disk sync log. CommitRecord.CommitChunks
+                    // holds all chunks we have managed to write during this commit.
+                    LOG_NOTICE(ctx, NKikimrServices::BS_VDISK_OTHER,
+                            VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                                "COMMITTER: OUT_OF_SPACE on chunk write, disposing disk sync log; %s",
+                                ev->Get()->ToString().data()));
+                    ctx.Send(NotifyID, new TEvSyncLogDiskOutOfSpace(std::move(CommitRecord.CommitChunks)));
+                    Die(ctx);
+                    return;
+                }
+
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
 
                 // chunk is written, apply index update

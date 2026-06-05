@@ -1,4 +1,5 @@
 #include "read_start.h"
+
 #include <ydb/core/tx/columnshard/transactions/protos/tx_event.pb.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
@@ -34,14 +35,16 @@ void TEvReadStart::DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) 
 
 void TEvReadStart::DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
-        context.AddInterval(lockId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
+        context.AddInterval(
+            lockId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
 }
 
 void TEvReadStart::DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
-        context.RemoveInterval(lockId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
+        context.RemoveInterval(
+            lockId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NTxInteractions

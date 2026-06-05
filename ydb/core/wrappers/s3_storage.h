@@ -17,6 +17,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/typetraits.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 
@@ -29,24 +30,26 @@ public:
     struct TS3CountersRoot;
 
     struct TS3RequestCounters: public TAtomicRefCount<TS3RequestCounters> {
-        TS3RequestCounters(const TS3CountersRoot* parent, NMonitoring::TDynamicCounterPtr requestGroup)
-            : Parent(parent)
-            , RequestGroup(std::move(requestGroup))
+        TS3RequestCounters(NMonitoring::TDynamicCounterPtr requestGroup)
+            : RequestGroup(std::move(requestGroup))
         {
         }
 
         NMonitoring::THistogramCounter* GetLatency() const;
         NMonitoring::TCounterForPtr* GetBytesWritten() const;
         NMonitoring::TCounterForPtr* GetBytesRead() const;
-        NMonitoring::TCounterForPtr* GetCodeCounter(const TString& code) const;
+        NMonitoring::TCounterForPtr* GetSuccessRequestsCountCounter() const;
+        NMonitoring::TCounterForPtr* GetRequestsCountCounter(const TString& statusName, int httpResponseCode, int awsErrorType) const;
 
     private:
-        const TS3CountersRoot* Parent = nullptr;
+        NMonitoring::TDynamicCounterPtr GetStatusSubgroupImpl(const TString& statusName, int httpResponseCode, int awsErrorType) const;
+
+    private:
         NMonitoring::TDynamicCounterPtr RequestGroup;
-        mutable NMonitoring::THistogramPtr LatencyHist;
-        mutable NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
-        mutable NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
-        mutable NMonitoring::TDynamicCounters::TCounterPtr CodeOk;
+        mutable std::atomic<NMonitoring::THistogramCounter*> LatencyHist;
+        mutable std::atomic<NMonitoring::TCounterForPtr*> BytesWritten;
+        mutable std::atomic<NMonitoring::TCounterForPtr*> BytesRead;
+        mutable std::atomic<NMonitoring::TCounterForPtr*> SuccessRequests;
     };
 
     struct TS3CountersRoot {
@@ -71,14 +74,14 @@ public:
 
             NMonitoring::TDynamicCounterPtr reqRoot;
             if (Root) {
-                reqRoot = Root->GetSubgroup("request", requestName);
+                reqRoot = Root->GetSubgroup("method", requestName);
                 constexpr bool requestHasBucket = THasBucket<typename TEvRequest::TRequest>::value;
                 if constexpr (requestHasBucket) {
                     reqRoot = reqRoot->GetSubgroup("bucket", bucket);
                 }
             }
 
-            TIntrusivePtr<TS3RequestCounters> counters = new TS3RequestCounters(this, std::move(reqRoot));
+            TIntrusivePtr<TS3RequestCounters> counters = new TS3RequestCounters(std::move(reqRoot));
             Cache.emplace(std::move(requestName), counters);
             return counters;
         }
@@ -94,7 +97,7 @@ private:
     const Aws::Auth::AWSCredentials Credentials;
     const TString Bucket;
     const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
-    bool Verbose = true;
+    bool Verbose = false;
     TS3CountersRoot Counters;
 
     mutable std::mutex RunningQueriesMutex;
@@ -168,13 +171,13 @@ public:
             const TString& bucket,
             NMonitoring::TDynamicCounterPtr counters,
             const Aws::S3::Model::StorageClass storageClass,
-            bool verbose = true,
-            bool useVirtualAdressing = true)
+            bool verbose = false,
+            bool useVirtualAddressing = true)
         : Client(new Aws::S3::S3Client(
             credentials,
             config,
             Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-            useVirtualAdressing))
+            useVirtualAddressing))
         , Config(config)
         , Credentials(credentials)
         , Bucket(bucket)

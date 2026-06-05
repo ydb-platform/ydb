@@ -83,6 +83,7 @@ public:
     void StateWork(TAutoPtr<NActors::IEventHandle> &ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         }
     }
 

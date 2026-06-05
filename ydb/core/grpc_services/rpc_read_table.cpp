@@ -8,7 +8,7 @@
 #include "service_table.h"
 
 #include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/base/appdata.h>

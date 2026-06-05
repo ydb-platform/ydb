@@ -208,7 +208,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
                 logLevel);
 
             TFunctionTypeInfo funcInfo;
-            auto status = functionRegistry.FindFunctionTypeInfo(udf.LangVer, env, typeInfoHelper, nullptr,
+            auto status = functionRegistry.FindFunctionTypeInfo(udf.LangVer, *udf.RuntimeSettings, env, typeInfoHelper, nullptr,
                                                                 udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), secureParamsProvider.get(),
                                                                 logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {

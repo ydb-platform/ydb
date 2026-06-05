@@ -283,8 +283,11 @@ private:
     void ReadUsingActor(NTableIndex::NKMeans::TClusterId parent) {
         auto range = ParentRange(parent);
         auto arena = MakeIntrusive<NActors::TProtoArenaHolder>();
-        auto src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
+        auto* src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
         src->SetDatabase(Settings.GetDatabase());
+        if (Settings.HasPoolId()) {
+            src->SetPoolId(Settings.GetPoolId());
+        }
         *src->MutableTable() = Settings.GetLevelTable();
         range.Serialize(*src->MutableFullRange());
         src->SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);

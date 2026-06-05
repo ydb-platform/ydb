@@ -2,6 +2,8 @@
 #include "kqp_opt_phy_effects_impl.h"
 #include "kqp_opt_phy_uniq_helper.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;

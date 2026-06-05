@@ -303,16 +303,16 @@ struct TTestHelper {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
-        init(serverSettings);
+        Init(serverSettings);
     }
 
     explicit TTestHelper(const TServerSettings& serverSettings, ui64 shardCount = 1, bool withFollower = false) {
         WithFollower = withFollower;
         ShardCount = shardCount;
-        init(serverSettings);
+        Init(serverSettings);
     }
 
-    void init(const TServerSettings& serverSettings) {
+    void Init(const TServerSettings& serverSettings) {
         Server = new TServer(serverSettings);
 
         auto &runtime = *Server->GetRuntime();
@@ -4054,7 +4054,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         AsyncDropTable(helper.Server, helper.Sender, "/Root", "table-1");
 
         runtime.SimulateSleep(TDuration::Seconds(1));
-        // Unblock execution of the read. It will now get added to the pipeline and 
+        // Unblock execution of the read. It will now get added to the pipeline and
         // would start executing if there were no additional checks on the presence of DropTable.
         blockedActivations.Stop().Unblock();
 
@@ -4153,7 +4153,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
     Y_UNIT_TEST(ShouldCalculateQuota) {
-        NDataShard::TReadIteratorState state(TReadIteratorId({}, 0), 0, TPathId(0, 0), {}, TRowVersion::Max(), true, {});
+        NDataShard::TReadIteratorState state(TReadIteratorId({}, 0), 0, TPathId(0, 0), {}, TRowVersion::Max(), true, {}, {});
         state.Quota.Rows = 100;
         state.Quota.Bytes = 1000;
         state.ConsumeSeqNo(10, 100); // seqno1

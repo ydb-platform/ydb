@@ -344,6 +344,14 @@
             },
             "formula": "build/external_resources/yexport/public.resources.json"
         },
+        "yfm-docs": {
+            "executable": {
+                "yfm-docs": [
+                    "yfm-docs"
+                ]
+            },
+            "formula": "build/platform/yfm/resources.json"
+        },
         "ygdiff": {
             "executable": {
                 "ygdiff": [
@@ -1089,6 +1097,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1171,6 +1189,16 @@
                         "os": "DARWIN"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
@@ -1235,6 +1263,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {
@@ -1829,6 +1868,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1911,6 +1960,16 @@
                         "os": "DARWIN"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
@@ -1975,6 +2034,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {
@@ -2679,6 +2749,34 @@
                 }
             }
         },
+        "yfm-docs": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "yfm-docs": {
+                    "bottle": "yfm-docs",
+                    "executable": "yfm-docs"
+                }
+            }
+        },
         "ygdiff": {
             "platforms": [
                 {
@@ -2907,6 +3005,9 @@
         "yexport": {
             "description": "Run yexport",
             "visible": false
+        },
+        "yfm-docs": {
+            "description": "YFM-extended markdown processor for Cloud deploy (v3)"
         },
         "ygdiff": {
             "description": "Run ygdiff tool",

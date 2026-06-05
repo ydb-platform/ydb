@@ -1,8 +1,8 @@
 #pragma once
 
+#include <ydb/core/base/events.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_common_types.h>
-#include <ydb/core/base/events.h>
 
 namespace NKikimr::NColumnShard::NOverload {
 
@@ -26,7 +26,8 @@ public:
     TEvOverloadSubscribe(TColumnShardInfo&& columnShardInfo, TPipeServerInfo&& pipeServerInfo, TOverloadSubscriberInfo&& overloadSubscriberInfo)
         : ColumnShardInfo(std::move(columnShardInfo))
         , PipeServerInfo(std::move(pipeServerInfo))
-        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo)) {
+        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo))
+    {
     }
 };
 
@@ -37,7 +38,8 @@ class TEvOverloadUnsubscribe: public NActors::TEventLocal<TEvOverloadUnsubscribe
 public:
     TEvOverloadUnsubscribe(TColumnShardInfo&& columnShardInfo, TOverloadSubscriberInfo&& overloadSubscriberInfo)
         : ColumnShardInfo(std::move(columnShardInfo))
-        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo)) {
+        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo))
+    {
     }
 };
 
@@ -48,7 +50,8 @@ class TEvOverloadPipeServerDisconnected: public NActors::TEventLocal<TEvOverload
 public:
     TEvOverloadPipeServerDisconnected(TColumnShardInfo&& columnShardInfo, TPipeServerInfo&& pipeServerInfo)
         : ColumnShardInfo(std::move(columnShardInfo))
-        , PipeServerInfo(std::move(pipeServerInfo)) {
+        , PipeServerInfo(std::move(pipeServerInfo))
+    {
     }
 };
 
@@ -57,10 +60,11 @@ class TEvOverloadColumnShardDied: public NActors::TEventLocal<TEvOverloadColumnS
 
 public:
     TEvOverloadColumnShardDied(TColumnShardInfo&& columnShardInfo)
-        : ColumnShardInfo(std::move(columnShardInfo)) {
+        : ColumnShardInfo(std::move(columnShardInfo))
+    {
     }
 };
 
 class TEvOverloadResourcesReleased: public NActors::TEventLocal<TEvOverloadResourcesReleased, EvOverloadResourcesReleased> {};
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

@@ -527,7 +527,7 @@ TCompatibilityPair CheckFieldsCompatibility(
             return {
                 ESchemaCompatibility::Incompatible,
                 TError(
-                    "Newly added field of %Qv cannot preceed already existing field "
+                    "Newly added field of %Qv cannot precede already existing field "
                     "unless both field renaming and removal are enabled",
                     oldDescriptor.GetDescription())
                     << TErrorAttribute("new_field_name", lastNewField->Name)

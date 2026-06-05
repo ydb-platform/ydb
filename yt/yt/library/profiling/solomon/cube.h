@@ -21,7 +21,7 @@ struct TReadOptions
 {
     TReadWindow Times;
 
-    std::function<bool(const std::string&)> SensorFilter;
+    std::function<bool(TStringBuf)> SensorFilter;
 
     bool ConvertCountersToRateGauge = false;
     bool ConvertCountersToDeltaGauge = false;
@@ -114,7 +114,7 @@ public:
     T Rollup(const TProjection& window, int index) const;
 
     int ReadSensors(
-        const std::string& name,
+        TStringBuf name,
         const TReadOptions& options,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;

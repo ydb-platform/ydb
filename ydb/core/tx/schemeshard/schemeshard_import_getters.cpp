@@ -6,6 +6,7 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -46,16 +47,19 @@ struct TGetterSettings {
     ui32 Retries;
     TMaybe<NBackup::TEncryptionKey> Key;
     TMaybe<NBackup::TEncryptionIV> IV;
+    TStringBuf LogPrefix = "s3"sv;
 
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
         std::visit([&settings, &iv](const auto& s) {
+            using TSettings = std::decay_t<decltype(s)>;
             settings.ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, s);
             settings.Retries = s.number_of_retries();
             if (s.has_encryption_settings()) {
                 settings.Key = NBackup::TEncryptionKey(s.encryption_settings().symmetric_key().key());
             }
             settings.IV = std::move(iv);
+            settings.LogPrefix = NBackup::NFieldsWrappers::GetStorageName<TSettings>();
         }, importInfo->Settings);
         return settings;
     }
@@ -81,6 +85,7 @@ protected:
         , Key(std::move(settings.Key))
         , IV(std::move(settings.IV))
         , Retries(settings.Retries)
+        , StoragePrefix(settings.LogPrefix)
     {
     }
 
@@ -154,7 +159,7 @@ protected:
             Delay = Min(Delay * ++Attempt, MaxDelay);
             this->Schedule(Delay, new TEvents::TEvWakeup());
         } else {
-            Reply(shouldRetry ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error);
+            Reply(shouldRetry ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << StoragePrefix << " error: " << error);
         }
     }
 
@@ -290,6 +295,8 @@ protected:
     TString CurrentObjectChecksum;
     TString CurrentObjectKey;
     std::function<void()> ChecksumValidatedCallback;
+
+    const TStringBuf StoragePrefix;
 };
 
 // Downloads scheme-related objects from S3
@@ -298,8 +305,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         TString srcPrefix = importInfo.GetItemSrcPrefix(itemIdx);
 
         // Absolute path in the prefix is possible if the backup with SchemaMapping
-        if (importInfo.Kind == TImportInfo::EKind::FS && !srcPrefix.empty() && srcPrefix[0] != '/') {
-            return CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
+        if (importInfo.Kind == TImportInfo::EKind::FS) {
+            if (!srcPrefix.empty() && srcPrefix[0] != '/') {
+                srcPrefix = CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
+            } else if (srcPrefix.empty()) {
+                srcPrefix = importInfo.GetFsSettings().base_path();
+            }
         }
 
         return srcPrefix;
@@ -865,7 +876,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
-        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx) + "/");
+        ListObjects(GetItemSource(*ImportInfo, ItemIdx) + "/");
     }
 
     void DownloadMetadata() {

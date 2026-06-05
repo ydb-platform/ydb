@@ -156,6 +156,8 @@ template <class... Ts>
 constexpr bool CKnownRange<THashSet<Ts...>> = true;
 template <class... Ts>
 constexpr bool CKnownRange<THashMultiSet<Ts...>> = true;
+template <class T, size_t N>
+constexpr bool CKnownRange<TCompactFlatSet<T, N>> = true;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -176,8 +178,6 @@ template <class... Ts>
 constexpr bool CKnownKVRange<TCompactFlatMap<Ts...>> = true;
 template <class K, class V, size_t N, class C>
 constexpr bool CKnownKVRange<TCompactFlatMap<K, V, N, C>> = true;
-template <class T, size_t N>
-constexpr bool CKnownRange<TCompactFlatSet<T, N>> = true;
 
 // TODO(arkady-e1ppa): Uncomment me when
 // https://github.com/llvm/llvm-project/issues/58534 is shipped.
@@ -351,7 +351,7 @@ TFormatterWrapper<TFormatter> MakeFormatterWrapper(
     TFormatter&& formatter)
 {
     return TFormatterWrapper<TFormatter>{
-        .Formatter = std::move(formatter)
+        .Formatter = std::forward<TFormatter>(formatter)
     };
 }
 
@@ -722,7 +722,9 @@ void FormatValue(TStringBuilderBase* builder, TEnum value, TStringBuf spec)
 }
 
 template <class TArcadiaEnum>
-    requires (std::is_enum_v<TArcadiaEnum> && !TEnumTraits<TArcadiaEnum>::IsEnum)
+concept CArcadiaEnum = (std::is_enum_v<TArcadiaEnum> && !TEnumTraits<TArcadiaEnum>::IsEnum);
+
+template <CArcadiaEnum TArcadiaEnum>
 void FormatValue(TStringBuilderBase* builder, TArcadiaEnum value, TStringBuf /*spec*/)
 {
     // NB(arkady-e1ppa): This can catch normal enums which
@@ -941,7 +943,7 @@ void FormatValue(
 {
     std::apply(
         [&] <class... TInnerArgs> (TInnerArgs&&... args) {
-            builder->AppendFormat(value.Format_, std::forward<TInnerArgs>(args)...);
+            builder->AppendFormat(TRuntimeFormat{value.Format_}, std::forward<TInnerArgs>(args)...);
         },
         value.Args_);
 }

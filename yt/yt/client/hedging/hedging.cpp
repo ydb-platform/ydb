@@ -207,6 +207,9 @@ public:
     UNSUPPORTED_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (const TGetMasterConsistentStateOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ExitReadOnly, (NObjectClient::TCellId, const TExitReadOnlyOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, MasterExitReadOnly, (const TMasterExitReadOnlyOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, FreezeHydraPeer, (NHydra::TCellId, const std::string&, const TFreezeHydraPeerOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TruncateChangelog, (NHydra::TCellId, const std::string&, const TTruncateChangelogOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, ScheduleRestart, (NHydra::TCellId, const std::string&, const TScheduleRestartOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (const TResetDynamicallyPropagatedMasterCellsOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (NObjectClient::TCellId, const TDiscombobulateNonvotingPeersOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SwitchLeader, (NObjectClient::TCellId, const std::string&, const TSwitchLeaderOptions&));
@@ -284,7 +287,11 @@ NApi::IClientPtr DoCreateHedgingClient(
         const auto& clusterName = connectionConfig->ClusterName.value_or(*connectionConfig->ClusterUrl);
         executorNodes.push_back({
             .Client = clientFactory(connectionConfig),
-            .Counter = New<TCounter>(counterTagSet.WithTag(NProfiling::TTag("yt_cluster", clusterName))),
+            .Counter = New<TCounter>(
+                counterTagSet.WithTag(NProfiling::TTag("yt_cluster", clusterName)),
+                config->RequestDurationHistogramMin,
+                config->RequestDurationHistogramMax,
+                config->RequestDurationHistogramGranularity),
             .ClusterName = clusterName,
             .InitialPenalty = connectionConfig->InitialPenalty,
         });

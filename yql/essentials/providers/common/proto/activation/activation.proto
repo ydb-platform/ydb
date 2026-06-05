@@ -1,0 +1,20 @@
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
+message TActivationByHour {
+    required uint32 Hour = 1;
+    required uint32 Percentage = 2;
+}
+
+message TActivationPercentage {
+    optional uint32 Percentage = 1 [default = 0];
+    repeated TActivationByHour ByHour = 2;
+    repeated string IncludeUsers = 3;
+    repeated string ExcludeUsers = 4;
+    optional bool ExcludeRobots = 5 [default = true];
+    repeated string Tags = 6;
+    repeated string IncludeGroups = 7;
+    repeated string ExcludeGroups = 8;
+    repeated string IncludeRevisions = 9;
+    repeated string ExcludeRevisions = 10;
+}

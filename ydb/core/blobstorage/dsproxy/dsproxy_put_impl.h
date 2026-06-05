@@ -58,13 +58,14 @@ private:
         bool IssueKeepFlag = false;
         bool IgnoreBlock = false;
         bool AlreadyEncrypted = false;
+        bool IsZeroEntry = false;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
         NWilson::TSpan Span;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
         TInstant Deadline;
 
         TBlobInfo(TLogoBlobID id, TRope&& buffer, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-                NLWTrace::TOrbit&& orbit, bool issueKeepFlag, bool ignoreBlock, bool alreadyEncrypted,
+                NLWTrace::TOrbit&& orbit, bool issueKeepFlag, bool ignoreBlock, bool alreadyEncrypted, bool isZeroEntry,
                 std::vector<std::pair<ui64, ui32>> extraBlockChecks, bool single,
                 std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay, TInstant deadline)
             : BlobId(id)
@@ -76,6 +77,7 @@ private:
             , IssueKeepFlag(issueKeepFlag)
             , IgnoreBlock(ignoreBlock)
             , AlreadyEncrypted(alreadyEncrypted)
+            , IsZeroEntry(isZeroEntry)
             , ExtraBlockChecks(std::move(extraBlockChecks))
             , Span(single ? NWilson::TSpan() : NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Put.Blob"))
             , ExecutionRelay(std::move(executionRelay))
@@ -131,8 +133,8 @@ public:
     {
         BlobMap.emplace(ev->Id, Blobs.size());
         Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
-            ev->IssueKeepFlag, ev->IgnoreBlock, ev->AlreadyEncrypted, std::move(ev->ExtraBlockChecks), true,
-            std::move(ev->ExecutionRelay), ev->Deadline);
+            ev->IssueKeepFlag, ev->IgnoreBlock, ev->AlreadyEncrypted, ev->IsZeroEntry, std::move(ev->ExtraBlockChecks),
+            true, std::move(ev->ExecutionRelay), ev->Deadline);
 
         auto& blob = Blobs.back();
         LWPROBE(DSProxyBlobPutTactics, blob.BlobId.TabletID(), Info->GroupID.GetRawId(), blob.BlobId.ToString(), Tactic,
@@ -163,7 +165,7 @@ public:
             Y_ABORT_UNLESS(msg.Tactic == tactic);
             BlobMap.emplace(msg.Id, Blobs.size());
             Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, msg.AlreadyEncrypted,
+                std::move(msg.Orbit), msg.IssueKeepFlag, msg.IgnoreBlock, msg.AlreadyEncrypted, msg.IsZeroEntry,
                 std::move(msg.ExtraBlockChecks), false, std::move(msg.ExecutionRelay), msg.Deadline);
 
             auto& blob = Blobs.back();
@@ -264,6 +266,9 @@ public:
                 if (blob.IgnoreBlock) {
                     record.SetIgnoreBlock(true);
                 }
+                if (blob.IsZeroEntry) {
+                    record.SetIsZeroEntry(true);
+                }
 
                 auto vput = History.CreateVPut(1, orderNumber);
                 vput.AddSubrequest(ptr->Id);
@@ -288,7 +293,7 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, blob.IssueKeepFlag, blob.IgnoreBlock,
-                        &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming);
+                        blob.IsZeroEntry, &blob.ExtraBlockChecks, blob.Span.GetTraceId(), checksumming);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }
@@ -305,7 +310,7 @@ public:
     void ProcessResponse(TEvBlobStorage::TEvVPutResult& msg) {
         ++VPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
+        ui32 orderNumber = GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
         ProcessResponseBlob(orderNumber, msg.Record);
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
@@ -313,7 +318,7 @@ public:
     void ProcessResponse(TEvBlobStorage::TEvVMultiPutResult& msg) {
         ++VMultiPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
+        ui32 orderNumber = GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
         auto vputResult = History.CreateVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
         for (const auto& item : msg.Record.GetItems()) {
             ProcessResponseBlob(orderNumber, item);
@@ -326,6 +331,22 @@ public:
         const auto it = BlobMap.find(id.FullID());
         Y_ABORT_UNLESS(it != BlobMap.end());
         return it->second;
+    }
+
+    ui32 GetOrderNumber(const TVDiskIdShort& vdiskId) const {
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdiskId), "incorrect VDiskId# %s", vdiskId.ToString().data());
+        return Info->GetOrderNumber(vdiskId);
+    }
+
+    ui32 GetOrderNumber(const TVDiskID& vdiskId) const {
+        Y_ABORT_UNLESS(vdiskId.GroupID == Info->GroupID, "incorrect VDiskId# %s expected GroupId# %u",
+            vdiskId.ToString().data(), static_cast<unsigned>(Info->GroupID.GetRawId()));
+
+        // Old-generation replies may legitimately reach this path during a generation race; only
+        // the group identity and topology coordinates must match before mapping to an order number.
+        const TVDiskIdShort shortId(vdiskId);
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(shortId), "incorrect VDiskId# %s", vdiskId.ToString().data());
+        return Info->GetOrderNumber(shortId);
     }
 
 protected:

@@ -703,6 +703,7 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
     try {
         TConvertToAstSettings settings;
+        settings.AllowFreeArgs = true;
         settings.NoInlineFunc = [] (const TExprNode& exprNode) {
             TExprBase node(&exprNode);
 
@@ -784,6 +785,8 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
                 return LookupJoinStrategyName;
             case EStreamLookupStrategyType::LookupSemiJoinRows:
                 return LookupSemiJoinStrategyName;
+            case EStreamLookupStrategyType::LockAndLookupRows:
+                return LockAndLookupStrategyName;
         }
 
         YQL_ENSURE(false, "Unspecified stream lookup startegy type: " << type);
@@ -879,6 +882,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
             return EStreamLookupStrategyType::LookupJoinRows;
         } else if (type == LookupSemiJoinStrategyName) {
             return EStreamLookupStrategyType::LookupSemiJoinRows;
+        } else if (type == LockAndLookupStrategyName) {
+            return EStreamLookupStrategyType::LockAndLookupRows;
         } else {
             YQL_ENSURE(false, "Unknown stream lookup startegy type: " << type);
         }

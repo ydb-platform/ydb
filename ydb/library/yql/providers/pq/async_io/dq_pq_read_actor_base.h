@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
@@ -12,8 +12,30 @@ class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
 protected:
     using TPartitionKey = ::NPq::TPartitionKey;
 
+    struct TPartitionInfo {
+        std::optional<ui64> Offset;             // offset of next event.
+        std::optional<ui64> EndOffset;          // end offset in topic on start.
+        TMaybe<TInstant> EndWriteTime;          // from predicate.
+        TInstant LastMessageWriteTime;
+
+        bool IsFinishedInTableMode() {
+            if (!EndOffset                      // Not connected yet.
+                && !EndWriteTime) {                         
+                return false;
+            }
+            bool endByOffset = 
+                EndOffset
+                && (*EndOffset == 0             // No data in partition on start.
+                    || (Offset && *EndOffset <= *Offset));
+            if (endByOffset) {
+                return true;
+            }
+            return EndWriteTime && *EndWriteTime <= LastMessageWriteTime;
+        }
+    };
+
     const ui64 InputIndex = 0;
-    THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
+    THashMap<TPartitionKey, TPartitionInfo> Partitions;
     const TTxId TxId;
     NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;

@@ -169,6 +169,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "taxi/uservices/",
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
+            "market/robotics/contrib/",  # Robotics contrib
             "market/sre",  # YMAKE-626 -> MARKET-???
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib
@@ -791,7 +792,7 @@ def onpy_constructor(unit, arg):
     if ':' not in arg:
         arg = arg + '=init'
     else:
-        arg[arg.index(':')] = '='
+        arg = arg.replace(':', '=', 1)
     unit.onresource(['DONT_COMPRESS', '-', 'py/constructors/{}'.format(arg)])
 
 

@@ -57,19 +57,19 @@ std::optional<int> TryAdjustListIndex(int index, int count)
     return adjustedIndex;
 }
 
-TString ToYPathLiteral(TStringBuf value)
+std::string ToYPathLiteral(TStringBuf value)
 {
     TStringBuilder builder;
     AppendYPathLiteral(&builder, value);
     return builder.Flush();
 }
 
-TString ToYPathLiteral(i64 value)
+std::string ToYPathLiteral(i64 value)
 {
     return ToString(value);
 }
 
-TString ToYPathLiteral(TGuid value)
+std::string ToYPathLiteral(TGuid value)
 {
     return ToString(value);
 }

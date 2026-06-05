@@ -85,6 +85,7 @@ message TDqConfig {
         optional uint64 InodeCount = 2;
         optional string Account = 3;
         optional string MediumName = 4;
+        optional string AdditionalSpecYson = 5; // YSON text map used as disk_request base; structured fields overwrite matching keys (e.g. add nbd_disk in YSON, set medium_name in DiskRequest)
     }
 
     message TYtBackend {

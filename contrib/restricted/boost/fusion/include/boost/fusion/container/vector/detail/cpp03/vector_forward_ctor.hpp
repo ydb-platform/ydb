@@ -5,7 +5,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 #ifndef BOOST_PP_IS_ITERATING
-#if !defined(FUSION_VECTOR_FORWARD_CTOR_07122005_1123)
+#ifndef FUSION_VECTOR_FORWARD_CTOR_07122005_1123
 #define FUSION_VECTOR_FORWARD_CTOR_07122005_1123
 
 #define FUSION_FORWARD_CTOR_FORWARD(z, n, _)    BOOST_FUSION_FWD_ELEM(U##n, _##n)

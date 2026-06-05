@@ -287,7 +287,6 @@ class ExternalNodeDaemon(object):
         pass
 
     def cleanup_logs(self):
-        self.ssh_command("sudo dmesg --clear", raise_on_error=True)
         self.ssh_command(
             'sudo rm -rf {}/* && sudo service rsyslog restart'.format(self.logs_directory), raise_on_error=True
         )

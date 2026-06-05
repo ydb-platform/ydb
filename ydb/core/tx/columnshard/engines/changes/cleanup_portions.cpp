@@ -42,6 +42,15 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
             action->DeclareRemove((TTabletId)self->TabletID(), b);
         }
     }
+
+    if (PortionsToDrop.size() && self->LastCleanupSnapshot < MinSnapshotForNewReads) {
+        self->LastCleanupSnapshot = MinSnapshotForNewReads;
+        NIceDb::TNiceDb db(*context.DB);
+        NColumnShard::Schema::SaveSpecialValue(
+            db, NColumnShard::Schema::EValueIds::LastCleanupSnapshotStep, self->LastCleanupSnapshot.GetPlanStep());
+        NColumnShard::Schema::SaveSpecialValue(
+            db, NColumnShard::Schema::EValueIds::LastCleanupSnapshotTxId, self->LastCleanupSnapshot.GetTxId());
+    }
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {

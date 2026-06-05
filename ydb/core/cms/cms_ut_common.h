@@ -487,6 +487,23 @@ public:
         return rec.GetResult();
     }
 
+    void CheckMaintenanceTaskDrop(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code)
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvDropMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvManageMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+    }
+
     template <typename... Ts>
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,

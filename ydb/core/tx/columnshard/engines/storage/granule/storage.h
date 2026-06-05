@@ -3,9 +3,9 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -35,7 +35,8 @@ private:
 
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
     }
 
     bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
@@ -54,7 +55,8 @@ public:
 
     public:
         TModificationGuard(TGranulesStat& storage)
-            : Owner(storage) {
+            : Owner(storage)
+        {
             Owner.StartModificationImpl();
         }
 
@@ -118,7 +120,8 @@ public:
 
     TGranuleOrdered(const NStorageOptimizer::TOptimizationPriority& priority, const std::shared_ptr<TGranuleMeta>& meta)
         : Priority(priority)
-        , Granule(meta) {
+        , Granule(meta)
+    {
     }
 
     bool operator<(const TGranuleOrdered& item) const {
@@ -157,7 +160,8 @@ public:
         : Counters(counters)
         , DataAccessorsManager(dataAccessorsManager)
         , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters)) {
+        , Stats(std::make_shared<TGranulesStat>(Counters))
+    {
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(StoragesManager);
     }
@@ -201,7 +205,6 @@ public:
         }
     }
 
-
     std::shared_ptr<TPortionInfo> GetPortionOptional(const TInternalPathId pathId, const ui64 portionId) const {
         auto it = Tables.find(pathId);
         if (it == Tables.end()) {
@@ -235,10 +238,8 @@ public:
     /**
     Returns granules for compaction in descending order of priority
     */
-    std::vector<TGranuleOrdered> GetGranulesForCompaction(
-        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), 
-        const std::optional<ui64> waitingPriority = std::nullopt
-    ) const;
+    std::vector<TGranuleOrdered> GetGranulesForCompaction(const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(),
+        const std::optional<ui64> waitingPriority = std::nullopt) const;
 };
 
 }   // namespace NKikimr::NOlap

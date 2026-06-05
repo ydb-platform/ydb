@@ -703,10 +703,10 @@ typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::Crea
     counters->CumulativeTimeCounter = profiler.TimeCounter("/time/cumulative");
     counters->TotalTimer = profiler.Timer("/time/total");
 
-    profiler.AddFuncGauge("/enqueued", MakeStrong(this), [counters = counters.get()] {
+    profiler.AddFuncCounter("/enqueued", MakeStrong(this), [counters = counters.get()] {
         return counters->EnqueuedCallbacks.load(std::memory_order::relaxed);
     });
-    profiler.AddFuncGauge("/dequeued", MakeStrong(this), [counters = counters.get()] {
+    profiler.AddFuncCounter("/dequeued", MakeStrong(this), [counters = counters.get()] {
         return counters->DequeuedCallbacks.load(std::memory_order::relaxed);
     });
     profiler.AddFuncGauge("/size", MakeStrong(this), [counters = counters.get()] {

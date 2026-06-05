@@ -1,6 +1,6 @@
 #pragma once
 
-#include "location.h"
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 
@@ -12,6 +12,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// An interface for interacting with DirtyMap. It is needed to register
+// ready-to-process PBuffer records and update statistics about space usage in
+// PBuffers.
 struct IReadyQueue
 {
     enum class EQueueType
@@ -19,6 +22,12 @@ struct IReadyQueue
         Clone,
         Flush,
         Erase,
+    };
+
+    enum class EPBufferCounter
+    {
+        Total,
+        Locked,
     };
 
     virtual ~IReadyQueue() = default;
@@ -30,9 +39,39 @@ struct IReadyQueue
 
     // Removes all registrations from Lsn.
     virtual void UnRegister(ui64 lsn) = 0;
+
+    // Notification about the change of byte counters in PBuffer
+    virtual void DataToPBufferAdded(
+        THostIndex host,
+        EPBufferCounter counter,
+        size_t byteCount) = 0;
+    // Notification about the change of byte counters in PBuffer
+    virtual void DataFromPBufferReleased(
+        THostIndex host,
+        EPBufferCounter counter,
+        size_t byteCount) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TReadSource
+{
+    THostMask Mask;
+    // 0 -> read from DDisk (Mask is the set of DDisk hosts to read from).
+    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // (Mask is the set of PBuffer hosts that confirmed the write).
+    ui64 Lsn = 0;
+
+    [[nodiscard]] bool Empty() const
+    {
+        return Mask.Empty();
+    }
+
+    [[nodiscard]] bool OnlyDDisk() const
+    {
+        return Lsn == 0;
+    }
+};
 
 class TInflightInfo: public TDisableCopy
 {
@@ -65,18 +104,26 @@ public:
         PBufferErased,
     };
 
-    TInflightInfo(IReadyQueue* readyQueues, ui64 lsn, ELocation location);
     TInflightInfo(
         IReadyQueue* readyQueues,
         ui64 lsn,
-        TLocationMask writeRequested,
-        TLocationMask writeConfirmed);
+        size_t byteCount,
+        THostIndex host);
+    TInflightInfo(
+        IReadyQueue* readyQueues,
+        ui64 lsn,
+        size_t byteCount,
+        THostMask writeRequested,
+        THostMask writeConfirmed);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
     ~TInflightInfo();
 
-    void RestorePBuffer(ELocation location);
+    // Detach from ReadyQueue.
+    void Detach();
+
+    void RestorePBuffer(THostIndex host);
 
     [[nodiscard]] EState GetState() const;
 
@@ -84,44 +131,60 @@ public:
     [[nodiscard]] NThreading::TFuture<void> GetQuorumReadyFuture();
 
     // The mask from which data sources can be read.
-    [[nodiscard]] TLocationMask ReadMask() const;
+    [[nodiscard]] TReadSource ReadMask() const;
 
     // Returns the PBuffer source from where the data will be transferred to
-    // DDisk, specified in the parameter destination. If ELocation::Unknown is
+    // DDisk, specified in the parameter destination. If InvalidHostIndex is
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
-    [[nodiscard]] ELocation RequestFlush(ELocation destination);
-    void ConfirmFlush(TRoute route);
-    void FlushFailed(TRoute route);
-    [[nodiscard]] TLocationMask GetRequestedFlushes() const;
+    [[nodiscard]] THostIndex RequestFlush(
+        THostIndex destination,
+        THostMask disabledHosts);
+    void ConfirmFlush(THostRoute route);
+    void FlushFailed(THostRoute route);
+    [[nodiscard]] THostMask GetRequestedFlushes() const;
 
     // Returns true when erase request needed.
-    [[nodiscard]] bool RequestErase(ELocation location);
+    [[nodiscard]] bool RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
-    [[nodiscard]] bool ConfirmErase(ELocation location);
-    void EraseFailed(ELocation location);
+    [[nodiscard]] bool ConfirmErase(THostIndex host);
+    void EraseFailed(THostIndex host);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
 
+    [[nodiscard]] THostMask GetWriteRequested() const;
+
+    TString DebugPrint(TInstant now) const;
+
 private:
+    void ApplyBytes(
+        THostIndex host,
+        IReadyQueue::EPBufferCounter counter,
+        bool add) const;
+    void ApplyBytes(
+        THostMask mask,
+        IReadyQueue::EPBufferCounter counter,
+        bool add) const;
+
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
     ui64 Lsn = 0;
+    size_t ByteCount = 0;
     TInstant StartAt;
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
 
-    TLocationMask WriteRequested;
-    TLocationMask WriteConfirmed;
-    TLocationMask FlushDesired;
-    TLocationMask FlushRequested;
-    TLocationMask FlushConfirmed;
-    TLocationMask EraseRequested;
-    TLocationMask EraseConfirmed;
+    THostMask WriteRequested;
+    THostMask WriteConfirmed;
+    THostMask FlushDesired;
+    THostMask FlushRequested;
+    THostMask FlushConfirmed;
+    THostMask EraseRequested;
+    THostMask EraseConfirmed;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

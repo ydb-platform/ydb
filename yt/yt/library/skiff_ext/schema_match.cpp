@@ -238,12 +238,12 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
     const INodePtr& schemaNode,
     const IMapNodePtr& registry,
     THashMap<TString, std::shared_ptr<TSkiffSchema>>* parsedRegistry,
-    THashSet<TString>* parseInProgressNames)
+    THashSet<std::string>* parseInProgressNames)
 {
     auto schemaNodeType = schemaNode->GetType();
     if (schemaNodeType == ENodeType::String) {
         auto name = schemaNode->AsString()->GetValue();
-        if (!name.StartsWith(ReferencePrefix)) {
+        if (!name.starts_with(ReferencePrefix)) {
             THROW_ERROR_EXCEPTION(
                 "Invalid reference %Qv, reference must start with %Qv",
                 name,
@@ -318,7 +318,7 @@ std::vector<std::shared_ptr<TSkiffSchema>> ParseSkiffSchemas(
     THashMap<TString, std::shared_ptr<TSkiffSchema>> parsedRegistry;
     std::vector<std::shared_ptr<TSkiffSchema>> result;
     for (const auto& node : tableSkiffSchemas->GetChildren()) {
-        THashSet<TString> parseInProgressNames;
+        THashSet<std::string> parseInProgressNames;
         auto skiffSchema = ParseSchema(node, skiffSchemaRegistry, &parsedRegistry, &parseInProgressNames);
         result.push_back(skiffSchema);
     }

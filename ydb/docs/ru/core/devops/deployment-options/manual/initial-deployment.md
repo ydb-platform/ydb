@@ -24,8 +24,9 @@
 * 2135, 2136: GRPC для клиент-кластерного взаимодействия;
 * 19001, 19002: Interconnect для внутрикластерного взаимодействия узлов;
 * 8765, 8766: HTTP интерфейс {{ ydb-short-name }} Embedded UI.
+* 9092, 9093: порты для работы по Kafka API.
 
-При размещении нескольких динамических узлов на одном сервере потребуются отдельные порты для gRPC, Interconnect и HTTP интерфейса каждого динамического узла в рамках сервера.
+При размещении нескольких динамических узлов на одном сервере потребуются отдельные порты для gRPC, Interconnect, HTTP интерфейса и Kafka API каждого динамического узла в рамках сервера.
 
 Убедитесь в том, что системные часы на всех серверах в составе кластера синхронизированы с помощью инструментов `ntpd` или `chrony`. Желательно использовать единый источник времени для всех серверов кластера, чтобы обеспечить одинаковую обработку секунд координации (leap seconds).
 
@@ -577,6 +578,7 @@ echo $?
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+      --kafka-port 9093 \
       --config-dir /opt/ydb/cfg \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
@@ -615,6 +617,7 @@ echo $?
       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+      --kafka-port 9093 \
       --config-dir /opt/ydb/cfg \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \

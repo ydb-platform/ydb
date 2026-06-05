@@ -1,5 +1,7 @@
 #include "part_database.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/testlib/test_executor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -16,12 +18,14 @@ using NYdb::NBS::NBlockStore::NStorage::TTestExecutor;
 bool LoadState(
     NKikimr::NTable::TDatabase& db,
     TMaybe<NKikimrBlockStore::TVolumeConfig>& volumeConfig,
-    TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections)
+    TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections,
+    TVector<TVChunkConfig>& vChunkConfigs)
 {
     TPartitionDatabase partitionDb(db);
     return partitionDb.ReadVolumeConfig(volumeConfig) &&
            partitionDb.ReadDirectBlockGroupsConnections(
-               directBlockGroupsConnections);
+               directBlockGroupsConnections) &&
+           partitionDb.ReadAllVChunkConfigs(vChunkConfigs);
 }
 
 NKikimrBlockStore::TVolumeConfig MakeSampleVolumeConfig()
@@ -68,9 +72,12 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                TVector<TVChunkConfig> vChunkConfigs;
+                UNIT_ASSERT(
+                    LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(!volumeConfig.Defined());
                 UNIT_ASSERT(!connections.Defined());
+                UNIT_ASSERT(vChunkConfigs.empty());
             });
     }
 
@@ -92,9 +99,12 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                TVector<TVChunkConfig> vChunkConfigs;
+                UNIT_ASSERT(
+                    LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(volumeConfig.Defined());
                 UNIT_ASSERT(!connections.Defined());
+                UNIT_ASSERT(vChunkConfigs.empty());
                 UNIT_ASSERT_VALUES_EQUAL(
                     written.GetDiskId(),
                     volumeConfig->GetDiskId());
@@ -125,12 +135,132 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                TVector<TVChunkConfig> vChunkConfigs;
+                UNIT_ASSERT(
+                    LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(!volumeConfig.Defined());
                 UNIT_ASSERT(connections.Defined());
+                UNIT_ASSERT(vChunkConfigs.empty());
                 UNIT_ASSERT_VALUES_EQUAL(
                     written.SerializeAsString(),
                     connections->SerializeAsString());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreAndReadVChunkConfigsPerRow)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                for (ui32 i = 0; i < 3; ++i) {
+                    partitionDb.StoreVChunkConfig(TVChunkConfig::MakeDefault(
+                        i,
+                        DirectBlockGroupHostCount,
+                        DefaultPrimaryCount));
+                }
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
+                TMaybe<TDirectBlockGroupsConnections> connections;
+                TVector<TVChunkConfig> vChunkConfigs;
+                UNIT_ASSERT(
+                    LoadState(db, volumeConfig, connections, vChunkConfigs));
+                UNIT_ASSERT(!volumeConfig.Defined());
+                UNIT_ASSERT(!connections.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(3u, vChunkConfigs.size());
+
+                for (size_t i = 0; i < vChunkConfigs.size(); ++i) {
+                    const auto& cfg = vChunkConfigs[i];
+                    UNIT_ASSERT(cfg.IsValid());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        static_cast<ui32>(i),
+                        cfg.GetVChunkIndex());
+                    const auto expected = TVChunkConfig::MakeDefault(
+                        i,
+                        DirectBlockGroupHostCount,
+                        DefaultPrimaryCount);
+                    UNIT_ASSERT(
+                        expected.GetDesiredPBuffers() ==
+                        cfg.GetDesiredPBuffers());
+                    UNIT_ASSERT(
+                        expected.GetSecondaryPBuffers() ==
+                        cfg.GetSecondaryPBuffers());
+                    UNIT_ASSERT(
+                        expected.GetTemporaryOfflinePBuffers() ==
+                        cfg.GetTemporaryOfflinePBuffers());
+                    UNIT_ASSERT(expected.GetDDisks() == cfg.GetDDisks());
+                    UNIT_ASSERT(
+                        expected.GetHealthyDDisks() == cfg.GetHealthyDDisks());
+                    UNIT_ASSERT(
+                        expected.GetDisabledHosts() == cfg.GetDisabledHosts());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expected.DebugPrint(),
+                        cfg.DebugPrint());
+                }
+            });
+    }
+
+    Y_UNIT_TEST(ShouldOverwriteVChunkConfigOnRepeatedStore)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreVChunkConfig(TVChunkConfig::MakeDefault(
+                    5,
+                    DirectBlockGroupHostCount,
+                    DefaultPrimaryCount));
+            });
+
+        auto updated = TVChunkConfig::MakeDefault(
+            5,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        updated.EvacuateHost(0);
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.StoreVChunkConfig(updated);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TVector<TVChunkConfig> vChunkConfigs;
+                UNIT_ASSERT(partitionDb.ReadAllVChunkConfigs(vChunkConfigs));
+                UNIT_ASSERT_VALUES_EQUAL(1u, vChunkConfigs.size());
+
+                const auto& stored = vChunkConfigs[0];
+                UNIT_ASSERT(
+                    updated.GetDesiredPBuffers() ==
+                    stored.GetDesiredPBuffers());
+                UNIT_ASSERT(
+                    updated.GetSecondaryPBuffers() ==
+                    stored.GetSecondaryPBuffers());
+                UNIT_ASSERT(
+                    updated.GetTemporaryOfflinePBuffers() ==
+                    stored.GetTemporaryOfflinePBuffers());
+                UNIT_ASSERT(updated.GetDDisks() == stored.GetDDisks());
+                UNIT_ASSERT(
+                    updated.GetHealthyDDisks() == stored.GetHealthyDDisks());
+                UNIT_ASSERT(
+                    updated.GetDisabledHosts() == stored.GetDisabledHosts());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    updated.DebugPrint(),
+                    stored.DebugPrint());
             });
     }
 
@@ -156,7 +286,9 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                TVector<TVChunkConfig> vChunkConfigs;
+                UNIT_ASSERT(
+                    LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(volumeConfig.Defined());
                 UNIT_ASSERT(connections.Defined());
                 UNIT_ASSERT_VALUES_EQUAL(

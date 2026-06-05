@@ -378,6 +378,19 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
             "Empty import item was specified",
             res.Status().GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(NoItemsWithoutSchemaMapping) {
+        NImport::TImportFromFsSettings settings = MakeImportSettings(TString(TempDir().Path()));
+
+        auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
+        UNIT_ASSERT_C(!res.Status().IsSuccess(),
+            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
+            res.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
+            "No items to import",
+            res.Status().GetIssues().ToString());
+    }
 }
 
 Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidationTestFixture)

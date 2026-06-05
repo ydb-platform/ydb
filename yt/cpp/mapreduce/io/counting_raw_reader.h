@@ -22,6 +22,9 @@ public:
 
     size_t GetReadByteCount() const;
 
+    void Abort() override;
+    bool IsAborted() const override;
+
 protected:
     size_t DoRead(void* buf, size_t len) override;
 

@@ -1,6 +1,5 @@
 #include "yql_dispatch.h"
 
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -10,7 +9,7 @@
 #include <util/random/random.h>
 #include <util/datetime/base.h>
 
-namespace NYql {
+namespace NYql::NCommon {
 
 namespace NPrivate {
 
@@ -144,8 +143,6 @@ YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DEFINE_CONTAINER_SETTING_SERIALIZER)
 
 } // namespace NPrivate
 
-namespace NCommon {
-
 bool TSettingDispatcher::IsRuntime(const TString& name) {
     auto normalizedName = NormalizeName(name);
     if (auto handler = Handlers_.Value(normalizedName, TSettingHandler::TPtr())) {
@@ -265,5 +262,4 @@ TSettingDispatcher::TErrorCallback TSettingDispatcher::GetErrorCallback(TPositio
     };
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

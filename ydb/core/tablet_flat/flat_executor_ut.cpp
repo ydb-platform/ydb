@@ -573,6 +573,7 @@ public:
             HFunc(NFake::TEvCompact, Handle);
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             HFunc(NFake::TEvReturn, Handle);
+            hFunc(TEvTablet::TEvMoveData, TTabletExecutedFlat::Handle);
             HFunc(TEvents::TEvPoison, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());
@@ -9200,6 +9201,38 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CorruptedBlobs) {
         env.WaitForGone();
     }
 
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveData) {
+    Y_UNIT_TEST(TestMoveData) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the first tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Init schema
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        env.SendAsync(rows.MakeRows(200));
+        env->AdvanceCurrentTime(TDuration::Seconds(30));
+
+        bool wasCompact = false;
+        auto observer = env->AddObserver<NFake::TEvCompacted>([&](auto&&) { wasCompact = true; });
+
+        env.SendSync(new TEvTablet::TEvMoveData());
+        TAutoPtr<IEventHandle> handle;
+        env->GrabEdgeEventRethrow<TEvTablet::TEvMoveDataResponse>(handle);
+        UNIT_ASSERT(wasCompact);
+    }
 }
 
 }

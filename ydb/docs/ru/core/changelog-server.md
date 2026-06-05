@@ -1,5 +1,34 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 25.4 {#25-4}
+
+### Версия 25.4.1.15 {#25-4-1-15}
+
+Дата выхода: 5 июня 2026.
+
+#### Функциональность
+
+* Доступны инструкции YQL [`BATCH UPDATE`](./yql/reference/syntax/batch-update.md?version=v25.4) и [`BATCH DELETE FROM`](./yql/reference/syntax/batch-delete.md?version=v25.4) для массового обновления и удаления данных в таблицах.
+* Механизм выполнения операций записи существенно изменился -- теперь запись выполняется в потоковом режиме без полной материализации данных на стороне Query Processor перед отправкой в даташарды, что повышает производительность при крупных операциях записи. Изменение распространяется на часть сценариев; в отдельных случаях (например, таблицы со вторичными индексами) по-прежнему используется прежний подход. Общие сведения о конвейере выполнения см. в разделе [Выполнение запросов](./concepts/query_execution/index.md?version=v25.4).
+* Оптимизировано выполнение Lookup Join: используется потоковый режим без материализации одной из сторон соединения, что снижает пиковое потребление памяти, ускоряет выполнение на больших наборах данных и снимает прежние ограничения на размер сторон соединения. См. описание [Index lookup Join](./faq/yql.md?version=v25.4#index-lookup-join) и синтаксис [оператора `JOIN`](./yql/reference/syntax/select/join.md?version=v25.4).
+* Добавлена возможность выставлять права доступа для [системных представлений](./devops/observability/system-views.md?version=v25.4) кластера и баз данных.
+* Для строковых таблиц доступна настройка [режимов кэширования](./concepts/datamodel/table.md?version=v25.4#cache-modes) и новый режим `in_memory`, который позволяет предзагружать данные таблицы в оперативную память при условии наличия необходимых объемов оперативной памяти.
+* Для читателей топиков добавлен параметр [`availability-period`](./reference/ydb-cli/topic-consumer-add.md?version=v25.4), позволяющий продлить хранение неподтверждённых сообщений сверх retention-period
+* Доступны [попартиционные метрики топиков и выгрузка в пользовательские шард-квоты](./reference/observability/metrics/index.md?version=v25.4#topics_partitions) для учёта и наблюдаемости.
+* Ускорение запросов с `LIMIT` в колоночных таблицах за счёт раннего ограничения выборки на узлах хранения (для запросов без сортировки или с сортировкой по первичному ключу). Общий синтаксис [`LIMIT` и `OFFSET`](./yql/reference/syntax/select/limit_offset.md?version=v25.4) в YQL.
+* Колоночные таблицы поддерживают тип `Bool` в схеме и запросах — см. [примитивные типы YQL](./yql/reference/types/primitive.md?version=v25.4#numeric).
+* [Фильтруемый векторный индекс](./dev/vector-indexes.md?version=v25.4#filtered) корректно находит вставленные в таблицу после создания индекса строки с новыми значениями колонок фильтров.
+* Потоковая обработка и поставка данных теснее интегрированы в ядро: [трансфер «топик → таблица»](./concepts/transfer.md?version=v25.4), [потоковые запросы](./dev/streaming-query/index.md?version=v25.4) стали доступны пользователям при включении 'EnableStreamingQueries'.
+* Добавлена опция `overlap_clusters` для существенного улучшения качества векторного поиска за счёт помещения векторов в несколько кластеров индекса (настройки индекса) — см. [векторные индексы](./dev/vector-indexes.md?version=v25.4).
+* Значительно ускорен поиск по всем видам векторных индексов за счёт подсчёта расстояний локально на каждом даташарде до передачи по сети — см. [VIEW (векторный индекс)](./yql/reference/syntax/select/vector_index.md?version=v25.4) и [векторные индексы](./dev/vector-indexes.md?version=v25.4).
+* Ускорен полный векторный поиск без ANN-индекса за счёт pushdown (векторный поиск, KNN UDF) — см. [векторный поиск](./concepts/query_execution/vector_search.md?version=v25.4) и [модуль KNN](./yql/reference/udf/list/knn.md?version=v25.4).
+* Полноценно поддержан механизм работы с секретами, хранимыми в базе данных: создание, изменение, удаление и использование — см. [Секреты](./concepts/datamodel/secrets.md?version=v25.4). Обратите внимание, что [старый синтаксис](./concepts/datamodel/secrets.md?version=v25.3) объявлен устаревшим.
+* Улучшено выполнение [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all): теперь поддерживается параллельное выполнение, что повышает производительность аналитических запросов.
+
+# Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
+
 ## Версия 25.3 {#25-3}
 
 ### Версия 25.3.1.25 {#25-3-1-25}
@@ -61,24 +90,27 @@
 
 #### Функциональность
 
-* [Аналитические возможности](./concepts/analytics/index.md) доступны по умолчанию: [колоночные таблицы](./concepts/datamodel/table.md?version=v25.2#column-oriented-tables) могут создаваться без включения специальных флагов, с использованием сжатия LZ4 и хеш-партиционирования. Поддерживаемые операции включают широкий набор DML (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) и CREATE TABLE AS SELECT. Интеграция с dbt, Apache Airflow, Jupyter, Superset и федеративные запросы к S3 позволяют строить сквозные аналитические пайплайны в YDB.
-* [Стоимостной оптимизатор](./concepts/query_execution/optimizer.md) работает по умолчанию для запросов, использующих хотя бы одну колоночную таблицу, но может быть включён принудительно и для остальных запросов. Стоимостной оптимизатор улучшает производительность выполнения запросов, вычисляя оптимальный порядок и тип соединений на основе статистики таблиц; поддерживаемые [hints](./dev/query-hints.md) позволяют тонко настраивать планы выполнения для сложных аналитических запросов.
-* Реализован [трансфер данных](./concepts/transfer.md?version=v25.2) – асинхронный механизм переноса данных из топика в таблицу. [Создание](./yql/reference/syntax/create-transfer.md?version=v25.2) экземпляра трансфера, его [изменение](./yql/reference/syntax/alter-transfer.md?version=v25.2) и [удаление](./yql/reference/syntax/drop-transfer.md?version=v25.2) осуществляется с использованием YQL. Для быстрого старта воспользуйтесь [инструкцией с примером](./recipes/transfer/quickstart.md?version=v25.2).
+* [Аналитические возможности](./concepts/analytics/index.md) доступны по умолчанию: [колоночные таблицы](./concepts/datamodel/table.md#column-oriented-tables) могут создаваться без включения специальных флагов, с использованием сжатия LZ4 и хеш-партиционирования. Поддерживаемые операции включают широкий набор DML (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) и CREATE TABLE AS SELECT. Интеграция с dbt, Apache Airflow, Jupyter, Superset и федеративные запросы к S3 позволяют строить сквозные аналитические пайплайны в YDB.
+* [Стоимостной оптимизатор](./concepts/query_execution/optimizer.md) работает по умолчанию для запросов, использующих хотя бы одну колоночную таблицу, но может быть включён принудительно и для остальных запросов. Стоимостной оптимизатор улучшает производительность выполнения запросов, вычисляя оптимальный порядок и тип соединений на основе статистики таблиц; поддерживаемые [hints](./dev/query-execution-optimization/query-hints.md) позволяют тонко настраивать планы выполнения для сложных аналитических запросов.
+* Реализован [трансфер данных](./concepts/transfer.md) – асинхронный механизм переноса данных из топика в таблицу. [Создание](./yql/reference/syntax/create-transfer.md) экземпляра трансфера, его [изменение](./yql/reference/syntax/alter-transfer.md) и [удаление](./yql/reference/syntax/drop-transfer.md) осуществляется с использованием YQL. Для быстрого старта воспользуйтесь [инструкцией с примером](./recipes/transfer/quickstart.md).
 * Добавлен [спиллинг](./concepts/query_execution/spilling.md), механизм управления памятью, при котором промежуточные данные, возникающие в результате выполнения запросов и превышающие доступный объём оперативной памяти узла, временно выгружаются во внешнее хранилище. Спиллинг обеспечивает выполнение пользовательских запросов, которые требуют обработки больших объёмов данных, превышающих доступную память узла.
 * Увеличено [максимальное время на выполнение одного запроса](./concepts/limits-ydb?version=v25.2) с 30 минут до 2 часов.
 * Добавлена поддержка Certificate Authority (CA) и [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) аутентификации в [асинхронной репликации](./yql/reference/syntax/create-async-replication.md?version=v25.2).
+* Обязательно к настройке:
+
+  * [Аутентификация и авторизация узлов](./devops/configuration-management/configuration-v1/node-authorization.md) для регистрации узлов в кластере.
 * Включены по умолчанию:
 
-  * [векторный индекс](./dev/vector-indexes.md?version=v25.2) для приближённого векторного поиска;
-  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md?version=v25.2) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka);
-  * поддержка [автопартиционирования топиков](./concepts/cdc.md?version=v25.2#topic-partitions) в CDC для строковых таблиц;
+  * [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска;
+  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka);
+  * поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц;
   * поддержка автопартиционирования топиков для асинхронной репликации;
-  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md?version=v25.2#numeric);
-  * поддержка [типа DateTime64](./yql/reference/types/primitive.md?version=v25.2#datetime);
+  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric);
+  * поддержка [типа DateTime64](./yql/reference/types/primitive.md#datetime);
   * автоудаление временных директорий и таблиц при экспорте в S3;
-  * поддержка [потока изменений](./concepts/cdc.md?version=v25.2) в операциях резервного копирования и восстановления;
-  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md?version=v25.2) для вторичного индекса;
-  * системные представления с [историей перегруженных партиций](./dev/system-views?version=v25.2#top-overload-partitions).
+  * поддержка [потока изменений](./concepts/cdc.md) в операциях резервного копирования и восстановления;
+  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса;
+  * системные представления с [историей перегруженных партиций](./dev/system-views#top-overload-partitions).
 
 #### Исправления ошибок
 

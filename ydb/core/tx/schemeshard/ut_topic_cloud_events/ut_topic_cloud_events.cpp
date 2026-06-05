@@ -16,9 +16,11 @@ using TCloudEventQueuePtr = std::shared_ptr<TCloudEventQueue>;
 
 static void AssertCloudEventInfo(const TCloudEventInfo& info,
                                  const TString& expectedEventType,
-                                 const TString& expectedPath) {
+                                 const TString& expectedPath,
+                                 const TString& expectedUserSID = TString()) {
     UNIT_ASSERT_STRINGS_EQUAL(GetCloudEventType(info), expectedEventType);
     UNIT_ASSERT_STRINGS_EQUAL(info.TopicPath, expectedPath);
+    UNIT_ASSERT_STRINGS_EQUAL(info.UserSID, expectedUserSID);
 }
 
 static void PopAndAssertTwoEvents(TCloudEventQueue& queue,
@@ -85,6 +87,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicCloudEvents) {
         AssertCloudEventInfo(*info,
             "yandex.cloud.events.ydb.topics.CreateTopic",
             "/MyRoot/MyTopic");
+    }
+
+    Y_UNIT_TEST(CreateTopicCloudEventSubjectId) {
+        TTestBasicRuntime runtime;
+        auto cloudEventQueue = std::make_shared<TCloudEventQueue>(0);
+
+        runtime.SetEventFilter([queue = cloudEventQueue](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NPQ::NEvents::InternalEventSpaceBegin(NPQ::NEvents::EServices::CLOUD_EVENTS)) {
+                auto* cloudEv = ev->Get<NPQ::NCloudEvents::TCloudEvent>();
+                if (cloudEv) {
+                    queue->Push(cloudEv->Info);
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        TTestEnv env(runtime);
+        ui64 txId = 1000;
+
+        auto* request = CreatePQGroupRequest(++txId, "/MyRoot",
+            R"(
+                Name: "MyTopic"
+                TotalGroupCount: 4
+                PartitionPerTablet: 2
+                PQTabletConfig { PartitionConfig { LifetimeSeconds: 10 } }
+            )");
+        request->Record.SetUserSID("user@iam");
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+
+        auto info = cloudEventQueue->Pop(TDuration::Seconds(5));
+        UNIT_ASSERT_C(info.Defined(), "Expected cloud event from TCloudEventsActor");
+
+        AssertCloudEventInfo(*info,
+            "yandex.cloud.events.ydb.topics.CreateTopic",
+            "/MyRoot/MyTopic",
+            "user@iam");
     }
 
     Y_UNIT_TEST(AlterTopicCloudEvent) {

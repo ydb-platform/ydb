@@ -45,7 +45,8 @@ public:
         , Alloc_(__LOCATION__)
         , Env_(Alloc_)
         , TypeInfoHelper_(new TTypeInfoHelper)
-        , FunctionInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
+        , RuntimeSettings_(NYql::MakeRuntimeSettings())
+        , FunctionInfoBuilder_(NYql::UnknownLangVersion, *RuntimeSettings_, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
     {
         HolderFactory_ = MakeHolder<THolderFactory>(
             Alloc_.Ref(),
@@ -248,6 +249,7 @@ private:
     TScopedAlloc Alloc_;
     TTypeEnvironment Env_;
     const NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TFunctionTypeInfoBuilder FunctionInfoBuilder_;
     THolder<THolderFactory> HolderFactory_;
     THolder<TDefaultValueBuilder> ValueBuilder_;

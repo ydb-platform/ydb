@@ -35,12 +35,14 @@ private:
 
 public:
     TBlobInfoSerializer(NKikimrColumnShardDataSharingProto::TIndexChunk& proto)
-        : Proto(proto) {
+        : Proto(proto)
+    {
     }
 
     void operator()(const TBlobRangeLink16& link) {
         *Proto.MutableBlobRange() = link.SerializeToProto();
     }
+
     void operator()(const TString& data) {
         *Proto.MutableBlobData() = data;
     }
@@ -68,6 +70,7 @@ public:
     ui64 operator()(const TBlobRangeLink16& link) {
         return link.GetSize();
     }
+
     ui64 operator()(const TString& data) {
         return data.size();
     }

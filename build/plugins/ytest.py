@@ -53,6 +53,7 @@ YTEST_FIELDS_BASE = (
     df.TestIosDeviceType.value,
     df.TestIosRuntimeType.value,
     df.TestRecipes.value,
+    df.TestPersistentRecipes.value,
 )
 
 YTEST_FIELDS_EXTRA = (
@@ -85,6 +86,7 @@ PY_EXEC_FIELDS_BASE = (
     df.TestFiles.test_srcs,
     df.TestPartition.value,
     df.TestRecipes.value,
+    df.TestPersistentRecipes.value,
     df.TestTimeout.from_unit_with_default,
     df.UseArcadiaPython.value,
 )
@@ -920,6 +922,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestClasspathDeps.value,
         df.TestJar.value,
         df.DockerImage.value,
+        df.ParallelTestsInSingleNode.value,
     )
 )
 def onjava_test(fields, unit, *args):
@@ -1139,6 +1142,7 @@ def on_add_custom_explicit_linter_check(fields, unit, *args):
         "WRAPPER_SCRIPT": 1,
         "FILES": unlimited,
         "DEPENDS": unlimited,
+        "CONFIG_TYPE": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "DEFAULT_CONFIGS": 1,

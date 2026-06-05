@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/common)
 
 SRCS(
+    build_info_ut.cpp
     cert_format_converter_ut.cpp
     config_ut.cpp
     csv_parser_ut.cpp
@@ -9,6 +10,9 @@ SRCS(
     pg_dump_parser_ut.cpp
     print_utils_ut.cpp
     recursive_remove_ut.cpp
+    scheme_query_utils_ut.cpp
+    tabbed_table_ut.cpp
+    tx_mode_utils_ut.cpp
 )
 
 END()

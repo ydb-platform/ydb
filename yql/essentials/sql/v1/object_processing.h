@@ -48,7 +48,7 @@ class TObjectProcessorImpl: public TAstListNode, public TObjectOperatorContext {
     INode::TPtr BuildKeys() const;
 
 protected:
-    const TString ObjectId_;
+    const TDeferredAtom ObjectId_;
     const TString TypeId_;
 
     virtual INode::TPtr BuildOptions() const = 0;
@@ -56,7 +56,7 @@ protected:
     virtual INode::TPtr FillFeatures(INode::TPtr options) const = 0;
 
 public:
-    TObjectProcessorImpl(TPosition pos, TString objectId, TString typeId, const TObjectOperatorContext& context);
+    TObjectProcessorImpl(TPosition pos, TDeferredAtom objectId, TString typeId, const TObjectOperatorContext& context);
 
     bool DoInit(TContext& ctx, ISource* src) override;
 };
@@ -72,7 +72,7 @@ protected:
 public:
     bool DoInit(TContext& ctx, ISource* src) override;
 
-    TObjectProcessorWithFeatures(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+    TObjectProcessorWithFeatures(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                                  TNodePtr features);
 };
 
@@ -88,7 +88,7 @@ protected:
     TPtr DoClone() const final;
 
 public:
-    TCreateObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+    TCreateObject(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                   TNodePtr features, bool existingOk, bool replaceIfExists);
 };
 
@@ -118,7 +118,7 @@ protected:
     TPtr DoClone() const final;
 
 public:
-    TAlterObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+    TAlterObject(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                  TNodePtr features, std::set<TString>&& featuresToReset, bool missingOk);
 };
 
@@ -133,7 +133,7 @@ protected:
     TPtr DoClone() const final;
 
 public:
-    TDropObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
+    TDropObject(TPosition pos, const TDeferredAtom& objectId, const TString& typeId, const TObjectOperatorContext& context,
                 TNodePtr features, bool missingOk);
 };
 

@@ -154,3 +154,50 @@ message TEvListBackupCollectionRestoresResponse {
     repeated TBackupCollectionRestore Entries = 3;
     optional string NextPageToken = 4;
 }
+
+message TFullBackup {
+    optional uint64 Id = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+    optional Ydb.Backup.BackupProgress.Progress Progress = 4;
+    optional int32 ProgressPercent = 5;
+    optional google.protobuf.Timestamp StartTime = 6;
+    optional google.protobuf.Timestamp EndTime = 7;
+    optional string UserSID = 8;
+}
+
+message TEvGetFullBackupRequest {
+    optional string DatabaseName = 1;
+    optional uint64 FullBackupId = 2;
+}
+
+message TEvGetFullBackupResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TFullBackup FullBackup = 3;
+}
+
+message TEvForgetFullBackupRequest {
+    optional uint64 TxId = 1;
+    optional string DatabaseName = 2;
+    optional uint64 FullBackupId = 3;
+}
+
+message TEvForgetFullBackupResponse {
+    optional uint64 TxId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+}
+
+message TEvListFullBackupsRequest {
+    optional string DatabaseName = 1;
+    optional uint64 PageSize = 2;
+    optional string PageToken = 3;
+}
+
+message TEvListFullBackupsResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated TFullBackup Entries = 3;
+    optional string NextPageToken = 4;
+}

@@ -81,6 +81,8 @@ public:
 
     NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override;
 
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override;
+
     IYtTokenResolver::TPtr GetYtTokenResolver() const override;
 
 protected:

@@ -5,15 +5,11 @@ import logging
 import tempfile
 import uuid
 
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
+
 import yatest
 
 logger = logging.getLogger(__name__)
-
-
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
 class TestProfileWithInvalidCaFile:

@@ -140,9 +140,12 @@ Yson::IsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Yson::IsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Yson::IsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Yson::IsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
+Yson::IsUtf8(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 ```
 
 Проверка, что текущий узел имеет соответствующий тип. Entity это `#`.
+
+Функция `Yson::IsUtf8` доступна начиная с версии [2026.01](../../changelog/2026.01.md#yson-module). Она возвращает успех только на узлах, полученных после функции `Yson::ParseJson`/`Yson::ParseJsonDecodeUtf8` или если строковой узел был построен через `Yson::From` из типа `Utf8`.
 
 ## Yson::GetLength
 
@@ -461,6 +464,7 @@ Yson::AsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Int64
 Yson::AsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Bool
 Yson::AsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Resource<'Yson2.Node'>>
 Yson::AsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String, Resource<'Yson2.Node'>>
+Yson::AsUtf8(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Utf8
 
 Yson::TryAsString(Resource<'Yson2.Node'>{Flags:AutoMap}) -> String?
 Yson::TryAsDouble(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Double?
@@ -469,12 +473,16 @@ Yson::TryAsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Int64?
 Yson::TryAsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Bool?
 Yson::TryAsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Resource<'Yson2.Node'>>?
 Yson::TryAsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String, Resource<'Yson2.Node'>>?
+Yson::TryAsUtf8(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Utf8?
 ```
 
 Доступны начиная с версии [2025.05](../../changelog/2025.05.md#yson-module).
 Приводят Yson узел к заданному типу.
 `TryAs*` функции при неверном типе Yson узла возвращают `NULL`, а `As*` функции в этом случае приведут к ошибке запроса.
 Для обработки узла с типом `Entity` ('#') следует использовать функцию [`IsEntity`](#ysonis).
+
+Функции `Yson::AsUtf8` и `Yson::TryAsUtf8` доступны начиная с версии [2026.01](../../changelog/2026.01.md#yson-module).
+См. описание функции [`Yson::IsUtf8`](#ysonis) для информации о том, когда можно привести узел к этому типу.
 
 ## In-place изменения Yson узлов {#yson-modify}
 

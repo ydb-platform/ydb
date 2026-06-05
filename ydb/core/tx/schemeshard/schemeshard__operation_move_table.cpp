@@ -83,8 +83,8 @@ public:
             if (srcPath->IsTable()) {
                 const auto& srcTable = context.SS->Tables.at(srcPath->PathId);
                 shardIdxs.reserve(srcTable->GetPartitions().size());
-                for (const auto& shard : srcTable->GetPartitions()) {
-                    shardIdxs.emplace_back(shard.ShardIdx);
+                for (const auto* shard : srcTable->GetPartitions()) {
+                    shardIdxs.emplace_back(shard->ShardIdx);
                 }
             } else if (srcPath->IsColumnTable()) {
                 const auto& srcTable =context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
@@ -185,7 +185,7 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
         context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
         context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     } else if (srcPath->IsColumnTable()) {
-        context.SS->PersistColumnTableRemove(db, srcPath->PathId, context.Ctx);
+        context.SS->PersistColumnTableRemove(db, srcPath->PathId, context.Ctx, /* skipStatsUpdate */ true);
     }
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 
@@ -275,14 +275,24 @@ public:
             Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
 
             TTableInfo::TPtr tableInfo = TTableInfo::DeepCopy(*context.SS->Tables.at(srcPath.Base()->PathId));
+            // report TTableInfo::VerifyConsistency() time
+            context.SS->TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
+
             tableInfo->ResetDescriptionCache();
             tableInfo->AlterVersion += 1;
 
             // copy table info
             context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
             context.SS->PersistTable(db, dstPath.Base()->PathId);
-            context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
-            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo, TVector<TTableShardInfo>(tableInfo->GetPartitions()));
+            context.SS->PersistAllTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
+            {
+                TVector<TTableShardInfo> newParts;
+                newParts.reserve(tableInfo->GetPartitions().size());
+                for (const auto* p : tableInfo->GetPartitions()) {
+                    newParts.push_back(*p);
+                }
+                context.SS->MovePartitioning(dstPath.Base()->PathId, tableInfo, std::move(newParts));
+            }
         } else if (srcPath->IsColumnTable()) {
             auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
             auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
@@ -505,11 +515,17 @@ public:
                 context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
                 const auto now = context.Ctx.Now();
-                for (auto& shard : tableInfo->GetPartitions()) {
-                    auto& lag = shard.LastCondEraseLag;
-                    lag = now - shard.LastCondErase;
+                for (auto* shard : tableInfo->GetPartitions()) {
+                    auto& lag = shard->LastCondEraseLag;
+                    lag = now - shard->LastCondErase;
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
                 }
+            }
+
+            if (tableInfo->PartitionsInShardIdxFormat) {
+                context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+            } else {
+                context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
             }
         }
 

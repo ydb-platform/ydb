@@ -353,6 +353,10 @@ private:
                 return NUdf::EFetchStatus::Ok;
             }
 
+            if (EState::Chop == state) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
             while (true) {
                 NYql::NUdf::TUnboxedValue fetchResult;
                 switch (const auto status = Stream.Fetch(fetchResult)) {
@@ -608,15 +612,22 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto load = BasicBlock::Create(context, "load", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto returnFinish = BasicBlock::Create(context, "return_finish", ctx.Func);
 
         auto block = main;
 
         const auto container = static_cast<Value*>(containerArg);
 
         const auto first = new LoadInst(stateType, stateArg, "first", block);
-        const auto reload = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, first, ConstantInt::get(stateType, ui8(EState::Next)), "reload", block);
 
-        BranchInst::Create(load, work, reload, block);
+        const auto dispatch = SwitchInst::Create(first, work, 2U, block);
+        dispatch->addCase(ConstantInt::get(stateType, ui8(EState::Next)), load);
+        dispatch->addCase(ConstantInt::get(stateType, ui8(EState::Chop)), returnFinish);
+
+        {
+            block = returnFinish;
+            ReturnInst::Create(context, ConstantInt::get(statusType, ui32(NUdf::EFetchStatus::Finish)), block);
+        }
 
         {
             block = load;

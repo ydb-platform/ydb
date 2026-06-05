@@ -1,8 +1,10 @@
 #pragma once
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
-#include <ydb/core/tx/columnshard/counters/counters_manager.h>
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/counters/counters_manager.h>
+#include <ydb/core/tx/priorities/usage/abstract.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -15,6 +17,8 @@ private:
     using TCurrentCompaction = THashMap<std::pair<TInternalPathId, TString>, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
+    ui32 MaxInflightCompactions = 1;
+    std::shared_ptr<NPrioritiesQueue::TAllocationGuard> CompactionSessionGuard;
 
     std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
@@ -22,10 +26,13 @@ private:
     bool ActiveCleanupInsertTable = false;
     bool ActiveCleanupSchemas = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
+
 public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
-        : Counters(std::move(counters)) {
+        : Counters(std::move(counters))
+    {
     }
+
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
 
@@ -66,14 +73,45 @@ public:
         return ActiveCompactionInfo.size();
     }
 
+    bool CanStartMoreCompactions() const {
+        return GetCompactionsCount() < MaxInflightCompactions;
+    }
+
+    ui32 GetMaxInflightCompactions() const {
+        return MaxInflightCompactions;
+    }
+
+    void SetMaxInflightCompactions(const ui32 maxInflight) {
+        MaxInflightCompactions = Max<ui32>(1, maxInflight);
+    }
+
+    bool HasCompactionSession() const {
+        return static_cast<bool>(CompactionSessionGuard);
+    }
+
+    const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& GetCompactionSessionGuard() const {
+        return CompactionSessionGuard;
+    }
+
+    void SetCompactionSessionGuard(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+        CompactionSessionGuard = guard;
+    }
+
+    void ClearCompactionSession() {
+        CompactionSessionGuard.reset();
+        MaxInflightCompactions = 1;
+    }
+
     void StartCleanupPortions() {
         Y_ABORT_UNLESS(!ActiveCleanupPortions);
         ActiveCleanupPortions = true;
     }
+
     void FinishCleanupPortions() {
         Y_ABORT_UNLESS(ActiveCleanupPortions);
         ActiveCleanupPortions = false;
     }
+
     bool IsCleanupPortionsActive() const {
         return ActiveCleanupPortions;
     }
@@ -82,10 +120,12 @@ public:
         Y_ABORT_UNLESS(!ActiveCleanupTables);
         ActiveCleanupTables = true;
     }
+
     void FinishCleanupTables() {
         Y_ABORT_UNLESS(ActiveCleanupTables);
         ActiveCleanupTables = false;
     }
+
     bool IsCleanupTablesActive() const {
         return ActiveCleanupTables;
     }
@@ -94,13 +134,15 @@ public:
         Y_ABORT_UNLESS(!ActiveCleanupInsertTable);
         ActiveCleanupInsertTable = true;
     }
+
     void FinishCleanupInsertTable() {
         Y_ABORT_UNLESS(ActiveCleanupInsertTable);
         ActiveCleanupInsertTable = false;
     }
+
     bool IsCleanupInsertTableActive() const {
         return ActiveCleanupInsertTable;
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

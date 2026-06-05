@@ -52,7 +52,14 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<ui64> IncrementalBackups;
 
+    // Full-backup control op ids to flush on Apply(); same shape as IncrementalBackups.
+    TDeque<ui64> FullBackups;
+
     TDeque<TPathId> StreamingQueries;
+
+    TDeque<TPathId> ExternalDataSources;
+    TDeque<TPathId> ExternalTables;
+    TDeque<TPathId> ResourcePools;
 
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
@@ -166,8 +173,24 @@ public:
         IncrementalBackups.emplace_back(id);
     }
 
+    void PersistFullBackupOp(ui64 id) {
+        FullBackups.emplace_back(id);
+    }
+
     void PersistStreamingQuery(const TPathId& pathId) {
         StreamingQueries.emplace_back(pathId);
+    }
+
+    void PersistExternalDataSource(const TPathId& pathId) {
+        ExternalDataSources.emplace_back(pathId);
+    }
+
+    void PersistExternalTable(const TPathId& pathId) {
+        ExternalTables.emplace_back(pathId);
+    }
+
+    void PersistResourcePool(const TPathId& pathId) {
+        ResourcePools.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

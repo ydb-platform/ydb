@@ -43,6 +43,8 @@ class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
 class CompactItem;
+class LocalBloomFilterIndex;
+class LocalBloomNgramFilterIndex;
 
 } // namespace Table
 } // namespace Ydb
@@ -416,6 +418,25 @@ public:
 };
 
 //! Represents index description
+// If FalsePositiveProbability is left unset, the server applies its built-in default of 0.1.
+struct TLocalBloomFilterSettings {
+    std::optional<double> FalsePositiveProbability;
+
+    static TLocalBloomFilterSettings FromProto(const Ydb::Table::LocalBloomFilterIndex& proto);
+    void SerializeTo(Ydb::Table::LocalBloomFilterIndex& proto) const;
+};
+
+// All fields are optional. If a field is left unset, the server applies its built-in
+// default: NgramSize = 3, CaseSensitive = true, FalsePositiveProbability = 0.1.
+struct TLocalBloomNgramFilterSettings {
+    std::optional<uint32_t> NgramSize;
+    std::optional<bool> CaseSensitive;
+    std::optional<double> FalsePositiveProbability;
+
+    static TLocalBloomNgramFilterSettings FromProto(const Ydb::Table::LocalBloomNgramFilterIndex& proto);
+    void SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const;
+};
+
 class TIndexDescription {
     friend class NYdb::TProtoAccessor;
 
@@ -426,7 +447,7 @@ public:
         const std::vector<std::string>& indexColumns,
         const std::vector<std::string>& dataColumns = {},
         const std::vector<TGlobalIndexSettings>& globalIndexSettings = {},
-        const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings = {}
+        const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& specializedIndexSettings = {}
     );
 
     TIndexDescription(
@@ -440,8 +461,9 @@ public:
     EIndexType GetIndexType() const;
     const std::vector<std::string>& GetIndexColumns() const;
     const std::vector<std::string>& GetDataColumns() const;
-    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
+    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
+    void SetParallel(uint32_t parallel);
 
     static TIndexDescription CreateGlobalIndex(
         const std::string& name,
@@ -519,8 +541,9 @@ private:
     std::vector<std::string> IndexColumns_;
     std::vector<std::string> DataColumns_;
     std::vector<TGlobalIndexSettings> GlobalIndexSettings_;
-    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> SpecializedIndexSettings_;
+    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings> SpecializedIndexSettings_;
     uint64_t SizeBytes_ = 0;
+    uint32_t Parallel_ = 0;
 };
 
 struct TRenameIndex {
@@ -538,8 +561,8 @@ public:
     TBuildIndexOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     struct TMetadata {
-        EBuildIndexState State;
-        float Progress;
+        EBuildIndexState State = EBuildIndexState::Unspecified;
+        float Progress = 0;
         std::string Path;
         std::optional<TIndexDescription> Desctiption;
     };
@@ -566,13 +589,13 @@ public:
     TCompactionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     struct TMetadata {
-        ECompactState State;
-        float Progress;
+        ECompactState State = ECompactState::Unspecified;
+        float Progress = 0;
         std::string Path;
-        bool Cascade;
-        uint32_t MaxInFlight;
-        uint32_t Total;
-        uint32_t Done;
+        bool Cascade = false;
+        uint32_t MaxInFlight = 0;
+        uint32_t Total = 0;
+        uint32_t Done = 0;
     };
 
     const TMetadata& Metadata() const;
@@ -1517,6 +1540,11 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 
     // Settings of session pool
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+
+    // Optional pool name surfaced through the OTel tag
+    // ydb.table.session.pool.name. When empty the default
+    // "<database>@<endpoint>" is used.
+    FLUENT_SETTING(std::string, PoolName);
 };
 
 struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {

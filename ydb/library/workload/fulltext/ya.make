@@ -3,9 +3,10 @@ LIBRARY()
 SRCS(
     fulltext.cpp
     fulltext_data_generator.cpp
-    markov_model_builder.cpp
+    fulltext_quality_evaluator.cpp
     fulltext_workload_generator.cpp
     fulltext_workload_params.cpp
+    markov_model_builder.cpp
     markov_model_evaluator.cpp
 )
 

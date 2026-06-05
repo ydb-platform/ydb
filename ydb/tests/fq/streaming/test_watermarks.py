@@ -3,19 +3,21 @@ import pytest
 import time
 from typing import Callable
 
-from ydb.tests.fq.streaming.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 
 logger = logging.getLogger(__name__)
 
 
 class TestWatermarksInYdb(StreamingTestBase):
-    @pytest.mark.parametrize("kikimr", [{"enable_watermarks": True}], indirect=["kikimr"])
+    @pytest.mark.parametrize("kikimr", [{"enable_watermarks": True, "enable_watermarks_advanced": True}], indirect=["kikimr"])
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
         if local_topics and shared_reading:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+        if tasks == 2 and not shared_reading:
+            pytest.skip("idleness is not supported for no_shared: YQ-5322")
 
         endpoint = self.get_endpoint(kikimr, local_topics)
         query_name = f"test_watermarks_{shared_reading}{tasks}{local_topics}"
@@ -23,7 +25,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
         self.create_source(kikimr, source_name, shared_reading)
 
-        ts = "CAST(ts AS Timestamp)" if shared_reading else "SystemMetadata('write_time')"
+        ts = "CAST(ts AS Timestamp)"
         cluster = f"{source_name}." if not local_topics else ""
         idleness_clause = ', WATERMARK_IDLE_TIMEOUT = "PT5S"' if tasks > 1 else ''
 

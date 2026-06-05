@@ -21,6 +21,8 @@
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/rpc/request_info.h>
+
 #include <yt/yt/client/signature/signature.h>
 
 #include <yt/yt/client/table_client/name_table.h>
@@ -758,6 +760,11 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
 
     FillRequest(req.Get(), path, /*format*/ std::nullopt, options);
 
+    SetReadTableRequestInfo(
+        req,
+        path,
+        *req);
+
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
             return NRpcProxy::CreateTableReader(std::move(inputStream));
@@ -1193,6 +1200,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     YT_OPTIONAL_SET_PROTO(req, expression_builder_version, options.ExpressionBuilderVersion);
     YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
+    YT_OPTIONAL_SET_PROTO(req, enable_parallelize_unordered_group_by, options.EnableParallelizeUnorderedGroupBy);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
     YT_OPTIONAL_SET_PROTO(req, max_join_batch_size, options.MaxJoinBatchSize);
     YT_OPTIONAL_SET_PROTO(req, rowset_processing_batch_size, options.RowsetProcessingBatchSize);

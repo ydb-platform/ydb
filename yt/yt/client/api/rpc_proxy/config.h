@@ -65,7 +65,7 @@ struct TConnectionConfig
     TDuration DefaultPingPeriod;
     TDuration DefaultChaosLeaseTimeout;
 
-    NBus::TBusConfigPtr BusClient;
+    NBus::NTcp::TBusConfigPtr BusClient;
     TDuration IdleChannelTtl;
 
     NHttp::TClientConfigPtr HttpClient;

@@ -7,6 +7,7 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -35,12 +36,12 @@ TRestoreRequestExecutor::~TRestoreRequestExecutor()
 
 void TRestoreRequestExecutor::Run()
 {
-    for (ui8 i = 0; i < DirectBlockGroupHostCount; ++i) {
+    for (THostIndex i = 0; i < DirectBlockGroupHostCount; ++i) {
         DoRun(i);
     }
 }
 
-void TRestoreRequestExecutor::DoRun(ui8 hostIndex)
+void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
 {
     auto future = DirectBlockGroup->ListPBuffers(hostIndex);
     future.Subscribe(
@@ -59,7 +60,7 @@ TRestoreRequestExecutor::GetFuture() const
 }
 
 void TRestoreRequestExecutor::OnResponse(
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TListPBufferResponse response)
 {
     if (HasError(response.Error)) {

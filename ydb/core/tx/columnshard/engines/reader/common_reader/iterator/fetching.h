@@ -21,6 +21,14 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
+    ui64 CachedSourceId = 0;
+    ui64 CachedBlobBytes = 0;
+    ui64 CachedRawBytes = 0;
+    ui32 CachedFilteredRows = 0;
+    ui32 CachedTotalRows = 0;
+    ui64 CachedTotalReservedBytes = 0;
+
+    void CacheSourceStats();
 
 protected:
     virtual bool DoApply(IDataReader& owner) override;
@@ -31,10 +39,36 @@ public:
         return "STEP_ACTION";
     }
 
+    virtual ui64 GetSourceId() const override {
+        return CachedSourceId;
+    }
+
+    virtual ui64 GetBlobBytes() const override {
+        return CachedBlobBytes;
+    }
+
+    virtual ui64 GetRawBytes() const override {
+        return CachedRawBytes;
+    }
+
+    virtual ui32 GetFilteredRows() const override {
+        return CachedFilteredRows;
+    }
+
+    virtual ui32 GetTotalRows() const override {
+        return CachedTotalRows;
+    }
+
+    virtual ui64 GetTotalReservedBytes() const override {
+        return CachedTotalReservedBytes;
+    }
+
     template <class T>
     TStepAction(std::shared_ptr<T>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
-        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId, changeSyncSection) {
+        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId, changeSyncSection)
+    {
     }
+
     TStepAction(std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
         const bool changeSyncSection);
 };
@@ -45,13 +79,16 @@ private:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
+    void ReportTracing(
+        const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
         : TBase("PROGRAM_EXECUTION")
-        , Program(program) {
+        , Program(program)
+    {
         for (auto&& i : Program->GetNodes()) {
             Signals.emplace(i.first, TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName()));
         }

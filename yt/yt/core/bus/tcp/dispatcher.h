@@ -14,7 +14,7 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,10 +36,10 @@ struct TBusNetworkCounters final
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpDispatcher
+class TDispatcher
 {
 public:
-    static TTcpDispatcher* Get();
+    static TDispatcher* Get();
 
     const TBusNetworkCountersPtr& GetCounters(const TString& networkName, bool encrypted);
 
@@ -47,7 +47,7 @@ public:
     NConcurrency::IPollerPtr GetXferPoller();
 
     //! Reconfigures the dispatcher.
-    void Configure(const TTcpDispatcherConfigPtr& config);
+    void Configure(const TDispatcherConfigPtr& config);
 
     //! Disables all networking. Safety measure for local runs and snapshot validation.
     void DisableNetworking();
@@ -68,14 +68,14 @@ public:
     NYTree::IYPathServicePtr GetOrchidService();
 
 private:
-    TTcpDispatcher();
+    TDispatcher();
 
     DECLARE_LEAKY_SINGLETON_FRIEND()
-    friend class TTcpConnection;
-    friend class TTcpBusClient;
-    friend class TTcpBusServerBase;
+    friend class TConnection;
+    friend class TBusClient;
+    friend class TBusServerBase;
     template <class TServer>
-    friend class TTcpBusServerProxy;
+    friend class TBusServerProxy;
     friend class TCompositeBusServer;
 
     class TImpl;
@@ -84,4 +84,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

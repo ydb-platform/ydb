@@ -139,6 +139,12 @@ struct TForsakeChaosCoordinatorOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TForsakeChaosShortcutOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TRemoveChaosCellMailboxOptions
     : public TTimeoutOptions
 { };
@@ -239,6 +245,11 @@ struct IInternalClient
         NHydra::TCellId chaosCellId,
         NHydra::TCellId coordinatorCellId,
         const TForsakeChaosCoordinatorOptions& options = {}) = 0;
+
+    virtual TFuture<void> ForsakeChaosShortcut(
+        NHydra::TCellId coordinatorCellId,
+        NChaosClient::TChaosObjectId chaosObjectId,
+        const TForsakeChaosShortcutOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveChaosCellMailbox(
         NHydra::TCellId chaosCellId,

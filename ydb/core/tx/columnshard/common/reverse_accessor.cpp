@@ -1,5 +1,3 @@
 #include "reverse_accessor.h"
 
-namespace NKikimr::NColumnShard {
-
-}
+namespace NKikimr::NColumnShard {}

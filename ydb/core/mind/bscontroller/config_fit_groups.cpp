@@ -324,11 +324,21 @@ namespace NKikimr {
 
                     if (replace) {
                         auto& g = getGroup();
-                        // get the current PDisk in the desired slot and replace it with the target one; if the target
-                        // PDisk id is zero, then new PDisk will be picked up automatically
-                        g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = targetPDiskId;
-                        if (State.Self.UseSelfHealLocalPolicy && it != State.ExplicitReconfigureMap.end()) {
-                            hardConstraints[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx].NodeId = vslot->VSlotId.ComprisingPDiskId().NodeId;
+                        if (targetPDiskId != TPDiskId() && IgnoreGroupSanityChecks) {
+                            // Preserve the legacy override semantics when layout correctness checks are explicitly
+                            // disabled for the whole request.
+                            g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = targetPDiskId;
+                        } else {
+                            // Explicit target PDisk must go through the same allocation checks as automatically
+                            // selected candidates, so leave the slot empty and express the manual choice as a hard
+                            // constraint.
+                            g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = TPDiskId();
+                            if (targetPDiskId != TPDiskId()) {
+                                hardConstraints[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx].PDiskId = targetPDiskId;
+                            } else if (State.Self.UseSelfHealLocalPolicy && it != State.ExplicitReconfigureMap.end()) {
+                                hardConstraints[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx].NodeId =
+                                    vslot->VSlotId.ComprisingPDiskId().NodeId;
+                            }
                         }
                         replacedSlots.emplace(vslot->GetShortVDiskId(), vslot->VSlotId);
                     } else {
@@ -411,12 +421,16 @@ namespace NKikimr {
                             for (const auto& [vdiskId, vslotId] : replacedSlots) {
                                 replacedDisks.emplace(vdiskId, vslotId.ComprisingPDiskId());
                             }
+                            // Retry with hard constraints must keep the full forbidden set assembled above,
+                            // including donor and VSlotsBeingDeleted exclusions, even though the soft attempt
+                            // takes ownership of `forbid`.
+                            auto forbidForRetry = forbid;
                             try {
                                 TGroupMapper::MergeTargetDiskConstraints(hardConstraints, softConstraints);
                                 AllocateOrSanitizeGroup(groupId, group, softConstraints, replacedDisks, std::move(forbid), groupSizeInUnits, requiredSpace,
                                     AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
                             } catch (const TExFitGroupError& ex) {
-                                AllocateOrSanitizeGroup(groupId, group, hardConstraints, replacedDisks, std::move(forbid), groupSizeInUnits, requiredSpace,
+                                AllocateOrSanitizeGroup(groupId, group, hardConstraints, replacedDisks, std::move(forbidForRetry), groupSizeInUnits, requiredSpace,
                                     AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
                             }
                         }
@@ -928,8 +942,9 @@ namespace NKikimr {
                     // process all groups in this pool and skip the rest
                     processSingleStoragePool(spIt->first, spIt->second, true, [&](const auto& callback) {
                         const auto& storagePoolGroups = state.StoragePoolGroups.Get();
-                        for (auto [begin, end] = storagePoolGroups.equal_range(spIt->first); begin != end; ++begin) {
-                            callback(begin->second);
+                        for (auto it = storagePoolGroups.lower_bound({spIt->first, Min<TGroupId>()});
+                                it != storagePoolGroups.end() && it->first == spIt->first; ++it) {
+                            callback(it->second);
                         }
                     });
                     for (; it != poolsAndGroups.end() && std::get<0>(*it) == storagePoolId; ++it)

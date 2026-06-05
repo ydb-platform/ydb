@@ -65,13 +65,17 @@ public:
         for (int i = 0; i != std::ssize(nodes); ++i) {
             const auto& node = nodes[i];
             auto penalty = node.InitialPenalty + node.AdaptivePenalty + node.ExternalPenalty - minInitialPenalty;
+            auto runRequest = BIND([callback] (NApi::IClientPtr client, TCounterPtr counter) {
+                counter->TotalRequestCount.Increment();
+                return callback(client);
+            });
             if (penalty) {
                 auto delayedFuture = NConcurrency::TDelayedExecutor::MakeDelayed(
                     penalty,
                     NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
-                futures.push_back(delayedFuture.Apply(BIND(callback, node.Client)));
+                futures.push_back(delayedFuture.Apply(BIND(runRequest, node.Client, node.Counter)));
             } else {
-                futures.push_back(callback(node.Client));
+                futures.push_back(runRequest(node.Client, node.Counter));
             }
             futures.back().Subscribe(BIND(
                 &THedgingExecutor::OnFinishRequest,

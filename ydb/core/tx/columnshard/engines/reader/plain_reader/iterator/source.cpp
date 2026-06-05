@@ -30,6 +30,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
         AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
     }
     if (AtomicCas(&SourceStartedFlag, 1, 0)) {
+        OnStartProcessing();
         SetMemoryGroupId(interval.GetIntervalId());
         AFL_VERIFY(FetchingPlan);
         InitStageData(std::make_unique<TFetchedData>(GetExclusiveIntervalOnly(), GetRecordsCount()));

@@ -148,6 +148,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
 
+    void FillBatchInfo(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+        TEvPQ::TEvWrite::TMsg& msg) const;
+
     void TrySendUpdateConfigResponses(const TActorContext& ctx);
     static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                      NPersQueue::TConverterFactoryPtr& converterFactory,
@@ -229,6 +233,7 @@ private:
     bool InitCompleted = false;
     THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
+    ui64 ReservedBytes = 0;
 
     struct TTxWriteInfo {
         THashMap<ui32, TPartitionId> Partitions;

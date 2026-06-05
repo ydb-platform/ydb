@@ -3,7 +3,7 @@
 #include "ast_builder.h"
 #include "type_check.h"
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.h>
 #include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.h>
 #include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>

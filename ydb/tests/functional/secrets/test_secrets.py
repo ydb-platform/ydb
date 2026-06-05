@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
-from .conftest import run_with_assert, create_user, provide_grants, create_secrets, DATABASE, DROP_SECRET_GRANTS, ALTER_SECRET_GRANTS
 import logging
+
+from ydb.tests.functional.secrets.lib.secrets_plugin import (
+    ALTER_SECRET_GRANTS,
+    create_secrets,
+    create_user,
+    DATABASE,
+    DROP_SECRET_GRANTS,
+    provide_grants,
+    run_with_assert,
+)
 
 logger = logging.getLogger(__name__)
 

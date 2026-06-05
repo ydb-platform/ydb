@@ -111,7 +111,9 @@ public:
     {
         auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         auto &read = *request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
-        read.SetBoxId(Pool->Config.GetBoxId());
+        if (Pool->Config.HasBoxId()) {
+            read.SetBoxId(Pool->Config.GetBoxId());
+        }
         read.AddName(Pool->Config.GetName());
 
         BLOG_D(LogPrefix << "read pool state: " << request->Record.ShortDebugString());
@@ -205,8 +207,8 @@ public:
         PoolStateAcquired = true;
         if (rec.GetStatus(0).StoragePoolSize()) {
             auto &pool = rec.GetStatus(0).GetStoragePool(0);
-            auto gen = pool.GetItemConfigGeneration();
-            Pool->Config.SetItemConfigGeneration(gen);
+            Pool->Config.SetBoxId(pool.GetBoxId());
+            Pool->Config.SetItemConfigGeneration(pool.GetItemConfigGeneration());
             PoolId = pool.GetStoragePoolId();
         } else {
             Pool->Config.SetItemConfigGeneration(0);

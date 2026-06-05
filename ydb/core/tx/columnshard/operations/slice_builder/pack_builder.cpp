@@ -23,14 +23,18 @@ public:
         TWritePortionInfoWithBlobsResult& MutablePortion() {
             return Portion;
         }
+
         const TWritePortionInfoWithBlobsResult& GetPortion() const {
             return Portion;
         }
+
         TWritePortionInfoWithBlobsResult&& ExtractPortion() {
             return std::move(Portion);
         }
+
         TInsertPortion(TWritePortionInfoWithBlobsResult&& portion)
-            : Portion(std::move(portion)) {
+            : Portion(std::move(portion))
+        {
         }
     };
 
@@ -39,6 +43,7 @@ private:
     std::vector<TInsertPortion> Portions;
     std::vector<NColumnShard::TWriteResult> WriteResults;
     TActorId DstActor;
+
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
@@ -54,6 +59,7 @@ private:
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));
         ctx.Send(DstActor, result.release());
     }
+
     virtual void DoOnStartSending() override {
     }
 
@@ -63,7 +69,8 @@ public:
         : Action(action)
         , Portions(std::move(portions))
         , WriteResults(std::move(writeResults))
-        , DstActor(dstActor) {
+        , DstActor(dstActor)
+    {
         for (auto&& p : Portions) {
             for (auto&& b : p.MutablePortion().MutableBlobs()) {
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
@@ -83,7 +90,8 @@ private:
 public:
     TSliceToMerge(const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
-        , ModificationType(modificationType) {
+        , ModificationType(modificationType)
+    {
     }
 
     void Add(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {
@@ -243,10 +251,9 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
             i.SetErrorMessage(cancelWritingReason, false);
         }
         NColumnShard::TInsertedPortions pack(std::move(writeResults), std::vector<NColumnShard::TInsertedPortion>());
-        auto result =
-            std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(NKikimrProto::EReplyStatus::ERROR, nullptr, std::move(pack));
+        auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
+            NKikimrProto::EReplyStatus::ERROR, nullptr, std::move(pack));
         TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
-    
     }
 }
 }   // namespace NKikimr::NOlap::NWritingPortions

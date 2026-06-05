@@ -214,19 +214,15 @@ namespace NKikimr {
         Neighbors.GenericParse(des);
     }
 
-
     // this function is called from TSyncerScheduler,
     // so all changes are made from one thread
-    void TSyncNeighbors::ApplyChanges(const TActorContext &ctx,
-                                      const NSyncer::TSyncerJobTask *task,
-                                      TDuration syncTimeInterval) {
-        LOG_INFO(ctx, BS_SYNCER, VDISKP(VDiskLogPrefix, "JOB_DONE: %s", task->ToString().data()));
-
-        TDuration timeout = task->IsFullRecoveryTask() ? TDuration::Seconds(0) : syncTimeInterval;
-        TInstant schTime = TAppData::TimeProvider->Now() + timeout;
-
-        NSyncer::TPeerSyncState &ref = Neighbors[task->VDiskId].Get().PeerSyncState;
-        ref = task->GetCurrent();
+    void TSyncNeighbors::ApplyChanges(
+            const TVDiskID& vDiskId,
+            const NSyncer::TPeerSyncState& peerSyncState,
+            TDuration syncTimeInterval) {
+        TInstant schTime = TAppData::TimeProvider->Now() + syncTimeInterval;
+        NSyncer::TPeerSyncState &ref = Neighbors[vDiskId].Get().PeerSyncState;
+        ref = peerSyncState;
         ref.SchTime = schTime;
     }
 

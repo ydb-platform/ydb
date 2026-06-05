@@ -98,23 +98,8 @@ TProgram::TStatus SyncExecution(
     Params2&&... params) {
     TProgram::TFutureStatus future =
         (program->*method)(std::forward<Params2>(params)...);
-    YQL_ENSURE(future.Initialized());
-    future.Wait();
-    HandleFutureException(future);
 
-    TProgram::TStatus status = future.GetValue();
-    while (status == TProgram::TStatus::Async) {
-        auto continueFuture = program->ContinueAsync();
-        continueFuture.Wait();
-        HandleFutureException(continueFuture);
-        status = continueFuture.GetValue();
-    }
-
-    if (status == TProgram::TStatus::Error) {
-        program->Print(program->ExprStream(), program->PlanStream());
-    }
-
-    return status;
+    return WaitExecution(TIntrusivePtr<TProgram>(program), future);
 }
 
 std::function<TString(const TString&, const TString&)> BuildDefaultTokenResolver(TCredentials::TPtr credentials) {
@@ -912,7 +897,7 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
     auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
         return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
     },
-                                    /*typeParser=*/{})
+                                    /*typeParser=*/{}, /*typeWriter=*/{})
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);
@@ -1893,6 +1878,13 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
                 writer.OnInt64Scalar(TypeCtx_->LineageStats.Duration);
                 writer.OnEndMap();
             }
+            if (TypeCtx_->LineageStats.Version > 0) {
+                writer.OnKeyedItem("Version");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Version);
+                writer.OnEndMap();
+            }
         writer.OnEndMap();
     }
 
@@ -2095,7 +2087,6 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }
-
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning
         // could be overridden by pragma later
@@ -2268,6 +2259,27 @@ bool TProgram::NeedWaitForActiveProcesses() {
     }
 
     return false;
+}
+
+TProgram::TStatus WaitExecution(TProgramPtr program, TProgram::TFutureStatus futureStatus) {
+    YQL_ENSURE(program);
+    YQL_ENSURE(futureStatus.Initialized());
+    futureStatus.Wait();
+    HandleFutureException(futureStatus);
+
+    TProgram::TStatus status = futureStatus.GetValue();
+    while (status == TProgram::TStatus::Async) {
+        auto continueFuture = program->ContinueAsync();
+        continueFuture.Wait();
+        HandleFutureException(continueFuture);
+        status = continueFuture.GetValue();
+    }
+
+    if (status == TProgram::TStatus::Error) {
+        program->Print(program->ExprStream(), program->PlanStream());
+    }
+
+    return status;
 }
 
 } // namespace NYql

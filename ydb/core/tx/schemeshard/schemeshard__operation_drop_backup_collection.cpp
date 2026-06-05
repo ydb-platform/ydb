@@ -132,45 +132,39 @@ TTxTransaction CreateTableDropTransaction(const TPath& tablePath) {
 // TODO: replace UGLY scan
 void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOperationContext& context, NIceDb::TNiceDb& db) {
     LOG_I("CleanupIncrementalRestoreState for backup collection pathId: " << backupCollectionPathId);
-    
+
     TVector<ui64> statesToCleanup;
-    
-    for (auto it = context.SS->IncrementalRestoreStates.begin(); it != context.SS->IncrementalRestoreStates.end();) {
+
+    for (auto it = context.SS->IncrementalRestoreStates.begin(); it != context.SS->IncrementalRestoreStates.end(); ++it) {
         if (it->second.BackupCollectionPathId == backupCollectionPathId) {
-            const auto& stateId = it->first;
-            statesToCleanup.push_back(stateId);
-            
-            auto toErase = it;
-            ++it;
-            context.SS->IncrementalRestoreStates.erase(toErase);
-        } else {
-            ++it;
+            statesToCleanup.push_back(it->first);
         }
     }
-    
+
     for (const auto& stateId : statesToCleanup) {
+        // Prefix-scan per opId, then delete tracked + untracked rows for that op.
+        // The state-tracked CleanupIncrementalRestoreItems only deletes rows whose
+        // seq is in the in-memory PendingItems/InFlightItems set; without the
+        // prefix scan, rows that slipped tracking (e.g. mid-flight reboot, partial
+        // rehydration) linger on disk until the next reboot self-heals them.
+        auto irow = db.Table<Schema::IncrementalRestoreItem>().Range(stateId).Select();
+        if (irow.IsReady()) {
+            while (!irow.EndOfSet()) {
+                const ui32 itemSeq = irow.GetValue<Schema::IncrementalRestoreItem::ItemSeq>();
+                db.Table<Schema::IncrementalRestoreItem>().Key(stateId, itemSeq).Delete();
+                if (!irow.Next()) {
+                    break;
+                }
+            }
+        }
+
+        auto* state = context.SS->IncrementalRestoreStates.FindPtr(stateId);
+        context.SS->CleanupIncrementalRestoreItems(stateId, db, state);
+        context.SS->IncrementalRestoreStates.erase(stateId);
         db.Table<Schema::IncrementalRestoreState>().Key(stateId).Delete();
-        
-        auto shardProgressRowset = db.Table<Schema::IncrementalRestoreShardProgress>().Range().Select();
-        if (!shardProgressRowset.IsReady()) {
-            return;
-        }
-        
-        while (!shardProgressRowset.EndOfSet()) {
-            ui64 operationId = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::OperationId>();
-            ui64 shardIdx = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::ShardIdx>();
-            
-            if (operationId == stateId) {
-                db.Table<Schema::IncrementalRestoreShardProgress>().Key(operationId, shardIdx).Delete();
-            }
-            
-            if (!shardProgressRowset.Next()) {
-                break;
-            }
-        }
     }
-    
-    for (auto opIt = context.SS->IncrementalRestoreOperationToState.begin(); 
+
+    for (auto opIt = context.SS->IncrementalRestoreOperationToState.begin();
          opIt != context.SS->IncrementalRestoreOperationToState.end();) {
         if (std::find(statesToCleanup.begin(), statesToCleanup.end(), opIt->second) != statesToCleanup.end()) {
             auto toErase = opIt;
@@ -180,7 +174,7 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
             ++opIt;
         }
     }
-    
+
     LOG_I("CleanupIncrementalRestoreState: Cleaned up " << statesToCleanup.size() << " incremental restore states");
 }
 
@@ -300,25 +294,25 @@ class TDropBackupCollection : public TSubOperation {
     bool HasActiveBackupOperations(const TPath& bcPath, TOperationContext& context) const {
         // Check if there are any active backup or restore operations for this collection
         const TPathId& bcPathId = bcPath.Base()->PathId;
-        
+
         // Check all active transactions to see if any involve this backup collection
         for (const auto& [txId, txState] : context.SS->TxInFlight) {
             if (txState.TxType == TTxState::TxBackup ||
                 txState.TxType == TTxState::TxRestore ||
                 txState.TxType == TTxState::TxCopyTable ||
                 txState.TxType == TTxState::TxReadOnlyCopyColumnTable) {
-                
+
                 // Check if the transaction target is this backup collection or a child path
                 const TPathId& targetPathId = txState.TargetPathId;
                 if (targetPathId == bcPathId) {
                     return true;
                 }
-                
+
                 // Check if target is a child of this backup collection
                 if (context.SS->PathsById.contains(targetPathId)) {
                     auto targetPath = context.SS->PathsById.at(targetPathId);
                     TPathId currentId = targetPathId;
-                    
+
                     // Walk up the path hierarchy to check if bcPathId is an ancestor
                     while (currentId && context.SS->PathsById.contains(currentId)) {
                         if (currentId == bcPathId) {
@@ -330,7 +324,23 @@ class TDropBackupCollection : public TSubOperation {
                 }
             }
         }
-        
+
+        for (const auto& [opId, longOp] : context.SS->LongIncrementalRestoreOps) {
+            auto longOpPathId = TPathId(longOp.GetBackupCollectionPathId().GetOwnerId(),
+                                        longOp.GetBackupCollectionPathId().GetLocalId());
+            if (longOpPathId != bcPathId) {
+                continue;
+            }
+            auto it = context.SS->IncrementalRestoreStates.find(ui64(opId.GetTxId()));
+            if (it == context.SS->IncrementalRestoreStates.end()) {
+                return true;
+            }
+            if (it->second.State != TIncrementalRestoreState::EState::Completed &&
+                it->second.State != TIncrementalRestoreState::EState::Failed) {
+                return true;
+            }
+        }
+
         return false;
     }
 

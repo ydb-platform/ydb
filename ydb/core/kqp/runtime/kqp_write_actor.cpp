@@ -1,6 +1,7 @@
 #include "kqp_write_actor.h"
 
 #include "kqp_buffer_lookup_actor.h"
+#include "kqp_buffer_lock_actor.h"
 #include "kqp_write_actor_settings.h"
 #include "kqp_write_table.h"
 
@@ -25,6 +26,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -51,7 +53,6 @@ namespace {
         case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
-        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL: // Rows were already checked during WHERE execution.
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT;
@@ -129,18 +130,33 @@ namespace {
         }
     }
 
-    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, ui64 recipientTopicTabletId,
+                          bool omitPeerTopicTablets, const THashSet<ui64>& topicTabletPeers) {
         transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
 
         if (!isImmediateCommit) {
             const auto prepareSettings = txManager->GetPrepareTransactionInfo();
 
+            const auto keepShardForPropose = [&](ui64 shardId) {
+                if (!omitPeerTopicTablets) {
+                    return true;
+                }
+                if (!topicTabletPeers.contains(shardId)) {
+                    return true;
+                }
+                return shardId == recipientTopicTabletId;
+            };
+
             if (!prepareSettings.ArbiterColumnShard) {
                 for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                    transaction.AddSendingShards(sendingShardId);
+                    if (keepShardForPropose(sendingShardId)) {
+                        transaction.AddSendingShards(sendingShardId);
+                    }
                 }
                 for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                    transaction.AddReceivingShards(receivingShardId);
+                    if (keepShardForPropose(receivingShardId)) {
+                        transaction.AddReceivingShards(receivingShardId);
+                    }
                 }
             } else {
                 transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
@@ -421,7 +437,7 @@ public:
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
-        NACLib::TUserContext::TPtr userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -1028,7 +1044,7 @@ public:
             TxManager->BreakLock(brokenShardId);
             YQL_ENSURE(TxManager->BrokenLocks());
 
-            SetVictimQuerySpanIdFromBrokenLocks(brokenShardId, ev->Get()->Record.GetTxLocks(), TxManager, &ev->Get()->Record);
+            SetVictimQuerySpanIdFromBrokenLocks(brokenShardId, ev->Get()->Record.GetTxLocks(), TxManager);
             if (TableWriteActorSpan) {
                 TableWriteActorSpan.EndError("LOCKS_BROKEN");
             }
@@ -1567,7 +1583,7 @@ private:
     IKqpTableWriterCallbacks* Callbacks;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::shared_ptr<const TPartitioning> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     ui64 ResolveAttempts = 0;
 
     IKqpTransactionManagerPtr TxManager;
@@ -1579,7 +1595,7 @@ private:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TKqpTableWriterStatistics Stats;
 
@@ -1608,6 +1624,8 @@ public:
         std::vector<ui32> OldKeyIndexes; // Old secondary key
 
         IKqpBufferTableLookup* Lookup = nullptr;
+
+        bool SkipMissingRows = false;
     };
 
     class IKqpReturningConsumer {
@@ -1623,11 +1641,17 @@ public:
         IKqpReturningConsumer* Consumer = nullptr;
     };
 
+    struct TPathLockInfo {
+        IKqpBufferTableLock* LockActor = nullptr;
+    };
+
 private:
     enum class EState {
         BLOCKED,
         BUFFERING,
+        LOCK_MAIN_TABLE,
         LOOKUP_MAIN_TABLE,
+        LOCK_UNIQUE_INDEX,
         LOOKUP_UNIQUE_INDEX,
         WRITING,
         CLOSING,
@@ -1646,6 +1670,7 @@ public:
             std::optional<TReturningInfo> returning,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
             std::vector<ui32> defaultMap,
+            std::vector<TPathLockInfo> locks,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Cookie(cookie)
         , DeleteCookie(deleteCookie)
@@ -1680,7 +1705,14 @@ public:
                 AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
                 AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
+                AFL_ENSURE(!lookup.SkipMissingRows);
             }
+        }
+
+        for (const auto& lock : locks) {
+            AFL_ENSURE(PathLookupInfo.contains(lock.LockActor->GetTableId().PathId)
+                    || PathWriteInfo.contains(lock.LockActor->GetTableId().PathId));
+            PathLockInfo[lock.LockActor->GetTableId().PathId] = lock;
         }
 
         ReturningInfo = returning;
@@ -1714,8 +1746,12 @@ public:
                     return false;
                 case EState::BUFFERING:
                     return ProcessBuffering(forceFlush);
+                case EState::LOCK_MAIN_TABLE:
+                    return ProcessLockingMainTable();
                 case EState::LOOKUP_MAIN_TABLE:
                     return ProcessLookupMainTable();
+                case EState::LOCK_UNIQUE_INDEX:
+                    return ProcessLockingUniqueIndex();
                 case EState::LOOKUP_UNIQUE_INDEX:
                     return ProcessLookupUniqueIndex();
                 case EState::WRITING:
@@ -1800,38 +1836,71 @@ private:
             }
         }
 
-        if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
-            // Need to lookup main table
+        std::swap(BufferedBatches, ProcessBatches);
+
+        return StartProcessing(false);
+    }
+
+    bool ProcessLockingMainTable() {
+        AFL_ENSURE(!IsError());
+        AFL_ENSURE(!ProcessBatches.empty());
+        AFL_ENSURE(!ProcessCells.empty());
+
+        auto& lockInfo = PathLockInfo.at(PathId);
+
+        if (!lockInfo.LockActor->HasResult(Cookie) && !lockInfo.LockActor->IsEmpty(Cookie)) {
+            return false;
+        }
+
+        return StartProcessing(true);
+    }
+
+    bool StartProcessing(bool locked) {
+        const bool needLock = !locked && PathLockInfo.contains(PathId);
+        const bool needLookup = PathLookupInfo.contains(PathId);
+
+        if (needLookup) {
             AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+            AFL_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
+        }
 
-            std::swap(BufferedBatches, ProcessBatches);
-
-            auto& lookupInfo = lookupInfoIt->second;
-            AFL_ENSURE(lookupInfo.KeyIndexes.empty());
-
+        if (needLock || needLookup) {
             THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
             size_t index = 0;
+            ProcessCells.clear();
+            KeyToIndexes.clear();
             for (const auto& batch : ProcessBatches) {
                 for (const auto& row : GetRows(batch)) {
+                    const auto& key = row.first(KeyColumnTypes.size());
                     ProcessCells.push_back(row);
-                    const auto& key = ProcessCells.back().first(KeyColumnTypes.size());
                     primaryKeysSet.insert(key);
                     KeyToIndexes[key].push_back(index++);
                 }
             }
 
             AFL_ENSURE(!ProcessCells.empty());
-            lookupInfo.Lookup->AddLookupTask(
-                Cookie, std::vector<TConstArrayRef<TCell>>(primaryKeysSet.begin(), primaryKeysSet.end()));
 
-            State = EState::LOOKUP_MAIN_TABLE;
-            return true;
+            if (needLock) {
+                auto& lockInfo = PathLockInfo.at(PathId);
+                lockInfo.LockActor->AddLockTask(
+                    Cookie,
+                    std::vector<TConstArrayRef<TCell>>(primaryKeysSet.begin(), primaryKeysSet.end()));
+                State = EState::LOCK_MAIN_TABLE;
+                return true;
+            } else {
+                AFL_ENSURE(needLookup);
+                auto& lookupInfo = PathLookupInfo.at(PathId);
+                lookupInfo.Lookup->AddLookupTask(
+                    Cookie, std::vector<TConstArrayRef<TCell>>(primaryKeysSet.begin(), primaryKeysSet.end()));
+                State = EState::LOOKUP_MAIN_TABLE;
+                return true;
+            }
         }
 
         // TODO: remove !PathLookupInfo.empty() after full error support
         if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && PathWriteInfo.size() > 1) {
             THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
-            for (const auto& batch : BufferedBatches) {
+            for (const auto& batch : ProcessBatches) {
                 for (const auto& row : GetRows(batch)) {
                     const auto& key = row.first(KeyColumnTypes.size());
                     if (!primaryKeysSet.insert(key).second) {
@@ -1842,53 +1911,29 @@ private:
             }
         }
 
-        Writes.reserve(BufferedBatches.size());
-        for (auto& batch : BufferedBatches) {
+        Writes.reserve(ProcessBatches.size());
+        for (auto& batch : ProcessBatches) {
             const auto rowsCount = batch->GetRowsCount();
             Writes.push_back(TWrite{
                 .Batch = std::move(batch),
                 .ExistsMask = std::vector<bool>(rowsCount, true),
             });
         }
-        BufferedBatches.clear();
+        ProcessBatches.clear();
+        ProcessCells.clear();
+        KeyToIndexes.clear();
 
         if (!PathLookupInfo.empty()) {
             // Need to lookup unique indexes.
             // In this case unique indexes keys are subsets of main table key or operation is INSERT.
-            AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
-
-            for (auto& [pathId, lookupInfo] : PathLookupInfo) {
-                AFL_ENSURE(pathId != PathId);
-
-                TUniqueSecondaryKeyCollector collector(
-                    KeyColumnTypes,
-                    lookupInfo.Lookup->GetKeyColumnTypes(),
-                    lookupInfo.KeyIndexes,
-                    lookupInfo.FullKeyIndexes,
-                    lookupInfo.PrimaryInFullKeyIndexes);
-                for (const auto& write : Writes) {
-                    for (const auto& row : GetRows(write.Batch)) {
-                        if (!collector.AddRow(row)) {
-                            Error = DuplicateKeyErrorText;
-                            return false;
-                        }
-                    }
-                }
-
-                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
-
-                lookupInfo.Lookup->AddUniqueCheckTask(
-                    Cookie,
-                    std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
-                    /* fail on existing row*/
-                    OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+            if (!PathLockInfo.empty()) {
+                return StartUniqueIndexLock();
             }
-
-            State = EState::LOOKUP_UNIQUE_INDEX;
+            return StartUniqueIndexLookup();
         } else {
             State = EState::WRITING;
+            return true;
         }
-        return true;
     }
 
     bool ProcessLookupMainTable() {
@@ -1909,7 +1954,7 @@ private:
         THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyToReadCellsIndex;
 
         lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
-            AFL_ENSURE(cells.size() > KeyColumnTypes.size());
+            AFL_ENSURE(cells.size() >= KeyColumnTypes.size());
 
             readCells.emplace_back(cells);
             const auto key = readCells.back().first(KeyColumnTypes.size());
@@ -1954,13 +1999,18 @@ private:
 
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
-            } else if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
-                    || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+
+                if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                    // In case of delete skip all following equal keys, because row is already erased.
+                    keyToReadCellsIndex.erase(keyIt);
+                }
+            } else if (lookupInfo.SkipMissingRows) {
+                AFL_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                    || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
                 // Skip updates and deletes for non-existing rows.
                 Memory -= EstimateSize(processCells);
             } else {
                 // For UPDATE WHERE all rows must exist.
-                AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
 
                 for (const auto& cell : processCells) {
                     rowsBatcher->AddCell(cell);
@@ -1988,31 +2038,93 @@ private:
 
         if (PathLookupInfo.size() > 1) {
             // Lookup unique indexes
-            AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+            if (!PathLockInfo.empty()) {
+                return StartUniqueIndexLock();
+            }
+            return StartUniqueIndexLookup();
+        } else {
+            State = EState::WRITING;
+            return true;
+        }
+    }
 
-            AFL_ENSURE(Writes.size() == 1);
-            const auto writeRows = GetRows(Writes[0].Batch);
-            const auto& existsMask = Writes[0].ExistsMask;
-            AFL_ENSURE(writeRows.size() == existsMask.size());
-
-            for (auto& [pathId, lookupInfo] : PathLookupInfo) {
-                if (pathId == PathId) {
-                    continue;
-                }
+    bool StartUniqueIndexLock() {
+        for (auto& [pathId, lockInfo] : PathLockInfo) {
+            if (pathId != PathId) {
+                const auto& lookupInfo = PathLookupInfo.at(pathId);
 
                 TUniqueSecondaryKeyCollector collector(
-                        KeyColumnTypes,
-                        lookupInfo.Lookup->GetKeyColumnTypes(),
-                        lookupInfo.KeyIndexes,
-                        lookupInfo.FullKeyIndexes,
-                        lookupInfo.PrimaryInFullKeyIndexes);
+                    KeyColumnTypes,
+                    lookupInfo.Lookup->GetKeyColumnTypes(),
+                    lookupInfo.KeyIndexes,
+                    lookupInfo.FullKeyIndexes,
+                    lookupInfo.PrimaryInFullKeyIndexes);
+                for (const auto& write : Writes) {
+                    for (const auto& row : GetRows(write.Batch)) {
+                        if (!collector.AddRow(row)) {
+                            Error = DuplicateKeyErrorText;
+                            return false;
+                        }
+                    }
+                }
+                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+                lockInfo.LockActor->AddLockTask(
+                    Cookie,
+                    std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()});
+            }
+        }
 
-                AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
-                AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
+        State = EState::LOCK_UNIQUE_INDEX;
+        return true;
+    }
+
+    bool ProcessLockingUniqueIndex() {
+        AFL_ENSURE(!IsError());
+
+        for (auto& [pathId, lockInfo] : PathLockInfo) {
+            if (pathId != PathId) {
+                if (!lockInfo.LockActor->HasResult(Cookie) && !lockInfo.LockActor->IsEmpty(Cookie)) {
+                    return false;
+                }
+            }
+        }
+
+        return StartUniqueIndexLookup();
+    }
+
+    bool StartUniqueIndexLookup() {
+        const bool skipExistingKeys = PathLookupInfo.contains(PathId); // has main table lookup
+        // skipExistingKeys=false means that unique indexes keys are subsets of main table key or operation is INSERT.
+
+        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+        // INSERT => !skipExistingKeys
+        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT || !skipExistingKeys);
+
+        for (auto& [pathId, lookupInfo] : PathLookupInfo) {
+            if (pathId == PathId) {
+                AFL_ENSURE(skipExistingKeys);
+                continue;
+            }
+
+            TUniqueSecondaryKeyCollector collector(
+                    KeyColumnTypes,
+                    lookupInfo.Lookup->GetKeyColumnTypes(),
+                    lookupInfo.KeyIndexes,
+                    lookupInfo.FullKeyIndexes,
+                    lookupInfo.PrimaryInFullKeyIndexes);
+
+            AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
+            AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
+
+            for (const auto& write : Writes) {
+                const auto writeRows = GetRows(write.Batch);
+                const auto& existsMask = write.ExistsMask;
+                AFL_ENSURE(writeRows.size() == existsMask.size());
                 for (size_t index = 0; index < writeRows.size(); ++index) {
-                    // Only UPSERT/REPLACE/UPDATE here
                     const auto& row = writeRows[index];
-                    if (existsMask[index]
+                    // Only UPSERT/REPLACE/UPDATE here with skipExistingKeys
+                    if (skipExistingKeys
+                            && existsMask[index]
                             && IsEqual(
                                 row,
                                 lookupInfo.KeyIndexes,
@@ -2027,20 +2139,18 @@ private:
                         return false;
                     }
                 }
-
-                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
-
-                lookupInfo.Lookup->AddUniqueCheckTask(
-                    Cookie,
-                    std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
-                    /* fail on existing row*/
-                    false);
             }
 
-            State = EState::LOOKUP_UNIQUE_INDEX;
-        } else {
-            State = EState::WRITING;
+            const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+
+            lookupInfo.Lookup->AddUniqueCheckTask(
+                Cookie,
+                std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
+                /* fail on existing row*/
+                OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
         }
+
+        State = EState::LOOKUP_UNIQUE_INDEX;
         return true;
     }
 
@@ -2156,20 +2266,18 @@ private:
                     if (hasAdditionalDelete) {
                         AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
                             && OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-                        {
-                            auto deleteProjection = CreateDataBatchProjection(
-                                actorInfo.DeleteKeysIndexes, Alloc);
-                            for (const auto& [key, rowAndExists] : keyToRow) {
-                                const auto& [row, exists] = rowAndExists;
-                                if (exists && rowPossiblyChanged(row)) {
-                                    deleteProjection->AddRow(row);
-                                }
+                        auto deleteProjection = CreateDataBatchProjection(
+                            actorInfo.DeleteKeysIndexes, Alloc);
+                        for (const auto& [key, rowAndExists] : keyToRow) {
+                            const auto& [row, exists] = rowAndExists;
+                            if (exists && rowPossiblyChanged(row)) {
+                                deleteProjection->AddRow(row);
                             }
-                            auto preparedKeyBatch = deleteProjection->Flush();
-                            actorInfo.WriteActor->Write(
-                                DeleteCookie,
-                                std::move(preparedKeyBatch));
                         }
+                        auto preparedKeyBatch = deleteProjection->Flush();
+                        actorInfo.WriteActor->Write(
+                            DeleteCookie,
+                            std::move(preparedKeyBatch));
                         actorInfo.WriteActor->FlushBuffer(DeleteCookie);
                     }
 
@@ -2257,6 +2365,7 @@ private:
 
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
+    THashMap<TPathId, TPathLockInfo> PathLockInfo;
     std::optional<TReturningInfo> ReturningInfo;
 
     bool Closed = false;
@@ -2405,7 +2514,7 @@ public:
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
         TIntrusivePtr<TKqpCounters> counters,
-        NACLib::TUserContext::TPtr userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
@@ -2430,6 +2539,7 @@ public:
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
 
+        AFL_ENSURE(Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_FLAT);
         TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
@@ -2768,7 +2878,7 @@ private:
     bool WaitingForTableActor = false;
 
     NWilson::TSpan DirectWriteActorSpan;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 
@@ -2799,12 +2909,16 @@ struct TWriteSettings {
     NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
+    bool NeedLookup;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ReturningColumns;
     TTransactionSettings TransactionSettings;
     i64 Priority;
     bool IsOlap;
     THashSet<TStringBuf> DefaultColumns;
+    bool SkipMissingRows;
+    enum class EInputRowFormat { Flat, StructOfRows };
+    EInputRowFormat InputRowFormat = EInputRowFormat::Flat;
 
     struct TIndex {
         TTableId TableId;
@@ -2813,6 +2927,8 @@ struct TWriteSettings {
         ui32 KeyPrefixSize;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
         bool IsUniq;
+        NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
+        bool NeedDeleteOldRows;
     };
 
     std::vector<TIndex> Indexes;
@@ -3111,7 +3227,9 @@ public:
                     .LockNodeId = LockNodeId,
                     .LockMode = settings.TransactionSettings.LockMode,
                     .QuerySpanId = QuerySpanId,
-                    .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
+                    .MvccSnapshot = settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                        ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot. 
+                        : settings.TransactionSettings.MvccSnapshot,
 
                     .TxManager = TxManager,
                     .Alloc = Alloc,
@@ -3125,6 +3243,35 @@ public:
 
                 TActorId id = RegisterWithSameMailbox(actor);
                 CA_LOG_D("Create new KqpBufferTableLookup for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+
+                return {ptr, id};
+            };
+
+            auto createLockActor = [&](const TTableId tableId, const TString& tablePath) -> std::pair<IKqpBufferTableLock*, TActorId> {
+                auto [ptr, actor] = CreateKqpBufferTableLock(TKqpBufferLockSettings{
+                    .Callbacks = this,
+
+                    .TableId = tableId,
+                    .TablePath = tablePath,
+
+                    .LockTxId = LockTxId,
+                    .LockNodeId = LockNodeId,
+                    .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
+                    .QuerySpanId = QuerySpanId,
+                    .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
+
+                    .TxManager = TxManager,
+                    .Alloc = Alloc,
+                    .TypeEnv = *TypeEnv,
+                    .HolderFactory = *HolderFactory,
+                    .SessionActorId = SessionActorId,
+                    .Counters = Counters,
+
+                    .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+                });
+
+                TActorId id = RegisterWithSameMailbox(actor);
+                CA_LOG_D("Create new KqpBufferTableLock for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
 
                 return {ptr, id};
             };
@@ -3152,7 +3299,19 @@ public:
                 actorInfo.WriteActor->SetCurrentQuerySpanId(settings.QuerySpanId);
             }
 
-            if (!settings.LookupColumns.empty()) {
+            if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+                auto& lockInfo = LockInfos[settings.TableId.PathId];
+                if (!lockInfo.Actors.contains(settings.TableId.PathId)) {
+                    const auto [ptr, id] = createLockActor(settings.TableId, settings.TablePath);
+                    AFL_ENSURE(lockInfo.Actors.emplace(settings.TableId.PathId, TLockInfo::TActorInfo{
+                        .LockActor = ptr,
+                        .Id = id,
+                    }).second);
+                }
+            }
+
+            if (settings.NeedLookup) {
+                AFL_ENSURE(settings.InputRowFormat == TWriteSettings::EInputRowFormat::Flat);
                 AFL_ENSURE(!settings.IsOlap);
                 auto& lookupInfo = LookupInfos[settings.TableId.PathId];
                 if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
@@ -3170,16 +3329,6 @@ public:
                     }
                 }
             }
-
-            THashSet<TStringBuf> primaryKeyColumnsSet;
-            for (const auto& column : settings.KeyColumns) {
-                primaryKeyColumnsSet.insert(column.GetName());
-            }
-            const auto isSubsetOfPrimaryKeyColumns = [&](const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columns) {
-                return std::all_of(columns.begin(), columns.end(), [&](const NKikimrKqp::TKqpColumnMetadataProto& column) {
-                    return primaryKeyColumnsSet.contains(column.GetName());
-                });
-            };
 
             for (const auto& indexSettings : settings.Indexes) {
                 AFL_ENSURE(!settings.IsOlap);
@@ -3215,6 +3364,25 @@ public:
                         }
                     }
                 }
+
+                if (indexSettings.IsUniq &&
+                        (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)) {
+                    auto& lockInfo = LockInfos[indexSettings.TableId.PathId];
+                    if (!lockInfo.Actors.contains(indexSettings.TableId.PathId)) {
+                        const auto [ptr, id] = createLockActor(indexSettings.TableId, indexSettings.TablePath);
+                        AFL_ENSURE(lockInfo.Actors.emplace(indexSettings.TableId.PathId, TLockInfo::TActorInfo{
+                            .LockActor = ptr,
+                            .Id = id,
+                        }).second);
+                    } else {
+                        if (!checkSchemaVersion(
+                                lockInfo.Actors.at(indexSettings.TableId.PathId).LockActor,
+                                indexSettings.TableId,
+                                indexSettings.TablePath)) {
+                            return;
+                        }
+                    }
+                }
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
@@ -3228,26 +3396,15 @@ public:
 
             std::vector<TKqpWriteTask::TPathWriteInfo> writes;
             std::vector<TKqpWriteTask::TPathLookupInfo> lookups;
+            std::vector<TKqpWriteTask::TPathLockInfo> locks;
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
                 AFL_ENSURE(!settings.IsOlap);
-                // Flag for the case of UPDATE ON been processed without doing lookup,
-                // so no secondary index key columns are touched.
-                // In this case we must use UPDATE operation at shards for all table,
-                // because we don't know if updated rows exist.
-                // No lookup means that secondary key is subset of primary key.
-                const bool updateOnWithoutLookup = (
-                    settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
-                    && settings.LookupColumns.empty());
 
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
                     writeCookie,
-                    settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
-                        ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        : (updateOnWithoutLookup
-                            ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
-                            : NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
+                    GetOperation(indexSettings.OperationType),
                     indexSettings.KeyColumns,
                     indexSettings.Columns,
                     CountLocalDefaults(
@@ -3256,11 +3413,7 @@ public:
                         settings.LookupColumns),
                     settings.Priority);
 
-                const bool needAdditionalDelete = !isSubsetOfPrimaryKeyColumns(indexSettings.KeyColumns)
-                    && settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
-                    && settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT;
-
-                if (needAdditionalDelete) {
+                if (indexSettings.NeedDeleteOldRows) {
                     writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
                         deleteCookie,
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
@@ -3271,7 +3424,7 @@ public:
                 }
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                    .DeleteKeysIndexes = needAdditionalDelete
+                    .DeleteKeysIndexes = indexSettings.NeedDeleteOldRows
                                 ? GetIndexes(
                                     settings.Columns,
                                     settings.LookupColumns,
@@ -3302,60 +3455,91 @@ public:
                 });
 
                 if (indexSettings.IsUniq) {
-                    auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
-                    auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
-                    lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
-                        .KeyIndexes = GetIndexes( // inserted secondary keys
-                            settings.Columns,
-                            settings.LookupColumns,
-                            TConstArrayRef{
-                                indexSettings.KeyColumns.data(),
-                                indexSettings.KeyPrefixSize},
-                            /* preferAdditionalInputColumns */ false),
-                        .FullKeyIndexes = GetIndexes( // full secondary table keys
-                            settings.Columns,
-                            settings.LookupColumns,
-                            indexSettings.KeyColumns,
-                            /* preferAdditionalInputColumns */ false),
-                        .PrimaryInFullKeyIndexes = [&](){ // primary key in full secondary table keys
-                            THashMap<TStringBuf, ui32> ColumnNameToIndex;
-                            for (ui32 index = 0; index < indexSettings.KeyColumns.size(); ++index) {
-                                ColumnNameToIndex[indexSettings.KeyColumns[index].GetName()] = index;
-                            }
-                            std::vector<ui32> result(settings.KeyColumns.size());
-                            for (ui32 index = 0; index < settings.KeyColumns.size(); ++index) {
-                                result[index] = ColumnNameToIndex[settings.KeyColumns[index].GetName()];
-                            }
-                            return result;
-                        }(),
-                        .OldKeyIndexes = GetIndexes( // old secondary keys
+                    if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+                        // Lock Unique Index
+                        auto& indexLockInfo = LockInfos.at(indexSettings.TableId.PathId);
+                        auto& lockActor = indexLockInfo.Actors.at(indexSettings.TableId.PathId).LockActor;
+
+                        locks.emplace_back(TKqpWriteTask::TPathLockInfo{
+                            .LockActor = lockActor,
+                        });
+
+                        lockActor->SetLockSettings(
+                            token.Cookie,
+                            indexSettings.KeyColumns);
+                    }
+
+                    {
+                        // Lookup Unique Index
+                        auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
+                        auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
+                        lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
+                            .KeyIndexes = GetIndexes( // inserted secondary keys
                                 settings.Columns,
                                 settings.LookupColumns,
                                 TConstArrayRef{
                                     indexSettings.KeyColumns.data(),
                                     indexSettings.KeyPrefixSize},
-                                /* preferAdditionalInputColumns */ true),
-                        .Lookup = lookupActor,
-                    });
+                                /* preferAdditionalInputColumns */ false),
+                            .FullKeyIndexes = GetIndexes( // full secondary table keys
+                                settings.Columns,
+                                settings.LookupColumns,
+                                indexSettings.KeyColumns,
+                                /* preferAdditionalInputColumns */ false),
+                            .PrimaryInFullKeyIndexes = [&](){ // primary key in full secondary table keys
+                                THashMap<TStringBuf, ui32> ColumnNameToIndex;
+                                for (ui32 index = 0; index < indexSettings.KeyColumns.size(); ++index) {
+                                    ColumnNameToIndex[indexSettings.KeyColumns[index].GetName()] = index;
+                                }
+                                std::vector<ui32> result(settings.KeyColumns.size());
+                                for (ui32 index = 0; index < settings.KeyColumns.size(); ++index) {
+                                    result[index] = ColumnNameToIndex[settings.KeyColumns[index].GetName()];
+                                }
+                                return result;
+                            }(),
+                            .OldKeyIndexes = GetIndexes( // old secondary keys
+                                    settings.Columns,
+                                    settings.LookupColumns,
+                                    TConstArrayRef{
+                                        indexSettings.KeyColumns.data(),
+                                        indexSettings.KeyPrefixSize},
+                                    /* preferAdditionalInputColumns */ true),
+                            .Lookup = lookupActor,
+                            .SkipMissingRows = false,
+                        });
 
-                    lookupActor->SetLookupSettings(
-                        token.Cookie,
-                        indexSettings.KeyPrefixSize,
-                        indexSettings.KeyColumns,
-                        {});
+                        lookupActor->SetLookupSettings(
+                            token.Cookie,
+                            indexSettings.KeyPrefixSize,
+                            indexSettings.KeyColumns,
+                            {});
+                    }
                 }
             }
+            if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+                auto& lockInfo = LockInfos.at(settings.TableId.PathId);
+                auto& lockActor = lockInfo.Actors.at(settings.TableId.PathId).LockActor;
 
-            if (!settings.LookupColumns.empty()) {
+                locks.emplace_back(TKqpWriteTask::TPathLockInfo{
+                    .LockActor = lockActor,
+                });
+
+                lockActor->SetLockSettings(
+                    token.Cookie,
+                    settings.KeyColumns);
+            }
+
+            if (settings.NeedLookup) {
                 AFL_ENSURE(!settings.IsOlap);
-                auto lookupInfo = LookupInfos.at(settings.TableId.PathId);
-                auto lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
+                auto& lookupInfo = LookupInfos.at(settings.TableId.PathId);
+                auto& lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
                 lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
                     .KeyIndexes = {},
                     .FullKeyIndexes = {},
                     .PrimaryInFullKeyIndexes = {},
                     .OldKeyIndexes = {},
                     .Lookup = lookupActor,
+                    .SkipMissingRows = settings.SkipMissingRows,
                 });
 
                 lookupActor->SetLookupSettings(
@@ -3365,12 +3549,13 @@ public:
                     settings.LookupColumns);
             }
 
+            AFL_ENSURE(!settings.SkipMissingRows
+                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
                 token.Cookie,
-                (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL
-                    || (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE && !settings.LookupColumns.empty()))
-                    ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT // Avoid unnecessary reads at datashard if we have already done lookup
-                    : GetOperation(settings.OperationType),
+                GetOperation(settings.OperationType),
                 settings.KeyColumns,
                 settings.Columns,
                 CountLocalDefaults(
@@ -3434,6 +3619,7 @@ public:
                             settings.DefaultColumns,
                             settings.Columns,
                             settings.LookupColumns),
+                    std::move(locks),
                     Alloc
                 });
 
@@ -3882,10 +4068,25 @@ public:
         }
         bool kafkaTransaction = TxManager->GetTopicOperations().HasKafkaOperations();
 
+        THashSet<ui64> topicTabletPeers;
+        bool omitPeerTopicTablets = false;
+        if (!isImmediateCommit) {
+            const auto& topicOps = TxManager->GetTopicOperations();
+            omitPeerTopicTablets = topicOps.ShouldOmitPeerTopicTabletsForPredicateExchange();
+            if (omitPeerTopicTablets) {
+                for (ui64 id : topicOps.GetReceivingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+                for (ui64 id : topicOps.GetSendingTabletIds()) {
+                    topicTabletPeers.insert(id);
+                }
+            }
+        }
+
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            FillTopicsCommit(isImmediateCommit, transaction, TxManager);
+            FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId, omitPeerTopicTablets, topicTabletPeers);
 
             if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();
@@ -4011,6 +4212,10 @@ public:
     }
 
     void Clear() {
+        ForEachLockActor([](IKqpBufferTableLock* actor, const TActorId) {
+            actor->Terminate();
+        });
+
         ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
             actor->Terminate();
         });
@@ -4024,6 +4229,7 @@ public:
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             WriteInfos.clear();
             LookupInfos.clear();
+            LockInfos.clear();
             WriteTasks.clear();
             HolderFactory.reset();
             TypeEnv.reset();
@@ -4240,7 +4446,9 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            TStringBuilder()
+                << "Failed to deliver message to tablet " << ev->Get()->TabletId << ". "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 
@@ -4260,7 +4468,10 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            TStringBuilder()
+                << "Failed to deliver message to tablet " << ev->Get()->TabletId
+                << " during prepare phase. "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 
@@ -4272,7 +4483,9 @@ public:
                 ReplyError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message to coordinator.",
+                    TStringBuilder()
+                        << "Failed to deliver commit message to coordinator "
+                        << ev->Get()->TabletId << ".",
                     {});
                 return;
             }
@@ -4285,7 +4498,9 @@ public:
             ReplyError(
                     NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                    TStringBuilder() << "State of operation is unknown. Failed to deviler message to coordinator.",
+                    TStringBuilder()
+                        << "Transaction state unknown: lost connection to coordinator "
+                        << ev->Get()->TabletId << ".",
                     {});
             return;
         }
@@ -4303,7 +4518,10 @@ public:
         ReplyError(
             NYql::NDqProto::StatusIds::UNDETERMINED,
             NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-            TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
+            TStringBuilder()
+                << "Transaction state unknown: failed to deliver message to tablet "
+                << ev->Get()->TabletId << ". "
+                << GetPathes(ev->Get()->TabletId) << ".",
             {});
     }
 
@@ -4367,6 +4585,10 @@ public:
         AFL_ENSURE(AfterWaitTasksState);
         auto afterWaitTasksState = std::move(*AfterWaitTasksState);
         AfterWaitTasksState = std::nullopt;
+
+        ForEachLockActor([](IKqpBufferTableLock* actor, const TActorId) {
+            actor->Unlink();
+        });
 
         ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
             actor->Unlink();
@@ -4640,7 +4862,7 @@ public:
             CollectTliStats(ev->Get()->Record);
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
-            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager, &ev->Get()->Record);
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager);
             if (TryDeferLocksBrokenError(ev->Get()->Record.GetOrigin(), MakeLockIssues(TxManager, getIssues()))) {
                 return;
             }
@@ -5081,6 +5303,9 @@ public:
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->FillStats(&result);
         });
+        ForEachLockActor([&](IKqpBufferTableLock* actor, const TActorId) {
+            actor->FillStats(&result);
+        });
         ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
             actor->FillStats(&result);
         });
@@ -5138,6 +5363,22 @@ public:
         for (auto& [_, lookupInfo] : LookupInfos) {
             for (auto& [_, actorInfo] : lookupInfo.Actors) {
                 func(actorInfo.LookupActor, actorInfo.Id);
+            }
+        }
+    }
+
+    void ForEachLockActor(std::function<void(IKqpBufferTableLock*, const TActorId)>&& func) {
+        for (auto& [_, lockInfo] : LockInfos) {
+            for (auto& [_, actorInfo] : lockInfo.Actors) {
+                func(actorInfo.LockActor, actorInfo.Id);
+            }
+        }
+    }
+
+    void ForEachLockActor(std::function<void(const IKqpBufferTableLock*, const TActorId)>&& func) const {
+        for (auto& [_, lockInfo] : LockInfos) {
+            for (auto& [_, actorInfo] : lockInfo.Actors) {
+                func(actorInfo.LockActor, actorInfo.Id);
             }
         }
     }
@@ -5209,6 +5450,15 @@ private:
         THashMap<TPathId, TActorInfo> Actors;
     };
 
+    struct TLockInfo {
+        struct TActorInfo {
+            IKqpBufferTableLock* LockActor = nullptr;
+            TActorId Id;
+        };
+
+        THashMap<TPathId, TActorInfo> Actors;
+    };
+
     class TReturningConsumer : public TKqpWriteTask::IKqpReturningConsumer  {
     public:
         void Consume(IDataBatchPtr data) override {
@@ -5223,13 +5473,13 @@ private:
         std::vector<TAckMessage> FlushDelayedAcks() {
             AFL_ENSURE(!Acks.empty());
 
+            std::swap(Acks.back().OutputData, Data);
             for (auto& data : Acks.back().OutputData) {
                 if (data) {
                     data->DetachAlloc();
                 }
             }
 
-            std::swap(Acks.back().OutputData, Data);
             std::vector<TAckMessage> result;
             std::swap(result, Acks);
 
@@ -5252,6 +5502,7 @@ private:
 
     THashMap<TPathId, TWriteInfo> WriteInfos;
     THashMap<TPathId, TLookupInfo> LookupInfos;
+    THashMap<TPathId, TLockInfo> LockInfos;
     THashMap<ui64, TReturningConsumer> ReturningConsumers;
     THashMap<ui64, TKqpWriteTask> WriteTasks;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
@@ -5276,7 +5527,7 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     ui64 QuerySpanId = 0;
 };
 
@@ -5317,7 +5568,15 @@ public:
             Settings.GetWriteIndexes().end());
 
         TGuard guard(*Alloc);
-        if (Settings.GetIsOlap()) {
+        if (Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS) {
+            AFL_ENSURE(!Settings.GetNeedLookup());
+            AFL_ENSURE(!Settings.GetIsOlap());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> lookupColumnsMetadata(
+                Settings.GetLookupColumns().begin(),
+                Settings.GetLookupColumns().end());
+
+            Batcher = CreateStructOfRowsDataBatcher(columnsMetadata, lookupColumnsMetadata, std::move(writeIndex), Alloc);
+        } else if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
             Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
@@ -5455,6 +5714,7 @@ private:
                 .OperationType = Settings.GetType(),
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
+                .NeedLookup = Settings.GetNeedLookup(),
                 .LookupColumns = std::move(lookupColumnsMetadata),
                 .ReturningColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
                     Settings.GetReturningColumns().begin(),
@@ -5470,6 +5730,10 @@ private:
                 .Priority = Settings.GetPriority(),
                 .IsOlap = Settings.GetIsOlap(),
                 .DefaultColumns = std::move(defaultColumns),
+                .SkipMissingRows = Settings.GetSkipMissingRows(),
+                .InputRowFormat = Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS
+                    ? TWriteSettings::EInputRowFormat::StructOfRows
+                    : TWriteSettings::EInputRowFormat::Flat,
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .QuerySpanId = Settings.GetQuerySpanId(),
@@ -5494,6 +5758,8 @@ private:
                     .KeyPrefixSize = indexSettings.GetKeyPrefixSize(),
                     .Columns = std::move(columnsMetadata),
                     .IsUniq = indexSettings.GetIsUniq(),
+                    .OperationType = indexSettings.GetOperationType(),
+                    .NeedDeleteOldRows = indexSettings.GetNeedDeleteOldRows(),
                 });
             }
         }

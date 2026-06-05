@@ -356,6 +356,7 @@ public:
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             SFunc(TEvents::TEvWakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         default:
             Y_ABORT("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
@@ -364,11 +365,7 @@ public:
     }
 
     bool CheckAccessGetNodeConfig() const {
-        if (TBase::IsTokenRequired()) {
-            return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
-        }
-        // if token is not required access is granted
-        return true;
+        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
     }
 
 private:

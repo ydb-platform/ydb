@@ -17,7 +17,7 @@ namespace NYT::NYTree {
 void ValidateNodeType(
     const IConstNodePtr& node,
     const THashSet<ENodeType>& expectedTypes,
-    const TString& expectedTypesStringRepresentation);
+    const std::string& expectedTypesStringRepresentation);
 
 [[noreturn]] void ThrowNoSuchChildKey(const IConstNodePtr& node, TStringBuf key);
 [[noreturn]] void ThrowNoSuchChildKey(TStringBuf key);
@@ -27,7 +27,7 @@ void ValidateNodeType(
 [[noreturn]] void ThrowNoSuchCustomAttribute(TStringBuf key);
 [[noreturn]] void ThrowMethodNotSupported(
     TStringBuf method,
-    const std::optional<TString>& resolveType = {});
+    const std::optional<std::string>& resolveType = {});
 [[noreturn]] void ThrowMethodNotSupportedForAttributes(TStringBuf method);
 [[noreturn]] void ThrowCannotHaveChildren(const IConstNodePtr& node);
 [[noreturn]] void ThrowAlreadyExists(const IConstNodePtr& node);

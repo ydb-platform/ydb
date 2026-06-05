@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 
 #include "phantom_flags.h"
+#include "phantom_flag_storage_data.h"
 #include "phantom_flag_storage_snapshot.h"
 #include "phantom_flag_thresholds.h"
 
@@ -19,25 +21,29 @@ class TPhantomFlagStorageState {
 public:
     TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> slCtx);
 
+    void InitializePersistent(TPhantomFlagStorageData&& data, TActorId syncLogKeeperId,
+            TActorId chunkKeeperId, ui32 appendBlockSize);
     void StartBuilding();
-
-    // Adds DoNotKeep flags from synclog if needed
-    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit);
 
     // Add all DoNotKeep records from cut synclog snapshot up to sizeLimit
     // Note: in some obscure cases there may be two active builders simultaneously
     // It shouldn't make any difference though, we just add more flags
-    void FinishBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit);
+    void FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit);
+    void Recover(TPhantomFlagStorageSnapshot&& snapshot);
     void Deactivate();
 
-    // TODO: rebuild thresholds structure after restart. Either write it to VDisk log or rebuild from hull snapshot
-
     // Read everything from storage
-    TPhantomFlagStorageSnapshot GetSnapshot() const;
+    void RequestSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const;
     bool IsActive() const;
+    bool IsPersistent() const;
+    TActorId GetProcessorId() const;
+    TPhantomFlagThresholds GetThresholdsCopy();
 
     // Process sync data from neighbours, we do it to update Thresholds
     void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
+
+    // Adds DoNotKeep flags from synclog if needed (non-persistent mode only)
+    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit);
 
     ui64 EstimateFlagsMemoryConsumption() const;
     ui64 EstimateThresholdsMemoryConsumption() const;
@@ -45,6 +51,10 @@ public:
     void UpdateSyncedMask(const TSyncedMask& newSyncedMask);
 
     void UpdateMetrics();
+
+    std::optional<TPhantomFlagStorageData> GetPersistentData() const;
+    void UpdatePersistentData(std::optional<TPhantomFlagStorageData>&& data);
+    void Terminate();
 
 private:
     // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour
@@ -60,10 +70,15 @@ private:
     const TBlobStorageGroupType GType;
     TPhantomFlagThresholds Thresholds;
     TPhantomFlags StoredFlags;
-    ui64 MaxFlagsStoredCount;
+    ui64 MaxFlagsStoredCount = 0;
     TSyncedMask SyncedMask;
     bool Active = false;
     bool Building = false;
+
+    // persistent phantom flag storage
+    bool Persistent = false;
+    TActorId ProcessorId;
+    std::optional<TPhantomFlagStorageData> PersistentData;
 };
 
 } // namespace NSyncLog

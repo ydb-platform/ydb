@@ -193,17 +193,6 @@ BELONGS ya.make
         src/core/tsi/ssl/key_logging/ssl_key_logging.h [1:1]
         src/cpp/common/tls_certificate_verifier.cc [2:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 0e7dfde444a19e176393b344aaa268da
-BELONGS src/proto/grpc/reflection/v1/ya.make
-    License text:
-        // Copyright 2016 The gRPC Authors
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/proto/grpc/reflection/v1/reflection.proto [1:1]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 0f2ee97b72f8652f2f1b888d86348121
 BELONGS ya.make
     License text:
@@ -1309,17 +1298,6 @@ BELONGS third_party/address_sorting/ya.make
         third_party/address_sorting/address_sorting_windows.c [4:5]
         third_party/address_sorting/include/address_sorting/address_sorting.h [4:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 7b51323881f67ba78a30a266dca846ec
-BELONGS src/proto/grpc/channelz/ya.make
-    License text:
-        // Copyright 2018 The gRPC Authors
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/proto/grpc/channelz/channelz.proto [1:1]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 8275bc623b0a10a5254d8668bcbe64a3
 BELONGS ya.make
     License text:
@@ -1730,17 +1708,6 @@ BELONGS third_party/upb/ya.make
         third_party/upb/upb/wire/reader.h [2:2]
         third_party/upb/upb/wire/types.h [2:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f053023fe408f1896a456d1d28958df9
-BELONGS src/proto/grpc/health/v1/ya.make
-    License text:
-        // Copyright 2015 The gRPC Authors
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/proto/grpc/health/v1/health.proto [1:1]
-
 KEEP     COPYRIGHT_SERVICE_LABEL f32ed637dd1a3ebb1d9856c441fe2fcd
 BELONGS ya.make
     License text:
@@ -1753,7 +1720,7 @@ BELONGS ya.make
         src/core/lib/event_engine/nameser.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f8fb9a8ebe3e4b096090bd006ebb72cc
-BELONGS src/proto/grpc/reflection/v1alpha/ya.make ya.make
+BELONGS ya.make
     License text:
          * Copyright 2016 gRPC authors.
     Scancode info:
@@ -1890,4 +1857,3 @@ BELONGS src/proto/grpc/reflection/v1alpha/ya.make ya.make
         src/cpp/server/server_posix.cc [3:3]
         src/cpp/thread_manager/thread_manager.cc [3:3]
         src/cpp/thread_manager/thread_manager.h [3:3]
-        src/proto/grpc/reflection/v1alpha/reflection.proto [1:1]

@@ -49,9 +49,17 @@ struct TIndexBuildShardStatus {
     }
 };
 
-// TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
+// TODO(???) [thank you, mbkkt]
+// Separate it to 4 classes:
+// > TBuildColumnsInfo
+// > TBuildSecondaryInfo
+// > TBuildVectorInfo
+// > TSetColumnConstraintOperationInfo
+// with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
+
+    virtual ~TIndexBuildInfo() = default;
 
     enum class EState: ui32 {
         Invalid = 0,
@@ -173,6 +181,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 OverlapClusters = 0;
         double OverlapRatio = 0;
         bool IsPrefixed = false;
+        bool Adaptive = false;
 
         // progress
         enum EState : ui32 {
@@ -186,6 +195,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 Level = 1;
         ui32 Round = 0;
         bool IsEmpty = false;
+        bool NeedVectorAutodetect = false;
 
         EState State = Sample;
 
@@ -381,7 +391,7 @@ public:
             result << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
                 << ", Sample = " << Sample.State
-                << ", Clusters = " << Clusters->GetClusters().size() << " }, ";
+                << ", Clusters = " << (Clusters ? Clusters->GetClusters().size() : 0) << " }, ";
         }
 
         result
@@ -598,10 +608,11 @@ public:
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     TString createError;
-                    Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
+                    Y_ENSURE(NKikimr::NKMeans::ValidateSettingsPartial(desc.settings(), createError), createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
+                    indexInfo->KMeans.Adaptive = desc.settings().adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
                         ? desc.settings().overlap_clusters()
@@ -610,7 +621,6 @@ public:
                         ? desc.settings().overlap_ratio()
                         : NTableIndex::NKMeans::DefaultOverlapRatio;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
-                    Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
@@ -619,6 +629,8 @@ public:
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomFilterDescription:
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomNGrammFilterDescription:
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;
@@ -688,42 +700,46 @@ public:
             << " for index type " << static_cast<int>(IndexType);
     }
 
-    bool IsBuildSecondaryIndex() const {
+    virtual bool IsBuildSecondaryIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryIndex;
     }
 
-    bool IsBuildSecondaryUniqueIndex() const {
+    virtual bool IsBuildSecondaryUniqueIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
-    bool IsBuildPrefixedVectorIndex() const {
+    virtual bool IsBuildPrefixedVectorIndex() const {
         return BuildKind == EBuildKind::BuildPrefixedVectorIndex;
     }
 
-    bool IsBuildVectorIndex() const {
+    virtual bool IsBuildVectorIndex() const {
         return BuildKind == EBuildKind::BuildVectorIndex || IsBuildPrefixedVectorIndex();
     }
 
-    bool IsBuildFulltextIndex() const {
+    virtual bool IsBuildFulltextIndex() const {
         return BuildKind == EBuildKind::BuildFulltext;
     }
 
-    bool IsBuildIndex() const {
+    virtual bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
 
-    bool IsBuildColumns() const {
+    virtual bool IsBuildColumns() const {
         return BuildKind == EBuildKind::BuildColumns;
     }
 
-    bool IsPreparing() const {
+    virtual bool IsSetColumnConstraint() const {
+        return false;
+    }
+
+    virtual bool IsPreparing() const {
         return State == EState::AlterMainTable ||
                State == EState::Locking ||
                State == EState::GatheringStatistics ||
                State == EState::Initiating;
     }
 
-    bool IsTransferring() const {
+    virtual bool IsTransferring() const {
         return State == EState::Filling ||
                State == EState::DropBuild ||
                State == EState::CreateBuild ||
@@ -731,28 +747,28 @@ public:
                State == EState::AlterSequence;
     }
 
-    bool IsApplying() const {
+    virtual bool IsApplying() const {
         return State == EState::Applying ||
                State == EState::Unlocking;
     }
 
-    bool IsDone() const {
+    virtual bool IsDone() const {
         return State == EState::Done;
     }
 
-    bool IsCancelled() const {
+    virtual bool IsCancelled() const {
         return State == EState::Cancelled || State == EState::Rejected;
     }
 
-    bool IsFinished() const {
+    virtual bool IsFinished() const {
         return IsDone() || IsCancelled();
     }
 
-    bool IsValidatingUniqueIndex() const {
+    virtual bool IsValidatingUniqueIndex() const {
         return SubState == ESubState::UniqIndexValidation || SubState == ESubState::UniqConsistentValidation;
     }
 
-    bool IsFlatRelevanceFulltext() const {
+    virtual bool IsFlatRelevanceFulltext() const {
         if (BuildKind != EBuildKind::BuildFulltext) {
             return false;
         }
@@ -833,6 +849,49 @@ public:
 
 };
 
+struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
+    enum class EOperationState: ui32 {
+        Invalid = 0,
+        Locking = 10,
+        LockNullWrites = 20,
+        Validate = 30,
+        UnlockNullWrites = 40,
+        Unlocking = 60,
+        Done = 200
+    };
+
+    EOperationState OperationState = EOperationState::Invalid;
+    std::vector<std::string> NotNullColumns;
+
+    TTxId LockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool LockNullWritesTxDone = false;
+
+    TTxId UnlockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool UnlockNullWritesTxDone = false;
+
+    THashMap<TShardIdx, TIndexBuildShardStatus> ValidationShards;
+
+    TDeque<TShardIdx> ToValidateShards;
+    THashSet<TShardIdx> InProgressValidationShards;
+    TVector<TShardIdx> DoneValidationShards;
+
+    TTxId ValidationSnapshotTxId = TTxId();
+    TStepId ValidationSnapshotStep = TStepId();
+
+    ui32 MaxInProgressValidationShards = 10;
+
+    bool ValidationFailed = false;  // true if any shard found NULL values
+
+    bool IsDone() const override {
+        return OperationState == EOperationState::Done;
+    }
+
+    bool IsSetColumnConstraint() const override {
+        return true;
+    }
+};
 
 }
 

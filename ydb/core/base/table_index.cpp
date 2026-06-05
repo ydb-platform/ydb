@@ -138,6 +138,12 @@ NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationCo
         : NKikimrSchemeOp::EIndexTypeGlobal;
 }
 
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexAlteringConfig& indexAlter) {
+    return indexAlter.HasType()
+        ? indexAlter.GetType()
+        : NKikimrSchemeOp::EIndexTypeGlobal;
+}
+
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
     return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
 }
@@ -168,6 +174,24 @@ NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase ty
     const auto result = TryConvertIndexType(type);
     Y_ENSURE(result);
     return *result;
+}
+
+bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
+    switch (type) {
+        case Ydb::Table::TableIndex::kGlobalIndex:
+        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        case Ydb::Table::TableIndex::kGlobalJsonIndex:
+        case Ydb::Table::TableIndex::TYPE_NOT_SET:
+            return false;
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+        case Ydb::Table::TableIndex::kLocalMinMaxIndex:
+            return true;
+    }
 }
 
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {

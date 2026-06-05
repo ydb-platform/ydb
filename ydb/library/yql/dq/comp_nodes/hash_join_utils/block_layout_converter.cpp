@@ -541,10 +541,61 @@ private:
     std::shared_ptr<arrow::DataType> ArrowType_;
 };
 
+class TVariantColumnDataExtractor : public IColumnDataExtractor {
+public:
+    TVariantColumnDataExtractor(std::vector<IColumnDataExtractor::TPtr> children, const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
+        Y_UNUSED(children, type, pool);
+    }
+
+    TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
+        Y_UNUSED(array);
+        NotImplemented();
+    }
+
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) override {
+        Y_UNUSED(array, nullBitmapRelocationBuffer);
+        NotImplemented();
+    }
+
+    TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+        Y_UNUSED(array);
+        NotImplemented();
+    }
+
+    TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
+        Y_UNUSED(array);
+        NotImplemented();
+    }
+
+    ui32 GetElementSize() override {
+        NotImplemented();
+    }
+
+    NPackedTuple::EColumnSizeType GetElementSizeType() override {
+        NotImplemented();
+    }
+
+    std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+        Y_UNUSED(bytes, len);
+        NotImplemented();
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        Y_UNUSED(extractors);
+        NotImplemented();
+    }
+
+private:
+    [[noreturn]] void NotImplemented() const {
+        THROW yexception() << "TVariantColumnDataExtractor: Variant type is not supported in block layout converter";
+    }
+};
+
 // ------------------------------------------------------------
 
 struct TColumnDataExtractorTraits {
     using TResult = IColumnDataExtractor;
+    using TVariant = TVariantColumnDataExtractor;
     template <bool Nullable>
     using TTuple = TTupleColumnDataExtractor<Nullable>;
     template <typename T, bool Nullable>

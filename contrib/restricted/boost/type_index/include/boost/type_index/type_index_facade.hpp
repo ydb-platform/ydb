@@ -1,5 +1,5 @@
 //
-// Copyright 2013-2025 Antony Polukhin.
+// Copyright 2013-2026 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -42,7 +42,7 @@ BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 /// class stl_type_index: public type_index_facade<stl_type_index, std::type_info> 
 /// {
 /// public:
-///     typedef std::type_info type_info_t;
+///     using type_info_t = std::type_info;
 /// private:
 ///     const type_info_t* data_;
 ///
@@ -70,7 +70,7 @@ private:
     }
     /// @endcond
 public:
-    typedef TypeInfo                                type_info_t;
+    using type_info_t = TypeInfo;
 
     /// \b Override: This function \b may be redefined in Derived class. Overrides \b must not throw.
     /// \return Name of a type. By default returns Derived::raw_name().

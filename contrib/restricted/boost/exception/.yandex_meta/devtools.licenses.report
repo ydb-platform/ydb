@@ -71,7 +71,7 @@ BELONGS ya.make
 
 KEEP     BSL-1.0              f978f4f2508f8a0c5f62f3f5ecedc8ce
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/exception/all.hpp at line 4, include/boost/exception/current_exception_cast.hpp at line 4, include/boost/exception/detail/clone_current_exception.hpp at line 4, include/boost/exception/detail/error_info_impl.hpp at line 4, include/boost/exception/detail/exception_ptr.hpp at line 5, include/boost/exception/detail/is_output_streamable.hpp at line 4, include/boost/exception/detail/object_hex_dump.hpp at line 4, include/boost/exception/detail/shared_ptr.hpp at line 4, include/boost/exception/detail/type_info.hpp at line 4, include/boost/exception/diagnostic_information.hpp at line 4, include/boost/exception/enable_current_exception.hpp at line 4, include/boost/exception/enable_error_info.hpp at line 4, include/boost/exception/errinfo_api_function.hpp at line 4, include/boost/exception/errinfo_at_line.hpp at line 4, include/boost/exception/errinfo_errno.hpp at line 4, include/boost/exception/errinfo_file_handle.hpp at line 4, include/boost/exception/errinfo_file_name.hpp at line 4, include/boost/exception/errinfo_file_open_mode.hpp at line 4, include/boost/exception/errinfo_nested_exception.hpp at line 4, include/boost/exception/errinfo_type_info_name.hpp at line 4, include/boost/exception/error_info.hpp at line 4, include/boost/exception/get_error_info.hpp at line 4, include/boost/exception/info.hpp at line 4, include/boost/exception/info_tuple.hpp at line 4, include/boost/exception/to_string.hpp at line 4, include/boost/exception/to_string_stub.hpp at line 4, include/boost/exception_ptr.hpp at line 4, src/clone_current_exception_non_intrusive.cpp at line 4
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/exception/all.hpp at line 4, include/boost/exception/current_exception_cast.hpp at line 4, include/boost/exception/detail/clone_current_exception.hpp at line 4, include/boost/exception/detail/encoder.hpp at line 4, include/boost/exception/detail/error_info_impl.hpp at line 4, include/boost/exception/detail/exception_ptr.hpp at line 5, include/boost/exception/detail/is_output_streamable.hpp at line 4, include/boost/exception/detail/object_hex_dump.hpp at line 4, include/boost/exception/detail/shared_ptr.hpp at line 4, include/boost/exception/detail/type_info.hpp at line 4, include/boost/exception/diagnostic_information.hpp at line 4, include/boost/exception/enable_current_exception.hpp at line 4, include/boost/exception/enable_error_info.hpp at line 4, include/boost/exception/errinfo_api_function.hpp at line 4, include/boost/exception/errinfo_at_line.hpp at line 4, include/boost/exception/errinfo_errno.hpp at line 4, include/boost/exception/errinfo_file_handle.hpp at line 4, include/boost/exception/errinfo_file_name.hpp at line 4, include/boost/exception/errinfo_file_open_mode.hpp at line 4, include/boost/exception/errinfo_nested_exception.hpp at line 4, include/boost/exception/errinfo_type_info_name.hpp at line 4, include/boost/exception/error_info.hpp at line 4, include/boost/exception/get_error_info.hpp at line 4, include/boost/exception/info.hpp at line 4, include/boost/exception/info_tuple.hpp at line 4, include/boost/exception/serialization/boost_json_encoder.hpp at line 4, include/boost/exception/serialization/nlohmann_json_encoder.hpp at line 4, include/boost/exception/to_string.hpp at line 4, include/boost/exception/to_string_stub.hpp at line 4, include/boost/exception_ptr.hpp at line 4, src/clone_current_exception_non_intrusive.cpp at line 4
     License text:
         //Distributed under the Boost Software License, Version 1.0. (See accompanying
         //file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -84,6 +84,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/exception/all.hpp at 
         include/boost/exception/all.hpp [3:4]
         include/boost/exception/current_exception_cast.hpp [3:4]
         include/boost/exception/detail/clone_current_exception.hpp [3:4]
+        include/boost/exception/detail/encoder.hpp [3:4]
         include/boost/exception/detail/error_info_impl.hpp [3:4]
         include/boost/exception/detail/exception_ptr.hpp [4:5]
         include/boost/exception/detail/is_output_streamable.hpp [3:4]
@@ -105,6 +106,8 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/exception/all.hpp at 
         include/boost/exception/get_error_info.hpp [3:4]
         include/boost/exception/info.hpp [3:4]
         include/boost/exception/info_tuple.hpp [3:4]
+        include/boost/exception/serialization/boost_json_encoder.hpp [3:4]
+        include/boost/exception/serialization/nlohmann_json_encoder.hpp [3:4]
         include/boost/exception/to_string.hpp [3:4]
         include/boost/exception/to_string_stub.hpp [3:4]
         include/boost/exception_ptr.hpp [3:4]

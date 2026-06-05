@@ -197,6 +197,7 @@ TFingerprintCounts CountTaskFingerprintsFromFiles(
                     TYtBlockIteratorSettings{},
                     TVector<ESortOrder>(keyColumns.size(), ESortOrder::Ascending),
                     fmr.IsFirstRowInclusive,
+                    fmr.IsLastRowInclusive,
                     fmr.FirstRowKeys,
                     fmr.LastRowKeys
                 ));

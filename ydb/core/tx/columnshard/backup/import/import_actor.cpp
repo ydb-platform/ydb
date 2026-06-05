@@ -1,4 +1,5 @@
 #include "import_actor.h"
+
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
@@ -11,18 +12,22 @@ class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShar
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     const ui64 TxId;
+
 protected:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         Self->GetProgressTxController().FinishProposeOnExecute(TxId, txc);
         return true;
     }
+
     virtual void Complete(const TActorContext& ctx) override {
         Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
     }
+
 public:
     TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId)
         : TBase(self)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 };
 
@@ -57,7 +62,7 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*writeEvent);
     TString data = blobsSplittedConclusion.GetResult()[0].GetData();
     writer.AddDataToPayload(std::move(data));
-            
+
     auto* operation = writeEvent->Record.AddOperations();
     operation->SetPayloadSchema(NArrow::SerializeSchema(*ev->Get()->Data->schema()));
     operation->SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE);
@@ -77,8 +82,7 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
 }
 
 void TImportActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to",
-                                                                        (ui32)to);
+    AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
     Stage = to;
 }
 
@@ -86,17 +90,19 @@ void TImportActor::OnTxCompleted(const ui64 /*txId*/) {
     Session->FinishActor();
 }
 
-void TImportActor::OnBootstrap(const TActorContext & /*ctx*/) {
+void TImportActor::OnBootstrap(const TActorContext& /*ctx*/) {
     const auto& restoreTask = ImportSession->GetTask().GetRestoreTask();
     auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
-    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(SelfId(), 0, restoreTask, NKikimr::NDataShard::TTableInfo{0, userTable}, ImportSession->GetTask().GetColumns());
+    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
+        SelfId(), 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
     ImportActorId = Register(importActor.release());
     SwitchStage(EStage::Initialization, EStage::WaitData);
     Become(&TImportActor::StateFunc);
 }
 
-TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter> &adapter)
-    : TBase(bgSession, adapter) {
+TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter)
+    : TBase(bgSession, adapter)
+{
     ImportSession = bgSession->GetLogicAsVerifiedPtr<NImport::TSession>();
 }
 
@@ -110,4 +116,4 @@ void TImportActor::OnSessionProgressSaved() {
     }
 }
 
-} // namespace NKikimr::NOlap::NImport
+}   // namespace NKikimr::NOlap::NImport

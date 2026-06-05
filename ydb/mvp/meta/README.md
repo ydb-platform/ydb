@@ -24,3 +24,4 @@ Generic auth/access_service_type examples are shared in:
 Meta-specific examples from `examples/`:
 
 - `examples/config.yaml` - minimal `generic` + `meta` block using `meta_database_token_name: federated-token`.
+- `examples/support_links_config.yaml` - support links example with `grafana/dashboard` and `grafana/dashboard/search` sources. Requires `meta_database_token_name` and `grafana.endpoint`.

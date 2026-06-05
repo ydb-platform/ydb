@@ -127,4 +127,4 @@ TComplexTypeYsonScanner CreateDictScanner(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT:NComplexTypes
+} // namespace NYT::NComplexTypes

@@ -2,9 +2,9 @@
 
 PY3_LIBRARY()
 
-VERSION(3.13.12)
+VERSION(3.13.13)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.13.12.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.13.13.tar.gz)
 
 LICENSE(Python-2.0)
 

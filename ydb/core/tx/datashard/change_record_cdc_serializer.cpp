@@ -2,11 +2,13 @@
 #include "change_record.h"
 #include "type_serialization.h"
 
+#include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -100,19 +102,6 @@ public:
 
 class TJsonSerializer: public TBaseSerializer {
     friend class TChangeRecord; // used in GetPartitionKey()
-
-    static NJson::TJsonWriterConfig DefaultJsonConfig() {
-        constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
-        constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
-        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
-        return NJson::TJsonWriterConfig {
-            .DoubleNDigits = doubleNDigits,
-            .FloatNDigits = floatNDigits,
-            .FloatToStringMode = floatMode,
-            .ValidateUtf8 = false,
-            .WriteNanAsString = true,
-        };
-    }
 
 protected:
     static auto ParseBody(const TString& protoBody) {
@@ -277,7 +266,7 @@ protected:
 public:
     explicit TJsonSerializer(const TChangeRecordSerializerOpts& opts)
         : TBaseSerializer(opts)
-        , JsonConfig(DefaultJsonConfig())
+        , JsonConfig(NFormats::DefaultJsonWriterConfig())
     {}
 
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {

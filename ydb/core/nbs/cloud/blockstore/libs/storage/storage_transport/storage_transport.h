@@ -6,6 +6,8 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
+#include <functional>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,6 +49,13 @@ public:
     using TEvListPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult;
 
+    // Callback type for WriteToManyPBuffers: called once per response received.
+    // May be called multiple times if the underlying transport delivers more
+    // than one response for the same request.
+    using TWriteToManyPBuffersCallback = std::function<void(
+        TEvWriteToManyPersistentBuffersResult,
+        std::shared_ptr<NWilson::TSpan>)>;
+
     IStorageTransport() = default;
 
     virtual ~IStorageTransport() = default;
@@ -60,14 +69,14 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvReadResult> ReadFromDDisk(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvWritePersistentBufferResult> WriteToPBuffer(
         const THostConnection& connection,
@@ -75,10 +84,12 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
-    virtual NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
-    WriteToManyPBuffers(
+    // Sends a write request to many persistent buffers.
+    // The callback is invoked once per response received from the transport
+    // layer (may be called more than once for the same request).
+    virtual void WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,
@@ -86,14 +97,15 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        std::shared_ptr<NWilson::TSpan> span,
+        TWriteToManyPBuffersCallback callback) = 0;
 
     virtual NThreading::TFuture<TEvWriteResult> WriteToDDisk(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvSyncWithPersistentBufferResult>
     SyncWithPBuffer(
@@ -101,14 +113,14 @@ public:
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
     EraseFromPBuffer(
         const THostConnection& connection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
-        NWilson::TSpan& span) = 0;
+        NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvListPersistentBufferResult>
     ListPBufferEntries(const THostConnection& connection) = 0;

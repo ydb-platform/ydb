@@ -12,11 +12,11 @@ FROM (
         c_first_name,
         d_date
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/date_dim`
+        `/Root/test/ds/date_dim` as date_dim
     ,
-        `/Root/test/ds/customer`
+        `/Root/test/ds/customer` as customer
     WHERE
         store_sales.ss_sold_date_sk == date_dim.d_date_sk
         AND store_sales.ss_customer_sk == customer.c_customer_sk
@@ -27,11 +27,11 @@ FROM (
         c_first_name,
         d_date
     FROM
-        `/Root/test/ds/catalog_sales`
+        `/Root/test/ds/catalog_sales` as catalog_sales
     ,
-        `/Root/test/ds/date_dim`
+        `/Root/test/ds/date_dim` as date_dim
     ,
-        `/Root/test/ds/customer`
+        `/Root/test/ds/customer` as customer
     WHERE
         catalog_sales.cs_sold_date_sk == date_dim.d_date_sk
         AND catalog_sales.cs_bill_customer_sk == customer.c_customer_sk
@@ -42,14 +42,14 @@ FROM (
         c_first_name,
         d_date
     FROM
-        `/Root/test/ds/web_sales`
+        `/Root/test/ds/web_sales` as web_sales
     ,
-        `/Root/test/ds/date_dim`
+        `/Root/test/ds/date_dim` as date_dim
     ,
-        `/Root/test/ds/customer`
+        `/Root/test/ds/customer` as customer
     WHERE
         web_sales.ws_sold_date_sk == date_dim.d_date_sk
         AND web_sales.ws_bill_customer_sk == customer.c_customer_sk
         AND d_month_seq BETWEEN 1212 AND 1212 + 11
-) hot_cust
+) AS hot_cust
 LIMIT 100;

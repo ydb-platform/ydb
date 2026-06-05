@@ -300,6 +300,10 @@ boost::winapi::NTSTATUS_ nt_create_file_handle_at
 
 //! Returns status of the file identified by an open handle. The path \a p is used to report errors and infer file permissions.
 filesystem::file_status status_by_handle(HANDLE h, path const& p, system::error_code* ec);
+//! symlink_status() implementation
+filesystem::file_status symlink_status_impl(path const& p, system::error_code* ec);
+//! status() implementation
+filesystem::file_status status_impl(path const& p, system::error_code* ec);
 
 } // namespace detail
 } // namespace filesystem

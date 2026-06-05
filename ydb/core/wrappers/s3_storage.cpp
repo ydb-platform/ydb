@@ -22,7 +22,15 @@ using namespace Aws::Utils::Stream;
 
 namespace {
 
-static const TString OkCode = "OK";
+static const TString OkStatusName = "OK";
+static const TString UnknownStatusName = "Unknown";
+static const TString StatusCountersGroup = "status";
+static const TString HttpCodeCountersGroup = "http_code";
+static const TString AwsCodeCountersGroup = "aws_code";
+static const TString RequestsCountCounter = "RequestsCount";
+static const TString BytesWrittenCounter = "BytesWritten";
+static const TString BytesReadCounter = "BytesRead";
+static const TString LatencyCounter = "LatencyMs";
 
 NMonitoring::IHistogramCollectorPtr GetLatencyCollector() {
     return NMonitoring::ExplicitHistogram({
@@ -73,14 +81,17 @@ protected:
         }
 
         // Error code: requests per second
-        TString errCode;
+        NMonitoring::TCounterForPtr* requestsCount = nullptr;
         if (outcome.IsSuccess()) {
-            errCode = OkCode;
+            requestsCount = Counters->GetSuccessRequestsCountCounter();
         } else {
-            errCode = TString(outcome.GetError().GetExceptionName());
+            requestsCount = Counters->GetRequestsCountCounter(
+                TString(outcome.GetError().GetExceptionName()),
+                static_cast<int>(outcome.GetError().GetResponseCode()),
+                static_cast<int>(outcome.GetError().GetErrorType()));
         }
-        if (auto* code = Counters->GetCodeCounter(errCode)) {
-            ++*code;
+        if (requestsCount) {
+            ++*requestsCount;
         }
 
         // Latency
@@ -88,13 +99,13 @@ protected:
             hist->Collect((TInstant::Now() - Start).MilliSeconds());
         }
 
-        if (BytesWritten) {
+        if (outcome.IsSuccess() && BytesWritten) {
             if (auto* bw = Counters->GetBytesWritten()) {
                 *bw += *BytesWritten;
             }
         }
 
-        if (BytesRead) {
+        if (outcome.IsSuccess() && BytesRead) {
             if (auto* br = Counters->GetBytesRead()) {
                 *br += *BytesRead;
             }
@@ -280,71 +291,67 @@ public:
 } // anonymous
 
 NMonitoring::THistogramCounter* TS3ExternalStorage::TS3RequestCounters::GetLatency() const {
-    if (LatencyHist) {
-        return LatencyHist.Get();
+    if (auto* hist = LatencyHist.load(std::memory_order_acquire)) {
+        return hist;
     }
     if (!RequestGroup) {
         return nullptr;
     }
 
-    Y_ABORT_UNLESS(Parent);
-    std::lock_guard<std::mutex> g(Parent->Mutex);
-    if (!LatencyHist) {
-        LatencyHist = RequestGroup->GetHistogram("LatencyMs", GetLatencyCollector());
-    }
-    return LatencyHist.Get();
+    auto* hist = RequestGroup->GetHistogram(LatencyCounter, GetLatencyCollector()).Get();
+    LatencyHist.store(hist, std::memory_order_release);
+    return hist;
 }
 
 NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesWritten() const {
-    if (BytesWritten) {
-        return BytesWritten.Get();
+    if (auto* counter = BytesWritten.load(std::memory_order_acquire)) {
+        return counter;
     }
     if (!RequestGroup) {
         return nullptr;
     }
 
-    Y_ABORT_UNLESS(Parent);
-    std::lock_guard<std::mutex> g(Parent->Mutex);
-    if (!BytesWritten) {
-        BytesWritten = RequestGroup->GetCounter("BytesWritten");
-    }
-    return BytesWritten.Get();
+    auto* counter = RequestGroup->GetCounter(BytesWrittenCounter, true).Get();
+    BytesWritten.store(counter, std::memory_order_release);
+    return counter;
 }
 
 NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesRead() const {
-    if (BytesRead) {
-        return BytesRead.Get();
+    if (auto* counter = BytesRead.load(std::memory_order_acquire)) {
+        return counter;
     }
     if (!RequestGroup) {
         return nullptr;
     }
 
-    Y_ABORT_UNLESS(Parent);
-    std::lock_guard<std::mutex> g(Parent->Mutex);
-    if (!BytesRead) {
-        BytesRead = RequestGroup->GetCounter("BytesRead");
-    }
-    return BytesRead.Get();
+    auto* counter = RequestGroup->GetCounter(BytesReadCounter, true).Get();
+    BytesRead.store(counter, std::memory_order_release);
+    return counter;
 }
 
-NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetCodeCounter(const TString& code) const {
-    if (code == OkCode && CodeOk) {
-        return CodeOk.Get();
-    }
+NMonitoring::TDynamicCounterPtr TS3ExternalStorage::TS3RequestCounters::GetStatusSubgroupImpl(const TString& statusName, int httpResponseCode, int awsErrorType) const {
+    return RequestGroup
+        ->GetSubgroup(StatusCountersGroup, statusName ? statusName : UnknownStatusName)
+        ->GetSubgroup(HttpCodeCountersGroup, ToString(httpResponseCode))
+        ->GetSubgroup(AwsCodeCountersGroup, ToString(awsErrorType));
+}
 
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetRequestsCountCounter(const TString& statusName, int httpResponseCode, int awsErrorType) const {
     if (!RequestGroup) {
         return nullptr;
     }
 
-    Y_ABORT_UNLESS(Parent);
-    std::lock_guard<std::mutex> g(Parent->Mutex);
-    if (code == OkCode) {
-        if (!CodeOk) {
-            CodeOk = RequestGroup->GetNamedCounter("code", code, true);
-        }
-        return CodeOk.Get();
+    return GetStatusSubgroupImpl(statusName, httpResponseCode, awsErrorType)->GetCounter(RequestsCountCounter, true).Get();
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetSuccessRequestsCountCounter() const {
+    if (auto* counter = SuccessRequests.load(std::memory_order_acquire)) {
+        return counter;
     }
-    return RequestGroup->GetNamedCounter("code", code, true).Get();
+
+    auto* counter = GetRequestsCountCounter(OkStatusName, 200, -1);
+    SuccessRequests.store(counter, std::memory_order_release);
+    return counter;
 }
 
 TS3ExternalStorage::~TS3ExternalStorage() {

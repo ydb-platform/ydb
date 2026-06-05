@@ -24,6 +24,12 @@ message Request {
         repeated SessionMetaItem meta = 2;
 
         string shared_secret_key = 3;
+
+        // Max protocol version the client supports (HTTP Accept-style). Unset or 0 = legacy only.
+        optional uint32 accept_protocol_version = 4;
+
+        // Proof of session binding for reconnect; used when negotiated protocol_version > 0.
+        bytes session_binding_proof = 5;
     }
 
     message MessageMetaItem {
@@ -66,6 +72,12 @@ message Response {
 
         // Application can skip all formed messages by seq_no upto last_seq_no - they are consumed by server.
         uint64 last_seq_no = 2;
+
+        // Negotiated protocol version (min(accept, server_max)). Unset or 0 = legacy session.
+        optional uint32 protocol_version = 3;
+
+        // Opaque token; client must send it back as session_binding_proof on reconnect (protocol v1+).
+        bytes session_binding_token = 4;
     }
 
     message Ack {
@@ -99,3 +111,8 @@ service UnifiedAgentService {
 //
 // Exactly once retries - when reconnect, client must provide previous session_id and same seq_no`s
 // for records - only in this case UnifiedAgent can dedup.
+//
+// Protocol negotiation (optional fields):
+// - Initialize.accept_protocol_version: max version the client supports (0 / unset = legacy only).
+// - Initialized.protocol_version: negotiated min(accept, server_max); unset/0 = legacy session.
+// - Initialized.session_binding_token + Initialize.session_binding_proof: v1+ session binding (opaque).

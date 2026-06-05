@@ -44,7 +44,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         values.append(numb)
         return ",".join(str(val) for val in values)
 
-    def _create_index(self, vector_type, table_name, target, prefixed, overlap):
+    def _create_index_sql(self, vector_type, table_name, target, prefixed, overlap):
         prefix = ""
         if prefixed:
             prefix = "user, "
@@ -52,7 +52,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             overlap = f", overlap_clusters={overlap}"
         else:
             overlap = ""
-        create_index_sql = f"""
+        return f"""
             ALTER TABLE {table_name}
             ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
             ON ({prefix}vec)
@@ -64,20 +64,11 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                   {overlap}
             );
         """
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(create_index_sql)
 
-    def wait_index_ready(self):
-        def predicate():
-            try:
-                self.select_from_index_without_roll()
-            except ydbs.issues.SchemeError as ex:
-                if "Required global index not found, index name" in str(ex):
-                    return False
-                raise ex
-            return True
-
-        assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
+    def _drop_index_sql(self, table_name):
+        return f"""
+            ALTER TABLE {table_name} DROP INDEX `{self.index_name}`;
+        """
 
     def _write_data(self, vector_type, table_name):
         [data_type, converter] = self.vector_types[vector_type]
@@ -117,19 +108,6 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                             ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
                             LIMIT {self.rows_count};"""
                         ])
-        return queries
-
-    def _get_queries(self):
-        overlaps = ['']
-        if min(self.versions) >= (25, 4):
-            overlaps = ['', '2']
-        queries = []
-        for prefixed in ['', '_pfx']:
-            for vector_type in self.vector_types.keys():
-                for distance in self.targets.keys():
-                    for distance_func in self.targets[distance].keys():
-                        for overlap in overlaps:
-                            queries.extend(self._get_queries_for(prefixed, vector_type, distance, distance_func, overlap))
         return queries
 
     def _get_queries_for(self, prefixed, vector_type, distance, distance_func, overlap):
@@ -184,32 +162,63 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         ])
         return queries
 
-    def _do_queries(self, queries):
+    def _all_variants(self):
+        overlaps = ['']
+        if min(self.versions) >= (25, 4):
+            overlaps = ['', '2']
+        res = []
+        for prefixed in ['', '_pfx']:
+            for vector_type in self.vector_types.keys():
+                for distance in self.targets.keys():
+                    for distance_func in self.targets[distance].keys():
+                        for overlap in overlaps:
+                            res.append([prefixed, vector_type, distance, distance_func, overlap])
+        return res
+
+    def _do_queries(self, session_pool, queries):
+        for [is_select, query] in queries:
+            result_sets = session_pool.execute_with_retries(query)
+            if is_select:
+                assert len(result_sets[0].rows) > 0, "Query returned an empty set"
+                rows = result_sets[0].rows
+                for row in rows:
+                    assert row['target'] is not None, "the distance is None"
+
+    def _indexed_search(self):
+        queries = []
+
+        def predicate():
+            try:
+                session_pool.execute_with_retries(queries[0][1])
+            except ydbs.issues.SchemeError as ex:
+                if "Required global index not found, index name" in str(ex):
+                    return False
+                raise ex
+            return True
+
+        variants = self._all_variants()
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for [is_select, query] in queries:
-                result_sets = session_pool.execute_with_retries(query)
-                if is_select:
-                    assert len(result_sets[0].rows) > 0, "Query returned an empty set"
-                    rows = result_sets[0].rows
-                    for row in rows:
-                        assert row['target'] is not None, "the distance is None"
+            for [prefixed, vector_type, distance, distance_func, overlap] in variants:
+                table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_{overlap}"
+                session_pool.execute_with_retries(self._create_index_sql(
+                    table_name=table_name,
+                    vector_type=vector_type,
+                    target=f"{distance}={distance_func}",
+                    prefixed=prefixed,
+                    overlap=overlap,
+                ))
+                queries = self._get_queries_for(prefixed, vector_type, distance, distance_func, overlap)
+                assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
+                self._do_queries(session_pool, queries)
+                session_pool.execute_with_retries(self._drop_index_sql(table_name))
 
-    def select_from_index(self):
-        queries = self._get_queries()
-        for _ in self.roll():
-            self._do_queries(queries)
-
-    def select_from_index_without_roll(self):
-        queries = self._get_queries()
-        self._do_queries(queries)
-
-    def knn_search(self):
+    def _knn_search(self):
         """Perform KNN search without vector index during rolling upgrade/downgrade."""
         queries = self._get_knn_queries()
-        for _ in self.roll():
-            self._do_queries(queries)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            self._do_queries(session_pool, queries)
 
-    def create_table(self, table_name):
+    def _create_table(self, table_name):
         query = f"""
                 CREATE TABLE {table_name} (
                     key Int64 NOT NULL,
@@ -222,27 +231,15 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             session_pool.execute_with_retries(query)
 
     def test_vector_index(self):
-        overlaps = ['']
-        if min(self.versions) >= (25, 4):
-            overlaps = ['', '2']
-        for prefixed in ['', '_pfx']:
-            for vector_type in self.vector_types.keys():
-                for distance in self.targets.keys():
-                    for distance_func in self.targets[distance].keys():
-                        for overlap in overlaps:
-                            table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_{overlap}"
-                            self.create_table(table_name)
-                            self._write_data(
-                                vector_type=vector_type,
-                                table_name=table_name,
-                            )
-                            self._create_index(
-                                table_name=table_name,
-                                vector_type=vector_type,
-                                target=f"{distance}={distance_func}",
-                                prefixed=prefixed,
-                                overlap=overlap,
-                            )
-        self.knn_search()
-        self.wait_index_ready()
-        self.select_from_index()
+        variants = self._all_variants()
+        for [prefixed, vector_type, distance, distance_func, overlap] in variants:
+            table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_{overlap}"
+            self._create_table(table_name)
+            self._write_data(
+                vector_type=vector_type,
+                table_name=table_name,
+            )
+        for _ in self.roll():
+            self._knn_search()
+        for _ in self.roll():
+            self._indexed_search()

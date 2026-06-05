@@ -1,38 +1,21 @@
 #pragma once
 
 #include "defs.h"
+#include "persistent_buffer_header.h"
 
-#include <queue>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 namespace NKikimr::NDDisk {
-
-    struct TPersistentBufferSectorInfo {
-        ui64 ChunkIdx : 32;
-        ui64 SectorIdx : 16;
-        ui64 HasSignatureCorrection : 1;
-        ui64 Reserved : 15;
-        ui64 Checksum : 64;
-    };
 
     class TPersistentBufferSpaceAllocator {
     protected:
 
-        struct TChunkRank {
+        struct TChunkInfo {
             ui32 ChunkIdx;
             ui32 FreeSpace;
-
-            bool operator==(const TChunkRank& other) const {
-                return ChunkIdx == other.ChunkIdx;
-            }
         };
 
-        struct TBestChunkChoiceComparator {
-            bool operator()(const TChunkRank& a, const TChunkRank& b) const {
-                return a.FreeSpace > b.FreeSpace || (a.FreeSpace == b.FreeSpace && a.ChunkIdx < b.ChunkIdx);
-            }
-        };
-
-        using TChunksQueue = std::set<TChunkRank, TBestChunkChoiceComparator>;
+        using TChunksByFreeSpace = std::vector<TChunkInfo>;
 
         struct TChunkSpaceOccupation {
             struct TSpaceRange {
@@ -59,24 +42,26 @@ namespace NKikimr::NDDisk {
             ui32 FreeSpace;
             std::set<TSpaceRange, TSequentialComparator> FreeSectors;
             std::set<TSpaceRange, TBestChoiceComparator> FreeSectorsPriorityQueue;
-            TChunksQueue& OwnerChunksQueue;
+            TPersistentBufferSpaceAllocator& Owner;
 
             void Occupy(ui32 sectorsCount, std::vector<TPersistentBufferSectorInfo>& result);
             void Free(ui32 fromSectorIdx, ui32 toSectorIdx);
             void MarkOccupied(ui32 fromSectorIdx, ui32 toSectorIdx);
-            TChunkRank GetRank() const { return {ChunkIdx, FreeSpace}; }
 
-            TChunkSpaceOccupation(TChunksQueue& ownerChunksQueue, ui32 chunkIdx, ui32 first, ui32 last);
+            TChunkSpaceOccupation(TPersistentBufferSpaceAllocator& owner, ui32 chunkIdx, ui32 first, ui32 last);
 
             TString ToString() const;
             ui32 VerifyFreeSpace();
         };
 
         ui32 SectorsInChunk;
-        std::unordered_map<ui32, TChunkSpaceOccupation> FreeSpaceMap;
-        TChunksQueue ChunksPriorityQueue;
+        absl::flat_hash_map<ui32, TChunkSpaceOccupation> FreeSpaceMap;
+        TChunksByFreeSpace ChunksByFreeSpace;
         ui32 FreeSpace = 0;
 
+        static bool ChunksByFreeSpaceLess(const TChunkInfo& a, const TChunkInfo& b);
+        void UpdateChunkInSortedQueue(ui32 chunkIdx, ui32 freeSpace, ui32 oldFreeSpace);
+        void AddChunkToSortedQueue(ui32 chunkIdx, ui32 freeSpace);
         ui32 VerifyFreeSpace();
 
     public:

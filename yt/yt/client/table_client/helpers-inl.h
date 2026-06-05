@@ -498,6 +498,26 @@ void FromUnversionedValue(
         unversionedValue);
 }
 
+void UnversionedValueToMapImpl(
+    std::function<void(TString, TUnversionedValue)> appender,
+    TUnversionedValue unversionedValue);
+
+template <class TKey, class TValue>
+void FromUnversionedValue(
+    THashMap<TKey, TValue>* map,
+    TUnversionedValue unversionedValue)
+    requires TUnversionedValueConversionTraits<TValue>::Scalar
+{
+    map->clear();
+    UnversionedValueToMapImpl(
+        [&] (TString key, TUnversionedValue itemValue) {
+            auto [it, inserted] = map->emplace(FromString<TKey>(std::move(key)), TValue());
+            Y_UNUSED(inserted);
+            FromUnversionedValue(&it->second, itemValue);
+        },
+        unversionedValue);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class... Ts>

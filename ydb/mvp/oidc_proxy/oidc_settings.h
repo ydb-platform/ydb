@@ -19,7 +19,11 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
+    // Keep the auth-flow cookie value well below common 4 KiB limits to leave
+    // room for the cookie name, attributes, and other cookies in the header.
+    static constexpr inline ui32 MAX_AUTH_FLOW_COOKIE_VALUE_SIZE = 3700;
     static constexpr inline TDuration DEFAULT_REQUEST_TIMEOUT = TDuration::Seconds(120);
+    static constexpr inline TDuration DEFAULT_AUTH_STATE_LIFETIME = TDuration::Minutes(10);
 
     static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
     static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;

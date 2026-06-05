@@ -141,7 +141,7 @@ private:
         using TScalarNode::TScalarNode; \
     };
 
-DECLARE_SCALAR_TYPE(String, TString)
+DECLARE_SCALAR_TYPE(String, std::string)
 DECLARE_SCALAR_TYPE(Int64, i64)
 DECLARE_SCALAR_TYPE(Uint64, ui64)
 DECLARE_SCALAR_TYPE(Double, double)
@@ -198,7 +198,12 @@ public:
 
     std::vector<std::pair<std::string, INodePtr>> GetChildren() const override
     {
-        return {KeyToChild_.begin(), KeyToChild_.end()};
+        std::vector<std::pair<std::string, INodePtr>> result;
+        result.reserve(KeyToChild_.size());
+        for (const auto& [key, child] : KeyToChild_) {
+            result.emplace_back(key, child);
+        }
+        return result;
     }
 
     std::vector<std::string> GetKeys() const override

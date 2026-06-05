@@ -110,6 +110,10 @@ TIntrusivePtr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const TIntrusiv
             otherSideCBOTree = CastOperator<TOpCBOTree>(maybeAnotherFilter->GetInput());
         }
 
+        if (maybeFilter) {
+            join->ReplaceChild(maybeFilter, maybeFilter->GetInput());
+        }
+
         if (otherSideCBOTree) {
             if (leftSideCBOTree) {
                 cboTree = JoinCBOTrees(cboTree, otherSideCBOTree, join);

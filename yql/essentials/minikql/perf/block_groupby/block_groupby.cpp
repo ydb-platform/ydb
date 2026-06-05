@@ -114,7 +114,7 @@ public:
         : Aggs_(aggs)
         , Rh_(sizeof(i64))
     {
-        Cells_.resize(1u << 8);
+        Cells_.resize(1U << 8);
     }
 
     void AddBatch(arrow::Datum keys, arrow::Datum payloads) {

@@ -39,6 +39,7 @@ message TTableServiceConfig {
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
         optional uint64 MinChannelBufferSize = 12 [default = 2048];             // 2 KB
+        optional uint32 MaxChannelCountPerNode = 31 [default = 7300];
 
         reserved 13;
         reserved 14;
@@ -59,6 +60,9 @@ message TTableServiceConfig {
         optional uint64 MaxNonParallelDataQueryTasksLimit = 28 [default = 1000];
 
         optional bool VerboseMemoryLimitException = 29 [default = false];
+
+        optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
+        optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
     }
 
     message TSpillingServiceConfig {
@@ -213,6 +217,7 @@ message TTableServiceConfig {
         optional uint64 MaxRowsProcessingStreamLookup = 9 [default = 65536];
         optional uint64 MaxTotalBytesQuotaStreamLookup = 10 [default = 2684354560]; // 5_MB * 512
         optional uint64 MaxInFlightReadsStreamLookup = 11 [default = 50];
+        optional uint64 MaxBytesPerFetchStreamLookup = 12 [default = 268435456]; // 256_MB
     }
 
     message TIteratorReadQuotaSettings {
@@ -453,21 +458,22 @@ message TTableServiceConfig {
 
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableWatermarks = 110 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 
-    optional uint64 LocalChannelInflightBytes  = 111 [default = 8388608];
-    optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216];
-    optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864];
+    optional uint64 LocalChannelInflightBytes  = 111 [default = 8388608]; // deprecated
+    optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216]; // deprecated
+    optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864]; // deprecated
 
     optional uint32 DqChannelVersion = 114 [ default = 2, (InvalidateCompileCache) = true];
 
-    optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableDiscardSelect = 115 [default = true, (InvalidateCompileCache) = true];
 
     enum ETxMode {
         SerializableRW = 0;
         SnapshotRW = 1;
         SnapshotRO = 2;
         StaleRO = 3;
+        ReadCommittedRW = 4;
     }
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
@@ -478,7 +484,7 @@ message TTableServiceConfig {
 
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
+    optional bool DqHashOperatorsUseBlocks = 120 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
@@ -497,4 +503,33 @@ message TTableServiceConfig {
     optional bool UseBlockHashJoin = 124 [default = true, (InvalidateCompileCache) = true];
 
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
+
+    optional uint64 QueryDeadlockTimeoutMs = 126 [default = 600000];
+
+    optional uint64 DqChannelReconciliationCount = 127 [default = 3]; // deprecated
+
+    optional bool EnableReadCommittedIsolation = 128 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableWatermarksAdvanced = 130 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableCompileCacheWarmup = 131 [default = false, (InvalidateCompileCache) = false];
+
+    optional bool EnableChannelMemoryTracking = 132 [default = true];
+
+    message TDqChannelConfig {
+        optional uint64 LocalChannelInflightBytes  = 1 [default = 8388608];
+        optional uint64 RemoteChannelInflightBytes = 2 [default = 16777216];
+        optional uint64 RemoteChannelColdInflightBytes = 8 [default = 524288];
+        optional uint64 RemoteSessionInflightBytes = 3 [default = 67108864];
+        optional uint64 ReconciliationCount = 4 [default = 3];
+        optional uint64 CleanupPeriodMs = 5 [default = 30000];
+        optional uint64 IdlePingPeriodMs = 6 [default = 30000];
+        optional uint64 IdleDestroyPeriodMs = 7 [default = 30000];
+    }
+
+    optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];
+
+    optional bool UseKqpTasksGraphV2 = 134 [default = false, (InvalidateCompileCache) = true];
 };

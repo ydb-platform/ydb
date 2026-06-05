@@ -29,5 +29,9 @@ TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> ri
     return res;
 }
 
+bool IUIsSubset(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
+    return IUSetDiff(left, right).empty();
+}
+
 }
 }

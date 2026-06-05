@@ -7,6 +7,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NKikimr::NPersQueueTests {
 
 Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
@@ -335,6 +337,181 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 break;
             }
         }
+    }
+
+    void SkipMessagesWithObsoleteTimestampImpl(TMaybe<TDuration> retentionPeriod) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableSkipMessagesWithObsoleteTimestamp(true);
+
+        auto pqSettings = NKikimr::NPersQueueTests::PQSettings(0);
+        pqSettings.SetFeatureFlags(ff);
+        pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
+        pqSettings.PQConfig.MutableMirrorConfig()->SetRewindCommitDelaySeconds(3);
+
+        NPersQueue::TTestServer server(pqSettings);
+
+        const auto& mirrorSettings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
+        auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), mirrorSettings);
+        for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
+            server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
+        }
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_MIRRORER, NKikimrServices::PERSQUEUE});
+
+        constexpr ui32 nMsg = 1000;
+        constexpr ui32 messageSize = 90_KB;
+        const TString srcTopic = "src_topic";
+        const TString dstTopic = "dst_topic";
+        const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
+        const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+        const TString mirrorConsumer = "mirror_consumer";
+
+        server.AnnoyingClient->CreateTopic(
+            srcTopicFullName,
+            /*partitionsCount =*/ 1,
+            /*lowWatermark =*/ 8_MB,
+            /*lifetimeS =*/ retentionPeriod.GetOrElse(TDuration::Hours(24)).Seconds(),
+            /*writeSpeed =*/ 20000000,
+            /*user =*/ "",
+            /*readSpeed =*/ 200000000,
+            /*rr =*/ {mirrorConsumer}
+        );
+
+        auto driver = server.AnnoyingClient->GetDriver();
+
+
+        // Write nMsg messages to the source topic.
+        {
+            auto writer = CreateSimpleWriter(*driver, srcTopic, "src_writer", 1, "raw");
+            ui64 seqNo = writer->GetInitSeqNo();
+            for (ui32 i = 0; i < nMsg; ++i) {
+                UNIT_ASSERT(writer->Write(TString("payload-") + ToString(i) + TString(messageSize, '-'), ++seqNo));
+            }
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
+        }
+
+        NYdb::NTopic::TTopicClient topicClient(*driver);
+        if (!retentionPeriod.Empty()) {
+            const TInstant describeDeadline = TDuration::Seconds(30).ToDeadLine();
+            bool shiftedStartOffset = false;
+            while (TInstant::Now() < describeDeadline) {
+                Cerr << "Waiting for blobs cleanup\n";
+                auto descr = topicClient.DescribePartition(
+                                            "/Root/PQ/" + srcTopicFullName,
+                                            0,
+                                            NYdb::NTopic::TDescribePartitionSettings().IncludeStats(true))
+                                 .GetValueSync();
+                if (!descr.IsSuccess()) {
+                    Cerr << "DescribeConsumer failed: " << descr.GetIssues().ToString() << Endl;
+                    Sleep(TDuration::Seconds(1));
+                    continue;
+                }
+
+                const auto& stats = descr.GetPartitionDescription().GetPartition().GetPartitionStats();
+                UNIT_ASSERT(stats.has_value());
+
+                Cerr << "PartitionStats: " << LabeledOutput(stats->GetStartOffset(), stats->GetEndOffset(), stats->GetStoreSizeBytes()) << "\n";
+                if (stats->GetStartOffset() != 0) {
+                    shiftedStartOffset = true;
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(250));
+            }
+            UNIT_ASSERT_C(shiftedStartOffset, "Start offset not changed");
+        }
+
+        Sleep(TDuration::Seconds(2));
+        const TInstant readFromTs = TInstant::Now() + TDuration::Seconds(1);
+
+        NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
+        mirrorFrom.SetEndpoint("localhost");
+        mirrorFrom.SetEndpointPort(server.GrpcPort);
+        mirrorFrom.SetTopic(srcTopic);
+        mirrorFrom.SetConsumer(mirrorConsumer);
+        mirrorFrom.SetSyncWriteTime(true);
+        mirrorFrom.SetReadFromTimestampsMs(readFromTs.MilliSeconds());
+
+        server.AnnoyingClient->CreateTopic(
+            dstTopicFullName,
+            /*partitionsCount =*/ 1,
+            /*lowWatermark =*/ 8_MB,
+            /*lifetimeS =*/ 86400,
+            /*writeSpeed =*/ 20000000,
+            /*user =*/ "",
+            /*readSpeed =*/ 200000000,
+            /*rr =*/ {"reader"},
+            /*important =*/ {},
+            mirrorFrom
+        );
+
+        // Repeatedly Describe the source topic until the mirror_consumer commits all messages.
+        const TInstant describeDeadline = TDuration::Seconds(180).ToDeadLine();
+        bool committed = false;
+        while (TInstant::Now() < describeDeadline) {
+            auto descr = topicClient.DescribeConsumer(
+                "/Root/PQ/" + srcTopicFullName,
+                mirrorConsumer,
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
+            ).GetValueSync();
+            if (!descr.IsSuccess()) {
+                Cerr << "DescribeConsumer failed: " << descr.GetIssues().ToString() << Endl;
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            const auto& partitions = descr.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            const auto& stats = partitions[0].GetPartitionConsumerStats();
+            if (stats) {
+                Cerr << "ConsumerStats: reader=" << stats->GetReaderName()
+                     << " committed=" << stats->GetCommittedOffset() << Endl;
+                if (!stats->GetReaderName().empty() && stats->GetCommittedOffset() == nMsg) {
+                    committed = true;
+                    break;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+        UNIT_ASSERT_C(committed, "mirror_consumer did not commit all skipped messages within timeout");
+
+        // Read from the destination topic; nothing must be there.
+        auto dstReader = topicClient.CreateReadSession(
+            NYdb::NTopic::TReadSessionSettings()
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings(dstTopic).AppendPartitionIds(0))
+                .ConsumerName("reader")
+        );
+
+        size_t messageCount = 0;
+        TInstant dstDeadline = TInstant::Max();
+        while (TInstant::Now() < dstDeadline) {
+            if (!dstReader->WaitEvent().Wait(dstDeadline)) {
+                break;
+            }
+            auto event = dstReader->GetEvent(false);
+            if (!event) {
+                continue;
+            }
+            if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                messageCount += data->GetMessagesCount();
+            } else if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                start->Confirm();
+                dstDeadline = TDuration::Seconds(10).ToDeadLine();
+            } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                stop->Confirm();
+            } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                break;
+            }
+        }
+        dstReader->Close(TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(messageCount, 0);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestamp) {
+        SkipMessagesWithObsoleteTimestampImpl(Nothing());
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetention) {
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1));
     }
 }
 } // NKikimr::NPersQueueTests

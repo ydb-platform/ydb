@@ -1,7 +1,7 @@
 #include "dq_input_transform_lookup.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -49,8 +49,7 @@ public:
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
         TDqComputeActorWatermarks* watermarksTracker,
-        const THashMap<TString, TString>& secureParams,
-        size_t fullscanRowLimit = 5000)
+        const THashMap<TString, TString>& secureParams)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -62,7 +61,7 @@ public:
         , Factory(factory)
         , Settings(std::move(settings))
         , SecureParams(secureParams)
-        , FullscanRowLimit(Min(fullscanRowLimit, (size_t)Settings.GetCacheLimit()))
+        , FullscanRowLimit(Settings.HasFullscanLimit() ? Settings.GetFullscanLimit() : Settings.GetCacheLimit())
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)

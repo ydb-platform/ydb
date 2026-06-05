@@ -356,4 +356,4 @@ TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool = null
 } // namespace NYql
 
 template <>
-void Out<NYql::TAstNode::EType>(class IOutputStream& o, NYql::TAstNode::EType x);
+void Out<NYql::TAstNode::EType>(IOutputStream& out, NYql::TAstNode::EType value);

@@ -12,6 +12,12 @@ from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
+from error_type_utils import (
+    is_not_launched_issue,
+    is_timeout_issue,
+    is_xfailed_issue,
+    source_has_tag,
+)
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
@@ -30,39 +36,6 @@ def load_owner_area_mapping():
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
         return {}
-
-
-def is_sanitizer_issue(error_text):
-    """
-    Detect if a test failure is caused by a sanitizer.
-    Returns True if the error text contains sanitizer-specific patterns.
-    """
-    if not error_text:
-        return False
-    
-    # Sanitizer error patterns for comprehensive coverage
-    sanitizer_patterns = [
-        # Main sanitizer patterns with severity levels (covers most cases)
-        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
-        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # UndefinedBehaviorSanitizer runtime errors
-        r'runtime error:',
-        r'==\d+==.*runtime error:',
-        
-        # Memory leak detection (specific LeakSanitizer output)
-        r'detected memory leaks',
-        r'==\d+==.*detected memory leaks',
-    ]
-    
-    for pattern in sanitizer_patterns:
-        if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
-            return True
-    
-    return False
-
 
 class TestStatus(Enum):
     PASS = 0
@@ -89,9 +62,14 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    stderr_url: str = ""
+    log_url: str = ""
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_xfailed_issue: bool = False
+    is_verify_issue: bool = False
+    is_possible_oom: bool = False
     is_not_launched: bool = False
 
     @property
@@ -189,7 +167,8 @@ class TestResult:
             'stderr': get_link_url("stderr"),
         }
         log_urls = {k: v for k, v in log_urls.items() if v}
-        
+        log_url = get_link_url("log") or get_link_url("Log") or ""
+
         # Get duration from result (same as upload_tests_results.py)
         duration = result.get("duration", 0)
         try:
@@ -206,11 +185,17 @@ class TestResult:
             count_of_passed=0,
             owners='',
             status_description=status_description or '',
+            stderr_url=log_urls.get('stderr', ''),
+            log_url=log_url,
             error_type=error_type or '',
-            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
+            # is_sanitizer_issue, is_verify_issue and is_possible_oom are set in gen_summary from error_type.
+            is_sanitizer_issue=False,
+            is_timeout_issue=is_timeout_issue(error_type),
+            is_xfailed_issue=is_xfailed_issue(error_type),
+            is_verify_issue=False,
+            is_possible_oom=False,
             # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
-            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status in (TestStatus.SKIP, TestStatus.MUTE)
+            is_not_launched=is_not_launched_issue(error_type, status.name)
         )
 
 
@@ -261,6 +246,8 @@ class TestSummary:
         self.lines: List[TestSummaryLine] = []
         self.is_failed = False
         self.is_retry = is_retry
+        self.dmesg_has_oom = False
+        self.oom_dmesg_url = None
 
     def add_line(self, line: TestSummaryLine):
         self.is_failed |= line.is_failed
@@ -342,7 +329,6 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
-    last_n_runs = 5
     has_any_log = set()
 
     for t in rows:
@@ -440,15 +426,15 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
-    buid_preset_params = '--build unknown_build_type'
+    build_preset_params = '--build unknown_build_type'
     if build_preset == 'release-asan' :
-        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-msan':
-        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-tsan':   
-        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'relwithdebinfo':
-        buid_preset_params = '--build "relwithdebinfo"'
+        build_preset_params = '--build "relwithdebinfo"'
     
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
@@ -536,7 +522,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         test_success_rates={},  # Empty - will be loaded from JSON
         data_file_url=data_file_url,  # URL to JSON data file
         build_preset=build_preset,
-        buid_preset_params=buid_preset_params,
+        build_preset_params=build_preset_params,
         branch=branch,
         pr_number=pr_number,
         pr_url=pr_url,
@@ -566,19 +552,21 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
+def _list_build_results_report_files(path):
+    """Return paths to build-results-report JSON files."""
+    import glob
+
+    if os.path.isfile(path):
+        return [path]
+    files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
+    if not files:
+        files = glob.glob(os.path.join(path, "report.json"))
+    return files
+
+
 def iter_build_results_files(path):
     """Iterate over build-results-report JSON files"""
-    import glob
-    
-    if os.path.isfile(path):
-        files = [path]
-    else:
-        # If it's a directory, look for report.json files
-        files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
-        if not files:
-            files = glob.glob(os.path.join(path, "report.json"))
-    
-    for fn in files:
+    for fn in _list_build_results_report_files(path):
         try:
             with open(fn, 'r') as f:
                 report = json.load(f)
@@ -596,16 +584,54 @@ def iter_build_results_files(path):
             continue
 
 
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
+# Did dmesg show ANY OOM-killer event during this try?
+_OOM_DMESG_EVIDENCE_RE = re.compile(
+    r'\b(?:Out of memory:\s+Killed process|invoked oom-killer|Memory cgroup out of memory)\b',
+    re.IGNORECASE,
+)
+
+
+def _dmesg_has_oom(oom_dmesg_log):
+    """True if the per-try dmesg dump contains any OOM-killer evidence."""
+    if not oom_dmesg_log:
+        return False
+    try:
+        if not os.path.isfile(oom_dmesg_log) or os.path.getsize(oom_dmesg_log) == 0:
+            return False
+        with open(oom_dmesg_log, 'r', encoding='utf-8', errors='replace') as f:
+            return _OOM_DMESG_EVIDENCE_RE.search(f.read()) is not None
+    except OSError:
+        return False
+
+
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None, oom_dmesg_log=None):
     summary = TestSummary(is_retry=is_retry)
+    summary.dmesg_has_oom = _dmesg_has_oom(oom_dmesg_log)
+    if summary.dmesg_has_oom and oom_dmesg_log:
+        try:
+            if os.path.isabs(oom_dmesg_log) and os.path.commonpath([oom_dmesg_log, public_dir]) == os.path.abspath(public_dir):
+                rel = os.path.relpath(oom_dmesg_log, public_dir)
+                summary.oom_dmesg_url = f"{public_dir_url}/{rel}"
+        except ValueError:
+            pass
+    if summary.dmesg_has_oom:
+        print(f"[oom] dmesg evidence found in {oom_dmesg_log}", flush=True)
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
 
-        for fn, result in iter_build_results_files(path):
+        for _fn, result in iter_build_results_files(path):
             test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
-        
+
+        for test in summary_line.tests:
+            if not test.status.is_error:
+                continue
+            et = test.error_type
+            test.is_sanitizer_issue = source_has_tag(et, "SANITIZER")
+            test.is_verify_issue = source_has_tag(et, "VERIFY")
+            test.is_possible_oom = source_has_tag(et, "POSSIBLE_OOM")
+
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
@@ -635,6 +661,18 @@ def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bo
     body = []
 
     body.append(result)
+
+    # Surface OOM evidence from dmesg in the report header.
+    if getattr(summary, "dmesg_has_oom", False):
+        link = (
+            f" See [oom_dmesg.txt]({summary.oom_dmesg_url})."
+            if getattr(summary, "oom_dmesg_url", None)
+            else ""
+        )
+        body.append(
+            f":warning: **OOM detected** in dmesg during this try. "
+            f"Tests killed by SIGKILL are flagged with the 'possible OOM' badge.{link}"
+        )
 
     if not is_last_retry:
         body.append("")
@@ -678,6 +716,8 @@ def main():
     parser.add_argument('--comment_text_file', required=True)
     parser.add_argument('--pr_number', required=False, type=int, help="Pull request number")
     parser.add_argument('--workflow_run_id', required=False, help="GitHub workflow run ID")
+    parser.add_argument('--oom_dmesg_log', required=False, default=None,
+                        help="Path to per-try dmesg OOM dump for OOM badge correlation.")
     parser.add_argument("args", nargs="+", metavar="TITLE html_out build-results-report-path")
     args = parser.parse_args()
 
@@ -695,7 +735,8 @@ def main():
                           build_preset=args.build_preset,
                           branch=args.branch,
                           pr_number=args.pr_number,
-                          workflow_run_id=args.workflow_run_id
+                          workflow_run_id=args.workflow_run_id,
+                          oom_dmesg_log=args.oom_dmesg_log,
                           )
     write_summary(summary)
 
@@ -713,8 +754,9 @@ def main():
         f.write('\n'.join(text))
         f.write('\n')
 
-    with open(args.status_report_file, "w") as f:
-        f.write(overall_status)
+    if args.status_report_file:
+        with open(args.status_report_file, "w") as f:
+            f.write(overall_status)
 
 
 if __name__ == "__main__":

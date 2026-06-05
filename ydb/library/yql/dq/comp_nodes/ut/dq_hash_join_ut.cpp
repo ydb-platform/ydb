@@ -2,7 +2,7 @@
 #include "utils/dq_setup.h"
 #include "utils/utils.h"
 #include <type_utils.h>
-#include <ydb/core/kqp/tools/join_perf/construct_join_graph.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>

@@ -118,8 +118,8 @@ Y_UNIT_TEST(TestFormats) {
     SimplePositiveTest(12345678, 15, 6, "12.345678");
     SimplePositiveTest(123456789, 15, 6, "123.456789");
     SimplePositiveTest(1234567898, 15, 6, "1234.567898");
-    SimplePositiveTest(12345678987ll, 15, 6, "12345.678987");
-    SimplePositiveTest(123456789876ll, 15, 6, "123456.789876");
+    SimplePositiveTest(12345678987LL, 15, 6, "12345.678987");
+    SimplePositiveTest(123456789876LL, 15, 6, "123456.789876");
 }
 
 Y_UNIT_TEST(TestHugeNumberFormat) {

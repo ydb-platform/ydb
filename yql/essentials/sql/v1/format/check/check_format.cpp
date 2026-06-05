@@ -192,6 +192,14 @@ TMaybe<TString> CheckedFormat(
     NYql::TIssues& issues,
     EConvergenceRequirement convergence)
 {
+    if (NSQLTranslation::TTranslationSettings effective;
+        !NSQLTranslation::ParseTranslationSettings(query, effective, issues))
+    {
+        return Nothing();
+    } else if (effective.PgParser) {
+        return query;
+    }
+
     NSQLTranslationV1::TLexers lexers = {
         .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
         .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),

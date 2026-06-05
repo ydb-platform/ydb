@@ -31,14 +31,17 @@ protected:
         const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
+
     virtual bool DoIsSplittable() const override {
         return GetRecordsCount() > 1;
     }
 
 public:
     IPortionColumnChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
-        : TBase(entityId, chunkIdx) {
+        : TBase(entityId, chunkIdx)
+    {
     }
+
     virtual ~IPortionColumnChunk() = default;
 
     TSimpleChunkMeta BuildSimpleChunkMeta() const {
@@ -60,11 +63,16 @@ private:
     ui32 CurrentArrayIndex = 0;
     ui32 CurrentRecordIndex = 0;
 
-public:
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> ApplyChunk(const std::shared_ptr<IPortionDataChunk>& chunk) const {
+        return Loader->ApplyVerified(
+            chunk->GetData(), chunk->GetRecordsCountVerified(), std::nullopt, chunk->GetAdditionalAccessorDataOptional());
+    }
 
+public:
     TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
         : Chunks(chunks)
-        , Loader(loader) {
+        , Loader(loader)
+    {
         Start();
     }
 
@@ -72,7 +80,7 @@ public:
         CurrentArrayIndex = 0;
         CurrentRecordIndex = 0;
         if (Chunks.size()) {
-            CurrentArray = Loader->ApplyVerified(Chunks.front()->GetData(), Chunks.front()->GetRecordsCountVerified());
+            CurrentArray = ApplyChunk(Chunks.front());
             CurrentChunkArray.reset();
         }
     }
@@ -91,7 +99,7 @@ public:
 
     bool ReadNextChunk() {
         while (++CurrentArrayIndex < Chunks.size()) {
-            CurrentArray = Loader->ApplyVerified(Chunks[CurrentArrayIndex]->GetData(), Chunks[CurrentArrayIndex]->GetRecordsCountVerified());
+            CurrentArray = ApplyChunk(Chunks[CurrentArrayIndex]);
             CurrentChunkArray.reset();
             CurrentRecordIndex = 0;
             if (CurrentRecordIndex < CurrentArray->GetRecordsCount()) {
@@ -119,7 +127,8 @@ private:
 
 public:
     TChunkedBatchReader(const std::vector<TChunkedColumnReader>& columnReaders)
-        : Columns(columnReaders) {
+        : Columns(columnReaders)
+    {
         AFL_VERIFY(Columns.size());
         for (auto&& i : Columns) {
             AFL_VERIFY(i.IsCorrect());

@@ -1099,6 +1099,10 @@ message CreateTopicRequest {
 
     // Enable content-based deduplication for the topic.
     bool content_based_deduplication = 14;
+
+    int64 partition_write_speed_messages_per_second = 15 [(Ydb.value) = ">= 0"];
+
+    int64 partition_write_burst_messages = 16 [(Ydb.value) = ">= 0"];
 }
 
 // Create topic response sent from server to client.
@@ -1238,6 +1242,12 @@ message DescribeTopicResult {
 
     // Is content-based deduplication enabled for the topic.
     bool content_based_deduplication = 17;
+
+    // Partition write speed in messages per second.
+    int64 partition_write_speed_messages_per_second = 18;
+
+    // Partition write burst in messages.
+    int64 partition_write_burst_messages = 19;
 }
 
 // Describe partition request sent from client to server.
@@ -1418,6 +1428,12 @@ message AlterTopicRequest {
 
     // Enable content-based deduplication for the topic.
     optional bool set_content_based_deduplication = 17;
+
+    // Set partition write speed in messages per second. Must be less than database limit.
+    optional int64 set_partition_write_speed_messages_per_second = 18 [(Ydb.value) = ">= 0"];
+
+    // Set partition write burst in messages. Must be less than database limit.
+    optional int64 set_partition_write_burst_messages = 19 [(Ydb.value) = ">= 0"];
 }
 
 // Update topic response sent from server to client.

@@ -21,6 +21,7 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/signals/owner.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -103,7 +104,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-    NACLib::TUserContext::TPtr userCtx);
+    TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -128,7 +129,7 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -209,7 +210,7 @@ public:
     }
 
     explicit TUploadRowsBase(std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
-                             NACLib::TUserContext::TPtr userCtx,
+                             TIntrusivePtr<NACLib::TUserContext> userCtx,
                              TDuration timeout = TDuration::Max(),
                              bool diskQuotaExceeded = false,
                              NWilson::TSpan span = {})

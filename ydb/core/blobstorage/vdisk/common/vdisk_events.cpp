@@ -54,14 +54,9 @@ namespace NKikimr {
     }
 
     TRope TEvBlobStorage::TEvVMultiPut::GetItemBuffer(ui64 itemIdx) const {
-        auto &item = Record.GetItems(itemIdx);
-        if (item.HasBuffer()) {
-            return TRope(item.GetBuffer());
-        } else {
-            return GetPayload(itemIdx);
-        }
+        Y_ABORT_UNLESS(itemIdx < GetPayloadCount());
+        return GetPayload(itemIdx);
     }
-
 
     TEvBlobStorage::TEvVGetBarrier::TEvVGetBarrier(const TVDiskID &vdisk, const TKeyBarrier &from, const TKeyBarrier &to, ui32 *maxResults,
             bool showInternals)

@@ -1,5 +1,5 @@
 //
-// Copyright 2012-2025 Antony Polukhin.
+// Copyright 2012-2026 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -44,25 +44,25 @@ namespace boost { namespace typeindex { namespace detail {
     struct ctti_skip {
         std::size_t size_at_begin;
         std::size_t size_at_end;
-        const char* until_runtime;
-        std::size_t until_runtime_length;
+        const char* substrig;
+        std::size_t substrig_length;
     };
 
     template <std::size_t N>
     constexpr ctti_skip make_ctti_skip(std::size_t size_at_begin,
                                        std::size_t size_at_end,
-                                       bool more_at_runtime,
-                                       const char (&until_runtime)[N])
+                                       bool is_skip_by_substring,
+                                       const char (&substrig)[N])
     {
-        return ctti_skip{size_at_begin, size_at_end, until_runtime, more_at_runtime ? N - 1 : 0};
+        return ctti_skip{size_at_begin, size_at_end, substrig, is_skip_by_substring ? N - 1 : 0};
     }
 
     template <std::size_t N>
     constexpr ctti_skip make_ctti_skip(std::size_t size_at_begin,
                                        std::size_t size_at_end,
-                                       const char (&until_runtime)[N])
+                                       const char (&substrig)[N])
     {
-        return ctti_skip{size_at_begin, size_at_end, until_runtime, N - 1};
+        return ctti_skip{size_at_begin, size_at_end, substrig, N - 1};
     }
 
 #if defined(BOOST_TYPE_INDEX_DOXYGEN_INVOKED)
@@ -147,6 +147,20 @@ constexpr ctti_skip skip() noexcept { return detail::make_ctti_skip(0, 0, ""); }
     }
 #endif // defined(BOOST_TYPE_INDEX_DETAIL_IS_CONSTANT)
 
+    BOOST_CXX14_CONSTEXPR BOOST_FORCEINLINE std::size_t constexpr_significant_part_length(const char* str) noexcept {
+        std::size_t length = 0;
+        while (str[length + detail::skip().size_at_end]) {
+            ++length;
+        }
+
+        // MSVC sometimes adds whitespaces
+        while (str[length - 1] == ' ') {
+            --length;
+        }
+
+        return length;
+    }
+
     template<class ForwardIterator1, class ForwardIterator2>
     BOOST_CXX14_CONSTEXPR inline ForwardIterator1 constexpr_search(
         ForwardIterator1 first1,
@@ -197,25 +211,25 @@ constexpr ctti_skip skip() noexcept { return detail::make_ctti_skip(0, 0, ""); }
     }
 
     template <unsigned int ArrayLength>
-    BOOST_CXX14_CONSTEXPR inline const char* skip_begining_runtime(const char* begin) noexcept {
-        constexpr auto skip_value = detail::skip();  // to have the same `.until_runtime` value in code below
+    BOOST_CXX14_CONSTEXPR inline const char* after_substrig(const char* begin) noexcept {
+        constexpr auto skip_value = detail::skip();  // to have the same `.substrig` value in code below
         const char* const it = detail::constexpr_search(
             begin, begin + ArrayLength,
-            skip_value.until_runtime, skip_value.until_runtime + skip_value.until_runtime_length
+            skip_value.substrig, skip_value.substrig + skip_value.substrig_length
         );
-        return (it == begin + ArrayLength ? begin : it + skip_value.until_runtime_length);
+        return (it == begin + ArrayLength ? begin : it + skip_value.substrig_length);
     }
 
     template <unsigned int ArrayLength>
     BOOST_CXX14_CONSTEXPR inline const char* skip_begining(const char* begin) noexcept {
-        detail::assert_compile_time_legths<(ArrayLength > skip().size_at_begin + skip().size_at_end)>();
-        return skip().until_runtime_length
-            ? detail::skip_begining_runtime<ArrayLength - skip().size_at_begin>(begin + skip().size_at_begin)
-            : begin + skip().size_at_begin
+        detail::assert_compile_time_legths<(ArrayLength > detail::skip().size_at_begin + detail::skip().size_at_end)>();
+        return detail::skip().substrig_length
+            ? detail::after_substrig<ArrayLength - detail::skip().size_at_begin>(begin + detail::skip().size_at_begin)
+            : begin + detail::skip().size_at_begin
         ;
     }
 
-#if !defined(__clang__) && defined(__GNUC__) && !defined(BOOST_NO_CXX14_CONSTEXPR)
+#if !defined(BOOST_NO_CXX14_CONSTEXPR)
     template <unsigned int... I>
     struct index_seq {};
 
@@ -224,31 +238,31 @@ constexpr ctti_skip skip() noexcept { return detail::make_ctti_skip(0, 0, ""); }
 
     template <unsigned int... Left, unsigned int... Right>
     struct make_index_sequence_join<index_seq<Left...>, index_seq<Right...> > {
-        typedef index_seq<Left..., Right...> type;
+        using type = index_seq<Left..., Right...>;
     };
 
     template <unsigned int C, unsigned int D>
     struct make_index_seq_impl {
-        typedef typename make_index_sequence_join<
+        using type = typename make_index_sequence_join<
             typename make_index_seq_impl<C, D / 2>::type,
             typename make_index_seq_impl<C + D / 2, (D + 1) / 2>::type
-        >::type type;
+        >::type;
     };
 
     template <unsigned int C>
     struct make_index_seq_impl<C, 0> {
-        typedef index_seq<> type;
+        using type = index_seq<>;
     };
 
     template <unsigned int C>
     struct make_index_seq_impl<C, 1> {
-        typedef index_seq<C> type;
+        using type = index_seq<C>;
     };
 
     template <char... C>
     struct cstring {
-        static constexpr unsigned int size_ = sizeof...(C);
-        static constexpr char data_[size_] = { C... };
+        static constexpr unsigned int size_ = sizeof...(C) + 1;
+        static constexpr char data_[size_] = { C..., '\0' };
     };
 
     template <char... C>
@@ -289,11 +303,13 @@ struct ctti {
 
     template <unsigned int ...Indexes>
     constexpr static const char* impl(::boost::typeindex::detail::index_seq<Indexes...> ) noexcept {
-        return ::boost::typeindex::detail::cstring<s<Indexes>()...>::data_;
+        using string_type = ::boost::typeindex::detail::cstring<s<Indexes>()...>;
+        return string_type::data_;
     }
 
     template <unsigned int D = 0> // `D` means `Dummy`
     constexpr static const char* n() noexcept {
+        namespace tid = boost::typeindex::detail;
     #if defined(BOOST_TYPE_INDEX_FUNCTION_SIGNATURE)
         constexpr unsigned int size = sizeof(BOOST_TYPE_INDEX_FUNCTION_SIGNATURE);
     #elif defined(__FUNCSIG__)
@@ -307,18 +323,22 @@ struct ctti {
                     || defined(__DMC__)
         constexpr unsigned int size = sizeof(__PRETTY_FUNCTION__);
     #else
-        boost::typeindex::detail::failed_to_get_function_name<T>();
+        tid::failed_to_get_function_name<T>();
     #endif
 
-        boost::typeindex::detail::assert_compile_time_legths<
-            (size > boost::typeindex::detail::skip().size_at_begin + boost::typeindex::detail::skip().size_at_end + sizeof("const *") - 1)
+        tid::assert_compile_time_legths<
+            (size > tid::skip().size_at_begin + tid::skip().size_at_end + sizeof("const *") - 1)
         >();
-        static_assert(!boost::typeindex::detail::skip().until_runtime_length, "Skipping for GCC in C++14 mode is unsupported");
+        static_assert(
+            !tid::skip().substrig_length,
+            "Skipping by substring for GCC in C++14 mode is unsupported"
+        );
 
-        typedef typename boost::typeindex::detail::make_index_seq_impl<
-            boost::typeindex::detail::skip().size_at_begin,
-            size - sizeof("const *") + 1 - boost::typeindex::detail::skip().size_at_begin
-        >::type idx_seq;
+        using idx_seq = typename tid::make_index_seq_impl<
+            tid::skip().size_at_begin,
+            size - (sizeof("const *") - 1) - tid::skip().size_at_begin
+            - 1 /* detail::cstring adds a terminating '\0' */
+        >::type;
         return impl(idx_seq());
     }
 #else
@@ -347,6 +367,32 @@ struct ctti {
 
 }} // namespace boost::detail
 
+namespace boost { namespace typeindex { namespace detail {
+
+#if !defined(BOOST_NO_CXX14_CONSTEXPR)
+    template <class T, unsigned int ...Indexes>
+    constexpr const char* make_pretty_name(::boost::typeindex::detail::index_seq<Indexes...> ) noexcept {
+        constexpr const char* name = boost::detail::ctti<T>::n();
+        using string_type = ::boost::typeindex::detail::cstring<name[Indexes]...>;
+        return string_type::data_;
+    }
+
+    template <class T>
+    constexpr const char* postprocessed_name() noexcept {
+        constexpr const char* name = boost::detail::ctti<T>::n();
+        constexpr auto length = detail::constexpr_significant_part_length(name);
+        using idx_seq = typename boost::typeindex::detail::make_index_seq_impl<0, length>::type;
+        return boost::typeindex::detail::make_pretty_name<T>(idx_seq());
+    }
+#else
+    template <class T>
+    constexpr const char* postprocessed_name() noexcept {
+        return boost::detail::ctti<T>::n();
+    }
+
+#endif
+
+}}} // namespace boost::typeindex::detail
 
 
 #endif // BOOST_TYPE_INDEX_DETAIL_COMPILE_TIME_TYPE_INFO_HPP

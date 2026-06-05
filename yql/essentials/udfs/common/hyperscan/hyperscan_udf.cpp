@@ -392,8 +392,24 @@ public:
         sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL));
         sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING));
         sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING));
-        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
-        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
+        static const TStringBuf MultiPolyArgs = R"(
+            [[
+                [];
+                {
+                    type=["CallableType";[];
+                        [["UniversalType"]];
+                        [[["OptionalType";["DataType";"String"]]]]
+                    ];
+                    runConfig=["DataType";"String"]
+                }
+            ]]
+        )";
+        auto multiGrep = sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI));
+        multiGrep->SetTypeAwareness();
+        multiGrep->SetPolyArgs(MultiPolyArgs);
+        auto multiMatch = sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI));
+        multiMatch->SetTypeAwareness();
+        multiMatch->SetPolyArgs(MultiPolyArgs);
         sink.Add(THyperscanCapture::Name());
         sink.Add(THyperscanReplace::Name());
     }

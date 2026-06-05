@@ -11,6 +11,8 @@ IF (OS_LINUX)
         ydb/core/load_test
         ydb/core/node_whiteboard
         ydb/core/tablet
+        ydb/library/actors/dnsresolver
+        ydb/library/actors/interconnect
         ydb/library/pdisk_io
         ydb/tools/stress_tool/lib
         ydb/tools/stress_tool/proto

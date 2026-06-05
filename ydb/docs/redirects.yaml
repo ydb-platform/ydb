@@ -65,6 +65,8 @@ common:
     to: /reference/observability/metrics/grafana-dashboards.md
   - from: /administration/production-storage-config.md
     to: /deploy/configuration/config.md
+  - from: /administration/state-storage-reconfiguration.md
+    to: /devops/manual/state-storage-reconfiguration.md
   - from: /administration/state-storage-move.md
     to: /devops/manual/state-storage-move.md
   - from: /deploy/manual/static-group-move.md
@@ -82,7 +84,7 @@ common:
   - from: /deploy/index.md
     to: /devops/index.md
   - from: /deploy/manual/deploy-ydb-on-premises.md
-    to: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /deploy/configuration/config.md
     to: /reference/configuration/index.md
   - from: /deploy/manual/connector.md
@@ -101,6 +103,8 @@ common:
     to: /devops/observability/system-views.md
   - from: /devops/manual/logging.md
     to: /devops/observability/logging.md
+  - from: /devops/manual/state-storage-reconfiguration.md
+    to: /devops/configuration-management/configuration-v1/state-storage-reconfiguration.md
   - from: /devops/manual/state-storage-move.md
     to: /devops/configuration-management/configuration-v1/state-storage-move.md
   - from: /maintenance/manual/change_actorsystem_configs.md
@@ -117,6 +121,10 @@ common:
     to: /devops/configuration-management/configuration-v1/cms.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
 
   # Redirects for Deployment Options
   - from: /devops/(ansible|kubernetes|manual)/(.*)$
@@ -160,7 +168,11 @@ common:
   - from: /operations/manage-users-attr.md
     to: /dev/custom-attributes.md
   - from: /operations/query_plans_optimization.md
-    to: /dev/query-plans-optimization.md
+    to: /dev/query-execution-optimization/query-plans-optimization.md
+  - from: /dev/query-plans-optimization.md
+    to: /dev/query-execution-optimization/query-plans-optimization.md
+  - from: /dev/query-hints.md
+    to: /dev/query-execution-optimization/query-hints.md
   - from: /best_practices/cdc.md
     to: /dev/cdc.md
   - from: /best_practices/pk-olap-scalability.md
@@ -473,21 +485,8 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
-
-ru:
-  - from: /postgresql/index.md
-    to: /postgresql/intro.md
-  - from: /db/terraform.md
-    to: /dev/terraform.md
-  - from: /postgresql/docker-connect.md
-    to: /postgresql/connect.md
-  - from: /maintenance/manual/replacing_nodes.md
-    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
-  - from: /concepts/topic.md
-    to: /concepts/datamodel/topic.md
-
+  # Redirects for query_execution
+  
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
   - from: /concepts/mvcc.md
@@ -509,21 +508,25 @@ ru:
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
 
+ru:
+  - from: /postgresql/index.md
+    to: /postgresql/intro.md
+  - from: /db/terraform.md
+    to: /dev/terraform.md
+  - from: /postgresql/docker-connect.md
+    to: /postgresql/connect.md
+  - from: /maintenance/manual/replacing_nodes.md
+    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
+  - from: /concepts/topic.md
+    to: /concepts/datamodel/topic.md
+
 en:
-  - from: /concepts/query_execution/index.md
-    to: /concepts/query_execution.md
-  - from: /concepts/query_execution/mvcc.md
-    to: /concepts/mvcc.md
-  - from: /concepts/query_execution/optimizer.md
-    to: /concepts/optimizer.md
-  - from: /concepts/query_execution/spilling.md
-    to: /concepts/spilling.md
-  - from: /concepts/query_execution/vector_search.md
-    to: /concepts/vector_search.md
-  - from: /concepts/query_execution/secondary_indexes.md
-    to: /concepts/secondary_indexes.md
-  - from: /concepts/query_execution/federated_query/(.*)$
-    to: /concepts/federated_query/$1
+  - from: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+  - from: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
 
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md

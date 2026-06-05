@@ -8,11 +8,6 @@ import json
 import os
 
 try:
-    import jwt
-except ImportError:
-    jwt = None  # type: ignore[assignment]
-
-try:
     from yandex.cloud.iam.v1 import iam_token_service_pb2_grpc
     from yandex.cloud.iam.v1 import iam_token_service_pb2
 except ImportError:
@@ -29,19 +24,16 @@ except ImportError:
             iam_token_service_pb2_grpc = None
             iam_token_service_pb2 = None
 
-try:
-    import requests
-except ImportError:
-    requests = None  # type: ignore
-
-
 DEFAULT_METADATA_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
 YANDEX_CLOUD_IAM_TOKEN_SERVICE_URL = "https://iam.api.cloud.yandex.net/iam/v1/tokens"
 YANDEX_CLOUD_JWT_ALGORITHM = "PS256"
 
 
 def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout, algorithm, token_service_url, subject=None):
-    assert jwt is not None, "Install pyjwt library to use jwt tokens"
+    try:
+        import jwt
+    except ImportError as e:
+        raise ImportError("Install pyjwt library to use jwt tokens") from e
     now = time.time()
     now_utc = datetime.fromtimestamp(now, timezone.utc)
     exp_utc = datetime.fromtimestamp(now + jwt_expiration_timeout, timezone.utc)
@@ -180,7 +172,10 @@ class MetadataUrlCredentials(credentials.AbstractExpiringTokenCredentials):
         :param ydb.Tracer tracer: ydb tracer
         """
         super(MetadataUrlCredentials, self).__init__(tracer)
-        assert requests is not None, "Install requests library to use metadata credentials provider"
+        try:
+            import requests  # noqa: F401
+        except ImportError as e:
+            raise ImportError("Install requests library to use metadata credentials provider") from e
         self.extra_error_message = (
             "Check that metadata service configured properly since we failed to fetch it from metadata_url."
         )
@@ -188,6 +183,8 @@ class MetadataUrlCredentials(credentials.AbstractExpiringTokenCredentials):
 
     @tracing.with_trace()
     def _make_token_request(self):
+        import requests
+
         response = requests.get(self._metadata_url, headers={"Metadata-Flavor": "Google"}, timeout=3)
         response.raise_for_status()
         return json.loads(response.text)

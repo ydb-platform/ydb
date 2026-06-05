@@ -12,6 +12,9 @@ PEERDIR(
     yql/essentials/utils
 )
 
- YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(yql_yt_binary_yson_compare_impl.h)
+
 END()
 

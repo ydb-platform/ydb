@@ -19,13 +19,9 @@ import pexpect
 
 import yatest
 
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
+
 logger = logging.getLogger(__name__)
-
-
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY environment variable is not specified")
 
 
 class ProfileTestBase:
@@ -97,7 +93,7 @@ class ProfileTestBase:
             env=env
         )
         # For debugging, enable output to stdout
-        if debug:
+        if debug or os.getenv("YDB_CLI_TEST_DEBUG", None):
             child.logfile_read = sys.stdout
         return child
 
@@ -675,8 +671,8 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         child.expect("Welcome", timeout=5)
 
-        # Wait for Input to be ready (shown by "Enter to confirm")
-        child.expect("Enter to confirm", timeout=5)
+        # Wait for Input to be ready (shown by "Enter.*to confirm")
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("new_full_profile\r")
 
@@ -685,7 +681,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.send('\r')
 
         # Enter endpoint value - wait for Input
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("grpc://newhost:2136\r")
 
@@ -694,7 +690,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.send('\r')
 
         # Enter database value - wait for Input
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("/NewDatabase\r")
 
@@ -725,7 +721,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.expect("Welcome", timeout=5)
 
         # Wait for Input to be ready
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("endpoint_only_init\r")
 
@@ -734,7 +730,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.send('\r')
 
         # Enter endpoint value
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("grpc://endpoint-only:2136\r")
 
@@ -768,7 +764,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.expect("Welcome", timeout=5)
 
         # Wait for Input to be ready
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("metadata_init_profile\r")
 
@@ -777,7 +773,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.send('\r')
 
         # Enter endpoint
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("grpc://metadata-test:2136\r")
 
@@ -786,7 +782,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.send('\r')
 
         # Enter database
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("/MetadataDb\r")
 
@@ -816,7 +812,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.expect("Welcome", timeout=5)
 
         # Wait for Input to be ready
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("minimal_init_profile\r")
 
@@ -863,7 +859,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.send('\r')
 
         # Wait for Input to be ready
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("second_profile\r")
 
@@ -872,7 +868,7 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.send('\r')
 
         # Enter endpoint
-        child.expect("Enter to confirm", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
         child.send("grpc://second:2136\r")
 
@@ -889,15 +885,17 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Activate - Yes
         child.expect("Activate", timeout=5)
+        child.expect("Enter.*to confirm", timeout=5)
         child.send('\r')
 
+        child.expect("is now active", timeout=5)
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
 
         config = self.read_profile_file()
-        assert 'second_profile' in config['profiles']
-        assert config['profiles']['second_profile']['endpoint'] == 'grpc://second:2136'
-        assert config.get('active_profile') == 'second_profile'
+        assert 'second_profile' in config['profiles'], config
+        assert config['profiles']['second_profile']['endpoint'] == 'grpc://second:2136', config
+        assert config.get('active_profile') == 'second_profile', config
 
     def test_init_select_existing_profile(self):
         """Select existing profile to modify in init"""

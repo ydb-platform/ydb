@@ -1,3 +1,4 @@
 [
-    "ydb/core/nbs"
+    "ydb/core/nbs",
+    "ydb/core/tx/columnshard"
 ]

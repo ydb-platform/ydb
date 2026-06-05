@@ -538,8 +538,10 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomUpsertReturning, UseDataQuery) {
-        auto settings = TKikimrSettings().SetWithSampleTables(true);
+    Y_UNIT_TEST_QUAD(NamedExpressionRandomUpsertReturning, UseDataQuery, EnableIndexStreamWrite) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        auto settings = TKikimrSettings(app).SetWithSampleTables(true);
 
         const std::vector<std::pair<std::string, std::string>> tests = {
             {"", ""},
@@ -646,8 +648,10 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomUpsertRevert, UseDataQuery) {
-        auto settings = TKikimrSettings().SetWithSampleTables(true);
+    Y_UNIT_TEST_QUAD(NamedExpressionRandomUpsertRevert, UseDataQuery, EnableIndexStreamWrite) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        auto settings = TKikimrSettings(app).SetWithSampleTables(true);
 
         const std::vector<std::string> ops = {"UPSERT", "INSERT", "INSERT OR REVERT"};
 

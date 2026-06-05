@@ -15,7 +15,8 @@ class TBlobsRemovingResult: public INormalizerChanges {
 public:
     TBlobsRemovingResult(std::shared_ptr<IBlobsDeclareRemovingAction> removingAction, std::vector<TPortionDataAccessor>&& portions)
         : RemovingAction(removingAction)
-        , Portions(std::move(portions)) {
+        , Portions(std::move(portions))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
@@ -47,7 +48,8 @@ class TBlobsRemovingTask: public INormalizerTask {
 public:
     TBlobsRemovingTask(std::vector<TUnifiedBlobId>&& blobs, std::vector<TPortionDataAccessor>&& portions)
         : Blobs(std::move(blobs))
-        , Portions(std::move(portions)) {
+        , Portions(std::move(portions))
+    {
     }
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {

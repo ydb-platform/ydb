@@ -223,40 +223,6 @@ private:
         }
 
         int result = 0;
-        if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
-            const TString& caCertificateFile = Settings.GetUseTls().GetCaCertFile();
-            result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CACERTFILE, caCertificateFile.c_str());
-            if (!NKikimrLdap::IsSuccess(result)) {
-                TStringBuilder logErrorMessage;
-                logErrorMessage << "Could not set LDAP ca file \"" << caCertificateFile + "\": " << NKikimrLdap::ErrorToString(result);
-                LDAP_LOG_D(logErrorMessage);
-                NKikimrLdap::Unbind(*ld);
-                return {{NKikimrLdap::ErrorToStatus(result),
-                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
-            }
-            const TString& certFile = Settings.GetUseTls().GetCertFile();
-            const TString& keyFile = Settings.GetUseTls().GetKeyFile();
-            if (!certFile.empty() && !keyFile.empty()) {
-                result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CERTFILE, certFile.c_str());
-                if (!NKikimrLdap::IsSuccess(result)) {
-                    TStringBuilder logErrorMessage;
-                    logErrorMessage << "Could not set LDAP client certificate file \"" << certFile + "\": " << NKikimrLdap::ErrorToString(result);
-                    LDAP_LOG_D(logErrorMessage);
-                    NKikimrLdap::Unbind(*ld);
-                    return {{NKikimrLdap::ErrorToStatus(result),
-                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
-                }
-                result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_KEYFILE, keyFile.c_str());
-                if (!NKikimrLdap::IsSuccess(result)) {
-                    TStringBuilder logErrorMessage;
-                    logErrorMessage << "Could not set LDAP client key file \"" << keyFile + "\": " << NKikimrLdap::ErrorToString(result);
-                    LDAP_LOG_D(logErrorMessage);
-                    NKikimrLdap::Unbind(*ld);
-                    return {{NKikimrLdap::ErrorToStatus(result),
-                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
-                }
-            }
-        }
 
         LDAP_LOG_D("init: scheme: " << Settings.GetScheme() << ", uris: " << UrisCreator.GetUris() << ", port: " << UrisCreator.GetConfiguredPort());
         result = NKikimrLdap::Init(ld, Settings.GetScheme(), UrisCreator.GetUris(), UrisCreator.GetConfiguredPort());
@@ -279,6 +245,51 @@ private:
         }
 
         if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
+            // ldap_initialize intentionally zeroes out ldo_tls_info (all file paths) in the
+            // per-connection context and sets ldo_tls_ctx = NULL (see open.c comment:
+            // "We explicitly inherit the SSL_CTX, don't need the names/paths").
+            // Therefore ALL TLS file paths must be set on the per-connection context (*ld != NULL)
+            // AFTER ldap_initialize. Then LDAP_OPT_X_TLS_NEWCTX forces OpenLDAP to rebuild the
+            // TLS context from the per-connection options, so the TLS handshake (which happens
+            // on first connect inside ldap_bind for ldaps://, or inside ldap_start_tls_s for
+            // StartTLS) uses the correct per-connection certificate and CA paths.
+            // This also eliminates the race condition: since we no longer rely on the global
+            // context for TLS_CERTFILE/TLS_KEYFILE/TLS_CACERTFILE, parallel connections with
+            // different certificates cannot interfere with each other.
+            const TString& caCertificateFile = Settings.GetUseTls().GetCaCertFile();
+            result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CACERTFILE, caCertificateFile.c_str());
+            if (!NKikimrLdap::IsSuccess(result)) {
+                TStringBuilder logErrorMessage;
+                logErrorMessage << "Could not set LDAP ca file \"" << caCertificateFile + "\": " << NKikimrLdap::ErrorToString(result);
+                LDAP_LOG_D(logErrorMessage);
+                NKikimrLdap::Unbind(*ld);
+                return {{NKikimrLdap::ErrorToStatus(result),
+                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+            }
+
+            const TString& certFile = Settings.GetUseTls().GetCertFile();
+            const TString& keyFile = Settings.GetUseTls().GetKeyFile();
+            if (!certFile.empty() && !keyFile.empty()) {
+                result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CERTFILE, certFile.c_str());
+                if (!NKikimrLdap::IsSuccess(result)) {
+                    TStringBuilder logErrorMessage;
+                    logErrorMessage << "Could not set LDAP client certificate file \"" << certFile + "\": " << NKikimrLdap::ErrorToString(result);
+                    LDAP_LOG_D(logErrorMessage);
+                    NKikimrLdap::Unbind(*ld);
+                    return {{NKikimrLdap::ErrorToStatus(result),
+                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                }
+                result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_KEYFILE, keyFile.c_str());
+                if (!NKikimrLdap::IsSuccess(result)) {
+                    TStringBuilder logErrorMessage;
+                    logErrorMessage << "Could not set LDAP client key file \"" << keyFile + "\": " << NKikimrLdap::ErrorToString(result);
+                    LDAP_LOG_D(logErrorMessage);
+                    NKikimrLdap::Unbind(*ld);
+                    return {{NKikimrLdap::ErrorToStatus(result),
+                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                }
+            }
+
             int requireCert = NKikimrLdap::ConvertRequireCert(Settings.GetUseTls().GetCertRequire());
             result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_REQUIRE_CERT, &requireCert);
             if (!NKikimrLdap::IsSuccess(result)) {
@@ -286,6 +297,20 @@ private:
                 TStringBuilder logErrorMessage;
                 logErrorMessage << "Could not set require certificate option: " << NKikimrLdap::ErrorToString(result);
                 LDAP_LOG_D(logErrorMessage);
+                return {{NKikimrLdap::ErrorToStatus(result),
+                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+            }
+
+            // Force OpenLDAP to rebuild the per-connection TLS context from the options we just
+            // set above. Without this call, ldo_tls_ctx remains NULL and OpenLDAP would fall back
+            // to the global TLS context (which has empty paths after ldap_initialize zeroed them).
+            int newCtxArg = 0; // 0 = client context (not server)
+            result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_NEWCTX, &newCtxArg);
+            if (!NKikimrLdap::IsSuccess(result)) {
+                TStringBuilder logErrorMessage;
+                logErrorMessage << "Could not initialize TLS context for LDAP connection: " << NKikimrLdap::ErrorToString(result);
+                LDAP_LOG_D(logErrorMessage);
+                NKikimrLdap::Unbind(*ld);
                 return {{NKikimrLdap::ErrorToStatus(result),
                         {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }

@@ -1,11 +1,13 @@
 #include "kqp_opt_log_impl.h"
 #include "kqp_opt_log_rules.h"
 
-#include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/common_opt/yql_co_sqlin.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -43,7 +45,7 @@ bool CanRewriteSqlInToEquiJoin(const TTypeAnnotationNode* lookupType, const TTyp
     return false;
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrConfiguration::TPtr& config)

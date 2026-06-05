@@ -4,6 +4,10 @@
 
 {% list tabs %}
 
+- C++
+
+  Функциональность на данный момент не поддерживается.
+
 - Go
 
   {% list tabs %}
@@ -401,6 +405,39 @@
 
   let client = ydb::ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
       .client()?;
+  ```
+
+- C#
+
+  В {{ ydb-short-name }} C# SDK логирование подключается через стандартный интерфейс `ILoggerFactory` из `Microsoft.Extensions.Logging`. Можно передать любую реализацию — консольный логгер, Serilog, NLog и другие:
+
+  ```C#
+  using Microsoft.Extensions.Logging;
+  using Ydb.Sdk.Ado;
+
+  var loggerFactory = LoggerFactory.Create(builder =>
+      builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
+
+  var ydbBuilder = new YdbConnectionStringBuilder
+  {
+      Host = "localhost",
+      Port = 2136,
+      Database = "/local",
+      LoggerFactory = loggerFactory
+  };
+
+  await using var dataSource = new YdbDataSource(ydbBuilder);
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
+
+  Так как `LoggerFactory` принимает стандартный `ILoggerFactory`, подключить Serilog или NLog можно без дополнительных адаптеров:
+
+  ```C#
+  // Serilog
+  var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+
+  // NLog
+  var loggerFactory = LoggerFactory.Create(builder => builder.AddNLog());
   ```
 
 - PHP

@@ -7,6 +7,7 @@
 namespace NKikimr::NColumnShard {
 class TColumnShard;
 class TArrowData;
+
 class TWriteTask: public TMoveOnly {
 private:
     std::shared_ptr<TArrowData> ArrowData;
@@ -39,9 +40,11 @@ public:
         return Timeout ? (Created + *Timeout <= now) : false;
     }
 
-    TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId, const NActors::TActorId recipientId,
-        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId, const ui64 lockNodeId, const NKikimrDataEvents::ELockMode lockMode,
-        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo)
+    TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
+        const NActors::TActorId recipientId, const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie,
+        const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId, const ui64 lockNodeId, const NKikimrDataEvents::ELockMode lockMode,
+        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout,
+        const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo)
         : ArrowData(arrowData)
         , Schema(schema)
         , SourceId(sourceId)
@@ -71,7 +74,8 @@ public:
     }
 
     bool Execute(TColumnShard* owner, const TActorContext& ctx) const;
-    void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
+    void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx,
+        const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
 };
 
 class TWriteTasksQueue {
@@ -82,7 +86,8 @@ private:
 
 public:
     TWriteTasksQueue(TColumnShard* owner)
-        : Owner(owner) {
+        : Owner(owner)
+    {
     }
 
     ~TWriteTasksQueue();

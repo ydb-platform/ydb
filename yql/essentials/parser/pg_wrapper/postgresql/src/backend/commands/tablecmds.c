@@ -8873,7 +8873,7 @@ ATExecAddStatistics(AlteredTableInfo *tab, Relation rel,
 	/* The CreateStatsStmt has already been through transformStatsStmt */
 	Assert(stmt->transformed);
 
-	address = CreateStatistics(stmt);
+	address = CreateStatistics(stmt, !is_rebuild);
 
 	return address;
 }
@@ -17636,6 +17636,8 @@ ComputePartitionAttrs(ParseState *pstate, Relation rel, List *partParams, AttrNu
 			/* Expression */
 			Node	   *expr = pelem->expr;
 			char		partattname[16];
+			Bitmapset  *expr_attrs = NULL;
+			int			i;
 
 			Assert(expr != NULL);
 			atttype = exprType(expr);
@@ -17659,9 +17661,55 @@ ComputePartitionAttrs(ParseState *pstate, Relation rel, List *partParams, AttrNu
 			while (IsA(expr, CollateExpr))
 				expr = (Node *) ((CollateExpr *) expr)->arg;
 
+			/*
+			 * Examine all the columns in the partition key expression. When
+			 * the whole-row reference is present, examine all the columns of
+			 * the partitioned table.
+			 */
+			pull_varattnos(expr, 1, &expr_attrs);
+			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, expr_attrs))
+			{
+				expr_attrs = bms_add_range(expr_attrs,
+										   1 - FirstLowInvalidHeapAttributeNumber,
+										   RelationGetNumberOfAttributes(rel) - FirstLowInvalidHeapAttributeNumber);
+				expr_attrs = bms_del_member(expr_attrs, 0 - FirstLowInvalidHeapAttributeNumber);
+			}
+
+			i = -1;
+			while ((i = bms_next_member(expr_attrs, i)) >= 0)
+			{
+				AttrNumber	attno = i + FirstLowInvalidHeapAttributeNumber;
+
+				Assert(attno != 0);
+
+				/*
+				 * Cannot allow system column references, since that would
+				 * make partition routing impossible: their values won't be
+				 * known yet when we need to do that.
+				 */
+				if (attno < 0)
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+							 errmsg("partition key expressions cannot contain system column references")));
+
+				/*
+				 * Generated columns cannot work: They are computed after
+				 * BEFORE triggers, but partition routing is done before all
+				 * triggers.
+				 */
+				if (TupleDescAttr(RelationGetDescr(rel), attno - 1)->attgenerated)
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+							 errmsg("cannot use generated column in partition key"),
+							 errdetail("Column \"%s\" is a generated column.",
+									   get_attname(RelationGetRelid(rel), attno, false)),
+							 parser_errposition(pstate, pelem->location)));
+			}
+
 			if (IsA(expr, Var) &&
 				((Var *) expr)->varattno > 0)
 			{
+
 				/*
 				 * User wrote "(column)" or "(column COLLATE something)".
 				 * Treat it like simple attribute anyway.
@@ -17670,9 +17718,6 @@ ComputePartitionAttrs(ParseState *pstate, Relation rel, List *partParams, AttrNu
 			}
 			else
 			{
-				Bitmapset  *expr_attrs = NULL;
-				int			i;
-
 				partattrs[attn] = 0;	/* marks the column as expression */
 				*partexprs = lappend(*partexprs, expr);
 
@@ -17681,41 +17726,6 @@ ComputePartitionAttrs(ParseState *pstate, Relation rel, List *partParams, AttrNu
 				 * subqueries, aggregates, window functions, and SRFs, based
 				 * on the EXPR_KIND_ for partition expressions.
 				 */
-
-				/*
-				 * Cannot allow system column references, since that would
-				 * make partition routing impossible: their values won't be
-				 * known yet when we need to do that.
-				 */
-				pull_varattnos(expr, 1, &expr_attrs);
-				for (i = FirstLowInvalidHeapAttributeNumber; i < 0; i++)
-				{
-					if (bms_is_member(i - FirstLowInvalidHeapAttributeNumber,
-									  expr_attrs))
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-								 errmsg("partition key expressions cannot contain system column references")));
-				}
-
-				/*
-				 * Generated columns cannot work: They are computed after
-				 * BEFORE triggers, but partition routing is done before all
-				 * triggers.
-				 */
-				i = -1;
-				while ((i = bms_next_member(expr_attrs, i)) >= 0)
-				{
-					AttrNumber	attno = i + FirstLowInvalidHeapAttributeNumber;
-
-					if (attno > 0 &&
-						TupleDescAttr(RelationGetDescr(rel), attno - 1)->attgenerated)
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-								 errmsg("cannot use generated column in partition key"),
-								 errdetail("Column \"%s\" is a generated column.",
-										   get_attname(RelationGetRelid(rel), attno, false)),
-								 parser_errposition(pstate, pelem->location)));
-				}
 
 				/*
 				 * Preprocess the expression before checking for mutability.
@@ -18665,13 +18675,14 @@ ATExecDetachPartition(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	Relation	partRel;
 	ObjectAddress address;
 	Oid			defaultPartOid;
+	PartitionDesc partdesc;
 
 	/*
 	 * We must lock the default partition, because detaching this partition
 	 * will change its partition constraint.
 	 */
-	defaultPartOid =
-		get_default_oid_from_partdesc(RelationGetPartitionDesc(rel, true));
+	partdesc = RelationGetPartitionDesc(rel, true);
+	defaultPartOid = get_default_oid_from_partdesc(partdesc);
 	if (OidIsValid(defaultPartOid))
 	{
 		/*
@@ -18738,10 +18749,13 @@ ATExecDetachPartition(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		char	   *partrelname;
 
 		/*
-		 * Add a new constraint to the partition being detached, which
-		 * supplants the partition constraint (unless there is one already).
+		 * For strategies other than hash, add a constraint to the partition
+		 * being detached which supplants the partition constraint. For hash
+		 * we cannot do that, because the constraint would reference the
+		 * partitioned table OID, possibly causing problems later.
 		 */
-		DetachAddConstraintIfNeeded(wqueue, partRel);
+		if (partdesc->boundinfo->strategy != PARTITION_STRATEGY_HASH)
+			DetachAddConstraintIfNeeded(wqueue, partRel);
 
 		/*
 		 * We're almost done now; the only traces that remain are the
@@ -19398,7 +19412,10 @@ ATExecAttachPartitionIdx(List **wqueue, Relation parentIdx, RangeVar *name)
 
 	ObjectAddressSet(address, RelationRelationId, RelationGetRelid(partIdx));
 
-	/* Silently do nothing if already in the right state */
+	/*
+	 * Check if the index is already attached to the correct parent,
+	 * ultimately attempting one round of validation if already the case.
+	 */
 	currParent = partIdx->rd_rel->relispartition ?
 		get_partition_parent(partIdxId, false) : InvalidOid;
 	if (currParent != RelationGetRelid(parentIdx))
@@ -19498,6 +19515,14 @@ ATExecAttachPartitionIdx(List **wqueue, Relation parentIdx, RangeVar *name)
 
 		free_attrmap(attmap);
 
+		validatePartitionedIndex(parentIdx, parentTbl);
+	}
+	else if (!parentIdx->rd_index->indisvalid)
+	{
+		/*
+		 * The index is attached, but the parent is still invalid; see if it
+		 * can be validated now.
+		 */
 		validatePartitionedIndex(parentIdx, parentTbl);
 	}
 

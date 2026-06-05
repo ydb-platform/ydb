@@ -348,7 +348,7 @@ void TAggregateExpander::CollectColumnsSpecs()
         if (const auto distinctField = (child->ChildrenSize() == 3) ? child->Child(2) : nullptr) {
             const auto ins = Distinct2Columns_.emplace(distinctField->Content(), TIdxSet());
             if (ins.second) {
-                DistinctFields_.push_back(distinctField);
+                DistinctFields_.emplace_back(distinctField);
             }
             ins.first->second.insert(InitialColumnNames_.size());
         } else {

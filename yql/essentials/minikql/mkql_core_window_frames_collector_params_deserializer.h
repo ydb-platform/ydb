@@ -15,6 +15,8 @@ template <typename T>
 constexpr static bool IsNan(T value) {
     if constexpr (std::is_floating_point_v<T>) {
         return std::isnan(value);
+    } else if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
+        return NYql::NDecimal::IsNan(value);
     } else {
         return false;
     }
@@ -40,15 +42,18 @@ template <typename TStreamElement,
 TRangeComparator<TStreamElement, TContext> CreateComparator(
     EDirection direction,
     TWithScale<TRangeScaler, TRangeType> delta,
-    TWithScale<TRangeColumnScaler, TRangeColumnType>,
+    TWithScale<TRangeColumnScaler, TRangeColumnType> column,
     const TDeserializerContext& deserializerContext,
     ESortOrder sortOrder,
     ui32 memberIndex,
     bool isAdding,
     EInfBoundary infBoundary)
 {
+    if constexpr (std::is_same_v<TRangeType, NYql::NDecimal::TInt128>) {
+        MKQL_ENSURE(column.Precision == delta.Precision, "Precision must be the same for column and delta");
+    }
     EDirection adjustedDirection = (sortOrder == ESortOrder::Asc) ? direction : InvertDirection(direction);
-    return [adjustedDirection, delta = std::move(delta.Value), isAdding, deserializerContext, memberIndex, infBoundary](TStreamElement from, TStreamElement to, bool currentRighter, TContext& context) {
+    return [adjustedDirection, delta = std::move(delta), isAdding, deserializerContext, memberIndex, infBoundary](TStreamElement from, TStreamElement to, bool currentRighter, TContext& context) {
         auto fromValue = deserializerContext.ExtractMember(from, memberIndex);
         auto toValue = deserializerContext.ExtractMember(to, memberIndex);
         bool fromNull = deserializerContext.CheckNull(fromValue);
@@ -64,11 +69,11 @@ TRangeComparator<TStreamElement, TContext> CreateComparator(
 
         if constexpr (std::is_same_v<typename TBlackboxTypeData<TContext, TElement>::TPtr, TRangeColumnType>) {
             static_assert(std::is_same_v<typename TBlackboxTypeData<TContext, TElement>::TPtr, TRangeType>, "TBlackboxTypeData::TPtr is not the same as TRangeColumnType");
-            return delta->IsBelongToInterval(infBoundary,
-                                             adjustedDirection,
-                                             std::move(fromValue),
-                                             std::move(toValue),
-                                             context);
+            return delta.Value->IsBelongToInterval(infBoundary,
+                                                   adjustedDirection,
+                                                   std::move(fromValue),
+                                                   std::move(toValue),
+                                                   context);
         } else {
             auto fromValueUnpacked = deserializerContext.template Extract<TRangeColumnType>(fromValue);
             auto toValueUnpacked = deserializerContext.template Extract<TRangeColumnType>(toValue);
@@ -80,10 +85,18 @@ TRangeComparator<TStreamElement, TContext> CreateComparator(
                 return true;
             }
 
-            return IsBelongToInterval(infBoundary, adjustedDirection,
-                                      Scale(std::move(fromValueUnpacked), TRangeColumnScaler),
-                                      Scale(delta, TRangeScaler),
-                                      Scale(std::move(toValueUnpacked), TRangeColumnScaler));
+            if constexpr (std::is_same_v<TRangeType, NYql::NDecimal::TInt128>) {
+                return IsBelongToInterval(infBoundary, adjustedDirection,
+                                          Scale(std::move(fromValueUnpacked), TRangeColumnScaler),
+                                          Scale(delta.Value, TRangeScaler),
+                                          Scale(std::move(toValueUnpacked), TRangeColumnScaler),
+                                          delta.Precision);
+            } else {
+                return IsBelongToInterval(infBoundary, adjustedDirection,
+                                          Scale(std::move(fromValueUnpacked), TRangeColumnScaler),
+                                          Scale(delta.Value, TRangeScaler),
+                                          Scale(std::move(toValueUnpacked), TRangeColumnScaler));
+            }
         }
     };
 }

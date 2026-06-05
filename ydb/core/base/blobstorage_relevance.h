@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <util/system/types.h>
 
 namespace NKikimr {
 
@@ -11,10 +12,17 @@ using TMessageRelevanceWatcher = std::weak_ptr<TMessageRelevanceTracker>;
 
 class TMessageRelevance {
 public:
+    enum class EStatus : ui8 {
+        Relevant = 0,
+        CancelledInternally = 1,
+        CancelledExternally = 2,
+    };
+
+public:
     TMessageRelevance() = default;
     TMessageRelevance(const TMessageRelevanceOwner& owner,
             std::optional<TMessageRelevanceWatcher> external = std::nullopt);
-    bool IsRelevant() const;
+    EStatus GetStatus() const;
 
 private:
     // tracks request actor state and cancels request when actor dies

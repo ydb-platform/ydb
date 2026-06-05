@@ -16,7 +16,7 @@ import unittest as pyunit
 import warnings
 from collections import OrderedDict
 from types import TracebackType
-from typing import TYPE_CHECKING, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Union
 
 from zope.interface import implementer
 
@@ -36,12 +36,12 @@ try:
 except ImportError:
     TestProtocolClient = None
 
-ExcInfo: TypeAlias = Tuple[Type[BaseException], BaseException, TracebackType]
-XUnitFailure = Union[ExcInfo, Tuple[None, None, None]]
+ExcInfo: TypeAlias = tuple[type[BaseException], BaseException, TracebackType]
+XUnitFailure = Union[ExcInfo, tuple[None, None, None]]
 TrialFailure = Union[XUnitFailure, Failure]
 
 
-def _makeTodo(value: str) -> "Todo":
+def _makeTodo(value: str) -> Todo:
     """
     Return a L{Todo} object built from C{value}.
 
@@ -97,13 +97,16 @@ class TestResult(pyunit.TestResult):
     # Used when no todo provided to addExpectedFailure or addUnexpectedSuccess.
     _DEFAULT_TODO = "Test expected to fail"
 
-    skips: List[Tuple[itrial.ITestCase, str]]
-    expectedFailures: List[Tuple[itrial.ITestCase, str, "Todo"]]  # type: ignore[assignment]
-    unexpectedSuccesses: List[Tuple[itrial.ITestCase, str]]  # type: ignore[assignment]
+    errors: list[
+        tuple[itrial.ITestCase | pyunit.TestCase, str | Failure]
+    ]  # type:ignore[assignment]
+    skips: list[tuple[itrial.ITestCase, str]]
+    expectedFailures: list[tuple[itrial.ITestCase, str | Failure, Todo]]  # type: ignore[assignment]
+    unexpectedSuccesses: list[tuple[itrial.ITestCase, str]]  # type: ignore[assignment]
     successes: int
-    _testStarted: Optional[int]
+    _testStarted: int | None
     # The duration of the test. It is None until the test completes.
-    _lastTime: Optional[int]
+    _lastTime: int | None
 
     # Make pytest not think this is test class
     __test__ = False
@@ -171,7 +174,13 @@ class TestResult(pyunit.TestResult):
         """
         self.failures.append((test, self._getFailure(fail)))
 
-    def addError(self, test, error):
+    def addError(
+        self,
+        test: pyunit.TestCase,
+        error: Failure
+        | tuple[type[BaseException], BaseException, TracebackType]
+        | tuple[None, None, None],
+    ) -> None:
         """
         Report an error that occurred while running the given test.
 
@@ -253,9 +262,9 @@ class TestResult(pyunit.TestResult):
         """
 
 
-@implementer(itrial.IReporter)
+@implementer(itrial.IReporterWithDurations)
 class TestResultDecorator(
-    proxyForInterface(itrial.IReporter, "_originalReporter")  # type: ignore[misc]
+    proxyForInterface(itrial.IReporterWithDurations, "_originalReporter")  # type: ignore[misc]
 ):
     """
     Base class for TestResult decorators.

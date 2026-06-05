@@ -44,10 +44,37 @@ struct TTestReadyQueue: public IReadyQueue
         ReadyToFlush.erase(lsn);
     }
 
+    void DataToPBufferAdded(
+        THostIndex host,
+        EPBufferCounter counter,
+        size_t size) override
+    {
+        PBufferCounters[host][counter] += size;
+    }
+
+    void DataFromPBufferReleased(
+        THostIndex host,
+        EPBufferCounter counter,
+        size_t size) override
+    {
+        PBufferCounters[host][counter] -= size;
+    }
+
+    size_t GetTotalBytes(THostIndex host)
+    {
+        return PBufferCounters[host][EPBufferCounter::Total];
+    }
+
     THashSet<ui64> ReadyToClone;
     THashSet<ui64> ReadyToFlush;
     THashSet<ui64> ReadyToErase;
+    TMap<THostIndex, TMap<EPBufferCounter, size_t>> PBufferCounters;
 };
+
+THostMask MakePrimaryHosts()
+{
+    return THostMask::MakeAll(3);
+}
 
 }   // namespace
 
@@ -58,13 +85,13 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleRestore)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, ELocation::PBuffer0);
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096, THostIndex{0});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToClone.contains(123));
 
-        inflightInfo.RestorePBuffer(ELocation::PBuffer1);
+        inflightInfo.RestorePBuffer(THostIndex{1});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToClone.contains(123));
 
-        inflightInfo.RestorePBuffer(ELocation::PBuffer2);
+        inflightInfo.RestorePBuffer(THostIndex{2});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToClone.contains(123));
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
     }
@@ -75,60 +102,57 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             123,
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            4096,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
         // Start flushes
         UNIT_ASSERT_VALUES_EQUAL(
-            ELocation::PBuffer0,
-            inflightInfo.RequestFlush(ELocation::DDisk0));
+            THostIndex{0},
+            inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
-            ELocation::PBuffer1,
-            inflightInfo.RequestFlush(ELocation::DDisk1));
+            THostIndex{1},
+            inflightInfo.RequestFlush(THostIndex{1}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
-            ELocation::PBuffer2,
-            inflightInfo.RequestFlush(ELocation::DDisk2));
+            THostIndex{2},
+            inflightInfo.RequestFlush(THostIndex{2}, THostMask()));
 
         // Confirm flushes
-        inflightInfo.ConfirmFlush(TRoute{
-            .Source = ELocation::PBuffer0,
-            .Destination = ELocation::DDisk0});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{0},
+            .DestinationHostIndex = THostIndex{0}});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
         inflightInfo.ConfirmFlush(
-            {.Source = ELocation::PBuffer1, .Destination = ELocation::DDisk1});
+            {.SourceHostIndex = THostIndex{1},
+             .DestinationHostIndex = THostIndex{1}});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
         inflightInfo.ConfirmFlush(
-            {.Source = ELocation::PBuffer2, .Destination = ELocation::DDisk2});
+            {.SourceHostIndex = THostIndex{2},
+             .DestinationHostIndex = THostIndex{2}});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
         // Check erase requests
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer0));
+            inflightInfo.RequestErase(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer1));
+            inflightInfo.RequestErase(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer2));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(ELocation::HOPBuffer0));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(ELocation::HOPBuffer1));
+            inflightInfo.RequestErase(THostIndex{2}));
 
         // Confirm erases
         UNIT_ASSERT_VALUES_EQUAL(
             false,
-            inflightInfo.ConfirmErase(ELocation::PBuffer0));
+            inflightInfo.ConfirmErase(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             false,
-            inflightInfo.ConfirmErase(ELocation::PBuffer1));
+            inflightInfo.ConfirmErase(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.ConfirmErase(ELocation::PBuffer2));
+            inflightInfo.ConfirmErase(THostIndex{2}));
     }
 
     Y_UNIT_TEST(ShouldHandleLock)
@@ -137,22 +161,24 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             123,
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            4096,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
         // Start flushes
-        auto l = inflightInfo.RequestFlush(ELocation::DDisk0);
-        l = inflightInfo.RequestFlush(ELocation::DDisk1);
-        l = inflightInfo.RequestFlush(ELocation::DDisk2);
+        auto l = inflightInfo.RequestFlush(THostIndex{0}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{1}, THostMask());
+        l = inflightInfo.RequestFlush(THostIndex{2}, THostMask());
         Y_UNUSED(l);
 
         // Confirm two flushes
-        inflightInfo.ConfirmFlush(TRoute{
-            .Source = ELocation::PBuffer0,
-            .Destination = ELocation::DDisk0});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{0},
+            .DestinationHostIndex = THostIndex{0}});
         inflightInfo.ConfirmFlush(
-            {.Source = ELocation::PBuffer1, .Destination = ELocation::DDisk1});
+            {.SourceHostIndex = THostIndex{1},
+             .DestinationHostIndex = THostIndex{1}});
 
         // Check lock/unlock PBuffer
         inflightInfo.LockPBuffer();
@@ -160,7 +186,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // Confirm last flush
         inflightInfo.ConfirmFlush(
-            {.Source = ELocation::PBuffer2, .Destination = ELocation::DDisk2});
+            {.SourceHostIndex = THostIndex{2},
+             .DestinationHostIndex = THostIndex{2}});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.empty());
 
         inflightInfo.UnlockPBuffer();
@@ -169,30 +196,24 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         // Check erase requests
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer0));
+            inflightInfo.RequestErase(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer1));
+            inflightInfo.RequestErase(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer2));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(ELocation::HOPBuffer0));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestErase(ELocation::HOPBuffer1));
+            inflightInfo.RequestErase(THostIndex{2}));
 
         // Confirm erases
         UNIT_ASSERT_VALUES_EQUAL(
             false,
-            inflightInfo.ConfirmErase(ELocation::PBuffer0));
+            inflightInfo.ConfirmErase(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             false,
-            inflightInfo.ConfirmErase(ELocation::PBuffer1));
+            inflightInfo.ConfirmErase(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.ConfirmErase(ELocation::PBuffer2));
+            inflightInfo.ConfirmErase(THostIndex{2}));
     }
 
     Y_UNIT_TEST(ShouldPutToReadyQueueOnFail)
@@ -201,61 +222,112 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             123,
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            4096,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
 
         // Flush started
         UNIT_ASSERT_VALUES_EQUAL(
-            ELocation::PBuffer0,
-            inflightInfo.RequestFlush(ELocation::DDisk0));
+            THostIndex{0},
+            inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
-            ELocation::PBuffer1,
-            inflightInfo.RequestFlush(ELocation::DDisk1));
+            THostIndex{1},
+            inflightInfo.RequestFlush(THostIndex{1}, THostMask()));
         UNIT_ASSERT_VALUES_EQUAL(
-            ELocation::PBuffer2,
-            inflightInfo.RequestFlush(ELocation::DDisk2));
+            THostIndex{2},
+            inflightInfo.RequestFlush(THostIndex{2}, THostMask()));
 
         // When a flush fails, the lsn must be queued for a flush again.
         readyQueue.ReadyToFlush.clear();
-        inflightInfo.FlushFailed(TRoute{
-            .Source = ELocation::PBuffer0,
-            .Destination = ELocation::DDisk0});
+        inflightInfo.FlushFailed(THostRoute{
+            .SourceHostIndex = THostIndex{0},
+            .DestinationHostIndex = THostIndex{0}});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
-        // Restart flush to DDisk0
+        // Restart flush to host 0
         UNIT_ASSERT_VALUES_EQUAL(
-            ELocation::PBuffer0,
-            inflightInfo.RequestFlush(ELocation::DDisk0));
+            THostIndex{0},
+            inflightInfo.RequestFlush(THostIndex{0}, THostMask()));
 
         // Confirm flushes
-        inflightInfo.ConfirmFlush(TRoute{
-            .Source = ELocation::PBuffer0,
-            .Destination = ELocation::DDisk0});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{0},
+            .DestinationHostIndex = THostIndex{0}});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(TRoute{
-            .Source = ELocation::PBuffer1,
-            .Destination = ELocation::DDisk1});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{1},
+            .DestinationHostIndex = THostIndex{1}});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(TRoute{
-            .Source = ELocation::PBuffer2,
-            .Destination = ELocation::DDisk2});
+        inflightInfo.ConfirmFlush(THostRoute{
+            .SourceHostIndex = THostIndex{2},
+            .DestinationHostIndex = THostIndex{2}});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
         // Erase started
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer0));
+            inflightInfo.RequestErase(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer1));
+            inflightInfo.RequestErase(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            inflightInfo.RequestErase(ELocation::PBuffer2));
+            inflightInfo.RequestErase(THostIndex{2}));
 
         // When a erase fails, the lsn must be queued for a erase again.
         readyQueue.ReadyToErase.clear();
-        inflightInfo.EraseFailed(ELocation::PBuffer0);
+        inflightInfo.EraseFailed(THostIndex{0});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+    }
+
+    Y_UNIT_TEST(ShouldCountTotalBytesForRestore)
+    {
+        TTestReadyQueue readyQueue;
+        {
+            TInflightInfo inflightInfo(&readyQueue, 123, 4096, THostIndex{0});
+
+            inflightInfo.RestorePBuffer(THostIndex{1});
+            inflightInfo.RestorePBuffer(THostIndex{2});
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{2}));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
+    }
+
+    Y_UNIT_TEST(ShouldCountTotalBytesForConfirmedWrite)
+    {
+        TTestReadyQueue readyQueue;
+        {
+            TInflightInfo inflightInfo(
+                &readyQueue,
+                123,
+                4096,
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                4096,
+                readyQueue.GetTotalBytes(THostIndex{2}));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
     }
 }
 

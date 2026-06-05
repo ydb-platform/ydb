@@ -141,11 +141,17 @@ namespace NKikimr {
             // HANDLERS
             ////////////////////////////////////////////////////////////////////////
             void Handle(TEvSyncLogPut::TPtr &ev, const TActorContext &ctx) {
+                if (SlCtx->VCtx->Top->GType.GetErasure() == TBlobStorageGroupType::ErasureNone) {
+                    return;
+                }
                 KeepState.PutMany(ev->Get()->GetRecs().GetData(), ev->Get()->GetRecs().GetSize());
                 PerformActions(ctx);
             }
 
             void Handle(TEvSyncLogPutSst::TPtr& ev, const TActorContext& ctx) {
+                if (SlCtx->VCtx->Top->GType.GetErasure() == TBlobStorageGroupType::ErasureNone) {
+                    return;
+                }
                 KeepState.PutLevelSegment(ev->Get()->LevelSegment.Get());
                 PerformActions(ctx);
             }
@@ -209,6 +215,24 @@ namespace NKikimr {
                 PerformActions(ctx);
             }
 
+            void Handle(TEvSyncLogDiskOutOfSpace::TPtr &ev, const TActorContext &ctx) {
+                auto *msg = ev->Get();
+                LOG_NOTICE(ctx, BS_SYNCLOG,
+                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                                "KEEPER: TEvSyncLogDiskOutOfSpace: disposing disk sync log;"
+                                " allocatedChunks# %s", FormatList(msg->AllocatedChunks).data()));
+
+                Sublog.Log() << ToStringLocalTimeUpToSeconds(ctx.Now())
+                    << " Disk sync log disposed due to OUT_OF_SPACE\n";
+
+                // committer aborted the commit
+                CommitterId = TActorId();
+                KeepState.DisposeDiskSyncLog(std::move(msg->AllocatedChunks));
+
+                // start the disposal commit (and any other delayed actions)
+                PerformActions(ctx);
+            }
+
             void Handle(TEvSyncLogSnapshot::TPtr &ev, const TActorContext &ctx) {
                 ++SlCtx->IFaceMonGroup.SyncLogGetSnapshot();
                 auto snap = KeepState.GetSyncLogSnapshot();
@@ -230,6 +254,7 @@ namespace NKikimr {
                 if (CommitterId) {
                     ctx.Send(CommitterId, new TEvents::TEvPoisonPill());
                 }
+                KeepState.Terminate();
                 Die(ctx);
             }
 
@@ -255,7 +280,13 @@ namespace NKikimr {
             }
 
             void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
-                Send(ev->Sender, new TEvPhantomFlagStorageGetSnapshotResult(KeepState.GetPhantomFlagStorageSnapshot()));
+                KeepState.RequestPhantomFlagStorageSnapshot(ev);
+            }
+
+            void Handle(const TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
+                // This actor only requests PhantomFlagStorage snapshot on restart
+                // to rebuild ThresholdsStructure
+                KeepState.RecoverPhantomFlagStorage(std::move(ev->Get()->Snapshot));
             }
 
             void Handle(const TEvLocalSyncData::TPtr& ev) {
@@ -266,6 +297,11 @@ namespace NKikimr {
 
             void Handle(const TEvSyncLogUpdateNeighbourSyncedLsn::TPtr& ev) {
                 KeepState.UpdateNeighbourSyncedLsn(ev->Get()->OrderNumber, ev->Get()->SyncedLsn);
+            }
+
+            void Handle(TEvPhantomFlagStorageCommitData::TPtr ev) {
+                KeepState.UpdatePhantomFlagStorageData(std::move(ev->Get()->Data));
+                KeepState.RetireExtractedChunks(ev->Get()->RetiredChunks);
             }
 
             void UpdateCounters() {
@@ -279,6 +315,7 @@ namespace NKikimr {
                 HFunc(TEvSyncLogTrim, Handle)
                 HFunc(TEvSyncLogFreeChunk, Handle)
                 HFunc(TEvSyncLogCommitDone, Handle)
+                HFunc(TEvSyncLogDiskOutOfSpace, Handle)
                 HFunc(TEvSyncLogSnapshot, Handle)
                 HFunc(TEvSyncLogLocalStatus, Handle)
                 HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
@@ -287,6 +324,7 @@ namespace NKikimr {
                 HFunc(TEvListChunks, Handle)
                 hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageCommitData, Handle)
                 hFunc(TEvLocalSyncData, Handle)
                 hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
                 cFunc(TEvents::TEvWakeup::EventType, UpdateCounters)

@@ -62,7 +62,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     readerSettings.SetTopicPartitionId(workerId);
     readerSettings.SetConsumerName(srcStreamConsumerName);
 
-    switch(config->GetKind()) {
+    switch (config->GetKind()) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable: {
             auto& writerSettings = *command.MutableLocalTableWriter();

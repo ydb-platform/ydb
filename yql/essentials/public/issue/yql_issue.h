@@ -356,13 +356,13 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message);
 } // namespace NYql
 
 template <>
-void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos);
+void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& value);
 
 template <>
-void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& pos);
+void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& value);
 
 template <>
-void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error);
+void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& value);
 
 template <>
 struct THash<NYql::TIssue> {

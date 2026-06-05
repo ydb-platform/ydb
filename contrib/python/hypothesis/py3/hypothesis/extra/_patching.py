@@ -129,20 +129,20 @@ class AddExamplesCodemod(VisitorBasedCodemodCommand):
                 else node.args
             ),
         )
-        via: cst.BaseExpression = cst.Call(
+        expr: cst.BaseExpression = cst.Call(
             func=cst.Attribute(node, cst.Name("via")),
             args=[cst.Arg(cst.SimpleString(repr(via)))],
         )
         if black:  # pragma: no branch
             try:
                 pretty = black.format_str(
-                    cst.Module([]).code_for_node(via),
+                    cst.Module([]).code_for_node(expr),
                     mode=black.Mode(line_length=self.line_length),
                 )
             except (ImportError, AttributeError):  # pragma: no cover
                 return None  # See https://github.com/psf/black/pull/4224
-            via = cst.parse_expression(pretty.strip())
-        return cst.Decorator(via)
+            expr = cst.parse_expression(pretty.strip())
+        return cst.Decorator(expr)
 
     def leave_FunctionDef(
         self, _original_node: cst.FunctionDef, updated_node: cst.FunctionDef
@@ -183,7 +183,7 @@ def get_patch_for(
     if patch is None:
         return None
 
-    (before, after) = patch
+    before, after = patch
     return (str(fname), before, after)
 
 
@@ -326,16 +326,17 @@ def save_patch(patch: str, *, slug: str = "") -> Path:  # pragma: no cover
     now = date.today().isoformat()
     cleaned = re.sub(r"^Date: .+?$", "", patch, count=1, flags=re.MULTILINE)
     hash8 = hashlib.sha1(cleaned.encode()).hexdigest()[:8]
-    fname = Path(storage_directory("patches", f"{now}--{slug}{hash8}.patch"))
-    fname.parent.mkdir(parents=True, exist_ok=True)
-    fname.write_text(patch, encoding="utf-8")
-    return fname.relative_to(Path.cwd())
+    patches_dir = storage_directory("patches")
+    patches_dir.create_if_missing()
+    p = patches_dir.path / f"{now}--{slug}{hash8}.patch"
+    p.write_text(patch, encoding="utf-8")
+    return p.relative_to(Path.cwd())
 
 
 def gc_patches(slug: str = "") -> None:  # pragma: no cover
     cutoff = date.today() - timedelta(days=7)
-    for fname in Path(storage_directory("patches")).glob(
+    for p in storage_directory("patches").path.glob(
         f"????-??-??--{slug}????????.patch"
     ):
-        if date.fromisoformat(fname.stem.split("--")[0]) < cutoff:
-            fname.unlink()
+        if date.fromisoformat(p.stem.split("--")[0]) < cutoff:
+            p.unlink()

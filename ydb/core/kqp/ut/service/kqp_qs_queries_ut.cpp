@@ -5688,7 +5688,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         if (!qResult.IsSuccess()) {
             Cerr << "Query failed, status: " << qResult.GetStatus() << ": " << qResult.GetIssues().ToString() << Endl;
         }
-        UNIT_ASSERT_C(qResult.IsSuccess() == expectOk, TStringBuilder() << "Query: " << query << ", status: " << qResult.GetStatus() << ": " << qResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(qResult.IsSuccess(), expectOk, TStringBuilder() << "Query: " << query << ", status: " << qResult.GetStatus() << ": " << qResult.GetIssues().ToString());
     };
 
     struct TEntryCheck {
@@ -5733,6 +5733,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_DEBUG);
         auto client = kikimr.GetQueryClient();
         auto session = client.GetSession().GetValueSync().GetSession();
         auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),
@@ -5799,6 +5800,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr{serverSettings};
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_DEBUG);
         auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
         auto session = client.GetSession().GetValueSync().GetSession();
         auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),

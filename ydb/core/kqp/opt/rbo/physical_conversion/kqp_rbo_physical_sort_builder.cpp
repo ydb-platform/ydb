@@ -90,23 +90,8 @@ TVector<TExprNode::TPtr> TPhysicalSortBuilder::BuildSortKeysForWideSort(const TV
     return sortKeys;
 }
 
-TVector<TInfoUnit> TPhysicalSortBuilder::GetInputIUs() const {
-    const auto inputOp = Sort->GetInput();
-    const auto inputStageId = *(inputOp->Props.StageId);
-    const auto sortStageId = *(Sort->Props.StageId);
-    if (inputOp->GetKind() == EOperator::Source && inputStageId == sortStageId && CastOperator<TOpRead>(inputOp)->NeedsMap()) {
-        TVector<TInfoUnit> result;
-        for (const auto& column : CastOperator<TOpRead>(inputOp)->Columns) {
-            result.emplace_back(column);
-        }
-        return result;
-    }
-
-    return inputOp->GetOutputIUs();
-}
-
 TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputs = GetInputIUs();
+    const auto inputs = Sort->GetInput()->GetOutputIUs();
     const auto& sortElements = Sort->SortElements;
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)

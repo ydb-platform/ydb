@@ -192,6 +192,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kDescendCommittedStorageConfig:
                         return DescendCommittedStorageConfig(op.Command.GetDescendCommittedStorageConfig());
 
+                    case TQuery::kDemandRetroTrace:
+                        return DemandRetroTrace(op.Command.GetDemandRetroTrace());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
@@ -254,6 +257,22 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
         StartProposition(request->MutableConfig());
+    }
+
+    void TInvokeRequestHandlerActor::DemandRetroTrace(const TQuery::TDemandRetroTrace& cmd) {
+        for (const auto& proto : cmd.GetTraceId()) {
+            NWilson::TTraceId traceId(proto);
+            if (traceId) {
+                Self->PendingRetroTraceIds.push_back(std::move(traceId));
+            }
+        }
+
+        if (!std::exchange(Self->RetroTraceBatchFlushScheduled, true)) {
+            TActivationContext::Schedule(Self->RetroTraceBatchInterval,
+                    new IEventHandle(TEvPrivate::EvFlushRetroTraceBatch, 0, Self->SelfId(), {}, nullptr, 0));
+        }
+
+        Finish(TResult::OK, std::nullopt, {}, false);
     }
 
     void TInvokeRequestHandlerActor::DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request) {
@@ -372,7 +391,7 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
-            const std::function<void(TResult*)>& callback) {
+            const std::function<void(TResult*)>& callback, bool sendResult) {
         TResult record;
         record.SetStatus(status);
         if (errorReason) {
@@ -393,13 +412,15 @@ namespace NKikimr::NStorage {
 
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
-                auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
-                record.Swap(&ev->Record);
-                auto handle = std::make_unique<IEventHandle>(op.Sender, SelfId(), ev.release(), 0, op.Cookie);
-                if (op.SessionId) {
-                    handle->Rewrite(TEvInterconnect::EvForward, op.SessionId);
+                if (sendResult) {
+                    auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                    record.Swap(&ev->Record);
+                    auto handle = std::make_unique<IEventHandle>(op.Sender, SelfId(), ev.release(), 0, op.Cookie);
+                    if (op.SessionId) {
+                        handle->Rewrite(TEvInterconnect::EvForward, op.SessionId);
+                    }
+                    TActivationContext::Send(handle.release());
                 }
-                TActivationContext::Send(handle.release());
             },
             [&](TCollectConfigsAndPropose&) {
                 if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {

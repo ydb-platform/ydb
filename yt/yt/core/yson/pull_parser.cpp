@@ -436,7 +436,7 @@ TYsonItem TYsonPullParser::Next()
         auto visitor = NDetail::TYsonItemCreatingVisitor();
         return NextImpl(&visitor);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error occurred while parsing YSON")
+        THROW_ERROR_EXCEPTION(EErrorCode::ParseError, "Error occurred while parsing YSON")
             << GetErrorAttributes()
             << ex;
     }

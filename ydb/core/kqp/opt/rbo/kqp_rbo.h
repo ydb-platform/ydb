@@ -21,12 +21,13 @@ enum ERuleProperties: ui32 {
  *
  * The rule may contain various metadata such as its name and a list of properties it requires to be computed
  * And it currently has a MatchAndApply method that checks if the rule can be applied and makes in-place modifications
- * to the plan.
+ * to the plan. It can also modify the input operator, in this case the optimizer will replace the old version with the new
+ * in the updated plan.
  */
 class IRule {
   public:
     IRule(TString name) : RuleName(name) {}
-    IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
+    IRule(TString name, ui32 props, bool logRule = true) : RuleName(name), Props(props), LogRule(logRule) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -44,7 +45,7 @@ class IRule {
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
-    ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
+    ISimplifiedRule(TString name, ui32 props, bool logRule = true) : IRule(name, props, logRule) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -104,6 +105,9 @@ public:
  * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
+
+TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
+TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 } // namespace NKqp
 } // namespace NKikimr

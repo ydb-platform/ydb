@@ -498,28 +498,28 @@ Y_UNIT_TEST(MixedTypeArithmetic) {
     // Test TWide + floating point (returns floating point)
     {
         Wide32 w(100);
-        UNIT_ASSERT_DOUBLES_EQUAL(w + 1.5f, 101.5f, 0.001f);
+        UNIT_ASSERT_DOUBLES_EQUAL(w + 1.5F, 101.5F, 0.001F);
         UNIT_ASSERT_DOUBLES_EQUAL(w + 2.5, 102.5, 0.001);
     }
 
     // Test floating point + TWide (returns floating point)
     {
         Wide32 w(100);
-        UNIT_ASSERT_DOUBLES_EQUAL(1.5f + w, 101.5f, 0.001f);
+        UNIT_ASSERT_DOUBLES_EQUAL(1.5F + w, 101.5F, 0.001F);
         UNIT_ASSERT_DOUBLES_EQUAL(2.5 + w, 102.5, 0.001);
     }
 
     // Test TWide - floating point (returns floating point)
     {
         Wide32 w(100);
-        UNIT_ASSERT_DOUBLES_EQUAL(w - 1.5f, 98.5f, 0.001f);
+        UNIT_ASSERT_DOUBLES_EQUAL(w - 1.5F, 98.5F, 0.001F);
         UNIT_ASSERT_DOUBLES_EQUAL(w - 2.5, 97.5, 0.001);
     }
 
     // Test floating point - TWide (returns floating point)
     {
         Wide32 w(50);
-        UNIT_ASSERT_DOUBLES_EQUAL(100.5f - w, 50.5f, 0.001f);
+        UNIT_ASSERT_DOUBLES_EQUAL(100.5F - w, 50.5F, 0.001F);
         UNIT_ASSERT_DOUBLES_EQUAL(100.5 - w, 50.5, 0.001);
     }
 
@@ -555,10 +555,10 @@ Y_UNIT_TEST(MixedTypeArithmeticBoundaryValues) {
     // Test with ui8 boundary values
     {
         UWide32 w(0);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(w + std::numeric_limits<ui8>::max()), 255u);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(w + std::numeric_limits<ui8>::min()), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(std::numeric_limits<ui8>::max() + w), 255u);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(std::numeric_limits<ui8>::min() + w), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(w + std::numeric_limits<ui8>::max()), 255U);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(w + std::numeric_limits<ui8>::min()), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(std::numeric_limits<ui8>::max() + w), 255U);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(std::numeric_limits<ui8>::min() + w), 0U);
     }
 
     {
@@ -596,9 +596,9 @@ Y_UNIT_TEST(MixedTypeArithmeticBoundaryValues) {
     // Test with floating point boundary values
     {
         Wide64 w(1000000);
-        UNIT_ASSERT_DOUBLES_EQUAL(w + std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), 1e30f);
-        UNIT_ASSERT_DOUBLES_EQUAL(w + std::numeric_limits<float>::min(), 1000000.0f, 1.0f);
-        UNIT_ASSERT_DOUBLES_EQUAL(std::numeric_limits<float>::max() + w, std::numeric_limits<float>::max(), 1e30f);
+        UNIT_ASSERT_DOUBLES_EQUAL(w + std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), 1e30F);
+        UNIT_ASSERT_DOUBLES_EQUAL(w + std::numeric_limits<float>::min(), 1000000.0F, 1.0F);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::numeric_limits<float>::max() + w, std::numeric_limits<float>::max(), 1e30F);
 
         UNIT_ASSERT_DOUBLES_EQUAL(w + std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), 1e300);
         UNIT_ASSERT_DOUBLES_EQUAL(w + std::numeric_limits<double>::min(), 1000000.0, 1.0);
@@ -607,10 +607,10 @@ Y_UNIT_TEST(MixedTypeArithmeticBoundaryValues) {
     // Test with negative floating point values
     {
         Wide32 w(100);
-        UNIT_ASSERT_DOUBLES_EQUAL(w + (-50.5f), 49.5f, 0.001f);
-        UNIT_ASSERT_DOUBLES_EQUAL((-50.5f) + w, 49.5f, 0.001f);
-        UNIT_ASSERT_DOUBLES_EQUAL(w - (-50.5f), 150.5f, 0.001f);
-        UNIT_ASSERT_DOUBLES_EQUAL((-50.5f) - w, -150.5f, 0.001f);
+        UNIT_ASSERT_DOUBLES_EQUAL(w + (-50.5F), 49.5F, 0.001F);
+        UNIT_ASSERT_DOUBLES_EQUAL((-50.5F) + w, 49.5F, 0.001F);
+        UNIT_ASSERT_DOUBLES_EQUAL(w - (-50.5F), 150.5F, 0.001F);
+        UNIT_ASSERT_DOUBLES_EQUAL((-50.5F) - w, -150.5F, 0.001F);
     }
 
     // Test with large TWide values and floating point
@@ -689,9 +689,9 @@ Y_UNIT_TEST(MixedTypeSpaceshipOperator) {
     // Test TWide <=> floating point
     {
         Wide32 w(100);
-        UNIT_ASSERT((w <=> 50.0f) > 0);
-        UNIT_ASSERT((w <=> 100.0f) == 0);
-        UNIT_ASSERT((w <=> 200.0f) < 0);
+        UNIT_ASSERT((w <=> 50.0F) > 0);
+        UNIT_ASSERT((w <=> 100.0F) == 0);
+        UNIT_ASSERT((w <=> 200.0F) < 0);
 
         UNIT_ASSERT((w <=> 50.0) > 0);
         UNIT_ASSERT((w <=> 100.0) == 0);
@@ -701,9 +701,9 @@ Y_UNIT_TEST(MixedTypeSpaceshipOperator) {
     // Test floating point <=> TWide
     {
         Wide32 w(100);
-        UNIT_ASSERT((50.0f <=> w) < 0);
-        UNIT_ASSERT((100.0f <=> w) == 0);
-        UNIT_ASSERT((200.0f <=> w) > 0);
+        UNIT_ASSERT((50.0F <=> w) < 0);
+        UNIT_ASSERT((100.0F <=> w) == 0);
+        UNIT_ASSERT((200.0F <=> w) > 0);
 
         UNIT_ASSERT((50.0 <=> w) < 0);
         UNIT_ASSERT((100.0 <=> w) == 0);

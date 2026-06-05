@@ -29,6 +29,6 @@ ci:
           title: Deploy docs
           task: common/docs/deploy
           input:
-            targets: yql/docs_yfm/yt;yql/docs_yfm/ydb;yql/docs_yfm/rtmr;yql/docs_yfm/main;yql/docs_yfm/s_expressions
+            targets: yql/docs_yfm/main;yql/docs_yfm/s_expressions
             arcanum_review_id: ${context.launch_pull_request_info.pull_request.id}
             notify: true # оставлять комментарий к ПР с ссылкой на выложенную документацию

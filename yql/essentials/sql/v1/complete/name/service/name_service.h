@@ -143,7 +143,7 @@ struct TNameResponse {
     TVector<TGenericName> RankedNames;
     TMaybe<size_t> NameHintLength = Nothing();
 
-    bool IsEmpty() const {
+    [[nodiscard]] bool IsEmpty() const {
         return RankedNames.empty();
     }
 };

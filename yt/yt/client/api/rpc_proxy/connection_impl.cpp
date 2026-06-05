@@ -37,6 +37,7 @@
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NBus;
+using namespace NBus::NTcp;
 using namespace NRpc;
 using namespace NNet;
 using namespace NHttp;
@@ -387,7 +388,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
     try {
         YT_LOG_DEBUG("Updating proxy list via HTTP (CorrelationId: %v)", correlationId);
 
-        auto poller = TTcpDispatcher::Get()->GetXferPoller();
+        auto poller = NYT::NBus::NTcp::TDispatcher::Get()->GetXferPoller();
         auto headers = New<THeaders>();
         SetUserAgent(headers, GetRpcUserAgent());
         if (auto token = DiscoveryToken_.Load(); !token.empty()) {

@@ -26,7 +26,7 @@ void TGRpcYdbObjectStorageService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr lo
         requestType,                                                    \
         YDB_API_DEFAULT_COUNTER_BLOCK(object-storage-list, methodName), \
         auditMode,                                                      \
-        EEmptyDatabaseMode::EmptyDatabaseAllowed,                       \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,                     \
         COMMON,                                                         \
         TGrpcRequestNoOperationCall,                                    \
         GRpcRequestProxyId_,                                            \

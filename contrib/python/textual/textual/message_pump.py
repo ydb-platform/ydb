@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from asyncio import CancelledError, Queue, QueueEmpty, Task, create_task
+from asyncio import CancelledError, QueueEmpty, Task, create_task
 from contextlib import contextmanager
 from functools import partial
 from time import perf_counter
@@ -27,14 +27,16 @@ from typing import (
     TypeVar,
     cast,
 )
-from weakref import WeakSet
+from weakref import WeakSet, ref
 
 from textual import Logger, events, log, messages
 from textual._callback import invoke
+from textual._compat import cached_property
 from textual._context import NoActiveAppError, active_app, active_message_pump
 from textual._context import message_hook as message_hook_context_var
 from textual._context import prevent_message_types_stack
 from textual._on import OnNoWidget
+from textual._queue import Queue
 from textual._time import time
 from textual.constants import SLOW_THRESHOLD
 from textual.css.match import match
@@ -114,7 +116,6 @@ class MessagePump(metaclass=_MessagePumpMeta):
     """Base class which supplies a message pump."""
 
     def __init__(self, parent: MessagePump | None = None) -> None:
-        self._message_queue: Queue[Message | None] = Queue()
         self._parent = parent
         self._running: bool = False
         self._closing: bool = False
@@ -125,7 +126,6 @@ class MessagePump(metaclass=_MessagePumpMeta):
         self._timers: WeakSet[Timer] = WeakSet()
         self._last_idle: float = time()
         self._max_idle: float | None = None
-        self._mounted_event = asyncio.Event()
         self._is_mounted = False
         """Having this explicit Boolean is an optimization.
 
@@ -144,6 +144,23 @@ class MessagePump(metaclass=_MessagePumpMeta):
         """
 
     @property
+    def _parent(self) -> MessagePump | None:
+        """The current parent message pump (if set)."""
+        return None if self.__parent is None else self.__parent()
+
+    @_parent.setter
+    def _parent(self, parent: MessagePump | None) -> None:
+        self.__parent = None if parent is None else ref(parent)
+
+    @cached_property
+    def _message_queue(self) -> Queue[Message | None]:
+        return Queue()
+
+    @cached_property
+    def _mounted_event(self) -> asyncio.Event:
+        return asyncio.Event()
+
+    @property
     def _prevent_message_types_stack(self) -> list[set[type[Message]]]:
         """The stack that manages prevented messages."""
         try:
@@ -152,6 +169,15 @@ class MessagePump(metaclass=_MessagePumpMeta):
             stack = [set()]
             prevent_message_types_stack.set(stack)
         return stack
+
+    def _thread_init(self):
+        """Initialize threading primitives for the current thread.
+
+        Require for Python3.8 https://github.com/Textualize/textual/issues/5845
+
+        """
+        self._message_queue
+        self._mounted_event
 
     def _get_prevented_messages(self) -> set[type[Message]]:
         """A set of all the prevented message types."""
@@ -210,29 +236,35 @@ class MessagePump(metaclass=_MessagePumpMeta):
         """Is this a root node (i.e. the App)?"""
         return False
 
-    @property
-    def app(self) -> "App[object]":
-        """
-        Get the current app.
+    if TYPE_CHECKING:
+        from textual import getters
 
-        Returns:
-            The current app.
+        app = getters.app(App)
+    else:
 
-        Raises:
-            NoActiveAppError: if no active app could be found for the current asyncio context
-        """
-        try:
-            return active_app.get()
-        except LookupError:
-            from textual.app import App
+        @property
+        def app(self) -> "App[object]":
+            """
+            Get the current app.
 
-            node: MessagePump | None = self
-            while not isinstance(node, App):
-                if node is None:
-                    raise NoActiveAppError()
-                node = node._parent
+            Returns:
+                The current app.
 
-            return node
+            Raises:
+                NoActiveAppError: if no active app could be found for the current asyncio context
+            """
+            try:
+                return active_app.get()
+            except LookupError:
+                from textual.app import App
+
+                node: MessagePump | None = self
+                while not isinstance(node, App):
+                    if node is None:
+                        raise NoActiveAppError()
+                    node = node._parent
+
+                return node
 
     @property
     def is_attached(self) -> bool:
@@ -434,6 +466,27 @@ class MessagePump(metaclass=_MessagePumpMeta):
         message = messages.InvokeLater(partial(callback, *args, **kwargs))
         return self.post_message(message)
 
+    async def wait_for_refresh(self) -> bool:
+        """Wait for the next refresh.
+
+        This method should only be called from a task other than the one running this widget.
+        If called from the same task, it will return immediately to avoid blocking the event loop.
+
+        Returns:
+            `True` if waiting for refresh was successful, or `False` if the call was a null-op
+                due to calling it within the node's own task.
+
+        """
+        assert (
+            self._task is not None
+        ), "Node must be running before calling wait_for_refresh"
+        if asyncio.current_task() is self._task:
+            return False
+        refreshed_event = asyncio.Event()
+        self.call_after_refresh(refreshed_event.set)
+        await refreshed_event.wait()
+        return True
+
     def call_later(self, callback: Callback, *args: Any, **kwargs: Any) -> bool:
         """Schedule a callback to run after all messages are processed in this object.
         Positional and keywords arguments are passed to the callable.
@@ -496,6 +549,8 @@ class MessagePump(metaclass=_MessagePumpMeta):
 
     def _start_messages(self) -> None:
         """Start messages task."""
+        self._thread_init()
+
         if self.app._running:
             self._task = create_task(
                 self._process_messages(), name=f"message pump {self}"
@@ -547,7 +602,6 @@ class MessagePump(metaclass=_MessagePumpMeta):
                     await self._dispatch_message(events.Mount())
             else:
                 await self._dispatch_message(events.Mount())
-            self.check_idle()
             self._post_mount()
         except Exception as error:
             self.app._handle_exception(error)
@@ -581,7 +635,7 @@ class MessagePump(metaclass=_MessagePumpMeta):
         """Process messages until the queue is closed."""
         _rich_traceback_guard = True
         self._thread_id = threading.get_ident()
-
+        await asyncio.sleep(0)
         while not self._closed:
             try:
                 message = await self._get_message()

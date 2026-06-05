@@ -1,5 +1,7 @@
 #include "read.h"
+
 #include <ydb/library/actors/core/log.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -12,7 +14,7 @@ void IBlobsReadingAction::StartReading(std::vector<TBlobRange>&& ranges) {
     }
     THashSet<TBlobRange> result;
     Groups = GroupBlobsForOptimization(std::move(ranges));
-    for (auto&& [range, _] :Groups) {
+    for (auto&& [range, _] : Groups) {
         result.emplace(range);
     }
     return DoStartReading(std::move(result));
@@ -93,4 +95,4 @@ TString TActionReadBlobs::DebugString() const {
     return JoinSeq(",", ranges);
 }
 
-}
+}   // namespace NKikimr::NOlap

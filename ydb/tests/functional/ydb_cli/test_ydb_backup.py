@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin as backup_bin, BaseCliTestWithDatabase
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 from hamcrest import assert_that, is_, is_not, contains_inanyorder, has_items, equal_to, empty
@@ -13,12 +14,6 @@ import pytest
 import yatest
 
 logger = logging.getLogger(__name__)
-
-
-def backup_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
 def upsert_simple(session, full_path):
@@ -318,28 +313,10 @@ def is_system_object(object):
     return object.name.startswith(".")
 
 
-class BaseTestBackupInFiles(object):
+class BaseTestBackupInFiles(BaseCliTestWithDatabase):
     @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                extra_feature_flags=[
-                    "enable_resource_pools",
-                    "enable_topic_message_level_parallelism",
-                ],
-            )
-        )
-        cls.cluster.start()
-        cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_resource_pools", "enable_topic_message_level_parallelism"])
 
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
@@ -348,7 +325,6 @@ class BaseTestBackupInFiles(object):
 
     @classmethod
     def create_backup(cls, path, expected_dirs, check_data, additional_args=[]):
-        _, name = os.path.split(path)
         backup_files_dir = output_path(cls.test_name, "backup_files_dir_" + path.replace("/", "_"))
         execution = yatest.common.execute(
             [
@@ -1507,10 +1483,10 @@ class TestRestoreNoData(BaseTestBackupInFiles):
         )
 
 
-class BaseTestClusterBackupInFiles(object):
+class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(
+        cls.cluster = cls._start_cluster(KikimrConfigGenerator(
             extra_feature_flags=[
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
@@ -1520,9 +1496,7 @@ class BaseTestClusterBackupInFiles(object):
             enforce_user_token_requirement=True,
             default_clusteradmin="root@builtin",
         ))
-        cls.cluster.start()
 
-        cls.root_dir = "/Root"
         cls.database = os.path.join(cls.root_dir, "db1")
 
         cls.cluster.create_database(
@@ -1537,17 +1511,12 @@ class BaseTestClusterBackupInFiles(object):
         cls.database_nodes = cls.cluster.register_and_start_slots(cls.database, count=3)
         cls.cluster.wait_tenant_up(cls.database, cls.cluster.config.default_clusteradmin)
 
-        driver_config = ydb.DriverConfig(
-            database=cls.database,
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port),
-            credentials=ydb.AuthTokenCredentials(cls.cluster.config.default_clusteradmin))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
+        cls.driver = cls._start_driver(cls.database, ydb.AuthTokenCredentials(cls.cluster.config.default_clusteradmin))
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.unregister_and_stop_slots(cls.database_nodes)
-        cls.cluster.stop()
+        super().teardown_class()
 
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
@@ -2098,15 +2067,8 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
 
 class TestReplaceSysACLOption(BaseTestBackupInFiles):
     @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
-        cls.cluster.start()
-        cls.root_dir = '/Root'
-        driver_config = ydb.DriverConfig(
-            database='/Root',
-            endpoint='%s:%s' % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator()
 
     def ydb_cli(self, args):
         return yatest.common.execute(

@@ -1,4 +1,5 @@
 #include "ydb_service_operation.h"
+#include "ydb_common.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
@@ -20,16 +21,9 @@ namespace {
     template <typename T>
     int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        ThrowOnError(operation);
         PrintOperation(operation, format);
-        if (!operation.Ready()) {
-            return EXIT_SUCCESS;
-        }
-        switch (operation.Status().GetStatus()) {
-        case EStatus::SUCCESS:
-            return EXIT_SUCCESS;
-        default:
-            return EXIT_FAILURE;
-        }
+        return EXIT_SUCCESS;
     }
 
     template <typename T>
@@ -110,6 +104,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     case TOperationId::INCREMENTAL_BACKUP:
         return GetOperation<NBackup::TIncrementalBackupResponse>(client, OperationId, OutputFormat);
+    case TOperationId::FULL_BACKUP:
+        return GetOperation<NBackup::TFullBackupResponse>(client, OperationId, OutputFormat);
     case TOperationId::RESTORE:
         return GetOperation<NBackup::TBackupCollectionRestoreResponse>(client, OperationId, OutputFormat);
     case TOperationId::COMPACTION:
@@ -152,6 +148,7 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
         {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},
+        {"fullbackup", &ListOperations<NBackup::TFullBackupResponse>},
         {"restore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
         {"compaction", &ListOperations<NTable::TCompactionOperation>},
     };

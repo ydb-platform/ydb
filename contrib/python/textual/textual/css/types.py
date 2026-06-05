@@ -16,6 +16,7 @@ EdgeType = Literal[
     "round",
     "solid",
     "thick",
+    "block",
     "double",
     "dashed",
     "heavy",
@@ -40,8 +41,43 @@ TextAlign = Literal["left", "start", "center", "right", "end", "justify"]
 Constrain = Literal["none", "inflect", "inside"]
 Overlay = Literal["none", "screen"]
 Position = Literal["relative", "absolute"]
+PointerShape = Literal[
+    "alias",
+    "cell",
+    "copy",
+    "crosshair",
+    "default",
+    "e-resize",
+    "ew-resize",
+    "grab",
+    "grabbing",
+    "help",
+    "move",
+    "n-resize",
+    "ne-resize",
+    "nesw-resize",
+    "no-drop",
+    "not-allowed",
+    "ns-resize",
+    "nw-resize",
+    "nwse-resize",
+    "pointer",
+    "progress",
+    "s-resize",
+    "se-resize",
+    "sw-resize",
+    "text",
+    "vertical-text",
+    "w-resize",
+    "wait",
+    "zoom-in",
+    "zoom-out",
+]
+
 TextWrap = Literal["wrap", "nowrap"]
 TextOverflow = Literal["clip", "fold", "ellipsis"]
+Expand = Literal["greedy", "expand"]
+ScrollbarVisibility = Literal["visible", "hidden"]
 
 Specificity3 = Tuple[int, int, int]
 Specificity6 = Tuple[int, int, int, int, int, int]

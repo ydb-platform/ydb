@@ -104,6 +104,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings->SetEnableSecureScriptExecutions(secureScriptExecutions);
         ServerSettings->SetGrpcPort(GrpcPort);
         ServerSettings->SetAppConfig(appConfig);
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
 
@@ -670,7 +671,9 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         // Wait background finalization
         Sleep(TestLeaseDuration);
-        ydb.GetRuntime()->Register(CreateKqpFinalizeScriptService({}, nullptr, nullptr, true, TDuration::Zero()));
+        TKqpFederatedQuerySetup setup;
+        setup.ScriptExecutionSettings = {.EnableBackgroundLeaseChecks = true, .LeaseCheckStartupTimeout = TDuration::Zero()};
+        ydb.GetRuntime()->Register(CreateKqpFinalizeScriptService({}, setup, nullptr));
         ydb.WaitOperationStatus(executionId, Ydb::StatusIds::UNAVAILABLE);
 
         ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);

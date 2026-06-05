@@ -34,6 +34,9 @@ struct TTabletInfo final
 {
     TTabletId TabletId;
     NHydra::TRevision MountRevision = NHydra::NullRevision;
+    // Unchanged logical mount revision guarantees that other important fields
+    // of the tablet (e.g. schema) did not change. Still, cell id could change.
+    NHydra::TRevision LogicalMountRevision = NHydra::NullRevision;
     ETabletState State;
     EInMemoryMode InMemoryMode;
     NTableClient::TLegacyOwningKey PivotKey;
@@ -163,6 +166,7 @@ struct TTableMountInfo final
     TTabletInfoPtr GetTabletForRow(NTableClient::TVersionedRow row) const;
     //! Returns error in case no mounted tablets are present. It may be used for cache invalidation.
     TErrorOr<TTabletInfoPtr> GetRandomMountedTablet() const;
+    TTabletInfoPtr FindTabletById(TTabletId id) const;
 
     void ValidateTabletOwner() const;
     void ValidateDynamic() const;
@@ -231,6 +235,7 @@ struct TTabletRedirectionHint
 struct ITableMountCache
     : public virtual TRefCounted
 {
+    //! May throw if another client requested this entry first and the result is not ready yet.
     virtual TFuture<TTableMountInfoPtr> GetTableInfo(const NYPath::TYPath& path) = 0;
 
     //! Invalidates cached table info for all table infos owning this tablet.

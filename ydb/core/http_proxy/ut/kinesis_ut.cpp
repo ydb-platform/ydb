@@ -1,23 +1,18 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
-
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/testlib/test_client.h>
-
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
-
 #include <nlohmann/json.hpp>
 
 #include <array>
 #include <memory>
-
-#include <library/cpp/logger/stream.h>
 
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
@@ -187,6 +182,13 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
+            res = SendHttpRequest("/Root", "kinesisApi.MethodNotExists", request, FormAuthorizationStr("ru-central-1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "InvalidAction");
+        }
+        {
+            request = CreateDescribeStreamRequest();
+            request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", "kinesisApi.", request, FormAuthorizationStr("ru-central-1"));
             UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
             UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
@@ -195,22 +197,22 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", ".", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
         }
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", "", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
         }
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", ".DescribeStream", request, FormAuthorizationStr("ru-central-1"));
-            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-            UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 404);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "Not Found");
         }
     }
 

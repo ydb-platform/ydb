@@ -58,7 +58,7 @@ TStatisticPath::TStatisticPath(TStatisticPathType&& path) noexcept
 { }
 
 TStatisticPath::TStatisticPath(const TStatisticPathLiteral& literal)
-    : Path_(TStatisticPathType(Delimiter) + literal.Literal())
+    : Path_(TStatisticPathType(1, Delimiter) + literal.Literal())
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,18 +68,18 @@ TError CheckStatisticPath(const TStatisticPathType& path)
     constexpr static TChar twoDelimiters[2]{Delimiter, Delimiter};
     constexpr static TBasicStringBuf<TChar> adjacentDelimiters(twoDelimiters, 2);
 
-    TError error;
     if (path.empty()) {
         return {};
     }
 
+    TError error;
     if (path.front() != Delimiter) {
         error = TError("Statistic path must start with a delimiter");
     } else if (path.back() == Delimiter) {
         error = TError("Statistic path must not end with a delimiter");
-    } else if (path.Contains(0)) {
+    } else if (path.find(NStatisticPath::TChar(0)) != TStatisticPathType::npos) {
         error = TError("Statistic path must not contain a null character");
-    } else if (path.Contains(adjacentDelimiters)) {
+    } else if (path.find(adjacentDelimiters.data(), 0, adjacentDelimiters.size()) != TStatisticPathType::npos) {
         error = TError("Statistic path must not contain adjacent delimiters");
     }
 

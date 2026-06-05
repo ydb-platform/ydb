@@ -42,7 +42,7 @@ class TestStress(MixedClusterFixture):
 
         upload_commands = [
             # bulk upsert workload
-            self.get_command_prefix_log(subcmds=["run", "bulk_upsert"], path=store_type)
+            self.get_command_prefix_log(subcmds=["run", "bulk-upsert"], path=store_type)
             + ["--seconds", str(timeout_scale), "--threads", "10", "--rows", "2000"],
             # upsert workload
             self.get_command_prefix_log(subcmds=["run", "upsert"], path=store_type)

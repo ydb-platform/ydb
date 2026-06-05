@@ -147,12 +147,20 @@ namespace NHydra {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-    constexpr int NoSuchSnapshot         = 600;
-    constexpr int NoSuchChangelog        = 601;
-    constexpr int InvalidEpoch           = 602;
-    constexpr int InvalidVersion         = 603;
-    constexpr int OutOfOrderMutations    = 609;
-    constexpr int InvalidSnapshotVersion = 610;
+    constexpr int NoSuchSnapshot                   = 600;
+    constexpr int NoSuchChangelog                  = 601;
+    constexpr int InvalidEpoch                     = 602;
+    constexpr int InvalidVersion                   = 603;
+    constexpr int OutOfOrderMutations              = 609;
+    constexpr int InvalidSnapshotVersion           = 610;
+    constexpr int ReadOnlySnapshotBuilt            = 611;
+    constexpr int ReadOnlySnapshotBuildFailed      = 612;
+    constexpr int BrokenChangelog                  = 613;
+    constexpr int ChangelogIOError                 = 614;
+    constexpr int InvalidChangelogState            = 615;
+    constexpr int ReadOnly                         = 616;
+    constexpr int RestartAfterRecovery             = 617;
+    constexpr int ExpectedMutationHandlerException = 618;
 
 ////////////////////////////////////////////////////////////////////////////////
 

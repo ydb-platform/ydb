@@ -1,4 +1,12 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value:"fdsa"|>,
+    <|value:"aswedfg"|>,
+    <|value:"asdadsaasd"|>,
+    <|value:"gdsfsassas"|>,
+    <|value:""|>,
+    <|value:"`Привет, мир!`"|>
+);
+
 SELECT
     value,
     String::ReplaceAll(value, "as", "zzz") AS all,
@@ -8,4 +16,4 @@ SELECT
     String::ReplaceLast(value, "a", "zz") AS last2,
     String::ReplaceFirst(value, "a", "") AS first3,
     String::ReplaceLast(value, "a", "") AS last3
-FROM Input;
+FROM AS_TABLE($input);

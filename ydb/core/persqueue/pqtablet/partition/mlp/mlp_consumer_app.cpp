@@ -36,7 +36,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                             PROPERTY("Last offset", Storage->GetLastOffset());
                             PROPERTY("Message counts", Storage->GetMessageCount());
                             PROPERTY("Keep message order", Storage->GetKeepMessageOrder() ? "Yes" : "No");
-                            PROPERTY("Locked message groups", Storage->GetLockedMessageGroupsId().size());
+                            PROPERTY("Locked message groups", Storage->GetLockedMessageGroupsIdSize());
                             PROPERTY("Free message groups", freeMessageGroups.size());
                         }
 

@@ -1,87 +1,60 @@
 #include "kqp_stage_graph.h"
 
+#include <yql/essentials/utils/log/log.h>
+
+#include <util/generic/guid.h>
+
+namespace NKikimr::NKqp {
+
 namespace {
+
 using namespace NKikimr;
 using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-void DFS(ui32 vertex, TVector<ui32> &sortedStages, THashSet<ui32> &visited, const THashMap<ui32, TVector<ui32>> &stageInputs) {
+void DFS(ui32 vertex, TList<ui32>& sortedStages, THashSet<ui32>& visited, const THashMap<ui32, TVector<ui32>>& stageInputs) {
     visited.emplace(vertex);
-
     for (auto u : stageInputs.at(vertex)) {
         if (!visited.contains(u)) {
             DFS(u, sortedStages, visited, stageInputs);
         }
     }
-
     sortedStages.push_back(vertex);
 }
 
-TExprNode::TPtr AddRenames(TExprNode::TPtr input, const TStageGraph::TSourceStageTraits& sourceStagesTraits, TExprContext& ctx) {
-    if (sourceStagesTraits.Renames.empty()) {
-        return input;
+TString FormatSortElements(const TVector<TSortElement>& sortElements) {
+    TStringBuilder result;
+    for (size_t i = 0; i < sortElements.size(); ++i) {
+        if (i != 0) {
+            result << ", ";
+        }
+
+        result << sortElements[i].ToString();
     }
+    return result;
+}
 
-    TVector<TExprBase> items;
-    auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("arg").Done().Ptr();
-
-    for (const auto& rename : sourceStagesTraits.Renames) {
-        // clang-format off
-        auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
-            .Name().Build(rename.second.GetFullName())
-            .Value<TCoMember>()
-                .Struct(arg)
-                .Name().Build(rename.first)
-            .Build()
-        .Done();
-        // clang-format on
-        items.push_back(tuple);
+NJson::TJsonValue MakeKeyColumnsJson(const TVector<TInfoUnit>& keys) {
+    NJson::TJsonValue keyColumns(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& key : keys) {
+        keyColumns.AppendValue(key.GetFullName());
     }
-
-    // clang-format off
-    return Build<TCoMap>(ctx, input->Pos())
-        .Input(input)
-        .Lambda<TCoLambda>()
-            .Args({arg})
-            .Body<TCoAsStruct>()
-                .Add(items)
-            .Build()
-        .Build()
-    .Done().Ptr();
-    // clang-format on
+    return keyColumns;
 }
 
-TExprNode::TPtr BuildSourceStage(TExprNode::TPtr dqsource, TExprContext &ctx) {
-    auto arg = Build<TCoArgument>(ctx, dqsource->Pos()).Name("arg").Done().Ptr();
-    // clang-format off
-    return Build<TDqPhyStage>(ctx, dqsource->Pos())
-        .Inputs()
-            .Add({dqsource})
-        .Build()
-        .Program()
-            .Args({arg})
-            .Body(arg)
-        .Build()
-        .Settings().Build()
-    .Done().Ptr();
-    // clang-format on
+} // anonymous namespace
+
+TString TSortElement::ToString() const {
+    TStringBuilder result;
+    result << SortColumn.GetFullName()
+        << (Ascending ? " asc " : " desc ")
+        << (NullsFirst ? "nulls first" : "nulls last");
+    return result;
 }
-
-}
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NNodes;
 
 template <typename DqConnectionType>
-TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
-    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
-        inputStage = BuildSourceStage(inputStage, ctx);
-        newStage = inputStage;
-    }
+TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
     // clang-format off
     return Build<DqConnectionType>(ctx, pos)
         .Output()
@@ -92,35 +65,32 @@ TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPo
     // clang-format on
 }
 
-TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
-    return BuildConnectionImpl<TDqCnBroadcast>(inputStage, pos, newStage, ctx);
+NJson::TJsonValue TConnection::ToJson() const {
+    NJson::TJsonValue json(NJson::EJsonValueType::JSON_MAP);
+    json["PlanNodeType"] = "Connection";
+    json["Node Type"] = GetExplainName();
+    return json;
 }
 
-TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
-    return BuildConnectionImpl<TDqCnMap>(inputStage, pos, newStage, ctx);
+TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    return BuildConnectionImpl<TDqCnBroadcast>(inputStage, pos, ctx);
 }
 
-TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
-    return Parallel ? BuildConnectionImpl<TDqCnParallelUnionAll>(inputStage, pos, newStage, ctx)
-                    : BuildConnectionImpl<TDqCnUnionAll>(inputStage, pos, newStage, ctx);
+TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    return BuildConnectionImpl<TDqCnMap>(inputStage, pos, ctx);
 }
 
-TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
-    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
-        inputStage = BuildSourceStage(inputStage, ctx);
-        newStage = inputStage;
-    }
+TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    return Parallel ? BuildConnectionImpl<TDqCnParallelUnionAll>(inputStage, pos, ctx) : BuildConnectionImpl<TDqCnUnionAll>(inputStage, pos, ctx);
+}
+
+TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    Y_ENSURE(HashFuncType, "Hash function type must be assigned before building a shuffle connection.");
 
     TVector<TCoAtom> keyColumns;
-    for (const auto& k : Keys) {
-        TString columnName;
-        if (FromSourceStageStorageType != NYql::EStorageType::NA || k.GetAlias() == "") {
-            columnName = k.GetColumnName();
-        } else {
-            columnName = k.GetFullName();
-        }
-        auto atom = Build<TCoAtom>(ctx, pos).Value(columnName).Done();
-        keyColumns.push_back(atom);
+    for (const auto& key : Keys) {
+        const auto columnName = key.GetFullName();
+        keyColumns.emplace_back(Build<TCoAtom>(ctx, pos).Value(columnName).Done());
     }
 
     // clang-format off
@@ -132,17 +102,29 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         .KeyColumns()
             .Add(keyColumns)
         .Build()
+        .UseSpilling().Build(UseSpilling)
+        .HashFunc().Build(ToString(*HashFuncType))
     .Done().Ptr();
     // clang-format on
 }
 
-TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                                  TExprContext& ctx) {
-    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
-        inputStage = BuildSourceStage(inputStage, ctx);
-        newStage = inputStage;
-    }
+NJson::TJsonValue TShuffleConnection::ToJson() const {
+    auto json = TConnection::ToJson();
+    Y_ENSURE(HashFuncType, "Hash function type must be assigned before building explain JSON.");
 
+    const auto hashFunc = ToString(*HashFuncType);
+    json["HashFunc"] = hashFunc;
+
+    const auto keyColumns = MakeKeyColumnsJson(Keys);
+    json["KeyColumns"] = keyColumns;
+    json["Node Type"] = TStringBuilder()
+        << GetExplainName()
+        << " (KeyColumns: " << keyColumns
+        << ", HashFunc: \"" << hashFunc << "\")";
+    return json;
+}
+
+TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
     TVector<TExprNode::TPtr> sortColumns;
     for (const auto& sortElement : Order) {
         // clang-format off
@@ -166,30 +148,49 @@ TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TP
     // clang-format on
 }
 
-TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                                   TExprContext &ctx) {
+NJson::TJsonValue TMergeConnection::ToJson() const {
+    auto json = TConnection::ToJson();
+    const auto sortBy = FormatSortElements(Order);
+    json["SortBy"] = sortBy;
+    json["Node Type"] = TStringBuilder()
+        << GetExplainName()
+        << " (SortBy: " << sortBy << ")";
+    return json;
+}
+
+TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
     Y_UNUSED(pos);
-    Y_UNUSED(newStage);
     Y_UNUSED(ctx);
     return inputStage;
 }
 
-std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32& stageInputCounter, TExprNode::TPtr& node,
-                                                                            TExprContext& ctx, ui32 fromStage) {
-    TString inputName = "input_arg" + std::to_string(stageInputCounter++);
-    YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
-    auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
-    auto output = arg;
-
-    if (IsSourceStage(fromStage)) {
-        output = AddRenames(arg, SourceStageRenames.at(fromStage), ctx);
-    }
-
-    return std::make_pair(arg, output);
+ui32 TStageGraph::AddStage() {
+    ui32 newStageId = StageIds.size();
+    StageIds.push_back(newStageId);
+    StageInputs[newStageId] = TVector<ui32>();
+    StageOutputs[newStageId] = TVector<ui32>();
+    StageGUIDs[newStageId] = CreateGuidAsString();
+    return newStageId;
 }
 
-void TStageGraph::TopologicalSort() {
-    TVector<ui32> sortedStages;
+std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32& stageInputCounter, TPositionHandle pos, TExprContext& ctx) const {
+    const TString inputName = "input_arg_" + std::to_string(stageInputCounter++);
+    YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
+    const auto arg = Build<TCoArgument>(ctx, pos).Name(inputName).Done().Ptr();
+    return std::make_pair(arg, arg);
+}
+
+TIntrusivePtr<TConnection> TStageGraph::TryGetConnection(ui32 from, ui32 to, ui32 occurrence) const {
+    const auto connectionsIt = Connections.find(std::make_pair(from, to));
+    if (connectionsIt == Connections.end() || occurrence >= connectionsIt->second.size()) {
+        return {};
+    }
+
+    return connectionsIt->second[occurrence];
+}
+
+TList<ui32> TStageGraph::GetTopologicalOrder() const {
+    TList<ui32> sortedStages;
     THashSet<ui32> visited;
 
     for (auto id : StageIds) {
@@ -198,8 +199,11 @@ void TStageGraph::TopologicalSort() {
         }
     }
 
-    StageIds = sortedStages;
+    return sortedStages;
 }
 
+void TStageGraph::TopologicalSort() {
+    StageIds = GetTopologicalOrder();
 }
-}
+
+} // namespace NKikimr::NKqp

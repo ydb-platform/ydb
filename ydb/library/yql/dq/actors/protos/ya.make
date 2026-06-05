@@ -11,7 +11,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/public/api/protos
     ydb/public/api/protos/annotations
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     ydb/library/yql/dq/proto
     yql/essentials/public/issue/protos
     yql/essentials/public/types

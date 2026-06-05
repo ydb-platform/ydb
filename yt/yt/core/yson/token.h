@@ -63,7 +63,6 @@ public:
 
     DEFINE_BYVAL_RO_PROPERTY(ETokenType, Type);
 
-    bool IsEmpty() const;
     TStringBuf GetStringValue() const;
     bool IsBinaryString() const;
     i64 GetInt64Value() const;
@@ -73,7 +72,7 @@ public:
 
     void ExpectType(ETokenType expectedType) const;
     void ExpectTypes(const std::vector<ETokenType>& expectedTypes) const;
-    void ThrowUnexpected() const;
+    [[noreturn]] void ThrowUnexpected() const;
 
     void Reset();
 

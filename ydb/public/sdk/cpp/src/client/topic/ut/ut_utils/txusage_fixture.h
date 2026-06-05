@@ -209,6 +209,8 @@ protected:
 
     void TestTransactionsConflictOnSeqNo();
 
+    void TestEmptySourceIdParallelTx();
+
     void TestWriteToTopic1();
 
     void TestWriteToTopic4();

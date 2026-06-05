@@ -306,11 +306,7 @@ bool ChangefeedSettings(const TRule_changefeed_settings& node, TSqlExpression& c
 bool CreateChangefeed(const TRule_changefeed& node, TSqlExpression& ctx, TVector<TChangefeedDescription>& changefeeds) {
     changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
 
-    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) {
-        return false;
-    }
-
-    return true;
+    return ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false);
 }
 
 namespace {
@@ -1039,12 +1035,16 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
         }
         case TUnaryCasualExprRule::TBlock1::kAlt2: {
             auto& alt = block.GetAlt2();
+
+            TSqlExpression child(*this);
+            child.IsSourceAllowed_ = child.IsSourceAllowed_ && suffixIsEmpty;
+
             TSQLResult<TExprOrIdent> exprOrId;
             if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) {
-                exprOrId = AtomExpr(alt.GetRule_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
+                exprOrId = child.AtomExpr(alt.GetRule_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
             } else {
                 MaybeUnnamedSmartParenOnTop_ = false;
-                exprOrId = InAtomExpr(alt.GetRule_in_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
+                exprOrId = child.InAtomExpr(alt.GetRule_in_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
             }
 
             if (!exprOrId) {
@@ -1211,13 +1211,6 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
             case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
                 // dot
                 if (lastExpr) {
-                    if (TSourcePtr source = MoveOutIfSource(lastExpr)) {
-                        lastExpr = ToSubSelectNode(std::move(source));
-                        if (!lastExpr) {
-                            return std::unexpected(ESQLError::Basic);
-                        }
-                    }
-
                     ids.push_back(lastExpr);
                 }
 
@@ -2327,7 +2320,7 @@ TSQLResult<TSqlExpression::TCaseBranch> TSqlExpression::ReduceCaseBranches(TVect
 }
 
 template <typename TNode, typename TGetNode, typename TIter>
-TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
+TNodeResult TSqlExpression::BinOper(const TString& operName, const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
     if (begin == end) {
         return SubExpr(node, tail);
     }
@@ -2337,7 +2330,7 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
 
     // can't have top level smart_parenthesis node if any binary operation is present
     MaybeUnnamedSmartParenOnTop_ = false;
-    Ctx_.IncrementMonCounter("sql_binary_operations", opName);
+    Ctx_.IncrementMonCounter("sql_binary_operations", operName);
     const size_t listSize = end - begin;
     TVector<TNodePtr> nodes;
     nodes.reserve(1 + listSize);
@@ -2358,7 +2351,7 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
             return std::unexpected(result.error());
         }
     }
-    return Wrap(child.BinOperList(opName, nodes.begin(), nodes.end()));
+    return Wrap(child.BinOperList(operName, nodes.begin(), nodes.end()));
 }
 
 template <typename TNode, typename TGetNode, typename TIter>

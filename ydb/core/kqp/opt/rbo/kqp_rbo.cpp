@@ -25,13 +25,15 @@ TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IR
     }
 }
 
-void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
-    if (props & ERuleProperties::RequireParents) {
-        root.ComputeParents();
-    }
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName) {
+    // FIXME: Parents are currently always required, because we need to update them when a rule fires
+    root.ComputeParents();
+    //if (props & ERuleProperties::RequireParents) {
+    //    root.ComputeParents();
+    //}
     if (props & (ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics)) {
         if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
-            Y_ENSURE(false, "RBO type annotation failed");
+            Y_ENSURE(false, TStringBuilder() << "RBO type annotation failed in stage " << stageName);
         }
     }
     if (props & (ERuleProperties::RequireMetadata | ERuleProperties::RequireStatistics)) {
@@ -71,11 +73,18 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
-                    if (iter.Parent) {
-                        iter.Parent->Children[iter.ChildIndex] = op;
-                    } else if (!iter.SubplanIU) {
+                    // If the original operator had parents, update all parents
+                    if (iter.Current->Parents.size()) {
+                        for (auto & [parent, parentIdx] : iter.Current->Parents) {
+                            parent->Children[parentIdx] = op;
+                        }
+                    } 
+                    // Otherwise, if its not a subplan, it was root, so update root
+                    else if (!iter.SubplanIU) {
                         root.SetInput(op);
-                    } else {
+                    }
+                    // Finally, it's a subplan, so update the subplan 
+                    else {
                         root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
                     }
 
@@ -83,7 +92,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                         YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
-                    ComputeRequiredProps(root, Props, ctx);
+                    ComputeRequiredProps(root, Props | ERuleProperties::RequireTypes, ctx, StageName);
                     ++numMatches;
                     break;
                 }
@@ -108,23 +117,28 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
 
     for (const auto& stage : Stages) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
-        ComputeRequiredProps(root, stage->Props, rboCtx);
+        ComputeRequiredProps(root, stage->Props, rboCtx, stage->StageName);
         if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
         }
         stage->RunStage(root, rboCtx);
         if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
         }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
     auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
-    ComputeRequiredProps(root, convertProps, rboCtx);
+    ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }
+
+    ui64 counter = 0;
+    THashMap<IOperator*, ui32> operatorIds;
+    rboCtx.ExecutionJson = root.GetExecutionJson(counter, operatorIds);
+    rboCtx.ExplainJson = root.GetExplainJson(counter, operatorIds);
 
     return ConvertToPhysical(root, rboCtx);
 }

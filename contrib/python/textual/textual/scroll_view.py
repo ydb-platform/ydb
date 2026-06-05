@@ -16,6 +16,11 @@ class ScrollView(ScrollableContainer):
     """
     A base class for a Widget that handles its own scrolling (i.e. doesn't rely
     on the compositor to render children).
+
+    !!! note
+
+        This is the typically wrong class for making something scrollable. If you want to make something scroll, set its
+        `overflow` style to auto or scroll. Or use one of the pre-defined scrolling containers such as [VerticalScroll][textual.containers.VerticalScroll].
     """
 
     ALLOW_MAXIMIZE = True
@@ -32,15 +37,23 @@ class ScrollView(ScrollableContainer):
         """Always scrollable."""
         return True
 
+    @property
+    def is_container(self) -> bool:
+        """Since a ScrollView should be a line-api widget, it won't have children,
+        and therefore isn't a container."""
+        return False
+
     def watch_scroll_x(self, old_value: float, new_value: float) -> None:
-        if self.show_horizontal_scrollbar and old_value != new_value:
+        if self.show_horizontal_scrollbar:
             self.horizontal_scrollbar.position = new_value
-            self.refresh()
+        if round(old_value) != round(new_value):
+            self.refresh(self.size.region)
 
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
-        if self.show_vertical_scrollbar and (old_value) != (new_value):
+        if self.show_vertical_scrollbar:
             self.vertical_scrollbar.position = new_value
-            self.refresh()
+        if round(old_value) != round(new_value):
+            self.refresh(self.size.region)
 
     def on_mount(self):
         self._refresh_scrollbars()
@@ -174,7 +187,6 @@ class ScrollView(ScrollableContainer):
             y_start: First line to refresh.
             line_count: Total number of lines to refresh.
         """
-
         refresh_region = Region(
             0,
             y_start - self.scroll_offset.y,

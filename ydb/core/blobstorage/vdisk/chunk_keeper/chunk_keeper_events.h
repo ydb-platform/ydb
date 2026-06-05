@@ -49,6 +49,8 @@ struct TEvChunkKeeperAllocateResult : TEventLocal<TEvChunkKeeperAllocateResult,
 
     TEvChunkKeeperAllocateResult(std::optional<ui32> chunkIdx, NKikimrProto::EReplyStatus status,
             TString errorReason = "");
+
+    TString ToString() const;
 };
 
 struct TEvChunkKeeperFree : TEventLocal<TEvChunkKeeperFree, TEvBlobStorage::EvChunkKeeperFree> {
@@ -66,6 +68,8 @@ struct TEvChunkKeeperFreeResult : TEventLocal<TEvChunkKeeperFreeResult, TEvBlobS
     TString ErrorReason;
 
     TEvChunkKeeperFreeResult(ui32 chunkIdx, NKikimrProto::EReplyStatus status, TString errorReason = "");
+
+    TString ToString() const;
 };
 
 struct TEvChunkKeeperDiscover : TEventLocal<TEvChunkKeeperDiscover, TEvBlobStorage::EvChunkKeeperDiscover> {
@@ -90,6 +94,8 @@ struct TEvChunkKeeperDiscoverResult : TEventLocal<TEvChunkKeeperDiscoverResult,
 
     TEvChunkKeeperDiscoverResult(std::vector<TChunkInfo>&& chunks, NKikimrProto::EReplyStatus status,
             TString errorReason = "");
+
+    TString ToString() const;
 };
 
 } // namespace NKikimr

@@ -2578,25 +2578,6 @@ public:
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
 
-    static Ydb::Monitoring::StatusFlag::Status GetFlagFromBSPDiskSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E flag) {
-        switch (flag) {
-            case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:
-            case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:
-                return Ydb::Monitoring::StatusFlag::GREEN;
-            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:
-            case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:
-                return Ydb::Monitoring::StatusFlag::YELLOW;
-            case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:
-            case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:
-            case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:
-                return Ydb::Monitoring::StatusFlag::ORANGE;
-            case NKikimrBlobStorage::TPDiskSpaceColor::RED:
-                return Ydb::Monitoring::StatusFlag::RED;
-            default:
-                return Ydb::Monitoring::StatusFlag::UNSPECIFIED;
-        }
-    }
-
     static Ydb::Monitoring::StatusFlag::Status GetFlagFromWhiteboardFlag(NKikimrWhiteboard::EFlag flag) {
         switch (flag) {
             case NKikimrWhiteboard::EFlag::Green:
@@ -3562,6 +3543,7 @@ public:
             }
             ui32 disabledRings = 0;
             ui32 badRings = 0;
+            auto statusBefore = currentContext->OverallStatus;
             for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
                 const auto& ring = ringGroup.Rings[ringIdx];
                 TSelfCheckContext ringContext(currentContext, TStringBuilder() << type << "_RING");
@@ -3583,6 +3565,7 @@ public:
                     ++badRings;
                 }
             }
+            currentContext->OverallStatus = statusBefore;
             if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
                 currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage);
             } else if (badRings > 1) {

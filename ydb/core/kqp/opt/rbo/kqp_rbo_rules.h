@@ -68,7 +68,7 @@ class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
  */
 class TInlineJoinFiltersRule : public ISimplifiedRule {
   public:
-    TInlineJoinFiltersRule() : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents) {}
+    TInlineJoinFiltersRule() : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -167,6 +167,16 @@ class TPushOlapProjectionRule : public ISimplifiedRule {
 };
 
 /**
+ * Disable blocks on columns limit.
+ */
+class TDisableBlocksOnColumnsLimitRule : public ISimplifiedRule {
+  public:
+      TDisableBlocksOnColumnsLimitRule() : ISimplifiedRule("Disable blocks on columns limit", ERuleProperties::RequireParents) {}
+
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Create inital CBO Tree
  */
 class TBuildInitialCBOTreeRule : public ISimplifiedRule {
@@ -241,6 +251,27 @@ class TPruneColumnsStage : public IRBOStage {
   public:
     TPruneColumnsStage();
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+};
+
+/**
+ * Propagate and assign hash functions on StageGraph connections.
+ */
+class TPropagateHashFuncStage : public IRBOStage {
+  public:
+    TPropagateHashFuncStage();
+    virtual void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+};
+
+/**
+ * Propagate aggregate operator.
+ */
+class TPropagateAggregateThroughStageRule: public ISimplifiedRule {
+public:
+    TPropagateAggregateThroughStageRule()
+        : ISimplifiedRule("Propagate aggregate operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**

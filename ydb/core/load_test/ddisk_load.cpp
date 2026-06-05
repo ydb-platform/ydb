@@ -144,10 +144,8 @@ private:
 };
 
 class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
-    static constexpr ui32 WriteSizeBytes = 4096;
-
     struct TAreaInfo {
-        // write positions as indices for every WriteSizeBytes
+        // write positions as indices for every IoSizeBytes
         TDeque<ui32> IOQueue;
         ui32 AreaSizeBytes = 0;
         ui32 Weight = 1;
@@ -214,8 +212,9 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     TRope ZeroData;
     bool AlignSourceData = true;
     bool IsReadLoad = false;
+    ui32 IoSizeBytes = 4096;
 
-    TString IOSizeInfo = ToString(WriteSizeBytes);
+    TString IOSizeInfo = ToString(IoSizeBytes);
     TString SequentialInfo = "unknown";
 
     ui64 ExpectedChunkSizeBytes = 0;
@@ -279,12 +278,16 @@ public:
         Credentials.TabletId = Tag ? Tag : 1;
         Credentials.Generation = 1;
 
+        IoSizeBytes = cmd.GetIoSizeBytes();
+        Y_ABORT_UNLESS(IoSizeBytes, "IoSizeBytes must be non-zero");
+        IOSizeInfo = ToString(IoSizeBytes);
+
         VERIFY_PARAM(ExpectedChunkSize);
         ExpectedChunkSizeBytes = cmd.GetExpectedChunkSize();
         Y_ABORT_UNLESS(ExpectedChunkSizeBytes, "ExpectedChunkSize must be non-zero");
         Y_ABORT_UNLESS(ExpectedChunkSizeBytes <= Max<ui32>(), "ExpectedChunkSize must fit into 32-bit offset");
-        Y_ABORT_UNLESS(ExpectedChunkSizeBytes % WriteSizeBytes == 0,
-            "ExpectedChunkSize must be divisible by WriteSizeBytes");
+        Y_ABORT_UNLESS(ExpectedChunkSizeBytes % IoSizeBytes == 0,
+            "ExpectedChunkSize must be divisible by IoSizeBytes");
 
         Simulate = cmd.HasSimulate() ? cmd.GetSimulate() : false;
         SimulateActorsCount = cmd.GetSimulateActorsCount();
@@ -299,8 +302,8 @@ public:
             if (!areaSize) {
                 ythrow TLoadActorException() << "area.AreaSize field is missing or zero";
             }
-            if (areaSize % WriteSizeBytes != 0) {
-                ythrow TLoadActorException() << "area.AreaSize must be divisible by WriteSizeBytes";
+            if (areaSize % IoSizeBytes != 0) {
+                ythrow TLoadActorException() << "area.AreaSize must be divisible by IoSizeBytes";
             }
             Y_ABORT_UNLESS(area.GetWeight(), "area.Weight must be non-zero");
             const ui32 numChunks = (areaSize + ExpectedChunkSizeBytes - 1) / ExpectedChunkSizeBytes;
@@ -389,8 +392,8 @@ public:
         ZeroData = BuildPayload(true);
 
         for (auto& area : Areas) {
-            const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
-            Y_ABORT_UNLESS(positions, "WriteSizeBytes must be smaller than AreaSizeBytes");
+            const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
+            Y_ABORT_UNLESS(positions, "IoSizeBytes must be smaller than AreaSizeBytes");
             if (area.InitType != NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
                 Initializing = true;
             }
@@ -422,7 +425,7 @@ public:
     }
 
     TRope BuildPayload(bool zeroFill) {
-        const size_t size = WriteSizeBytes;
+        const size_t size = IoSizeBytes;
         const size_t allocSize = size + SimulatedBufferAlignment;
         auto storage = std::unique_ptr<char, decltype(&free)>(static_cast<char*>(std::malloc(allocSize)), &free);
         Y_ABORT_UNLESS(storage, "Failed to allocate payload buffer");
@@ -453,7 +456,7 @@ public:
                 }
             } else if (area.InitType ==
                     NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FULL) {
-                const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
+                const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
                 if (area.InitNextPosition < positions) {
                     return true;
                 }
@@ -585,16 +588,16 @@ public:
 
             TAreaInfo& area = PickAreaByWeight();
             if (area.IOQueue.empty()) {
-                const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
-                Y_ABORT_UNLESS(positions, "WriteSizeBytes must be smaller than AreaSizeBytes");
+                const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
+                Y_ABORT_UNLESS(positions, "IoSizeBytes must be smaller than AreaSizeBytes");
                 FillPositions(area.IOQueue, positions, area.Sequential);
             }
             const ui32 ioIndex = area.IOQueue.front();
             area.IOQueue.pop_front();
             area.IOQueue.push_back(ioIndex);
 
-            const ui32 offset = ioIndex * WriteSizeBytes;
-            const ui32 size = WriteSizeBytes;
+            const ui32 offset = ioIndex * IoSizeBytes;
+            const ui32 size = IoSizeBytes;
             Report->Size = size;
 
             const TInstant now = TAppData::TimeProvider->Now();
@@ -641,16 +644,16 @@ public:
                     vChunkIndex = area.BaseChunkIndex + area.InitNextChunk;
                     offsetInChunk = 0;
                 } else {
-                    const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
+                    const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
                     if (area.InitNextPosition >= positions) {
                         continue;
                     }
-                    offset = area.InitNextPosition * WriteSizeBytes;
+                    offset = area.InitNextPosition * IoSizeBytes;
                     vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
                     offsetInChunk = offset % ExpectedChunkSizeBytes;
                 }
 
-                const ui32 size = WriteSizeBytes;
+                const ui32 size = IoSizeBytes;
 
                 const TInstant now = TAppData::TimeProvider->Now();
                 const ui64 requestIdx = NewTRequestInfo(size, now, true);
@@ -685,6 +688,15 @@ public:
     void Handle(NDDisk::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        if (!ok) {
+            TStringStream str;
+            str << "TEvWriteResult error, Status# "
+                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+                << " ErrorReason# " << msg.GetErrorReason();
+            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            FinishAndDie(ctx, str.Str());
+            return;
+        }
         const ui64 requestIdx = ev->Cookie;
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
@@ -693,6 +705,15 @@ public:
     void Handle(NDDisk::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        if (!ok) {
+            TStringStream str;
+            str << "TEvReadResult error, Status# "
+                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+                << " ErrorReason# " << msg.GetErrorReason();
+            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            FinishAndDie(ctx, str.Str());
+            return;
+        }
         const ui64 requestIdx = ev->Cookie;
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);

@@ -421,6 +421,16 @@ void FillDummyTabletChannels(NKikimrTabletBase::TTabletStorageInfo* info) {
     }
 }
 
+void FillDummyTabletChannelsWithoutErasure(NKikimrTabletBase::TTabletStorageInfo* info) {
+    for (ui32 channel = 0; channel < 5; ++channel) {
+        auto* channelInfo = info->AddChannels();
+        channelInfo->SetChannel(channel);
+        auto* history = channelInfo->AddHistory();
+        history->SetFromGeneration(0);
+        history->SetGroupID(0);
+    }
+}
+
 void SendConfigUpdate(TTestBasicRuntime& runtime,
                         const TVector<TActorId>& bootstrappers,
                         const NKikimrConfig::TBootstrap& config) {
@@ -600,6 +610,111 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
 
         auto responseEvent = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(configDispatcher);
         UNIT_ASSERT(responseEvent);
+    }
+
+    Y_UNIT_TEST(FillMissingChannelErasureFromStartupBootstrapConfig) {
+        TTestBasicRuntime runtime(1);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+        bool gotClientDestroyed = false;
+
+        NKikimrConfig::TBootstrap initialConfig;
+        AddDummyTablet(initialConfig, runtime, BootstrapperTestTabletId0, {0});
+
+        auto configuredBootstrapper = StartConfiguredBootstrapper(runtime, initialConfig, 0);
+        Y_UNUSED(configuredBootstrapper);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto clientDestroyedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientDestroyed>([&](TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+            if (ev->Get()->TabletId == BootstrapperTestTabletId0) {
+                gotClientDestroyed = true;
+            }
+        });
+        Y_UNUSED(clientDestroyedObserver);
+
+        auto initialObserver = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, initialObserver, 0);
+
+        NKikimrConfig::TBootstrap updatedConfig;
+        auto* updatedTablet = updatedConfig.AddTablet();
+        updatedTablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        updatedTablet->MutableInfo()->SetTabletID(BootstrapperTestTabletId0);
+        updatedTablet->SetAllowDynamicConfiguration(true);
+        updatedTablet->AddNode(runtime.GetNodeId(0));
+        FillDummyTabletChannelsWithoutErasure(updatedTablet->MutableInfo());
+
+        auto configDispatcher = runtime.AllocateEdgeActor(0);
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
+        notification->Record.SetLocal(true);
+        notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
+
+        runtime.Send(new IEventHandle(configuredBootstrapper, configDispatcher, notification.Release(), 0, 1));
+
+        auto responseEvent = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(configDispatcher);
+        UNIT_ASSERT(responseEvent);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_C(!gotClientDestroyed, "Normalized bootstrap config update must not restart tablet");
+
+        auto observerAfterUpdate = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observerAfterUpdate, 0);
+    }
+
+    Y_UNIT_TEST(SkipInvalidTabletUpdateWithIncompleteChannels) {
+        TTestBasicRuntime runtime(1);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+        bool gotClientDestroyed = false;
+
+        NKikimrConfig::TBootstrap initialConfig;
+        AddDummyTablet(initialConfig, runtime, BootstrapperTestTabletId0, {0});
+
+        auto configuredBootstrapper = StartConfiguredBootstrapper(runtime, initialConfig, 0);
+        Y_UNUSED(configuredBootstrapper);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto clientDestroyedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientDestroyed>([&](TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+            if (ev->Get()->TabletId == BootstrapperTestTabletId0) {
+                gotClientDestroyed = true;
+            }
+        });
+        Y_UNUSED(clientDestroyedObserver);
+
+        auto initialObserver = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, initialObserver, 0);
+
+        NKikimrConfig::TBootstrap updatedConfig;
+        AddDummyTablet(updatedConfig, runtime, BootstrapperTestTabletId0, {0});
+
+        auto* invalidTablet = updatedConfig.AddTablet();
+        invalidTablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        invalidTablet->MutableInfo()->SetTabletID(BootstrapperTestTabletId1);
+        invalidTablet->SetAllowDynamicConfiguration(true);
+        invalidTablet->AddNode(runtime.GetNodeId(0));
+        FillDummyTabletChannelsWithoutErasure(invalidTablet->MutableInfo());
+
+        auto configDispatcher = runtime.AllocateEdgeActor(0);
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
+        notification->Record.SetLocal(true);
+        notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
+
+        runtime.Send(new IEventHandle(configuredBootstrapper, configDispatcher, notification.Release(), 0, 1));
+
+        auto responseEvent = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(configDispatcher);
+        UNIT_ASSERT(responseEvent);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_C(!gotClientDestroyed, "Invalid tablet update must not restart existing tablet");
+
+        auto observerAfterUpdate = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observerAfterUpdate, 0);
+
+        auto invalidTabletObserver = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectNotOk(runtime, BootstrapperTestTabletId1, invalidTabletObserver, 0);
     }
 
     Y_UNIT_TEST(NodeListChange) {

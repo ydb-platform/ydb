@@ -957,10 +957,19 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                 ringInfo->SetDisabled();
 
             for(auto replica : ring.Replicas) {
-                CheckNodeExistenceWithVerify(replica.NodeId());
-                ringInfo->AddNode(Nodes[replica.NodeId()]);
-                StateStorageReplicas.insert(replica.NodeId());
-                StateStorageNodeToRingId[replica.NodeId()] = ringId;
+                const ui32 nodeId = replica.NodeId();
+                if (!HasNode(nodeId)) {
+                    // we do not want to abort here constantly, so we just add down stub replica
+                    BLOG_ERROR("Node " << nodeId << " referenced by state storage ring " << ringId << " in ring group " << rGroupId
+                               << " does not exist in cluster. State storage is probably not reconfigured yet. Treating the replica as down.");
+                    TNodeInfoPtr stub = MakeIntrusive<TNodeInfo>();
+                    stub->NodeId = nodeId;
+                    ringInfo->AddNode(stub);
+                    continue;
+                }
+                ringInfo->AddNode(Nodes[nodeId]);
+                StateStorageReplicas.insert(nodeId);
+                StateStorageNodeToRingId[nodeId] = ringId;
             }
 
             StateStorageRings[rGroupId].push_back(ringInfo);

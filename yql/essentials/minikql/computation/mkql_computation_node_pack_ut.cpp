@@ -173,12 +173,12 @@ protected:
         TType* tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
 
         TUnboxedValueVector tupleElemens;
-        tupleElemens.push_back(MakeString("01234567890123456789"));
-        tupleElemens.push_back(MakeString("01234567890"));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(MakeString("01234567890123456789"));
+        tupleElemens.emplace_back(MakeString("01234567890"));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
 
         const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(tupleElemens);
         const auto uValue = TestPackUnpack(tupleType, value, "Type:Tuple");
@@ -222,12 +222,12 @@ protected:
         TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
 
         TUnboxedValueVector structElemens;
-        structElemens.push_back(MakeString("01234567890123456789"));
-        structElemens.push_back(MakeString("01234567890"));
-        structElemens.push_back(NUdf::TUnboxedValuePod());
-        structElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
-        structElemens.push_back(NUdf::TUnboxedValuePod());
-        structElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        structElemens.emplace_back(MakeString("01234567890123456789"));
+        structElemens.emplace_back(MakeString("01234567890"));
+        structElemens.emplace_back(NUdf::TUnboxedValuePod());
+        structElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        structElemens.emplace_back(NUdf::TUnboxedValuePod());
+        structElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
 
         const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(structElemens);
         const auto uValue = TestPackUnpack(structType, value, "Type:Struct");
@@ -503,7 +503,7 @@ protected:
 
             UNIT_ASSERT_VALUES_EQUAL(uValue.GetVariantIndex(), 2);
             auto e = uValue.GetVariantItem();
-            UNIT_ASSERT_VALUES_EQUAL(e.template Get<ui64>(), 12345ull);
+            UNIT_ASSERT_VALUES_EQUAL(e.template Get<ui64>(), 12345ULL);
         }
     }
 
@@ -528,17 +528,17 @@ protected:
         auto dec2 = NYql::NDecimal::FromString("-9781555555.99", 35, 2);
 
         TUnboxedValueVector tupleElemens;
-        tupleElemens.push_back(MakeString("01234567890123456789"));
-        tupleElemens.push_back(MakeString("01234567890"));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(MakeString("01234567890123456789"));
+        tupleElemens.emplace_back(MakeString("01234567890"));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
         if (!forPerf) {
-            tupleElemens.push_back(NUdf::TUnboxedValuePod(inf));
-            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec1));
-            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec2));
-            tupleElemens.push_back(NUdf::TUnboxedValuePod());
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod(inf));
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod(dec1));
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod(dec2));
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
         }
 
         return HolderFactory_.VectorAsArray(tupleElemens);
@@ -577,8 +577,8 @@ protected:
         TType* tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
 
         TUnboxedValueVector tupleElemens;
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui32(12345)));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui32(67890)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui32(12345)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui32(67890)));
 
         const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(tupleElemens);
         TestPackPerformance(tupleType, value);
@@ -824,7 +824,7 @@ protected:
         if (offset != 0 || len != blockLen) {
             for (auto& datum : datums) {
                 if (datum.is_array()) {
-                    datum = NYql::NUdf::DeepSlice(datum.array(), offset, len);
+                    datum = NYql::NUdf::DeepSlice(*datum.array(), offset, len);
                 }
             }
             datums[blockLenIndex] = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len));
@@ -846,7 +846,7 @@ protected:
         }
         TUnboxedValueVector columns;
         for (auto& datum : datums) {
-            columns.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum)));
+            columns.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum), NYql::DefaultDatumTestValidationMode));
         }
 
         auto senderPacker = MakeValuePacker(false, rowType, args.PackerVersion, {}, ArrowPool_, args.MinFillPercentage);
@@ -990,8 +990,8 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(2));
         builder->Add(NYql::NUdf::TBlockItem(3));
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1018,8 +1018,8 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem(ui32(3)));
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1045,8 +1045,8 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str2")));
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str3")));
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1073,8 +1073,8 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str3")));
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1102,8 +1102,8 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem(ui32(3)));
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1130,8 +1130,8 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem());
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1159,8 +1159,8 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem());
         builder->Add(NYql::NUdf::TBlockItem().MakeOptional());
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1193,8 +1193,8 @@ protected:
         tzDate3.SetTimezoneId(300);
         builder->Add(tzDate3);
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1226,8 +1226,8 @@ protected:
         tzDate3.SetTimezoneId(300);
         builder->Add(tzDate3);
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1259,8 +1259,8 @@ protected:
         auto tuple3Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(3)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("c"))});
         builder->Add(NYql::NUdf::TBlockItem(tuple3Items.data()));
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1292,8 +1292,8 @@ protected:
         auto tuple3Items = std::to_array<NYql::NUdf::TBlockItem>({NYql::NUdf::TBlockItem(i32(3)), NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("c"))});
         builder->Add(NYql::NUdf::TBlockItem(tuple3Items.data()));
         TUnboxedValueVector columns;
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true), NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3)), NYql::DefaultDatumTestValidationMode));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1342,8 +1342,8 @@ protected:
 
         TUnboxedValueVector columns;
         // Here we take only second chunk with exactly one element.
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(buildResult.chunks()[1]));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(buildResult.chunks()[1], NYql::DefaultDatumTestValidationMode));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1)), NYql::DefaultDatumTestValidationMode));
 
         if (expectedToFail) {
             UNIT_ASSERT_EXCEPTION(MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish(), yexception);

@@ -1,5 +1,7 @@
 #include "retryful_writer.h"
 
+#include <yt/cpp/mapreduce/common/trace_context.h>
+
 #include <yt/cpp/mapreduce/http/requests.h>
 
 #include <yt/cpp/mapreduce/interface/errors.h>
@@ -71,6 +73,26 @@ void TRetryfulWriter::DoFinish()
     WriterState_ = Completed;
 }
 
+void TRetryfulWriter::CreateTransaction()
+{
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
+    WriteTransaction_.ConstructInPlace(
+        RawClient_,
+        ClientRetryPolicy_,
+        Context_,
+        ParentTransactionId_,
+        TransactionPinger_->GetChildTxPinger(),
+        TStartTransactionOptions());
+    auto append = Path_.Append_.GetOrElse(false);
+    auto lockMode = (append ? LM_SHARED : LM_EXCLUSIVE);
+    NDetail::RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &lockMode] (TMutationId& mutationId) {
+            RawClient_->Lock(mutationId, WriteTransaction_->GetId(), this->Path_.Path_, lockMode);
+        });
+}
+
 void TRetryfulWriter::FlushBuffer(bool lastBlock)
 {
     if (!Started_) {
@@ -99,6 +121,8 @@ void TRetryfulWriter::FlushBuffer(bool lastBlock)
 
 void TRetryfulWriter::Send(const TBuffer& buffer)
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     auto transactionId = (WriteTransaction_ ? WriteTransaction_->GetId() : ParentTransactionId_);
 
     NDetail::RequestWithRetry<void>(
@@ -154,6 +178,8 @@ void* TRetryfulWriter::SendThread(void* opaque)
 
 void TRetryfulWriter::Abort()
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     if (Started_) {
         FilledBuffers_.Stop();
         Thread_.Join();

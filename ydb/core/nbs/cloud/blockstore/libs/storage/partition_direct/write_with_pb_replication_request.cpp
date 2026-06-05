@@ -73,7 +73,7 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
 
 void TWriteWithPbReplicationRequestExecutor::Run()
 {
-    Bundle->Span.Event("Run");
+    Bundle->GetSpan().Event("Run");
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
 
@@ -107,11 +107,11 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         VChunkConfig.GetVChunkIndex(),
         coordinatorHostIndex,
         std::move(hosts),
-        Bundle->Lsn,
-        Bundle->VChunkRange,
+        Bundle->GetLsn(),
+        Bundle->GetVChunkRange(),
         PbufferReplyTimeout,
-        Bundle->Request->Sglist,
-        Bundle->Span.GetTraceId(),
+        Bundle->GetSgList(),
+        Bundle->GetSpan().GetTraceId(),
         [self =
              std::static_pointer_cast<TWriteWithPbReplicationRequestExecutor>(
                  shared_from_this())](

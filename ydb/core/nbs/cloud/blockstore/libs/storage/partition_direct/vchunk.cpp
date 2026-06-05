@@ -180,21 +180,21 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
         vchunkRange,
         lsn);
 
-    bundle->Span.Attribute("VChunkIndex", VChunkConfig.GetVChunkIndex());
+    bundle->GetSpan().Attribute("VChunkIndex", VChunkConfig.GetVChunkIndex());
 
-    auto future = bundle->Promise.GetFuture();
+    auto future = bundle->GetFuture();
 
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(), bundle = std::move(bundle)]   //
         () mutable
         {
             // Executor thread
-            bundle->Span.Event("ExecutorTread");
+            bundle->GetSpan().Event("ExecutorTread");
 
             if (auto self = weakSelf.lock()) {
                 self->DoWriteBlocksLocal(std::move(bundle));
             } else {
-                bundle->Promise.SetValue(
+                bundle->SendFinalReply(
                     TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
             }
         });
@@ -252,6 +252,66 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
     return sb;
+}
+
+void TVChunk::OnWriteBlocksResponse(
+    std::shared_ptr<TWriteRequestBundle> bundle,
+    const TWriteRequestResponse& response)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnWriteBlocksResponse: %s %s",
+        LogTitle.GetWithTime().c_str(),
+        bundle->GetVChunkRange().Print().c_str(),
+        FormatError(response.Error).c_str());
+
+    --InflightWritesCount;
+
+    {
+        auto dirtyMapSpan = bundle->GetSpan().CreateChild(
+            NKikimr::TWilsonNbs::NbsBasic,
+            "TVChunk.UpdateDirtyMap",
+            NWilson::EFlags::AUTO_END);
+
+        BlocksDirtyMap.WriteFinished(
+            response.Lsn,
+            bundle->GetVChunkRange(),
+            response.RequestedWrites,
+            response.CompletedWrites);
+    }
+
+    bool ok = !HasError(response.Error);
+    Counters.RequestFinished(EVChunkOperation::Write, ok);
+
+    bundle->SendFinalReply(TWriteBlocksLocalResponse{.Error = response.Error});
+
+    UpdatePendingCounters();
+    DoFlush(false);
+    ScheduleCleaningUp();
+}
+
+void TVChunk::OnBelatedWriteBlocksResponse(
+    std::shared_ptr<TWriteRequestBundle> bundle,
+    THostMask completedWrites)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnWriteBlocksNotify. Range %s",
+        LogTitle.GetWithTime().c_str(),
+        bundle->GetVChunkRange().Print().c_str());
+
+    BlocksDirtyMap.UpdateBelatedEraseQueue(
+        completedWrites,
+        bundle->GetLsn(),
+        bundle->GetVChunkRange());
+
+    DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -423,7 +483,7 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
         NKikimrServices::NBS_PARTITION,
         "%s DoWriteBlocksLocal: %s",
         LogTitle.GetWithTime().c_str(),
-        bundle->VChunkRange.Print().c_str());
+        bundle->GetVChunkRange().Print().c_str());
 
     auto writeExecutor = CreateWriteRequestExecutor(
         ActorSystem,
@@ -434,69 +494,6 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 
     ++InflightWritesCount;
     writeExecutor->Run();
-}
-
-void TVChunk::OnWriteBlocksResponse(
-    std::shared_ptr<TWriteRequestBundle> bundle,
-    const TWriteRequestResponse& response)
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnWriteBlocksResponse: %s %s",
-        LogTitle.GetWithTime().c_str(),
-        bundle->VChunkRange.Print().c_str(),
-        FormatError(response.Error).c_str());
-
-    --InflightWritesCount;
-
-    {
-        auto dirtyMapSpan = bundle->Span.CreateChild(
-            NKikimr::TWilsonNbs::NbsBasic,
-            "TVChunk.UpdateDirtyMap",
-            NWilson::EFlags::AUTO_END);
-
-        BlocksDirtyMap.WriteFinished(
-            response.Lsn,
-            bundle->VChunkRange,
-            response.RequestedWrites,
-            response.CompletedWrites);
-    }
-
-    bool ok = !HasError(response.Error);
-    Counters.RequestFinished(EVChunkOperation::Write, ok);
-
-    bundle->Promise.SetValue(
-        TWriteBlocksLocalResponse{.Error = response.Error});
-
-    bundle->Span.EndOk();
-
-    UpdatePendingCounters();
-    DoFlush(false);
-    ScheduleCleaningUp();
-}
-
-void TVChunk::OnBelatedWriteBlocksResponse(
-    std::shared_ptr<TWriteRequestBundle> bundle,
-    THostMask completedWrites)
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnWriteBlocksNotify. Range %s",
-        LogTitle.GetWithTime().c_str(),
-        bundle->VChunkRange.Print().c_str());
-
-    BlocksDirtyMap.UpdateBelatedEraseQueue(
-        completedWrites,
-        bundle->Lsn,
-        bundle->VChunkRange);
-
-    DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
 }
 
 void TVChunk::DoFlush(bool force)

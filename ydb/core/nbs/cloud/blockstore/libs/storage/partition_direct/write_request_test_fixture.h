@@ -41,7 +41,6 @@ struct TWriteRequestTestFixture: public TBaseFixture
     std::shared_ptr<TWriteClientMock> WriteClient =
         std::make_shared<TWriteClientMock>();
 
-    TWriteRequestTestFixture();
     void Init() override;
 
     static TDBGWriteBlocksResponse CreateOkDirectResponse();
@@ -53,12 +52,6 @@ struct TWriteRequestTestFixture: public TBaseFixture
 
     TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
     GetManyPBuffersHandlerWithImmediateOkResponse();
-
-    TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
-    GetManyPBuffersHandlerHanging2();
-
-    TDirectBlockGroupMock::TWriteBlocksToPBufferHandler
-    GetDirectWriteHandlerHanging2();
 
     std::shared_ptr<TBaseWriteRequestExecutor> CreatePBufferReplicationExecutor(
         TRequestHeaders headers);

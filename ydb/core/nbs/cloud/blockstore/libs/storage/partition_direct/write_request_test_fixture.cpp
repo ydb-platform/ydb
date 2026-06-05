@@ -28,8 +28,6 @@ void TWriteClientMock::OnBelatedWriteBlocksResponse(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteRequestTestFixture::TWriteRequestTestFixture() = default;
-
 void TWriteRequestTestFixture::Init()
 {
     TBaseFixture::Init();
@@ -105,6 +103,44 @@ TDBGWriteBlocksResponse TWriteRequestTestFixture::CreateFailDirectResponse()
     return {.Error = MakeError(E_FAIL, "direct write failed")};
 }
 
+// static
+TDBGWriteBlocksToManyPBuffersResponse
+TWriteRequestTestFixture::CreateOkResponse()
+{
+    TDBGWriteBlocksToManyPBuffersResponse okResponse;
+    okResponse.OverallError = MakeError(S_OK);
+    okResponse.Responses.push_back(
+        {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
+    okResponse.Responses.push_back(
+        {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
+    okResponse.Responses.push_back(
+        {.HostIndex = THostIndex{2}, .Error = MakeError(S_OK)});
+
+    return okResponse;
+}
+
+// static
+TDBGWriteBlocksToManyPBuffersResponse
+TWriteRequestTestFixture::CreateOneOkResponse(THostIndex hostIndex)
+{
+    TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
+    partiallyOkResponse.OverallError = MakeError(S_OK);
+    partiallyOkResponse.Responses.push_back(
+        {.HostIndex = hostIndex, .Error = MakeError(S_OK)});
+
+    return partiallyOkResponse;
+}
+
+// static
+TDBGWriteBlocksToManyPBuffersResponse
+TWriteRequestTestFixture::CreateDBGErrorResponse()
+{
+    TDBGWriteBlocksToManyPBuffersResponse dbgErrorResponse;
+    dbgErrorResponse.OverallError = MakeError(E_FAIL);
+
+    return dbgErrorResponse;
+}
+
 TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
 TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
 {
@@ -139,65 +175,6 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
             VChunkConfig.GetDesiredPBuffers().Get(hostIndexes[2]));
 
         callback(CreateOkResponse());
-    };
-
-    return result;
-}
-
-TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
-TWriteRequestTestFixture::GetManyPBuffersHandlerHanging2()
-{
-    auto result =
-        [this](
-            ui32 vChunkIndex,
-            THostIndex coordinatorHostIndex,
-            std::vector<THostIndex> hostIndexes,
-            ui64 lsn,
-            TBlockRange64 range,
-            TDuration replyTimeout,
-            const TGuardedSgList& guardedSglist,
-            const NWilson::TTraceId& traceId,
-            IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
-    {
-        Y_UNUSED(
-            vChunkIndex,
-            coordinatorHostIndex,
-            hostIndexes,
-            lsn,
-            range,
-            replyTimeout,
-            guardedSglist,
-            traceId);
-
-        // Store the callback so tests can invoke it later to simulate a
-        // response (possibly multiple times).
-        ManyPBufferCallback = std::move(callback);
-    };
-
-    return result;
-}
-
-TDirectBlockGroupMock::TWriteBlocksToPBufferHandler
-TWriteRequestTestFixture::GetDirectWriteHandlerHanging2()
-{
-    auto result = [this]   //
-        (ui32 vChunkIndex,
-         ui8 hostIndex,
-         ui64 lsn,
-         TBlockRange64 range,
-         const TGuardedSgList& guardedSglist,
-         const NWilson::TTraceId& traceId)
-    {
-        Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
-
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
-
-        TPromise<TDBGWriteBlocksResponse> response(
-            NewPromise<TDBGWriteBlocksResponse>());
-        DirectWritePromises.push_back(std::move(response));
-
-        return DirectWritePromises.back().GetFuture();
     };
 
     return result;
@@ -259,44 +236,6 @@ TWriteRequestTestFixture::CreateDirectReplicationExecutor(
         std::move(bundle));
 
     return request;
-}
-
-// static
-TDBGWriteBlocksToManyPBuffersResponse
-TWriteRequestTestFixture::CreateOkResponse()
-{
-    TDBGWriteBlocksToManyPBuffersResponse okResponse;
-    okResponse.OverallError = MakeError(S_OK);
-    okResponse.Responses.push_back(
-        {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
-    okResponse.Responses.push_back(
-        {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
-    okResponse.Responses.push_back(
-        {.HostIndex = THostIndex{2}, .Error = MakeError(S_OK)});
-
-    return okResponse;
-}
-
-// static
-TDBGWriteBlocksToManyPBuffersResponse
-TWriteRequestTestFixture::CreateOneOkResponse(THostIndex hostIndex)
-{
-    TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
-    partiallyOkResponse.OverallError = MakeError(S_OK);
-    partiallyOkResponse.Responses.push_back(
-        {.HostIndex = hostIndex, .Error = MakeError(S_OK)});
-
-    return partiallyOkResponse;
-}
-
-// static
-TDBGWriteBlocksToManyPBuffersResponse
-TWriteRequestTestFixture::CreateDBGErrorResponse()
-{
-    TDBGWriteBlocksToManyPBuffersResponse dbgErrorResponse;
-    dbgErrorResponse.OverallError = MakeError(E_FAIL);
-
-    return dbgErrorResponse;
 }
 
 void TWriteRequestTestFixture::RunScheduledHedge()

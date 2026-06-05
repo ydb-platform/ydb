@@ -30,7 +30,7 @@ TWriteWithDirectReplicationRequestExecutor::
 
 void TWriteWithDirectReplicationRequestExecutor::Run()
 {
-    Bundle->Span.Event("Run");
+    Bundle->GetSpan().Event("Run");
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
 

@@ -24,9 +24,9 @@ TWriteRequestBundle::TWriteRequestBundle(
           NWilson::EFlags::AUTO_END,
           actorSystem)
     , CallContext(std::move(callContext))
-    , Promise(&Span, NKikimr::TWilsonNbs::NbsBasic)
     , VChunkRange(vchunkRange)
     , Lsn(lsn)
+    , Promise(NThreading::NewPromise<TWriteBlocksLocalResponse>())
 {}
 
 void TWriteRequestBundle::Reply(
@@ -45,7 +45,7 @@ void TWriteRequestBundle::Reply(
                 .RequestedWrites = requestedWrites,
                 .CompletedWrites = completedWrites});
     } else {
-        Promise.SetValue(
+        SendFinalReply(
             TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
     }
 }
@@ -55,6 +55,40 @@ void TWriteRequestBundle::NotifyBelated(THostMask hosts)
     if (auto client = WriteClient.lock()) {
         client->OnBelatedWriteBlocksResponse(shared_from_this(), hosts);
     }
+}
+
+void TWriteRequestBundle::SendFinalReply(TWriteBlocksLocalResponse response)
+{
+    auto span = Span.CreateChild(
+        NKikimr::TWilsonNbs::NbsBasic,
+        "Reply",
+        NWilson::EFlags::AUTO_END);
+    Promise.SetValue(std::move(response));
+}
+
+NThreading::TFuture<TWriteBlocksLocalResponse> TWriteRequestBundle::GetFuture()
+{
+    return Promise.GetFuture();
+}
+
+NWilson::TSpan& TWriteRequestBundle::GetSpan()
+{
+    return Span;
+}
+
+TBlockRange64 TWriteRequestBundle::GetVChunkRange() const
+{
+    return VChunkRange;
+}
+
+ui64 TWriteRequestBundle::GetLsn() const
+{
+    return Lsn;
+}
+
+TGuardedSgList& TWriteRequestBundle::GetSgList()
+{
+    return Request->Sglist;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

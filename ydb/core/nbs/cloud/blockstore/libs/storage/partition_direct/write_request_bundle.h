@@ -23,18 +23,14 @@ struct TWriteRequestResponse
     THostMask CompletedWrites;
 };
 
-struct TWriteRequestBundle
+// The class is designed to store the state during the execution of a write
+// blocks request. All the layers through which the request passes exchange data
+// through this object.
+class TWriteRequestBundle
     : TDisableCopyMove
     , public std::enable_shared_from_this<TWriteRequestBundle>
 {
-    IWriteClientWeakPtr WriteClient;
-    std::shared_ptr<TWriteBlocksLocalRequest> Request;
-    NWilson::TSpan Span;
-    TCallContextPtr CallContext;
-    TTracedPromise2<TWriteBlocksLocalResponse> Promise;
-    TBlockRange64 VChunkRange;
-    ui64 Lsn = 0;
-
+public:
     TWriteRequestBundle(
         NActors::TActorSystem* const actorSystem,
         IWriteClientWeakPtr writeClient,
@@ -44,12 +40,32 @@ struct TWriteRequestBundle
         TBlockRange64 vchunkRange,
         ui64 lsn);
 
+    // Respond via WriteClient to VChunk.
     void Reply(
         NProto::TError error,
         THostMask requestedWrites,
         THostMask completedWrites);
-
+    // Notify VChunk about belated writes.
     void NotifyBelated(THostMask hosts);
+
+    // Respond via Promise to FastPathService.
+    void SendFinalReply(TWriteBlocksLocalResponse response);
+
+    NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture();
+    NWilson::TSpan& GetSpan();
+    TBlockRange64 GetVChunkRange() const;
+    ui64 GetLsn() const;
+    TGuardedSgList& GetSgList();
+
+private:
+    IWriteClientWeakPtr WriteClient;
+    std::shared_ptr<TWriteBlocksLocalRequest> Request;
+    NWilson::TSpan Span;
+    TCallContextPtr CallContext;
+    TBlockRange64 VChunkRange;
+    ui64 Lsn = 0;
+
+    NThreading::TPromise<TWriteBlocksLocalResponse> Promise;
 };
 
 struct IWriteClient

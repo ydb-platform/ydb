@@ -119,7 +119,7 @@ void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
         PrintHostIndex(host).c_str());
 
     auto span = DirectBlockGroup->CreateChildSpan(
-        Bundle->Span.GetTraceId(),
+        Bundle->GetSpan().GetTraceId(),
         "TBaseWriteRequestExecutor");
     if (span) {
         span->Attribute("HostIndex", ToString(host));
@@ -130,9 +130,9 @@ void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
     auto future = DirectBlockGroup->WriteBlocksToPBuffer(
         VChunkConfig.GetVChunkIndex(),
         host,
-        Bundle->Lsn,
-        Bundle->VChunkRange,
-        Bundle->Request->Sglist,
+        Bundle->GetLsn(),
+        Bundle->GetVChunkRange(),
+        Bundle->GetSgList(),
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
@@ -247,7 +247,8 @@ TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
                 actorSystem,
                 logTitle.GetChildWithTags(
                     GetCycleCount(),
-                    {{"t", "p-write"}, {"r", bundle->VChunkRange.Print()}}),
+                    {{"t", "p-write"},
+                     {"r", bundle->GetVChunkRange().Print()}}),
                 vChunkConfig,
                 std::move(directBlockGroup),
                 bundle);
@@ -257,7 +258,8 @@ TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
                 actorSystem,
                 logTitle.GetChildWithTags(
                     GetCycleCount(),
-                    {{"t", "d-write"}, {"r", bundle->VChunkRange.Print()}}),
+                    {{"t", "d-write"},
+                     {"r", bundle->GetVChunkRange().Print()}}),
                 vChunkConfig,
                 std::move(directBlockGroup),
                 bundle);

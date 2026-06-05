@@ -29,7 +29,7 @@ using TRegionPtr = std::shared_ptr<TRegion>;
 class TDDiskDataCopier;
 using TDDiskDataCopierPtr = std::shared_ptr<TDDiskDataCopier>;
 
-struct TWriteRequestBundle;
+class TWriteRequestBundle;
 using TWriteRequestBundlePtr = std::shared_ptr<TWriteRequestBundle>;
 
 struct IWriteClient;

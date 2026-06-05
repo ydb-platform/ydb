@@ -64,6 +64,14 @@ public:
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
+    // IWriteClient implementation
+    void OnWriteBlocksResponse(
+        std::shared_ptr<TWriteRequestBundle> bundle,
+        const TWriteRequestResponse& response) override;
+    void OnBelatedWriteBlocksResponse(
+        std::shared_ptr<TWriteRequestBundle> bundle,
+        THostMask completedWrites) override;
+
 private:
     friend struct TBaseFixture;
 
@@ -91,15 +99,6 @@ private:
         std::shared_ptr<NWilson::TSpan> span);
 
     void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
-
-    // IWriteClient implementation
-    void OnWriteBlocksResponse(
-        std::shared_ptr<TWriteRequestBundle> bundle,
-        const TWriteRequestResponse& response) override;
-    void OnBelatedWriteBlocksResponse(
-        std::shared_ptr<TWriteRequestBundle> bundle,
-        THostMask completedWrites) override;
-
     void DoFlush(bool force);
     void OnFlushResponse(const TFlushRequestExecutor::TResponse& response);
 

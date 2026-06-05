@@ -456,6 +456,8 @@ public:
     TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
 
     bool SysViewsRosterUpdateStarted = false;
+    bool LocalIndexMigrationStarted = false;
+    TActorId LocalIndexMigratorId;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
@@ -1076,6 +1078,8 @@ public:
     void SubscribeToTempTableOwners();
 
     void CollectSysViewUpdates(const TActorContext& ctx);
+
+    void CollectLocalIndexMigrations(const TActorContext& ctx);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 

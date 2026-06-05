@@ -30,6 +30,7 @@ PEERDIR(
     ydb/core/docapi
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/opt/cbo
+    ydb/core/local_indexes/bloom
     ydb/core/kqp/query_data
     ydb/core/protos
     ydb/core/scheme

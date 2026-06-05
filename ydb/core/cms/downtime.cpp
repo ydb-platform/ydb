@@ -226,7 +226,7 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
             db.Table<Schema::NodeDowntimes>().Key(pr.first).Delete();
 
             YDB_LOG_CTX_TRACE(ctx, "Removed downtime for node from local DB",
-                {"#_pr.first", pr.first});
+                {"node", pr.first});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
@@ -234,7 +234,7 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
                 .Update<Schema::NodeDowntimes::Downtime>(rec);
 
             YDB_LOG_CTX_TRACE(ctx, "Updated downtime for node in local DB",
-                {"#_pr.first", pr.first},
+                {"node", pr.first},
                 {"downtime", pr.second});
         }
     }
@@ -245,7 +245,7 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
                 .Delete();
 
             YDB_LOG_CTX_TRACE(ctx, "Removed downtime for pdisk from local DB",
-                {"#_pr.first.ToString()", pr.first.ToString()});
+                {"pdisk", pr.first.ToString()});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
@@ -253,7 +253,7 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
                 .Update<Schema::PDiskDowntimes::Downtime>(rec);
 
             YDB_LOG_CTX_TRACE(ctx, "Updated downtime for pdisk in local DB",
-                {"#_pr.first.ToString()", pr.first.ToString()},
+                {"pdisk", pr.first.ToString()},
                 {"downtime", pr.second});
         }
     }

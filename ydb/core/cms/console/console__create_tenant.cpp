@@ -103,9 +103,9 @@ public:
 
         if (Self->Config.TenantsQuota
             && Self->Tenants.size() >= Self->Config.TenantsQuota) {
-            YDB_LOG_CTX_NOTICE(ctx, "Tenants quota is exceeded ( /",
-                {"#_Self->Tenants.size()", Self->Tenants.size()},
-                {"#_Self->Config.TenantsQuota", Self->Config.TenantsQuota});
+            YDB_LOG_CTX_NOTICE(ctx, "Tenants quota is exceeded",
+                {"Tenants", Self->Tenants.size()},
+                {"TenantsQuota", Self->Config.TenantsQuota});
             Self->Counters.Inc(COUNTER_TENANTS_QUOTA_EXCEEDED);
             return Error(Ydb::StatusIds::UNAVAILABLE,
                          "Tenants quota is exceeded", ctx);
@@ -364,9 +364,9 @@ public:
         Tenant->TxId = ctx.Now().GetValue();
         Tenant->Generation = 1;
 
-        YDB_LOG_CTX_DEBUG(ctx, "Add tenant (txid",
+        YDB_LOG_CTX_DEBUG(ctx, "Add tenant",
             {"path", path},
-            {"#_Tenant->TxId", Tenant->TxId});
+            {"txId", Tenant->TxId});
 
         Self->DbAddTenant(Tenant, txc, ctx);
 

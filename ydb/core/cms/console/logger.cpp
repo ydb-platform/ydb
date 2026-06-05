@@ -27,7 +27,7 @@ bool TLogger::DbCleanupLog(ui32 remainEntries,
     NIceDb::TNiceDb db(txc.DB);
 
     YDB_LOG_CTX_DEBUG(ctx, "Removing log records",
-        {"#_(fromId - MinLogItemId + 1)", (fromId - MinLogItemId + 1)});
+        {"count", (fromId - MinLogItemId + 1)});
 
     for (ui64 id = MinLogItemId; id <= fromId; ++id)
         db.Table<Schema::LogRecords>().Key(id).Delete();

@@ -23,10 +23,10 @@ public:
         auto &rec = Event->Get()->Record;
         Response = new TEvCms::TEvNotificationResponse;
 
-        YDB_LOG_CTX_INFO(ctx, "Processing notification from (time= reason='')",
-            {"#_rec.GetUser().data()", rec.GetUser().data()},
-            {"#_TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()},
-            {"#_rec.GetReason().data()", rec.GetReason().data()});
+        YDB_LOG_CTX_INFO(ctx, "Processing notification",
+            {"fromUser", rec.GetUser().data()},
+            {"time", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()},
+            {"reason", rec.GetReason().data()});
 
         if (Self->CheckNotification(rec, Response->Record, ctx)) {
             TString id = Self->AcceptNotification(rec, ctx);
@@ -53,7 +53,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_CTX_DEBUG(ctx, "TTxProcessNotification complete with response: ",
-            {"#_Response->Record.ShortDebugString().data()", Response->Record.ShortDebugString().data()});
+            {"response", Response->Record.ShortDebugString().data()});
 
         Self->Reply(Event, std::move(Response), ctx);
         Self->ScheduleNotificationsCleanup(ctx);

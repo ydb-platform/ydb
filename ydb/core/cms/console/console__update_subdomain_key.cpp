@@ -39,7 +39,7 @@ public:
         if (Tenant->IsRemoving()) {
             YDB_LOG_CTX_ERROR(ctx, "TTxUpdateSubDomainKey found tenant in wrong state",
                 {"Path", Path},
-                {"#_Tenant->State", Tenant->State});
+                {"TenantState", Tenant->State});
             Tenant = nullptr;
             return true;
         }

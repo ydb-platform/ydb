@@ -29,7 +29,7 @@ public:
     {
     }
 
-     TTxType GetTxType() const override { return TXTYPE_LOAD_STATE; } 
+     TTxType GetTxType() const override { return TXTYPE_LOAD_STATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         YDB_LOG_CTX_DEBUG(ctx, "TTxLoadState Execute");
@@ -111,10 +111,10 @@ public:
             request.Priority = priority;
             ParseFromStringSafe(requestStr, &request.Request);
 
-            YDB_LOG_CTX_DEBUG(ctx, "Loaded request owned by : ",
-                {"#_id.data()", id.data()},
-                {"#_owner.data()", owner.data()},
-                {"#_requestStr.data()", requestStr.data()});
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded request owned by",
+                {"id", id.data()},
+                {"owner", owner.data()},
+                {"request", requestStr.data()});
 
             state->ScheduledRequests.emplace(id, request);
 
@@ -133,8 +133,8 @@ public:
             state->WalleTasks.emplace(taskId, task);
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded Wall-E task mapped to request ",
-                {"#_taskId.data()", taskId.data()},
-                {"#_requestId.data()", requestId.data()});
+                {"taskId", taskId.data()},
+                {"requestId", requestId.data()});
 
             if (!walleTaskRowset.Next())
                 return false;
@@ -158,9 +158,9 @@ public:
                 .LastRefreshTime = TInstant::MicroSeconds(lastRefreshTime)
             });
 
-            YDB_LOG_CTX_DEBUG(ctx, "Loaded maintenance task mapped to request ",
-                {"#_taskId.data()", taskId.data()},
-                {"#_requestId.data()", requestId.data()});
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded maintenance task mapped to request",
+                {"taskId", taskId.data()},
+                {"requestId", requestId.data()});
 
             if (!maintenanceTasksRowset.Next())
                 return false;
@@ -182,11 +182,11 @@ public:
             permission.Deadline = TInstant::MicroSeconds(deadline);
             permission.Priority = priority;
 
-            YDB_LOG_CTX_DEBUG(ctx, "Loaded permission owned by valid until : ",
-                {"#_id.data()", id.data()},
-                {"#_owner.data()", owner.data()},
-                {"#_TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data()", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data()},
-                {"#_actionStr.data()", actionStr.data()});
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded permission owned by valid until",
+                {"id", id.data()},
+                {"owner", owner.data()},
+                {"until", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data()},
+                {"action", actionStr.data()});
 
             state->Permissions.emplace(id, permission);
 
@@ -194,18 +194,18 @@ public:
                 const auto &taskId = state->WalleRequests[requestId];
                 state->WalleTasks[taskId].Permissions.insert(id);
 
-                YDB_LOG_CTX_DEBUG(ctx, "Added permission to Wall-E task ",
-                    {"#_id.data()", id.data()},
-                    {"#_taskId.data()", taskId.data()});
+                YDB_LOG_CTX_DEBUG(ctx, "Added permission to Wall-E task",
+                    {"id", id.data()},
+                    {"taskId", taskId.data()});
             }
 
             if (state->MaintenanceRequests.contains(requestId)) {
                 const auto &taskId = state->MaintenanceRequests[requestId];
                 state->MaintenanceTasks[taskId].Permissions.insert(id);
 
-                YDB_LOG_CTX_DEBUG(ctx, "Added permission to maintenance task ",
-                    {"#_id.data()", id.data()},
-                    {"#_taskId.data()", taskId.data()});
+                YDB_LOG_CTX_DEBUG(ctx, "Added permission to maintenance task",
+                    {"id", id.data()},
+                    {"taskId", taskId.data()});
             }
 
             if (!permissionRowset.Next())
@@ -223,9 +223,9 @@ public:
             ParseFromStringSafe(notificationStr, &notification.Notification);
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded notification owned by : ",
-                {"#_id.data()", id.data()},
-                {"#_owner.data()", owner.data()},
-                {"#_notificationStr.data()", notificationStr.data()});
+                {"id", id.data()},
+                {"owner", owner.data()},
+                {"notification", notificationStr.data()});
 
             state->Notifications.emplace(id, notification);
 
@@ -237,8 +237,8 @@ public:
             ui32 nodeId = nodeTenantRowset.GetValue<Schema::NodeTenant::NodeId>();
             TString tenant = nodeTenantRowset.GetValue<Schema::NodeTenant::Tenant>();
 
-            YDB_LOG_CTX_DEBUG(ctx, "Loaded node tenant '' for node ",
-                {"#_tenant.data()", tenant.data()},
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded node tenant for node",
+                {"tenant", tenant.data()},
                 {"nodeId", nodeId});
             state->InitialNodeTenants[nodeId] = tenant;
 

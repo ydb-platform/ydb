@@ -87,13 +87,13 @@ public:
                 Self->DisabledValidators.insert(rec.GetName());
 
                 YDB_LOG_CTX_DEBUG(ctx, "Disable validator",
-                    {"#_rec.GetName()", rec.GetName()});
+                    {"request", rec.GetName()});
             } else {
                 registry->EnableValidator(rec.GetName());
                 Self->DisabledValidators.erase(rec.GetName());
 
                 YDB_LOG_CTX_DEBUG(ctx, "Enable validator",
-                    {"#_rec.GetName()", rec.GetName()});
+                    {"request", rec.GetName()});
             }
         }
 

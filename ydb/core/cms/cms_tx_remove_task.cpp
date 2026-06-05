@@ -35,7 +35,7 @@ public:
                 << ": id# " << Id);
         } else {
             YDB_LOG_CTX_ERROR(ctx, "Can't find task ",
-                {"#_Id.data()", Id.data()});
+                {"Id", Id.data()});
         }
 
         return true;

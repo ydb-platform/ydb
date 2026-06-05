@@ -20,14 +20,14 @@ public:
         auto &req = Request->Get()->Record;
 
         YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Execute",
-            {"#_req.ShortDebugString()", req.ShortDebugString()});
+            {"request", req.ShortDebugString()});
 
         TVector<NKikimrConsole::TLogRecord> records;
         if (!Self->Logger.DbLoadLogTail(req.GetLogFilter(), records, txc))
             return false;
 
         YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail found matching log records",
-            {"#_records.size()", records.size()});
+            {"records", records.size()});
 
         Response = MakeHolder<TEvConsole::TEvGetLogTailResponse>();
         auto &rec = Response->Record;

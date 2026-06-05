@@ -2,9 +2,9 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/core/base/nameservice.h> 
-#include <ydb/core/cms/console/configs_dispatcher.h> 
-#include <ydb/core/cms/console/configs_dispatcher_proxy.h> 
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/configs_dispatcher_proxy.h>
 #include <ydb/core/util/stlog.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT CMS_CONFIGS
@@ -71,7 +71,7 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
         } else {
             YDB_LOG_DEBUG("Received unknown version ' '",
                 {"Marker", "CIG3"},
-                {"#_record.GetVersion()", record.GetVersion()},
+                {"Version", record.GetVersion()},
                 {"from_NodeId", nodeId});
             UnknownNodes++;
             UnknownNodesList.push_back(nodeId);
@@ -92,7 +92,7 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
     YDB_LOG_WARN("Collection timed out. Missing responses from nodes.",
         {"Marker", "CIG5"},
-        {"#_PendingNodes.size()", PendingNodes.size()});
+        {"PendingNodes", PendingNodes.size()});
     UnknownNodes += PendingNodes.size();
     for (const auto& nodeId : PendingNodes) {
         UnknownNodesList.push_back(nodeId);
@@ -108,7 +108,7 @@ void TConfigurationInfoCollector::ReplyAndDie() {
         {"V2", V2Nodes},
         {"Unknown", UnknownNodes},
         {"(Total", TotalNodes});
-    auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>(); 
+    auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>();
     auto *result = response->Record.MutableResponse();
     result->set_v1_nodes(V1Nodes);
     result->set_v2_nodes(V2Nodes);

@@ -59,8 +59,7 @@ void TImmediateControlsConfigurator::Bootstrap(const TActorContext &ctx)
 
     Become(&TThis::StateWork);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TImmediateControlsConfigurator: subscribe for config updates.");
+    YDB_LOG_CTX_DEBUG(ctx, "TImmediateControlsConfigurator: subscribe for config updates.");
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),

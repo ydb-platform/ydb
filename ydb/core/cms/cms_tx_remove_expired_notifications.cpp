@@ -33,9 +33,9 @@ public:
                 TInstant deadline = time + TDuration::MicroSeconds(i->GetDuration());
 
                 if (deadline <= now) {
-                    YDB_LOG_CTX_INFO(ctx, "Removing expired action from notification : ",
-                        {"#_info.NotificationId.data()", info.NotificationId.data()},
-                        {"#_i->ShortDebugString().data()", i->ShortDebugString().data()});
+                    YDB_LOG_CTX_INFO(ctx, "Removing expired action from notification",
+                        {"NotificationId", info.NotificationId.data()},
+                        {"action", i->ShortDebugString().data()});
 
                     i = actions->erase(i);
                     modified = true;

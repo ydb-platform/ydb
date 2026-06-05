@@ -47,8 +47,7 @@ public:
             Self->LoadConfigFromProto(config);
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-                {"config", Endl},
-                {"#_config.DebugString()", config.DebugString()});
+                {"config", config.DebugString()});
         } else {
             YDB_LOG_CTX_DEBUG(ctx, "Using default config.");
 

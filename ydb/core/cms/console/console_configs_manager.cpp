@@ -278,16 +278,16 @@ void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
 
     for (auto &pr : PendingConfigModifications.RemovedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Remove",
-            {"#_ConfigIndex.GetItem(pr.first)->ToString()", ConfigIndex.GetItem(pr.first)->ToString()});
+            {"item", ConfigIndex.GetItem(pr.first)->ToString()});
     for (auto &pr : PendingConfigModifications.ModifiedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Remove modified",
-            {"#_pr.second->ToString()", pr.second->ToString()});
+            {"item", pr.second->ToString()});
     for (auto &pr : PendingConfigModifications.ModifiedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Add modified",
-            {"#_pr.second->ToString()", pr.second->ToString()});
+            {"item", pr.second->ToString()});
     for (auto item : PendingConfigModifications.AddedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Add new",
-            {"#_item->ToString()", item->ToString()});
+            {"item", item->ToString()});
 
     PendingConfigModifications.ApplyTo(ConfigIndex);
 
@@ -305,12 +305,12 @@ void TConfigsManager::ApplyPendingSubscriptionModifications(const TActorContext 
 
     for (auto &id : PendingSubscriptionModifications.RemovedSubscriptions) {
         YDB_LOG_CTX_DEBUG(ctx, "Remove subscription",
-            {"#_SubscriptionIndex.GetSubscription(id)->ToString()", SubscriptionIndex.GetSubscription(id)->ToString()});
+            {"subscription", SubscriptionIndex.GetSubscription(id)->ToString()});
         SubscriptionIndex.RemoveSubscription(id);
     }
     for (auto &subscription : PendingSubscriptionModifications.AddedSubscriptions) {
         YDB_LOG_CTX_DEBUG(ctx, "Add subscription",
-            {"#_subscription->ToString()", subscription->ToString()});
+            {"subscription", subscription->ToString()});
         SubscriptionIndex.AddSubscription(subscription);
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedLastProvided) {
@@ -603,7 +603,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         ConfigIndex.AddItem(item);
 
         YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-            {"#_item->ToString()", item->ToString()});
+            {"item", item->ToString()});
 
         if (!configItemRowset.Next())
             return false;
@@ -689,7 +689,7 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
 {
     YDB_LOG_CTX_TRACE(ctx, "",
         {"Database", (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ")},
-        {"#_item->ToString()", item->ToString()});
+        {"item", item->ToString()});
 
     TString config;
     Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.SerializeToString(&config);

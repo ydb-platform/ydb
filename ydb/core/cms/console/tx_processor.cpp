@@ -84,7 +84,7 @@ void TTxProcessor::RemoveSubProcessor(TTxProcessor::TPtr sub,
 {
     YDB_LOG_CTX_TRACE(ctx, "removing sub-processor",
         {"LogPrefix", LogPrefix},
-        {"#_sub->Name", sub->Name});
+        {"subName", sub->Name});
 
     Y_ABORT_UNLESS(SubProcessors.contains(sub->Name));
     SubProcessors.erase(sub->Name);

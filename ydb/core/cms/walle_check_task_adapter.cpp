@@ -27,8 +27,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
-        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request: ",
-            {"#_RequestEvent->Get()->Record.ShortDebugString().data()", RequestEvent->Get()->Record.ShortDebugString().data()});
+        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
+            {"requestEvent", RequestEvent->Get()->Record.ShortDebugString().data()});
 
         if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);

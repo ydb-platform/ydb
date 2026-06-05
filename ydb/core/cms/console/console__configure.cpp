@@ -501,7 +501,7 @@ public:
                                                 config);
         auto affected = affectedChecker.ComputeAffectedConfigs(GetAffectedKinds(rec.GetActions()), false);
         YDB_LOG_CTX_DEBUG(ctx, "affected.size()",
-            {"#_affected.size()", affected.size()});
+            {"size", affected.size()});
         for (auto &item : affected) {
             auto &entry = *Response->Record.AddAffectedConfigs();
             entry.SetTenant(item.Tenant);

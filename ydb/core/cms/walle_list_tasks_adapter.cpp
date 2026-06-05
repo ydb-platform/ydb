@@ -25,8 +25,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         auto &rec = RequestEvent->Get()->Record;
 
-        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request: ",
-            {"#_rec.ShortDebugString().data()", rec.ShortDebugString().data()});
+        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
+            {"request", rec.ShortDebugString().data()});
 
         TAutoPtr<TEvCms::TEvWalleListTasksResponse> response = new TEvCms::TEvWalleListTasksResponse;
 

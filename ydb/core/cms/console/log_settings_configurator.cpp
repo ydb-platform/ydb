@@ -69,8 +69,7 @@ void TLogSettingsConfigurator::Bootstrap(const TActorContext &ctx)
 
     Become(&TThis::StateWork);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TLogSettingsConfigurator: subscribe for config updates.");
+    YDB_LOG_CTX_DEBUG(ctx, "TLogSettingsConfigurator: subscribe for config updates.");
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -126,7 +125,7 @@ void TLogSettingsConfigurator::SaveLogSettingsConfigToCache(const NKikimrConfig:
 
     } catch (const yexception& ex) {
         YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: failed to save log settings config to cache file ' '",
-            {"#_ex.what()", ex.what()});
+            {"exception", ex.what()});
     }
 }
 
@@ -154,8 +153,8 @@ TLogSettingsConfigurator::ComputeComponentSettings(const NKikimrConfig::TLogConf
         auto component = logSettings->FindComponent(entry.GetComponent());
 
         if (component == NLog::InvalidComponent) {
-            YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: ignoring entry for invalid component ' '",
-                {"#_entry.GetComponent()", entry.GetComponent()});
+            YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: ignoring entry for invalid component",
+                {"сomponent", entry.GetComponent()});
             continue;
         }
 

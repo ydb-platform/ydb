@@ -280,7 +280,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper connection",
-            {"#_num_0", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
+            {"status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
 
         if (ev->Get()->Status != NKikimrProto::OK) {
             OnPipeDestroyed(ctx);

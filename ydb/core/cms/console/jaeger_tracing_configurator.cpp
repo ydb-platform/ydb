@@ -119,18 +119,18 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         auto requestTypes = GetRequestTypes(scope);
         if (requestTypes.empty()) {
             YDB_LOG_ERROR("failed to parse request type in the rule. Skipping the rule",
-                {"#_samplingRule.ShortDebugString()", samplingRule.ShortDebugString()});
+                {"rule", samplingRule.ShortDebugString()});
             continue;
         }
 
         if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxTracesPerMinute()) {
             YDB_LOG_ERROR("missing required fields in rule (required fields are: level, fraction, max_traces_per_minute). Skipping the rule",
-                {"#_samplingRule.ShortDebugString()", samplingRule.ShortDebugString()});
+                {"rule", samplingRule.ShortDebugString()});
             continue;
         }
         if (samplingRule.GetMaxTracesPerMinute() == 0) {
             YDB_LOG_ERROR("max_traces_per_minute should never be zero. Found in rule. Skipping the rule",
-                {"#_samplingRule.GetMaxTracesPerMinute()", samplingRule.GetMaxTracesPerMinute()});
+                {"rule", samplingRule.GetMaxTracesPerMinute()});
             continue;
         }
 
@@ -139,7 +139,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         if (level > TComponentTracingLevels::MostVerbose) {
             YDB_LOG_ERROR("sampling level exceeds maximum allowed value ( provided, maximum is ). Lowering the level",
                 {"level", level},
-                {"#_static_cast<ui32>(TComponentTracingLevels::MostVerbose)", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
+                {"mostVerbose", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
             level = TComponentTracingLevels::MostVerbose;
         }
         if (fraction < 0 || fraction > 1) {
@@ -177,7 +177,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         auto requestTypes = GetRequestTypes(throttlingRule.GetScope());
         if (requestTypes.empty()) {
             YDB_LOG_ERROR("failed to parse request type in rule. Skipping the rule",
-                {"#_throttlingRule.ShortDebugString()", throttlingRule.ShortDebugString()});
+                {"rule", throttlingRule.ShortDebugString()});
             continue;
         }
 
@@ -185,18 +185,18 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         if (level > TComponentTracingLevels::MostVerbose) {
             YDB_LOG_ERROR("sampling level exceeds maximum allowed value ( provided, maximum is ). Lowering the level",
                 {"level", level},
-                {"#_static_cast<ui32>(TComponentTracingLevels::MostVerbose)", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
+                {"mostVerbose", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
             level = TComponentTracingLevels::MostVerbose;
         }
 
         if (!throttlingRule.HasMaxTracesPerMinute()) {
             YDB_LOG_ERROR("missing required field max_traces_per_minute in rule. Skipping the rule",
-                {"#_throttlingRule.ShortDebugString()", throttlingRule.ShortDebugString()});
+                {"rule", throttlingRule.ShortDebugString()});
             continue;
         }
         if (throttlingRule.GetMaxTracesPerMinute() == 0) {
             YDB_LOG_ERROR("max_traces_per_minute should never be zero. Found in rule. Skipping the rule",
-                {"#_throttlingRule.GetMaxTracesPerMinute()", throttlingRule.GetMaxTracesPerMinute()});
+                {"maxTracesPerMinute()", throttlingRule.GetMaxTracesPerMinute()});
             continue;
         }
 

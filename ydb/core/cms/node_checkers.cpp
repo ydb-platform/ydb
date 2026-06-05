@@ -3,10 +3,9 @@
 
 #include <ydb/library/actors/core/log.h>
 
-namespace NKikimr::NCms {
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
-#define NCH_LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CMS, "[Nodes Counter] " << stream)
-#define NCH_LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::CMS, "[Nodes Counter] " << stream)
+namespace NKikimr::NCms {
 
 TNodeLockContext::TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode)
     : Priority(priority)
@@ -113,12 +112,13 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, const TNodeLockContext&
     Y_ABORT_UNLESS(Nodes.contains(nodeId));
     auto nodeState = Nodes.at(nodeId).State;
 
-    NCH_LOG_D("Checking Node: "
-            << nodeId << ", with state: " << nodeState
-            << ", with limit: " << DisabledNodesLimit
-            << ", with ratio limit: " << DisabledNodesRatioLimit
-            << ", locked nodes: " << LockedNodesCount
-            << ", down nodes: " << DownNodesCount);
+    YDB_LOG_DEBUG("[Nodes Counter] Checking",
+        {"Node", nodeId},
+        {"state", nodeState},
+        {"limitNodes", DisabledNodesLimit},
+        {"limitRatio", DisabledNodesRatioLimit},
+        {"lockedNodes", LockedNodesCount},
+        {"downNodes", DownNodesCount});
 
     switch (nodeState) {
         case NODE_STATE_UP:
@@ -203,11 +203,12 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext&
     Y_ABORT_UNLESS(Nodes.contains(nodeId));
     auto nodeState = Nodes.at(nodeId).State;
 
-    NCH_LOG_D("Checking limits for sys tablet: " << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)
-            << ", on node: " << nodeId
-            << ", with state: " << nodeState
-            << ", locked nodes: " << LockedNodesCount
-            << ", down nodes: " << DownNodesCount);
+    YDB_LOG_DEBUG("[Nodes Counter] Checking limits for sys, with, locked, down",
+        {"tablet", NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)},
+        {"on_node", nodeId},
+        {"state", nodeState},
+        {"lockedNodes", LockedNodesCount},
+        {"downNodes", DownNodesCount});
 
     switch (nodeState) {
         case NODE_STATE_UP:

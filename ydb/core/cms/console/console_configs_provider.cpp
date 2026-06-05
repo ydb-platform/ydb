@@ -122,7 +122,7 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_CTX_DEBUG(ctx, "TTabletConfigSender( ) connection",
             {"subscriptionId", Subscription->Id},
-            {"#_num_0", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
+            {"status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
 
         if (ev->Get()->Status != NKikimrProto::OK) {
             OnPipeDestroyed(ctx);
@@ -240,7 +240,7 @@ public:
 
         YDB_LOG_CTX_DEBUG(ctx, "TServiceConfigSender( ) undelivered notification (retry in seconds)",
             {"subscriptionId", Subscription->Id},
-            {"#_RetryInterval.Seconds()", RetryInterval.Seconds()});
+            {"RetryInterval", RetryInterval.Seconds()});
 
         if (!ScheduledRetry) {
             ctx.Schedule(RetryInterval, new TEvents::TEvWakeup);
@@ -255,7 +255,7 @@ public:
 
         YDB_LOG_CTX_DEBUG(ctx, "TServiceConfigSender( ) disconnected (retry in seconds)",
             {"subscriptionId", Subscription->Id},
-            {"#_RetryInterval.Seconds()", RetryInterval.Seconds()});
+            {"RetryInterval", RetryInterval.Seconds()});
 
         if (!ScheduledRetry) {
             ctx.Schedule(RetryInterval, new TEvents::TEvWakeup);
@@ -308,7 +308,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         YDB_LOG_CTX_TRACE(ctx, "TSubscriptionClientSender( ) send TEvConfigSubscriptionResponse",
-            {"#_Subscription->Subscriber.ToString()", Subscription->Subscriber.ToString()});
+            {"subscriber", Subscription->Subscriber.ToString()});
 
         Send(Subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionResponse(Subscription->Generation, Ydb::StatusIds::SUCCESS),
              IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
@@ -336,14 +336,14 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "TSubscriptionClientSender( ) received poison pill, will die.",
-            {"#_Subscription->Subscriber.ToString()", Subscription->Subscriber.ToString()});
+            {"subscriber", Subscription->Subscriber.ToString()});
         Die(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "TSubscriptionClientSender( ) received undelivered notification, will disconnect.",
-            {"#_Subscription->Subscriber.ToString()", Subscription->Subscriber.ToString()});
+            {"subscriber", Subscription->Subscriber.ToString()});
 
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
         Die(ctx);
@@ -352,14 +352,14 @@ public:
     void Handle(TEvents::TEvWakeup::TPtr &/*ev*/, const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "TSubscriptionClientSender( ) received wake up",
-            {"#_Subscription->Subscriber.ToString()", Subscription->Subscriber.ToString()});
+            {"subscriber", Subscription->Subscriber.ToString()});
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerCoolDown(Subscription));
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &/*ev*/, const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "TSubscriptionClientSender( ) received node disconnected notification, will disconnect.",
-            {"#_Subscription->Subscriber.ToString()", Subscription->Subscriber.ToString()});
+            {"subscriber", Subscription->Subscriber.ToString()});
 
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
         Die(ctx);
@@ -371,7 +371,7 @@ public:
         notification.Get()->Record.SetOrder(NextOrder++);
 
         YDB_LOG_CTX_TRACE(ctx, "TSubscriptionClientSender( ) send",
-            {"#_Subscription->Subscriber.ToString()", Subscription->Subscriber.ToString()},
+            {"subscriber", Subscription->Subscriber.ToString()},
             {"TEvConfigSubscriptionNotificationRequest", notification.Get()->Record.ShortDebugString()});
 
         const float mbytes = notification.Get()->GetCachedByteSize() / 1'000'000.f;
@@ -429,7 +429,7 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
     for (auto &[id, _] : modifications.RemovedItems) {
         auto item = ConfigIndex.GetItem(id);
         YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: remove",
-            {"#_item->ToString()", item->ToString()});
+            {"item", item->ToString()});
         ConfigIndex.RemoveItem(id);
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
         InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions);
@@ -438,11 +438,11 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
         auto item = ConfigIndex.GetItem(pr.first);
 
         YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: remove modified",
-            {"#_item->ToString()", item->ToString()});
+            {"item", item->ToString()});
         ConfigIndex.RemoveItem(pr.first);
 
         YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: add modified",
-            {"#_pr.second->ToString()", pr.second->ToString()});
+            {"item", pr.second->ToString()});
         ConfigIndex.AddItem(pr.second);
 
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
@@ -454,7 +454,7 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
     }
     for (auto item : modifications.AddedItems) {
         YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: add new",
-            {"#_item->ToString()", item->ToString()});
+            {"item", item->ToString()});
         ConfigIndex.AddItem(item);
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
         InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions);
@@ -474,7 +474,7 @@ void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModific
     for (auto &id : modifications.RemovedSubscriptions) {
         auto subscription = SubscriptionIndex.GetSubscription(id);
         YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: remove subscription",
-            {"#_subscription->ToString()", subscription->ToString()});
+            {"subscription", subscription->ToString()});
         if (subscription->Worker) {
             ctx.Send(subscription->Worker, new TEvents::TEvPoisonPill);
             subscription->Worker = TActorId();
@@ -483,7 +483,7 @@ void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModific
     }
     for (auto &subscription : modifications.AddedSubscriptions) {
         YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: add subscription",
-            {"#_subscription->ToString()", subscription->ToString()});
+            {"subscription", subscription->ToString()});
         SubscriptionIndex.AddSubscription(subscription);
         subscriptions.insert(subscription);
     }
@@ -622,8 +622,8 @@ bool TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
                                          const TActorContext &ctx)
 {
     YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: check if update is required for volatile subscription",
-        {"#_subscription->Subscriber.ToString()", subscription->Subscriber.ToString()},
-        {"#_subscription->Generation", subscription->Generation});
+        {"subscriber", subscription->Subscriber.ToString()},
+        {"generation", subscription->Generation});
 
     auto config = ConfigIndex.BuildConfig(subscription->NodeId, subscription->Host,
                                           subscription->Tenant, subscription->NodeType,
@@ -698,14 +698,14 @@ bool TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     if (affectedKinds.empty() && !yamlChanged && subscription->FirstUpdateSent) {
         YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: no changes found for subscription",
-            {"#_subscription->Subscriber.ToString()", subscription->Subscriber.ToString()},
-            {"#_subscription->Generation", subscription->Generation});
+            {"subscriber", subscription->Subscriber.ToString()},
+            {"generation", subscription->Generation});
         return false;
     }
 
     YDB_LOG_CTX_TRACE(ctx, "TConfigsProvider: new config found for subscription",
-        {"#_subscription->Subscriber.ToString()", subscription->Subscriber.ToString()},
-        {"#_subscription->Generation", subscription->Generation},
+        {"subscriber", subscription->Subscriber.ToString()},
+        {"generation", subscription->Generation},
         {"version", version.ShortDebugString()});
 
     subscription->LastProvided.Swap(&version);
@@ -822,8 +822,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     if (existing) {
         if (existing->Generation >= rec.GetGeneration()) {
             YDB_LOG_CTX_DEBUG(ctx, "TConfigsProvider received stale subscription request",
-                {"#_subscriber.ToString()", subscriber.ToString()},
-                {"#_rec.GetGeneration()", rec.GetGeneration()});
+                {"subscriber", subscriber.ToString()},
+                {"generation", rec.GetGeneration()});
             return;
         }
 
@@ -860,8 +860,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     InMemoryIndex.AddSubscription(subscription);
 
     YDB_LOG_CTX_DEBUG(ctx, "TConfigsProvider registered new subscription",
-        {"#_subscriber.ToString()", subscriber.ToString()},
-        {"#_rec.GetGeneration()", rec.GetGeneration()});
+        {"subscriber", subscriber.ToString()},
+        {"generation", rec.GetGeneration()});
 
     subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId()));
 
@@ -877,8 +877,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &e
     auto subscription = InMemoryIndex.GetSubscription(subscriber);
     if (!subscription || subscription->Generation > rec.GetGeneration()) {
         YDB_LOG_CTX_DEBUG(ctx, "TConfigsProvider received stale subscription canceled request",
-            {"#_subscriber.ToString()", subscriber.ToString()},
-            {"#_rec.GetGeneration()", rec.GetGeneration()});
+            {"subscriber", subscriber.ToString()},
+            {"generation", rec.GetGeneration()});
         return;
     }
 
@@ -899,8 +899,8 @@ void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const
         Send(subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation));
 
         YDB_LOG_CTX_DEBUG(ctx, "TConfigsProvider removed subscription (subscription worker died)",
-            {"#_subscription->Subscriber", subscription->Subscriber},
-            {"#_subscription->Generation", subscription->Generation});
+            {"Subscriber", subscription->Subscriber},
+            {"generation", subscription->Generation});
     }
 
     ProcessScheduledUpdates(ctx);
@@ -1193,7 +1193,7 @@ void TConfigsProvider::Handle(TEvPrivate::TEvNotificationTimeout::TPtr &ev, cons
     auto subscription = ev->Get()->Subscription;
 
     YDB_LOG_CTX_ERROR(ctx, "Couldn't deliver config notification for subscription",
-        {"#_subscription->ToString()", subscription->ToString()});
+        {"subscription", subscription->ToString()});
 
     // Subscription was removed
     if (!SubscriptionIndex.GetSubscription(subscription->Id)) {

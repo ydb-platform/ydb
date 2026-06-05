@@ -50,7 +50,7 @@ bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
     }
 
     YDB_LOG_CTX_DEBUG(ctx, "Removing log records",
-        {"#_ids.size()", ids.size()});
+        {"count", ids.size()});
 
     for (auto id : ids)
         db.Table<Schema::LogRecords>().Key(id).Delete();

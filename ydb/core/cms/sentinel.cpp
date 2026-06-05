@@ -1019,14 +1019,14 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         if (ConfigUpdater.Id || StateUpdater.Id) {
             YDB_LOG_INFO("[Sentinel] [ was delayed",
                 {"Name", Name()},
-                {"#_TUpdater::Name()", TUpdater::Name()});
+                {"TUpdaterName", TUpdater::Name()});
             updater.Delayed = true;
             return;
         }
 
         YDB_LOG_DEBUG("[Sentinel] [ Start",
             {"Name", Name()},
-            {"#_TUpdater::Name()", TUpdater::Name()});
+            {"TUpdaterName", TUpdater::Name()});
         updater.Start(RegisterWithSameMailbox(new TUpdater(SelfId(), CmsState, SentinelState)), Now());
     }
 
@@ -1089,7 +1089,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     void OnConfigUpdated() {
         YDB_LOG_DEBUG("[Sentinel] [ Config was updated in",
             {"Name", Name()},
-            {"#_(Now() - ConfigUpdater.StartedAt)", (Now() - ConfigUpdater.StartedAt)});
+            {"TimeDelta", (Now() - ConfigUpdater.StartedAt)});
 
         RemoveUntouched();
         *Counters->PDisksTotal = SentinelState->PDisks.size();
@@ -1108,7 +1108,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     void OnStateUpdated() {
         YDB_LOG_DEBUG("[Sentinel] [ State was updated in",
             {"Name", Name()},
-            {"#_(Now() - StateUpdater.StartedAt)", (Now() - StateUpdater.StartedAt)});
+            {"TimeDelta", (Now() - StateUpdater.StartedAt)});
 
         EnsureAllTouched();
 
@@ -1190,7 +1190,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 {"Name", Name()},
                 {"pdiskId", id},
                 {"status", status},
-                {"#_status", requiredStatus},
+                {"requiredStatus", requiredStatus},
                 {"reason", reason},
                 {"run", Config.DryRun});
             LogStatusChange(id, status, requiredStatus, reason);

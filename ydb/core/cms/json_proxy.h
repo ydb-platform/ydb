@@ -66,9 +66,9 @@ public:
 
         std::optional<ui32> followerId = GetFollowerId(ctx);
         YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::CMS, "TJsonProxyBase send request to tablet, followerId",
-            {"#_GetTabletName()", GetTabletName()},
+            {"tabletName", GetTabletName()},
             {"tid", tid},
-            {"#_num_0", ((followerId) ? ToString(*followerId) : TString("(undefined)"))});
+            {"follower", ((followerId) ? ToString(*followerId) : TString("(undefined)"))});
 
         NTabletPipe::TClientConfig pipeConfig;
 

@@ -2992,6 +2992,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(RemoveIdentityMapRemovesEmptyMap) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto emptyMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{});
+        TOpRoot root(emptyMap, pos, {"a", "payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+        TRuleBasedStage removeIdentity("Focused remove identity map", std::move(rules));
+        ComputeLogicalTestProps(root);
+        removeIdentity.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Remove identity map");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Remove identity map to apply");
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+    }
+
     Y_UNIT_TEST(PruneDeadReadColumnsRule) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();

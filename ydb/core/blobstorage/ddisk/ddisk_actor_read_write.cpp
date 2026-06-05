@@ -373,6 +373,10 @@ namespace NKikimr::NDDisk {
                 CollectPbStatsSnapshot();
                 break;
             }
+            case EWakeupTag::WakeupProcessPersistentBufferQueue: {
+                ProcessPersistentBufferQueue();
+                break;
+            }
         }
     }
 

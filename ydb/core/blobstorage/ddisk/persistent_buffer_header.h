@@ -17,6 +17,7 @@ namespace NKikimr::NDDisk {
             IS_BARRIER = 1,
             IS_ERASE = 2,
             IS_ERASE_COMPACT = 4,
+            IS_PACK = 8,
         };
 
         ui8 Signature[16];
@@ -83,6 +84,27 @@ namespace NKikimr::NDDisk {
     };
 
     static_assert(sizeof(TPersistentBufferLsnRecordHeader) <= DataAlignment);
+
+    struct TPersistentBufferLsnsPackRecord {
+        static constexpr ui32 MaxSectorsPerPackBufferRecord = 8;
+
+        ui64 TabletId;
+        ui32 Generation;
+        ui32 Reserved1;
+        ui64 VChunkIndex;
+        ui32 OffsetInBytes;
+        ui32 Size;
+        ui64 Lsn;
+
+        TPersistentBufferSectorInfo Locations[MaxSectorsPerPackBufferRecord];
+    };
+
+    struct TPersistentBufferLsnPackRecordHeader {
+        static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBufferHeader)) / sizeof(TPersistentBufferLsnsPackRecord);
+
+        TPersistentBufferHeader Header;
+        TPersistentBufferLsnsPackRecord Pack[MaxLsnsPerPack];
+    };
 
 #pragma pack(pop)
 }

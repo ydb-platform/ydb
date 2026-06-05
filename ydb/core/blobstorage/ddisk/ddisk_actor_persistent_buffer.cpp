@@ -251,12 +251,48 @@ namespace NKikimr::NDDisk {
         if (PendingPersistentBufferEvents.empty() || !PersistentBufferReady) {
             return;
         }
+        PersistentBufferWaitingTimerIsOn = false;
         STLOG_D("TDDiskActor::ProcessPersistentBufferQueue start processing",
             (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
         while (!PendingPersistentBufferEvents.empty()) {
+            // Collect a batch of consecutive TEvWritePersistentBuffer events
+            {
+                std::vector<TEvWritePersistentBuffer::TPtr> batch;
+                while (!PendingPersistentBufferEvents.empty()
+                    && batch.size() < TPersistentBufferLsnPackRecordHeader::MaxLsnsPerPack) {
+                    auto& front = PendingPersistentBufferEvents.front();
+                    if (front.Ev->Type != TEvWritePersistentBuffer::EventType) {
+                        break;
+                    }
+                    auto* writeEv = static_cast<TEventHandle<TEvWritePersistentBuffer>*>(front.Ev.get());
+                    const TBlockSelector selector(writeEv->Get()->Record.GetSelector());
+                    if (selector.Size > TPersistentBufferLsnsPackRecord::MaxSectorsPerPackBufferRecord * SectorSize) {
+                        break;
+                    }
+                    front.Ev.release();
+                    PendingPersistentBufferEvents.pop();
+                    Counters.PersistentBuffer.PendingEventsQueueSize->Dec();
+                    batch.emplace_back(writeEv);
+                }
+                if (!batch.empty()) {
+                    auto size = PendingPersistentBufferEvents.size();
+                    ProcessPersistentBufferBatchWrite(std::move(batch));
+                    if (PendingPersistentBufferEvents.size() != size) {
+                        if (IssuePersistentBufferChunkAllocationInflight) {
+                            STLOG_D("TDDiskActor::ProcessPersistentBufferQueue waiting next chunk allocation",
+                                (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()), (size, size));
+                            return;
+                        }
+                        Y_ABORT("TDDiskActor::ProcessPersistentBufferQueue pending queue growth");
+                    }
+                    continue;
+                }
+            }
+
             auto temp = PendingPersistentBufferEvents.front().Release();
             PendingPersistentBufferEvents.pop();
             Counters.PersistentBuffer.PendingEventsQueueSize->Dec();
+
             auto size = PendingPersistentBufferEvents.size();
             Receive(temp);
             if (PendingPersistentBufferEvents.size() != size) {
@@ -268,6 +304,214 @@ namespace NKikimr::NDDisk {
                 Y_ABORT("TDDiskActor::ProcessPersistentBufferQueue pending queue growth");
             }
         }
+    }
+
+    bool TDDiskActor::PersistentBufferPreprocessWrite(TEvWritePersistentBuffer::TPtr ev) {
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        const TBlockSelector selector(record.GetSelector());
+        const ui64 lsn = record.GetLsn();
+
+        auto barrierRecord = PersistentBufferBarriersManager.GetBarrier(creds.TabletId);
+        if (barrierRecord.Generation > creds.Generation
+            || (barrierRecord.Generation == creds.Generation && lsn <= barrierRecord.Lsn)) {
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite write before barrier",
+                (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn), (Barrier, barrierRecord.Lsn));
+            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+                TStringBuilder() << "write before barrier"
+                    << " tabletId# " << creds.TabletId
+                    << " generation# " << creds.Generation
+                    << " lsn# " << lsn
+                    << " barrier# " << barrierRecord.Lsn));
+            return false;
+        }
+
+        auto checkIsSameRequest = [&](auto &data) {
+            bool dataEqual = data.Size == selector.Size;
+            if (dataEqual) {
+                const TWriteInstruction instr(record.GetInstruction());
+                Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
+                TRope payload = ev->Get()->GetPayload(*instr.PayloadId);
+                for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
+                    auto it = payload.Position(SectorSize * i);
+                    if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                        *it.ContiguousDataMut() = 0;
+                    }
+                    if (data.Sectors[i + 1].Checksum != CalculateChecksum(it)) {
+                        dataEqual = false;
+                        break;
+                    }
+                }
+            }
+
+            if (!dataEqual || data.OffsetInBytes != selector.OffsetInBytes || data.Size != selector.Size
+                || data.VChunkIndex != selector.VChunkIndex) {
+                STLOG_D("TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
+                    (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
+                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                    TStringBuilder() << "duplicate record with incorrect data"));
+                return false;
+            }
+            return true;
+        };
+        if (auto it = PersistentBuffers.find({creds.TabletId, creds.Generation}); it != PersistentBuffers.end()) {
+            if (auto recordIt = it->second.Records.find(lsn); recordIt != it->second.Records.end()) {
+                auto& record = recordIt->second;
+                if (!checkIsSameRequest(record)) {
+                    return false;
+                }
+                STLOG_D("TDDiskActor::ProcessPersistentBufferWrite duplicate record",
+                    (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
+                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+                return false;
+            }
+
+            if (selector.Size + it->second.Size > PersistentBufferFormat.PerTabletStorageLimit) {
+                STLOG_D("TDDiskActor::ProcessPersistentBufferWrite tablet space occupation limit is reached",
+                    (TabletId, creds.TabletId), (Generation, creds.Generation), (TabletSpaceOccupied, it->second.Size),
+                    (WriteDataSize, selector.Size), (PerTabletStorageLimit, PersistentBufferFormat.PerTabletStorageLimit));
+                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
+                    TStringBuilder() << "persistent buffer overfill "
+                        << selector.Size << " bytes requested, current tablet space occupation " << it->second.Size << " bytes"));
+                return false;
+            }
+        }
+        if (auto it = PersistentBufferWriteInflightsByRecord.find({creds.TabletId, creds.Generation, lsn}); it != PersistentBufferWriteInflightsByRecord.end()) {
+            Y_ABORT_UNLESS(!it->second.empty());
+
+            auto inflightIt = PersistentBufferDiskOperationInflight.find(*it->second.begin());
+            Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
+            auto& inflight = inflightIt->second;
+
+            if (!checkIsSameRequest(inflight)) {
+                return false;
+            }
+
+            auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+            NPrivate::AddMessageWaitAttributes(span);
+            span
+                .Attribute("tablet_id", static_cast<i64>(creds.TabletId))
+                .Attribute("vchunk_index", static_cast<i64>(selector.VChunkIndex))
+                .Attribute("offset_in_bytes", selector.OffsetInBytes)
+                .Attribute("size", selector.Size)
+                .Attribute("lsn", static_cast<i64>(lsn));
+
+            auto opCookie = NextCookie++;
+            auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
+            inflightRecord = {
+                .Sender = ev->Sender,
+                .Cookie = ev->Cookie,
+                .Session = ev->InterconnectSession,
+                .Span = std::move(span),
+            };
+            it->second.emplace_back(opCookie);
+            return false;
+        }
+        return true;
+    }
+
+    void TDDiskActor::ProcessPersistentBufferBatchWrite(std::vector<TEvWritePersistentBuffer::TPtr> evs) {
+        std::vector<TEvWritePersistentBuffer::TPtr> evsToWrite;
+        evsToWrite.reserve(evs.size());
+        ui32 sectorsCnt = 1;
+        for (auto ev : evs) {
+            if (PersistentBufferPreprocessWrite(ev)) {
+                evsToWrite.push_back(ev);
+                const auto& record = ev->Get()->Record;
+                const TBlockSelector selector(record.GetSelector());
+                sectorsCnt += selector.Size / SectorSize;
+            }
+        }
+
+        auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
+
+        if (sectors.size() == 0) {
+            if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
+                for (auto ev : evsToWrite) {
+                    if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                        STLOG_D("TDDiskActor::ProcessPersistentBufferBatchWrite pending queue overfill", (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                        SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED,
+                            TStringBuilder() << "pending queue overfill, size:"
+                                << PendingPersistentBufferEvents.size() << " limit: " << PersistentBufferFormat.MaxPendingEventsQueueSize));
+                        continue;
+                    }
+                    STLOG_D("TDDiskActor::ProcessPersistentBufferBatchWrite pending",
+                        (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
+                    PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
+                    Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
+                }
+                IssuePersistentBufferChunkAllocation();
+            } else {
+                for (auto ev : evsToWrite) {
+                    STLOG_D("TDDiskActor::ProcessPersistentBufferBatchWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
+                    SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
+                        TStringBuilder() << "persistent buffer overfill "
+                            << (sectorsCnt * SectorSize) << " bytes requested, free " << (PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize) << " bytes"));
+                }
+            }
+            return;
+        }
+        Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord + 1 && sectorsCnt > 1);
+
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.BatchWritePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
+            .Attribute("lsn_count", evsToWrite.size())
+            .Attribute("sectors_to_write", sectorsCnt)
+        Counters.Interface.WritePersistentBuffer.Request((sectorsCnt - 1) * SectorSize);
+
+        TRcBuf payloadWithHeader = ev->Get()->GetPayloadWithHeader(*instr.PayloadId);
+
+//         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
+//             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, std::move(payloadWithHeader), sectors);
+
+//         auto opCookie = NextCookie++;
+//         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
+//         inflightRecord = {
+//             .Sender = ev->Sender,
+//             .Cookie = ev->Cookie,
+//             .Session = ev->InterconnectSession,
+//             .Span = std::move(span),
+
+//             .TabletId = creds.TabletId,
+//             .Generation = creds.Generation,
+//             .VChunkIndex = selector.VChunkIndex,
+//             .Lsn = lsn,
+//             .OffsetInBytes = selector.OffsetInBytes,
+//             .Size = selector.Size,
+//             .Sectors = sectors,
+//             .DataParts = {{0, std::move(payload)}},
+//             .PartsCount = 1,
+//             .OccupiedSectors = std::move(sectors),
+//             .StartTs = HPNow(),
+//         };
+//         PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn}].emplace_back(opCookie);
+
+//         // TODO: make uring to call flush just once
+//         for(auto& [chunkIdx, offset, data] : parts) {
+//             const ui64 cookie = NextCookie++;
+//             inflightRecord.OperationCookies.insert(cookie);
+//             auto diskOffset = DiskFormat->Offset(chunkIdx, 0, offset);
+//             std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TPersistentBufferPartIoOp>();
+//             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
+//             partOp->SetCookie(opCookie);
+//             partOp->SetPartCookie(cookie);
+//             partOp->PrepareWrite(std::move(data), diskOffset, chunkIdx, offset);
+//             inflightRecord.Span.Event(
+// #if defined(__linux__)
+//                 UringRouter ? "DirectUringOp" :
+// #endif
+//                 "Send to pdisk");
+
+//             DirectUringOp(op);
+//         }
     }
 
     void TDDiskActor::RestorePersistentBufferChunk(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr ev) {
@@ -578,111 +822,17 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
-
-        auto barrierRecord = PersistentBufferBarriersManager.GetBarrier(creds.TabletId);
-        if (barrierRecord.Generation > creds.Generation
-            || (barrierRecord.Generation == creds.Generation && lsn <= barrierRecord.Lsn)) {
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite write before barrier",
-                (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn), (Barrier, barrierRecord.Lsn));
-            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
-                TStringBuilder() << "write before barrier"
-                    << " tabletId# " << creds.TabletId
-                    << " generation# " << creds.Generation
-                    << " lsn# " << lsn
-                    << " barrier# " << barrierRecord.Lsn));
+        if (!PersistentBufferPreprocessWrite(ev)) {
             return;
         }
 
         ui32 sectorsCnt = selector.Size / SectorSize + 1;
         const TWriteInstruction instr(record.GetInstruction());
-        TRope payload;
-        if (instr.PayloadId) {
-            payload = ev->Get()->GetPayload(*instr.PayloadId);
-        }
-        STLOG_T("TDDiskActor::ProcessPersistentBufferWrite",
+        Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
+        TRope payload = ev->Get()->GetPayload(*instr.PayloadId);
+        STLOG_I("TDDiskActor::ProcessPersistentBufferWrite",
             (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
-        auto checkIsSameRequest = [&](auto &data) {
-            bool dataEqual = data.Size == selector.Size;
-            if (dataEqual) {
-                for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
-                    auto it = payload.Position(SectorSize * i);
-                    if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                        *it.ContiguousDataMut() = 0;
-                    }
-                    if (data.Sectors[i + 1].Checksum != CalculateChecksum(it)) {
-                        dataEqual = false;
-                        break;
-                    }
-                }
-            }
 
-            if (!dataEqual || data.OffsetInBytes != selector.OffsetInBytes || data.Size != selector.Size
-                || data.VChunkIndex != selector.VChunkIndex) {
-                STLOG_D("TDDiskActor::ProcessPersistentBufferWrite duplicate record with incorrect data",
-                    (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
-                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                    TStringBuilder() << "duplicate record with incorrect data"));
-                return false;
-            }
-            return true;
-        };
-        if (auto it = PersistentBuffers.find({creds.TabletId, creds.Generation}); it != PersistentBuffers.end()) {
-            if (auto recordIt = it->second.Records.find(lsn); recordIt != it->second.Records.end()) {
-                auto& record = recordIt->second;
-                if (!checkIsSameRequest(record)) {
-                    return;
-                }
-                STLOG_D("TDDiskActor::ProcessPersistentBufferWrite duplicate record",
-                    (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
-                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
-                return;
-            }
-
-            if (selector.Size + it->second.Size > PersistentBufferFormat.PerTabletStorageLimit) {
-                STLOG_D("TDDiskActor::ProcessPersistentBufferWrite tablet space occupation limit is reached",
-                    (TabletId, creds.TabletId), (Generation, creds.Generation), (TabletSpaceOccupied, it->second.Size),
-                    (WriteDataSize, selector.Size), (PerTabletStorageLimit, PersistentBufferFormat.PerTabletStorageLimit));
-                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
-                    TStringBuilder() << "persistent buffer overfill "
-                        << selector.Size << " bytes requested, current tablet space occupation " << it->second.Size << " bytes"));
-                return;
-            }
-        }
-        if (auto it = PersistentBufferWriteInflightsByRecord.find({creds.TabletId, creds.Generation, lsn}); it != PersistentBufferWriteInflightsByRecord.end()) {
-            Y_ABORT_UNLESS(!it->second.empty());
-
-            auto inflightIt = PersistentBufferDiskOperationInflight.find(*it->second.begin());
-            Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
-            auto& inflight = inflightIt->second;
-
-            if (!checkIsSameRequest(inflight)) {
-                return;
-            }
-
-            auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
-            NPrivate::AddMessageWaitAttributes(span);
-            span
-                .Attribute("tablet_id", static_cast<i64>(creds.TabletId))
-                .Attribute("vchunk_index", static_cast<i64>(selector.VChunkIndex))
-                .Attribute("offset_in_bytes", selector.OffsetInBytes)
-                .Attribute("size", selector.Size)
-                .Attribute("lsn", static_cast<i64>(lsn));
-
-            auto opCookie = NextCookie++;
-            auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
-            inflightRecord = {
-                .Sender = ev->Sender,
-                .Cookie = ev->Cookie,
-                .Session = ev->InterconnectSession,
-                .Span = std::move(span),
-            };
-            it->second.emplace_back(opCookie);
-            return;
-        }
         auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
@@ -725,9 +875,6 @@ namespace NKikimr::NDDisk {
             .Attribute("lsn", static_cast<i64>(lsn));
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
 
-        // CheckQuery (in Handle(TEvWritePersistentBuffer)) rejects requests with a missing PayloadId or a zero
-        // selector.Size, so a payload is always present here; slicing relies on this (sectorsCnt > 1).
-        Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer reached slicing without a payload");
         TRcBuf payloadWithHeader = ev->Get()->GetPayloadWithHeader(*instr.PayloadId);
 
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
@@ -806,6 +953,17 @@ namespace NKikimr::NDDisk {
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
             Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
+            return;
+        }
+        if (selector.Size <= TPersistentBufferLsnsPackRecord::MaxSectorsPerPackBufferRecord * SectorSize
+            && PersistentBufferFormat.WritesBatchingMicroseconds > 0
+            && PendingPersistentBufferEvents.size() < PersistentBufferFormat.MaxPendingEventsQueueSize) {
+            PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
+            Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
+            if (!PersistentBufferWaitingTimerIsOn) {
+                PersistentBufferWaitingTimerIsOn = true;
+                Schedule(TDuration::MicroSeconds(PersistentBufferFormat.WritesBatchingPeriodMicroseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupProcessPersistentBufferQueue));
+            }
             return;
         }
         ProcessPersistentBufferWrite(ev);

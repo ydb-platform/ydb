@@ -322,6 +322,7 @@ namespace NKikimr::NDDisk {
             WakeupIoSubmitQueue = 1,
             WakeupUpdateFreeSpaceInfo = 2,
             WakeupCollectPbStats = 3,
+            WakeupProcessPersistentBufferQueue = 4,
         };
 
         struct TPbOpSnapshot {
@@ -759,6 +760,7 @@ namespace NKikimr::NDDisk {
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
         bool PersistentBufferReady = false;
+        bool PersistentBufferWaitingTimerIsOn = false;
 
         std::unordered_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
@@ -784,6 +786,7 @@ namespace NKikimr::NDDisk {
         void ReplyReadPersistentBuffer(TPersistentBuffer::TRecord& pr, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, std::optional<TString> errorMessage);
 
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
+        void ProcessPersistentBufferBatchWrite(std::vector<TEvWritePersistentBuffer::TPtr> evs);
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);
         void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn);

@@ -1301,30 +1301,29 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queriesOnEmptyColumns = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 select count(*) from `/Root/t1` as t1;
             )",
             // non optional, optional coumn
             R"(
-                PRAGMA YqlSelect = 'force';
                 select count(t1.a), count(t1.b) from `/Root/t1` as t1;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select sum(t1.a), sum(t1.b) from `/Root/t1` as t1;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select min(t1.a), min(t1.b) from `/Root/t1` as t1;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select avg(t1.a), avg(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                SELECT stddev_samp(t1.a), stddev_samp(t1.b) from `/Root/t1` as t1;
             )",
         };
         std::vector<std::string> resultsEmptyColumns = {
             R"([[0u]])",
             R"([[0u;0u]])",
+            R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])"
@@ -1573,6 +1572,51 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+
+        NYdb::TValueBuilder rowsTableT1More;
+        rowsTableT1More.BeginList();
+        for (size_t i = 5; i < 20; ++i) {
+            rowsTableT1More.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i & 1 ? 1 : 2)
+                .AddMember("c").Int64(2)
+                .EndStruct();
+        }
+        rowsTableT1More.EndList();
+
+        auto resultUpsertMore = db.BulkUpsert("/Root/t1", rowsTableT1More.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsertMore.IsSuccess(), resultUpsertMore.GetIssues().ToString());
+
+        queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT stddev_samp(t1.a) as res0, stddev_samp(t1.b) as res1 from `/Root/t1` as t1 order by res0, res1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT stddev_samp(t1.a) as res, t1.b from `/Root/t1` as t1 group by t1.b order by res;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT stddev_samp(t1.b) as res, t1.c from `/Root/t1` as t1 group by t1.c order by res;
+            )",
+        };
+
+        results = {
+            R"([[[5.916079783];[0.512989176]]])",
+            R"([[6.055300708;[1]];[6.055300708;[2]]])",
+            R"([[[0.512989176];[2]]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            //Cout << query << Endl;
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+       }
     }
 
     Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {

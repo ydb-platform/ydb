@@ -504,6 +504,8 @@ message TPQTabletConfig {
     optional string MonitoringProjectId = 41;
 
     optional string TimestampType = 42;
+
+    optional bool ContentBasedDeduplication = 43 [default = false];
 }
 
 message THeartbeat {

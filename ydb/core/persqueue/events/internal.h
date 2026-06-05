@@ -1115,6 +1115,7 @@ struct TEvPQ {
 
         TEvConsumed(ui64 consumedBytes)
             : ConsumedBytes(consumedBytes)
+            , ConsumedMessages(0)
             , IsOverhead(true)
         {}
 

@@ -57,6 +57,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
     , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
+    , ContentBasedDeduplication_(Proto_.content_based_deduplication())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -204,6 +205,10 @@ uint64_t TTopicDescription::GetPartitionWriteSpeedMessagesPerSecond() const {
 
 uint64_t TTopicDescription::GetPartitionWriteBurstMessages() const {
     return PartitionWriteBurstMessages_;
+}
+
+bool TTopicDescription::GetContentBasedDeduplication() const {
+    return ContentBasedDeduplication_;
 }
 
 EMeteringMode TTopicDescription::GetMeteringMode() const {

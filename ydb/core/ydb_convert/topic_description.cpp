@@ -135,6 +135,8 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent());
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent());
 
+    out.set_content_based_deduplication(config.GetContentBasedDeduplication());
+
     if (!config.GetRequireAuthWrite()) {
         (*out.mutable_attributes())["_allow_unauthenticated_write"] = "true";
     }

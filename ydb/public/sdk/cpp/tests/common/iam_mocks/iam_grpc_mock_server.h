@@ -29,7 +29,7 @@ public:
 
     int GetRequestCount() const;
     void ResetRequestCount();
-    const yandex::cloud::iam::v1::CreateIamTokenRequest& GetLastRequest() const;
+    yandex::cloud::iam::v1::CreateIamTokenRequest GetLastRequest() const;
     bool HasLastRequest() const;
 
 private:
@@ -49,19 +49,37 @@ public:
         yandex::cloud::iam::v1::CreateIamTokenResponse* response) override;
 
     void Release();
+    void Shutdown();
 
     bool WaitUntilRpcEntered(std::chrono::milliseconds timeout) const;
 
 private:
     std::atomic<bool> RpcEntered_{false};
     bool Released_ = false;
+    bool ShuttingDown_ = false;
     mutable std::mutex Mutex_;
     std::condition_variable ReleasedCv_;
+};
+
+class TBlockingIamReleaseGuard {
+public:
+    explicit TBlockingIamReleaseGuard(TBlockingIamTokenService& service)
+        : Service_(service)
+    {}
+
+    ~TBlockingIamReleaseGuard() {
+        Service_.Release();
+    }
+
+private:
+    TBlockingIamTokenService& Service_;
 };
 
 class TIamGrpcServer {
 public:
     explicit TIamGrpcServer(grpc::Service* service);
+    TIamGrpcServer(const TIamGrpcServer&) = delete;
+    TIamGrpcServer& operator=(const TIamGrpcServer&) = delete;
 
     bool Start();
     std::string Endpoint() const;

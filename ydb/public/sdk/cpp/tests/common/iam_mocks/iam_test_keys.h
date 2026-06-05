@@ -50,14 +50,18 @@ inline constexpr const char* TestRSAPublicKey =
     "jQIDAQAB\n"
     "-----END PUBLIC KEY-----\n";
 
+inline constexpr const char* kIamJwtAudience = "https://iam.api.cloud.yandex.net/iam/v1/tokens";
+inline constexpr const char* kIamJwtKeyId = "unit-test-key";
+inline constexpr const char* kIamJwtIssuer = "unit-test-account";
+
 inline std::string MakeJwtKeyFileContent() {
     TStringStream ss;
     NJson::TJsonWriter w(&ss, false);
     w.OpenMap();
     w.WriteKey("id");
-    w.Write("unit-test-key");
+    w.Write(kIamJwtKeyId);
     w.WriteKey("service_account_id");
-    w.Write("unit-test-account");
+    w.Write(kIamJwtIssuer);
     w.WriteKey("private_key");
     w.Write(TestRSAPrivateKey);
     w.WriteKey("public_key");

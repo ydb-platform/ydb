@@ -3,6 +3,10 @@ GTEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
+# Driver auth negative control requires rejecting unauthenticated/invalid tokens.
+ENV(YDB_ENFORCE_USER_TOKEN_REQUIREMENT=true)
+ENV(YDB_DEFAULT_CLUSTERADMIN=root@builtin)
+
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
     SIZE(LARGE)
@@ -14,6 +18,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/grpc
+    contrib/libs/jwt-cpp
     library/cpp/http/server
     library/cpp/json
     library/cpp/testing/common
@@ -22,10 +27,12 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/iam
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/types/core_facility
-    ydb/public/sdk/cpp/tests/integration/iam/helpers
+    ydb/public/sdk/cpp/src/client/types/credentials
+    ydb/public/sdk/cpp/tests/common/iam_mocks
 )
 
 SRCS(
+    driver_auth_it.cpp
     iam_test_fixture.cpp
     jwt_it.cpp
     metadata_it.cpp

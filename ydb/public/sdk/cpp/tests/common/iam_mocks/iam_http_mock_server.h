@@ -13,6 +13,18 @@
 
 namespace NYdb::NTest {
 
+inline constexpr const char* kMetadataTokenPath =
+    "/computeMetadata/v1/instance/service-accounts/default/token";
+inline constexpr const char* kMetadataFlavorHeader = "Metadata-Flavor";
+inline constexpr const char* kMetadataFlavorValue = "Google";
+
+struct TMetadataRequestInfo {
+    std::string Method;
+    std::string Path;
+    std::string MetadataFlavor;
+    bool IsValid = false;
+};
+
 class TMetadataServer : public THttpServer::ICallBack {
 public:
     class TRequest : public TRequestReplier {
@@ -32,18 +44,26 @@ public:
     TClientRequest* CreateClient() override;
 
     void SetResponse(HttpCodes code, const std::string& response);
+    void SetStrictMode(bool strict);
 
     int GetRequestCount() const;
     void ResetRequestCount();
+    TMetadataRequestInfo GetLastRequest() const;
+    bool HasLastRequest() const;
 
     NTesting::TPortHolder PortHolder;
     uint16_t Port;
     THttpServer::TOptions HttpOptions;
     THttpServer HttpServer;
-    HttpCodes StatusCode = HTTP_OK;
-    std::string Response;
-    mutable std::mutex Lock;
-    int RequestCount = 0;
+
+private:
+    mutable std::mutex Lock_;
+    HttpCodes StatusCode_ = HTTP_OK;
+    std::string Response_;
+    bool StrictMode_ = true;
+    int RequestCount_ = 0;
+    TMetadataRequestInfo LastRequest_;
+    bool HasLastRequest_ = false;
 };
 
 std::string MakeTokenResponse(const std::string& token, int expiresIn);

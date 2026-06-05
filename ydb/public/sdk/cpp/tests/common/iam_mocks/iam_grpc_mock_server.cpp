@@ -2,8 +2,6 @@
 
 #include "iam_test_keys.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/types.h>
-
 namespace NYdb::NTest {
 
 void TIamTokenServiceStub::SetResponseToken(const std::string& token, int64_t expiresAtSeconds) {
@@ -38,7 +36,7 @@ void TIamTokenServiceStub::ResetRequestCount() {
     HasLastRequest_ = false;
 }
 
-const yandex::cloud::iam::v1::CreateIamTokenRequest& TIamTokenServiceStub::GetLastRequest() const {
+yandex::cloud::iam::v1::CreateIamTokenRequest TIamTokenServiceStub::GetLastRequest() const {
     std::lock_guard lock(Lock_);
     return LastRequest_;
 }
@@ -56,9 +54,11 @@ grpc::Status TBlockingIamTokenService::Create(
     RpcEntered_.store(true);
 
     std::unique_lock lock(Mutex_);
-    ReleasedCv_.wait(lock, [this] { return Released_; });
+    ReleasedCv_.wait(lock, [this, context] {
+        return Released_ || ShuttingDown_ || context->IsCancelled();
+    });
 
-    if (context->IsCancelled()) {
+    if (context->IsCancelled() || ShuttingDown_) {
         return grpc::Status::CANCELLED;
     }
     response->set_iam_token("released-token");
@@ -70,6 +70,15 @@ grpc::Status TBlockingIamTokenService::Create(
 void TBlockingIamTokenService::Release() {
     {
         std::lock_guard lock(Mutex_);
+        Released_ = true;
+    }
+    ReleasedCv_.notify_all();
+}
+
+void TBlockingIamTokenService::Shutdown() {
+    {
+        std::lock_guard lock(Mutex_);
+        ShuttingDown_ = true;
         Released_ = true;
     }
     ReleasedCv_.notify_all();
@@ -110,6 +119,9 @@ std::string TIamGrpcServer::Endpoint() const {
 }
 
 void TIamGrpcServer::Stop() {
+    if (auto* blocking = dynamic_cast<TBlockingIamTokenService*>(Service_)) {
+        blocking->Shutdown();
+    }
     if (Server_) {
         Server_->Shutdown();
     }

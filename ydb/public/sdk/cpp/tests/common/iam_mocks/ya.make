@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/grpc
+    library/cpp/http/misc
     library/cpp/http/server
     library/cpp/json
     library/cpp/testing/common

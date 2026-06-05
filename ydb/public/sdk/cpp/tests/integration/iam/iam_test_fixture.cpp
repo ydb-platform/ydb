@@ -4,35 +4,56 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
+#include <stdexcept>
+#include <string>
+#include <utility>
+
 namespace NYdb::NTest {
 
 namespace {
 
-void SkipIfNoYdbEnv() {
+struct TYdbEnv {
+    std::string Endpoint;
+    std::string Database;
+};
+
+TYdbEnv RequireYdbEnvImpl() {
     const char* endpoint = std::getenv("YDB_ENDPOINT");
     if (!endpoint || !*endpoint) {
-        GTEST_SKIP() << "YDB_ENDPOINT is not set";
+        throw std::runtime_error(
+            "YDB_ENDPOINT is not set; recipe-backed integration target must provide it");
     }
     const char* database = std::getenv("YDB_DATABASE");
     if (!database || !*database) {
-        GTEST_SKIP() << "YDB_DATABASE is not set";
+        throw std::runtime_error(
+            "YDB_DATABASE is not set; recipe-backed integration target must provide it");
     }
+    return TYdbEnv{endpoint, database};
 }
 
 } // namespace
 
 TDriverConfig MakeDriverConfig(TCredentialsProviderFactoryPtr factory) {
-    SkipIfNoYdbEnv();
+    const TYdbEnv env = RequireYdbEnvImpl();
     return TDriverConfig()
-        .SetEndpoint(std::getenv("YDB_ENDPOINT"))
-        .SetDatabase(std::getenv("YDB_DATABASE"))
+        .SetEndpoint(env.Endpoint)
+        .SetDatabase(env.Database)
         .SetCredentialsProviderFactory(std::move(factory));
 }
 
-void RunSelect1(TDriver& driver) {
+TStatus RunSelect1Status(TDriver& driver) {
     NQuery::TQueryClient client(driver);
-    auto status = client.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx()).GetValueSync();
+    return client.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx()).GetValueSync();
+}
+
+void RunSelect1ExpectSuccess(TDriver& driver) {
+    const auto status = RunSelect1Status(driver);
     ASSERT_TRUE(status.IsSuccess()) << status.GetIssues().ToString();
+}
+
+bool IsAuthError(const TStatus& status) {
+    const EStatus code = status.GetStatus();
+    return code == EStatus::CLIENT_UNAUTHENTICATED || code == EStatus::UNAUTHORIZED;
 }
 
 } // namespace NYdb::NTest

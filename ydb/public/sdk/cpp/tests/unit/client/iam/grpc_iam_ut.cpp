@@ -1,8 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
-#include <ydb/public/sdk/cpp/tests/integration/iam/helpers/iam_grpc_mock_server.h>
-#include <ydb/public/sdk/cpp/tests/integration/iam/helpers/iam_test_keys.h>
+#include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_grpc_mock_server.h>
+#include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_test_keys.h>
 
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.pb.h>
@@ -23,12 +23,11 @@ using namespace yandex::cloud::iam::v1;
 
 TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletes) {
     TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
     TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 
     TIamOAuth params = MakeOAuthParams(server.Endpoint());
-    // Short client deadline: completion arrives with DEADLINE_EXCEEDED while the server handler is still
-    // blocked waiting for Release() (in-flight work on the server side vs client teardown).
     params.RequestTimeout = TDuration::MilliSeconds(400);
 
     auto work = [&params] {
@@ -55,6 +54,7 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletes) {
 
 TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactoryWrapper) {
     TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
     TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 
@@ -82,13 +82,9 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactor
     server.Stop();
 }
 
-// Regression test for backward compatibility of the deprecated no-arg
-// ICredentialsProviderFactory::CreateProvider() entry point on IAM factories. After commit
-// 0140ad8 ("fix sdk: fixed self thread join in iam cred provider") this entry point was
-// throwing "Not supported" and broke all out-of-tree callers that didn't yet plumb an
-// ICoreFacility. The factory must spin up a private facility transparently.
 TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompat) {
     TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
     TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 
@@ -112,12 +108,9 @@ TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompat) {
     server.Stop();
 }
 
-// Regression test for the deprecated no-arg CreateProvider() on the JWT factory. Mirrors the
-// OAuth counterpart above. The standalone path spins up a private TSimpleCoreFacility behind
-// TOwningFacilityCredentialsProvider; this verifies the JWT specialization wires it up
-// correctly and tears down without aborting.
 TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompatJwt) {
     TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
     TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 
@@ -185,9 +178,9 @@ private:
 
 } // namespace
 
-// Regression: Stop() must not hang when FillContext is blocked inside AuthTokenProvider_->GetAuthInfo().
 TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
     TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
     TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 

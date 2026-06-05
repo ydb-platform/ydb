@@ -920,7 +920,8 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
-            LOG_W("Skip sending TEvReadyState to checkpoint coordinator (nodes were disconnected, task id " << dqTask.Id << ")");
+            LOG_W("Skip sending TEvReadyState to checkpoint coordinator"
+                << ": task " << dqTask.Id << " has no ComputeActorId (node disconnected / task not started)");
             return;
         }
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);

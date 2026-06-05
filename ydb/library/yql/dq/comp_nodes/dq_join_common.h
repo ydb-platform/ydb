@@ -1,8 +1,10 @@
 #pragma once
 #include "dq_hash_join_table.h"
 #include "dq_block_hash_join_settings.h"
+#include <bit>
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/block_layout_converter.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/spilled_storage.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
@@ -375,6 +377,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         FetchingBuild(Self& self)
             : Build(std::move(self.Sources_).Build())
             , Spiller(self.Spiller_, self.Layouts_.Build)
+            , BuildConverter(self.BuildConverter_)
         {
             self.Logger_.LogDebug("FetchingBuild stage started");
         }
@@ -382,6 +385,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         Source Build;
         TBucketsSpiller<Settings> Spiller;
         std::optional<TPackResult> Pack;
+        IBlockLayoutConverter* BuildConverter;
     };
 
     struct BuildingInMemoryTable {
@@ -483,12 +487,14 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     };
 
     THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts, TBlockHashJoinSettings settings = {})
+                    TSides<const NPackedTuple::TTupleLayout*> layouts, TBlockHashJoinSettings settings = {},
+                    IBlockLayoutConverter* buildConverter = nullptr)
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
         , Settings_(settings)
+        , BuildConverter_(buildConverter)
     {
     }
 
@@ -553,33 +559,75 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             State_ = FetchingBuild{*this};
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
             FetchingBuild& state = *s;
-            if (!state.Pack.has_value()) {
-                FetchResult<TPackResult> var = state.Build.FetchRow();
-                NYql::NUdf::EFetchStatus status = AsStatus(var);
-                if (status == NYql::NUdf::EFetchStatus::Yield) {
-                    return EFetchResult::Yield;
-                } else if (status == NYql::NUdf::EFetchStatus::Ok) {
-                    state.Pack = std::move(GetPayload(var));
+            if (state.BuildConverter) {
+                // Optimization 6: Use BucketPack for single-pass partitioned packing.
+                // Instead of Pack() → iterate → AddRow(AppendTuple/TupleDeepCopy per row),
+                // we do FetchColumns() → BucketPack() → AddBucketPacked().
+                if (!state.Pack.has_value()) {
+                    FetchResult<TVector<arrow::Datum>> var = state.Build.FetchColumns();
+                    NYql::NUdf::EFetchStatus status = AsStatus(var);
+                    if (status == NYql::NUdf::EFetchStatus::Yield) {
+                        return EFetchResult::Yield;
+                    } else if (status == NYql::NUdf::EFetchStatus::Ok) {
+                        const ui32 bucketsLogNum = std::bit_width(static_cast<ui32>(Settings.Buckets)) - 1;
+                        TMKQLVector<TPackResult> bucketPacks(Settings.Buckets);
+                        state.BuildConverter->BucketPack(
+                            GetPayload(var),
+                            TPaddedPtr<TPackResult>(bucketPacks.data()),
+                            bucketsLogNum);
+                        // Mark that we have data to distribute after spilling check
+                        state.Pack = TPackResult{}; // sentinel: non-nullopt signals "have data"
+                        // Distribute pre-bucketed data
+                        ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
+                        switch (res) {
+                        case Spilling:
+                            return WaitWhileSpilling();
+                        case FinishedSpilling:
+                            break;
+                        case DontHavePages:
+                            break;
+                        }
+                        state.Spiller.AddBucketPacked(bucketPacks);
+                        state.Pack = std::nullopt;
+                    } else {
+                        MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
+                        MKQL_ENSURE(state.Build.Finished(), "sanity check");
+                        State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
+                    }
                 } else {
-                    MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
-                    MKQL_ENSURE(state.Build.Finished(), "sanity check");
-                    State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
+                    // Shouldn't happen in BucketPack path since we clear Pack immediately
+                    state.Pack = std::nullopt;
                 }
             } else {
-                ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
-                switch (res) {
-                case Spilling:
-                    return WaitWhileSpilling();
-                case FinishedSpilling:
-                    break;
-                case DontHavePages:{
-                    break;
+                // Original path: Pack() → iterate → AddRow()
+                if (!state.Pack.has_value()) {
+                    FetchResult<TPackResult> var = state.Build.FetchRow();
+                    NYql::NUdf::EFetchStatus status = AsStatus(var);
+                    if (status == NYql::NUdf::EFetchStatus::Yield) {
+                        return EFetchResult::Yield;
+                    } else if (status == NYql::NUdf::EFetchStatus::Ok) {
+                        state.Pack = std::move(GetPayload(var));
+                    } else {
+                        MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
+                        MKQL_ENSURE(state.Build.Finished(), "sanity check");
+                        State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
+                    }
+                } else {
+                    ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
+                    switch (res) {
+                    case Spilling:
+                        return WaitWhileSpilling();
+                    case FinishedSpilling:
+                        break;
+                    case DontHavePages:{
+                        break;
+                    }
+                    }
+                    for (TSingleTuple tuple: *state.Pack) {
+                        state.Spiller.AddRow(tuple);
+                    }
+                    state.Pack = std::nullopt;
                 }
-                }
-                for (TSingleTuple tuple: *state.Pack) { 
-                    state.Spiller.AddRow(tuple); 
-                }
-                state.Pack = std::nullopt;
             }
         } else if (auto* s = std::get_if<BuildingInMemoryTable>(&State_)) {
             BuildingInMemoryTable& state = *s;
@@ -826,6 +874,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     ISpiller::TPtr Spiller_;
     Sources Sources_;
     TBlockHashJoinSettings Settings_;
+    IBlockLayoutConverter* BuildConverter_ = nullptr;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };

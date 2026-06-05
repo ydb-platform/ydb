@@ -56,7 +56,12 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         return Buff_.size() - 1;
     }
 
-    FetchResult<IBlockLayoutConverter::TPackResult> FetchRow() {
+    IBlockLayoutConverter* GetConverter() const {
+        return ArrowBlockToInternalConverter_;
+    }
+
+    // Fetch raw Arrow columns (before packing). Used by BucketPack optimization.
+    FetchResult<TVector<arrow::Datum>> FetchColumns() {
         if (Finished()) {
             return Finish{};
         }
@@ -77,8 +82,17 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             }
             columns = std::move(permuted);
         }
+        return One{std::move(columns)};
+    }
+
+    FetchResult<IBlockLayoutConverter::TPackResult> FetchRow() {
+        FetchResult<TVector<arrow::Datum>> colResult = FetchColumns();
+        NYql::NUdf::EFetchStatus status = AsStatus(colResult);
+        if (status != NYql::NUdf::EFetchStatus::Ok) {
+            return status == NYql::NUdf::EFetchStatus::Finish ? FetchResult<IBlockLayoutConverter::TPackResult>{Finish{}} : FetchResult<IBlockLayoutConverter::TPackResult>{Yield{}};
+        }
         IBlockLayoutConverter::TPackResult result;
-        ArrowBlockToInternalConverter_->Pack(columns, result);
+        ArrowBlockToInternalConverter_->Pack(GetPayload(colResult), result);
         return One{std::move(result)};
     }
 
@@ -108,6 +122,9 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         , Converters_(converters)
         , LeftIsBuild_(meta->Settings.LeftIsBuild())
     {
+        for (ESide side : EachSide) {
+            RowSize_.SelectSide(side) = Converters_.SelectSide(side)->GetTupleLayout()->TotalRowSize;
+        }
         if constexpr (!std::is_same_v<decltype(Nulls_), Empty>) {
             TVector<arrow::Datum> nulls;
             for(auto* type:userNullTypes) {
@@ -132,10 +149,8 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
 
     i64 SizeTuples() const {
         AssertSizeIsSane();
-        return Output_.Probe.NTuples;
+        return NOutputTuples_;
     }
-
-
 
     using TuplePairs = TSides<TPackResult>;
     struct Empty {};
@@ -145,9 +160,30 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         struct ConsumeFn {
             TRenamesPackedTupleOutput& self;
             void operator()(TSides<TSingleTuple> tuples) {
-                for(ESide side: EachSide) {
-                    self.Output_.SelectSide(side).AppendTuple(tuples.SelectSide(side), self.Converters_.SelectSide(side)->GetTupleLayout());
+                for (ESide side : EachSide) {
+                    const ui32 rowSize = self.RowSize_.SelectSide(side);
+                    auto& packedTuples = self.Output_.SelectSide(side).PackedTuples;
+                    const ui64 offset = packedTuples.size();
+                    packedTuples.resize(offset + rowSize);
+                    std::memcpy(packedTuples.data() + offset, tuples.SelectSide(side).PackedData, rowSize);
+
+                    const auto* layout = self.Converters_.SelectSide(side)->GetTupleLayout();
+                    auto& overflow = self.Output_.SelectSide(side).Overflow;
+                    for (const auto& col : layout->VariableColumns) {
+                        ui8 size = ReadUnaligned<ui8>(tuples.SelectSide(side).PackedData + col.Offset);
+                        if (size == 255) {
+                            auto overflowOffset = ReadUnaligned<ui32>(tuples.SelectSide(side).PackedData + col.Offset + 1);
+                            auto overflowSize = ReadUnaligned<ui32>(tuples.SelectSide(side).PackedData + col.Offset + 1 + sizeof(ui32));
+                            ui32 newOverflowOffset = overflow.size();
+                            overflow.resize(newOverflowOffset + overflowSize);
+                            std::memcpy(overflow.data() + newOverflowOffset,
+                                        tuples.SelectSide(side).OverflowBegin + overflowOffset, overflowSize);
+                            WriteUnaligned<ui32>(packedTuples.data() + offset + col.Offset + 1, newOverflowOffset);
+                        }
+                    }
+                    self.Output_.SelectSide(side).NTuples++;
                 }
+                self.NOutputTuples_++;
             }
             void operator()(TSingleTuple tuple) {
                 if constexpr (Kind == EJoinKind::Left) {
@@ -158,7 +194,28 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                         this->operator()(TSides<TSingleTuple>{.Build = null, .Probe = tuple});
                     }
                 } else if constexpr(SemiOrOnlyJoin(Kind)) {
-                    self.Output_.Probe.AppendTuple(tuple, self.Converters_.Probe->GetTupleLayout());
+                    const ui32 rowSize = self.RowSize_.Probe;
+                    auto& packedTuples = self.Output_.Probe.PackedTuples;
+                    const ui64 offset = packedTuples.size();
+                    packedTuples.resize(offset + rowSize);
+                    std::memcpy(packedTuples.data() + offset, tuple.PackedData, rowSize);
+
+                    const auto* layout = self.Converters_.Probe->GetTupleLayout();
+                    auto& overflow = self.Output_.Probe.Overflow;
+                    for (const auto& col : layout->VariableColumns) {
+                        ui8 size = ReadUnaligned<ui8>(tuple.PackedData + col.Offset);
+                        if (size == 255) {
+                            auto overflowOffset = ReadUnaligned<ui32>(tuple.PackedData + col.Offset + 1);
+                            auto overflowSize = ReadUnaligned<ui32>(tuple.PackedData + col.Offset + 1 + sizeof(ui32));
+                            ui32 newOverflowOffset = overflow.size();
+                            overflow.resize(newOverflowOffset + overflowSize);
+                            std::memcpy(overflow.data() + newOverflowOffset,
+                                        tuple.OverflowBegin + overflowOffset, overflowSize);
+                            WriteUnaligned<ui32>(packedTuples.data() + offset + col.Offset + 1, newOverflowOffset);
+                        }
+                    }
+                    self.Output_.Probe.NTuples++;
+                    self.NOutputTuples_++;
                 }
             }
         };
@@ -170,6 +227,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
             TVector<arrow::Datum> out;
             Converters_.Probe->Unpack(Output_.Probe, out);
             Output_.Probe.Clear();
+            NOutputTuples_ = 0;
             TVector<arrow::Datum> renamed;
             for(auto rename: *Renames_){
                 MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
@@ -182,6 +240,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                 Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), sides.SelectSide(side));
                 Output_.SelectSide(side).Clear();
             }
+            NOutputTuples_ = 0;
             TVector<arrow::Datum> renamed;
             for (auto rename : *Renames_) {
                 renamed.push_back(sides.SelectSide(rename.Side)[rename.Index]);
@@ -191,17 +250,6 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     }
 
   private:
-    TSides<TVector<arrow::Datum>> Flush() {
-        TSides<TVector<arrow::Datum>> out;
-        for(ESide side: EachSide) {
-
-            Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), out.SelectSide(side));
-            Output_.SelectSide(side).Clear();
-
-        }
-
-        return out;
-    }
     void AssertSizeIsSane() const{
         if constexpr (Kind == EJoinKind::LeftOnly || Kind==EJoinKind::LeftSemi) {
             MKQL_ENSURE(Output_.Build.NTuples == 0, "Left Only and Left Semi join types shouldn't collect any Build(right) tuples");
@@ -213,8 +261,10 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TuplePairs Output_;
     const TDqJoinImplRenames* Renames_;
     TSides<IBlockLayoutConverter*> Converters_;
+    TSides<ui32> RowSize_;
     BuildNullIfNeeded Nulls_;
     bool LeftIsBuild_;
+    i64 NOutputTuples_ = 0;
 };
 
 template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind>> {
@@ -261,7 +311,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()},
-                    meta->Settings)
+                    meta->Settings,
+                    Converters_.Build.get())
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
         {}

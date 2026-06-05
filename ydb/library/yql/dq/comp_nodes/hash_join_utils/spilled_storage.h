@@ -102,6 +102,33 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
     }
 
+    // Accept pre-bucketed TPackResult arrays produced by BucketPack().
+    // bucketsLogNum must satisfy (1 << bucketsLogNum) == Settings.Buckets.
+    void AddBucketPacked(TMKQLVector<TPackResult>& bucketPacks) {
+        MKQL_ENSURE(std::ssize(bucketPacks) == Settings.Buckets, "bucket count mismatch");
+        for (int i = 0; i < Settings.Buckets; ++i) {
+            TPackResult& pack = bucketPacks[i];
+            if (pack.NTuples == 0) {
+                continue;
+            }
+            TBucket& thisBucket = Buckets_[i];
+            if (thisBucket.BuildingPage.Empty()) {
+                thisBucket.BuildingPage = std::move(pack);
+            } else {
+                Layout_->Concat(
+                    thisBucket.BuildingPage.PackedTuples,
+                    thisBucket.BuildingPage.Overflow,
+                    thisBucket.BuildingPage.NTuples,
+                    pack.PackedTuples.data(),
+                    pack.Overflow.data(),
+                    pack.NTuples,
+                    pack.Overflow.size());
+                thisBucket.BuildingPage.NTuples += pack.NTuples;
+            }
+            thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
+        }
+    }
+
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition) {
         while (condition() || SpillingPages_.has_value()) {
             if (SpillingPages_.has_value()) {

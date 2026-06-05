@@ -45,7 +45,7 @@ std::string MakeCreateTable(const TTtlNotAllowedIndexTestConfig& config, bool wi
     return query;
 }
 
-}  // namespace
+} // namespace
 
 void TestTtlNotAllowedBoth(TQueryClient db, const TTtlNotAllowedIndexTestConfig& config) {
     ExecuteQueryExpectFailure(db, MakeCreateTable(config, true, "PT1H"), config.ExpectedError);

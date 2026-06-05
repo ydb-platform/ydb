@@ -6,7 +6,7 @@ NO_RUNTIME()
 
 IF (OS_LINUX)
     SRCS(
-        GLOBAL write_profile_data.cpp
+        GLOBAL profile_name_handler.cpp
     )
 ENDIF()
 

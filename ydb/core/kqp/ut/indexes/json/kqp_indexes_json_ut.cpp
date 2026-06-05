@@ -2857,6 +2857,38 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_STRING_CONTAINS(yson, "#");
         }
     }
+
+    Y_UNIT_TEST(BulkUpsert) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, "Json");
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+
+            TValueBuilder rows;
+            rows.BeginList()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(1)
+                    .AddMember("Text").Json(R"({"k1": ["v1", 1, false]})")
+                    .AddMember("Data").Utf8("data 1")
+                .EndStruct()
+            .EndList();
+
+            auto result = tableClient.BulkUpsert("/Root/TestTable", rows.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only async-indexed tables are supported by BulkUpsert");
+        }
+    }
 }
 
 }  // namespace NKikimr::NKqp

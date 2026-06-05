@@ -64,14 +64,42 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Codec, Ydb::Topic::CODEC_RAW);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+    }
+
+    Y_UNIT_TEST(CompressedMessage) {
+        auto setup = CreateSetup();
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+        setup->Write("/Root/topic1", "msg-1", 0, std::nullopt, std::nullopt, NYdb::NTopic::ECodec::GZIP);
+
+        auto& runtime = setup->GetRuntime();
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(3),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Codec, Ydb::Topic::CODEC_GZIP);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageMetaAttributes["__codec"], "gzip");
+
+        const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(Ydb::Topic::CODEC_GZIP));
+        auto data = codecImpl->Decompress(response->Messages[0].Data);
+        UNIT_ASSERT_VALUES_EQUAL(data, "msg-1");
     }
 
     Y_UNIT_TEST(TopicWithManyIterationsData) {
@@ -94,7 +122,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(1),
                 .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -111,7 +138,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(0),
                 .ProcessingTimeout = TDuration::Seconds(5),
                 .MaxNumberOfMessage = 10,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -127,7 +153,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(0),
                 .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -144,7 +169,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .WaitTime = TDuration::Seconds(5),
                 .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
-                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -171,7 +195,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);
@@ -225,7 +248,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         {
@@ -243,7 +265,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .WaitTime = TDuration::Seconds(3),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         {

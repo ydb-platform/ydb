@@ -517,9 +517,9 @@ std::shared_ptr<NIndexes::NMinMax::TIndexMeta> TIndexInfo::GetIndexMetaMinMax(co
         if (i.second->GetClassName() != NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto maxIndex = static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(i.second.GetObjectPtr());
-        if (maxIndex->GetColumnId() == columnId) {
-            return maxIndex;
+        auto minMaxIndex = static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(i.second.GetObjectPtr());
+        if (minMaxIndex->GetColumnId() == columnId) {
+            return minMaxIndex;
         }
     }
     return nullptr;

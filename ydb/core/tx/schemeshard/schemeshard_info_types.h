@@ -2774,6 +2774,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         TString SourcePathName;
         TPathId SourcePathId;
         NKikimrSchemeOp::EPathType SourcePathType;
+        ui32 ParentIdx; // used by indexes
 
         EState State = EState::Waiting;
         ESubState SubState = ESubState::AllocateTxId;
@@ -2783,10 +2784,15 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
         TItem() = default;
 
-        explicit TItem(const TString& sourcePathName, const TPathId sourcePathId, NKikimrSchemeOp::EPathType sourcePathType)
+        explicit TItem(
+                const TString& sourcePathName,
+                const TPathId sourcePathId,
+                NKikimrSchemeOp::EPathType sourcePathType,
+                ui32 parentIdx = Max<ui32>())
             : SourcePathName(sourcePathName)
             , SourcePathId(sourcePathId)
             , SourcePathType(sourcePathType)
+            , ParentIdx(parentIdx)
         {
         }
 
@@ -2826,6 +2832,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     bool EnableChecksums = false;
     bool EnablePermissions = false;
+    bool IncludeIndexData = false;
 
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
     TActorId ExportMetadataUploader;
@@ -2958,6 +2965,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
+        TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
 
         EState State = EState::GetScheme;
@@ -2971,6 +2979,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString Issue;
         TPathId StreamImplPathId;
         TMaybe<NBackup::TEncryptionIV> ExportItemIV;
+
+        ui32 ParentIdx = Max<ui32>();
+        TVector<ui32> ChildItems;
 
         TItem() = default;
 

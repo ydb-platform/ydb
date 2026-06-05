@@ -3513,6 +3513,194 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("b")) == filterInputs.end());
     }
 
+    Y_UNIT_TEST(RewritePreferredAliasUpdatesMapExpression) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto topMap = MakeIntrusive<TOpMap>(aliasMap, pos, TVector<TMapElement>{
+            MakeTestAppend("out", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(topMap, pos, {"a", "out"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
+        ComputeLogicalTestProps(root);
+        rewriteAliases.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
+
+        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
+        UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
+        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("a"));
+    }
+
+    Y_UNIT_TEST(RewritePreferredAliasDoesNotPreferGeneratedIgnoreName) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto ignore = TInfoUnit("__kqp_rbo_ignore_arg_0");
+
+        auto read = MakeTestRead({TInfoUnit("b")}, pos);
+        auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend(ignore.GetFullName(), "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto topMap = MakeIntrusive<TOpMap>(aliasMap, pos, TVector<TMapElement>{
+            MakeTestAppend("out", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(topMap, pos, {ignore.GetFullName(), "out"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
+        ComputeLogicalTestProps(root);
+        rewriteAliases.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
+
+        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
+        UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
+        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("b"));
+    }
+
+    Y_UNIT_TEST(RewritePreferredAliasUpdatesJoinKeysAndFilters) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto leftAliasMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightRead = MakeTestRead({TInfoUnit("r")}, pos);
+        auto joinFilter = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps),
+            MakeColumnAccess(TInfoUnit("r"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto join = MakeIntrusive<TOpJoin>(
+            leftAliasMap,
+            rightRead,
+            pos,
+            "Inner",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("b"), TInfoUnit("r")}},
+            TVector<TExpression>{joinFilter}
+        );
+        TOpRoot root(join, pos, {"a", "r"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
+        ComputeLogicalTestProps(root);
+        rewriteAliases.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
+
+        UNIT_ASSERT_VALUES_EQUAL(join->JoinKeys.size(), 1);
+        UNIT_ASSERT(join->JoinKeys.front().first == TInfoUnit("a"));
+        UNIT_ASSERT(join->JoinKeys.front().second == TInfoUnit("r"));
+
+        UNIT_ASSERT_VALUES_EQUAL(join->JoinFilters.size(), 1);
+        const auto joinFilterInputs = join->JoinFilters.front().GetInputIUs(false, true);
+        UNIT_ASSERT(std::find(joinFilterInputs.begin(), joinFilterInputs.end(), TInfoUnit("a")) != joinFilterInputs.end());
+        UNIT_ASSERT(std::find(joinFilterInputs.begin(), joinFilterInputs.end(), TInfoUnit("b")) == joinFilterInputs.end());
+    }
+
+    Y_UNIT_TEST(RewritePreferredAliasUpdatesAggregateInputs) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("value")}, pos);
+        auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestAppend("v", "value", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            aliasMap,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(TInfoUnit("value"), "sum", TInfoUnit("sum_value"))},
+            TVector<TInfoUnit>{TInfoUnit("b"), TInfoUnit("v")},
+            EOpPhase::Final,
+            false,
+            pos
+        );
+        TOpRoot root(aggregate, pos, {"a", "v", "sum_value"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
+        ComputeLogicalTestProps(root);
+        rewriteAliases.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
+
+        UNIT_ASSERT_VALUES_EQUAL(aggregate->KeyColumns.size(), 2);
+        UNIT_ASSERT(aggregate->KeyColumns[0] == TInfoUnit("a"));
+        UNIT_ASSERT(aggregate->KeyColumns[1] == TInfoUnit("v"));
+        UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
+        UNIT_ASSERT(aggregate->AggregationTraitsList.front().OriginalColName == TInfoUnit("v"));
+        UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
+    }
+
+    Y_UNIT_TEST(RewritePreferredAliasUpdatesSortAndLimitInputs) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto aliasMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto limit = MakeIntrusive<TOpLimit>(
+            aliasMap,
+            pos,
+            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps),
+            EOpPhase::Final
+        );
+        auto sort = MakeIntrusive<TOpSort>(
+            limit,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("b"), true, true)},
+            MakeColumnAccess(TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        TOpRoot root(sort, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
+        ComputeLogicalTestProps(root);
+        rewriteAliases.RunStage(root, testContext.RboCtx);
+
+        const auto& appliedRules = testContext.RboCtx.AppliedRules;
+        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
+        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
+
+        const auto limitInputs = limit->LimitCond.GetInputIUs(false, true);
+        UNIT_ASSERT(std::find(limitInputs.begin(), limitInputs.end(), TInfoUnit("a")) != limitInputs.end());
+        UNIT_ASSERT(std::find(limitInputs.begin(), limitInputs.end(), TInfoUnit("b")) == limitInputs.end());
+
+        UNIT_ASSERT_VALUES_EQUAL(sort->SortElements.size(), 1);
+        UNIT_ASSERT(sort->SortElements.front().SortColumn == TInfoUnit("a"));
+        UNIT_ASSERT(sort->LimitCond);
+        const auto sortLimitInputs = sort->LimitCond->GetInputIUs(false, true);
+        UNIT_ASSERT(std::find(sortLimitInputs.begin(), sortLimitInputs.end(), TInfoUnit("a")) != sortLimitInputs.end());
+        UNIT_ASSERT(std::find(sortLimitInputs.begin(), sortLimitInputs.end(), TInfoUnit("b")) == sortLimitInputs.end());
+    }
+
     Y_UNIT_TEST(PushAppendAliasCrossesTransparentUnaryChain) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;

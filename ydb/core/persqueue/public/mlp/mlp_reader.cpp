@@ -132,29 +132,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             continue;
         }
 
-        auto codec = proto.has_codec() ? static_cast<Ydb::Topic::Codec>(proto.codec() + 1) : Ydb::Topic::CODEC_RAW;
-        TString codecStr;
-        switch (codec) {
-            case Ydb::Topic::CODEC_GZIP:
-                codecStr = "gzip";
-                break;
-            case Ydb::Topic::CODEC_LZOP:
-                codecStr = "lzop";
-                break;
-            case Ydb::Topic::CODEC_ZSTD:
-                codecStr = "zstd";
-                break;
-            case Ydb::Topic::CODEC_CUSTOM:
-                codecStr = "custom";
-                break;
-            default:
-                break;
-        }
-
         THashMap<TString, TString> messageMetaAttr(proto.messagemeta_size());
-        if (!codecStr.empty()) {
-            messageMetaAttr.try_emplace("__codec", std::move(codecStr));
-        }
         for (const auto& meta : proto.messagemeta()) {
             messageMetaAttr.try_emplace(meta.key(), meta.value());
         }
@@ -166,7 +144,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         }
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
-            .Codec = codec,
+            .Codec = proto.has_codec() ? static_cast<Ydb::Topic::Codec>(proto.codec() + 1) : Ydb::Topic::CODEC_RAW,
             .Data = std::move(*proto.MutableData()),
             .MessageMetaAttributes = std::move(messageMetaAttr),
             .SentTimestamp = TInstant::MilliSeconds(message.messagemeta().senttimestampmilliseconds()),

@@ -23,9 +23,10 @@
 
 - Go
 
-  {{ ydb-short-name }} Go SDK пишет логи через собственный интерфейс `log.Logger`. Реализуйте небольшой мост, который превращает каждую запись в OpenTelemetry log record, и экспортируйте их OTLP-экспортёром логов:
+  Для {{ ydb-short-name }} Go SDK есть готовый адаптер [ydb-go-sdk-otel](https://github.com/ydb-platform/ydb-go-sdk-otel), который превращает события SDK в сигналы OpenTelemetry: трассы (`WithTracer`), метрики (`WithMetrics`) и логи (`WithLogger`). Адаптер не настраивает экспортёры сам — вы создаёте `LoggerProvider` с OTLP-экспортёром логов, делаете его глобальным, а затем передаёте опцию `ydbOtel.WithLogger` в `ydb.Open`. Каждая внутренняя запись лога SDK (инициализация драйвера, пул сессий, выполнение запросов, ретраи и т.д.) при этом отправляется в коллектор как OTLP log record.
 
   ```bash
+  go get github.com/ydb-platform/ydb-go-sdk-otel
   go get go.opentelemetry.io/otel/sdk/log
   go get go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc
   ```
@@ -36,44 +37,23 @@
   import (
       "context"
       "os"
-      "time"
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
-      ydblog "github.com/ydb-platform/ydb-go-sdk/v3/log"
-      ydbtrace "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
 
       "go.opentelemetry.io/otel/attribute"
       "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-      otellog "go.opentelemetry.io/otel/log"
+      "go.opentelemetry.io/otel/log/global"
       sdklog "go.opentelemetry.io/otel/sdk/log"
       "go.opentelemetry.io/otel/sdk/resource"
+
+      ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
   )
-
-  // otelLogger реализует интерфейс log.Logger из ydb-go-sdk и пересылает каждую
-  // запись в OpenTelemetry-логгер.
-  type otelLogger struct {
-      logger   otellog.Logger
-      minLevel ydblog.Level
-  }
-
-  func (o *otelLogger) Log(ctx context.Context, msg string, fields ...ydblog.Field) {
-      lvl := ydblog.LevelFromContext(ctx)
-      if lvl < o.minLevel {
-          return
-      }
-      var rec otellog.Record
-      rec.SetTimestamp(time.Now())
-      rec.SetBody(otellog.StringValue(msg))
-      rec.SetSeverityText(lvl.String())
-      for _, f := range fields {
-          rec.AddAttributes(otellog.String(f.Key(), f.String()))
-      }
-      o.logger.Emit(ctx, rec)
-  }
 
   func main() {
       ctx := context.Background()
 
+      // 1. Настраиваем провайдер логов OTel с OTLP-экспортёром.
       exporter, err := otlploggrpc.New(ctx,
           otlploggrpc.WithEndpoint("localhost:4317"),
           otlploggrpc.WithInsecure(),
@@ -90,11 +70,15 @@
       )
       defer lp.Shutdown(ctx)
 
-      logger := &otelLogger{logger: lp.Logger("ydb-go-sdk"), minLevel: ydblog.INFO}
+      // Делаем провайдер глобальным, чтобы адаптер мог получить из него логгер.
+      global.SetLoggerProvider(lp)
 
+      // 2. Открываем драйвер YDB с адаптером ydb-go-sdk-otel.
+      // WithLogger пересылает события логов SDK в OTel log records;
+      // передача nil использует global.Logger("ydb-go-sdk").
       db, err := ydb.Open(ctx,
           os.Getenv("YDB_CONNECTION_STRING"),
-          ydb.WithLogger(logger, ydbtrace.DetailsAll),
+          ydbOtel.WithLogger(nil, ydbOtel.WithDetailer(trace.DetailsAll)),
       )
       if err != nil {
           panic(err)

@@ -580,7 +580,8 @@ class TestWarmupCounters:
     def teardown_class(cls):
         if hasattr(cls, "driver"):
             cls.driver.stop()
-        cls.cluster.stop()
+        if hasattr(cls, "cluster"):
+            cls.cluster.stop()
 
     def test_warmup_counters_attribution(self):
         node2 = self.cluster.nodes[2]
@@ -594,10 +595,10 @@ class TestWarmupCounters:
         node2.stop()
         time.sleep(2)
         node2.start()
-        time.sleep(NODE_READY_TIMEOUT_SECONDS)
+        time.sleep(5)
 
         finished = CompileCacheView.wait_for_warmup_finished(
-            node2, timeout=WARMUP_DEADLINE_SECONDS,
+            node2, timeout=NODE_READY_TIMEOUT_SECONDS + WARMUP_DEADLINE_SECONDS,
         )
         compiled = finished.get("Warmup/QueriesCompiled", 0)
         assert compiled > 0, (

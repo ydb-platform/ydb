@@ -1928,13 +1928,7 @@ public:
         if (Settings.Database) {
             GUCSettings->Set("ydb_database", Settings.Database.substr(1, Settings.Database.size() - 1));
         }
-        // Skip empty UserName: anonymous/builtin clients arrive with
-        // Settings.UserName=Defined("") on the explicit-session path
-        // (proto3 string default) and Nothing() on the implicit path.
-        // Writing ydb_user="" splits TKqpQueryId across the two paths and
-        // breaks compile-cache hits / warmup attribution. PG roles set
-        // a real, non-empty UserName, so this is safe.
-        if (Settings.UserName && !Settings.UserName->empty()) {
+        if (Settings.UserName) {
             GUCSettings->Set("ydb_user", *Settings.UserName);
         }
     }

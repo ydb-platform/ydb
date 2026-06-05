@@ -180,23 +180,49 @@ const TCgi::TParam TCgi::Action = TStringBuf("Action");
 
 namespace {
 
+bool HasOnlySchemeShardDevUiParams(const TCgiParameters& cgi, std::initializer_list<TStringBuf> allowed) {
+    for (const auto& [name, _] : cgi) {
+        bool isAllowed = false;
+        for (TStringBuf allowedName : allowed) {
+            if (name == allowedName) {
+                isAllowed = true;
+                break;
+            }
+        }
+        if (!isAllowed) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi) {
     if (cgi.Has(TCgi::Action)) {
         return false;
     }
-    if (!cgi.Has(TCgi::Page)) {
-        return true;
+
+    const TString& page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
+
+    if (page == TCgi::TPages::MainPage) {
+        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page});
     }
-    const TString& page = cgi.Get(TCgi::Page);
-    if (page == TCgi::TPages::MainPage
-        || page == TCgi::TPages::TransactionList
-        || page == TCgi::TPages::TransactionInfo
-        || page == TCgi::TPages::PathInfo
-        || page == TCgi::TPages::ShardInfoByTabletId
-        || page == TCgi::TPages::ShardInfoByShardIdx
-        || page == TCgi::TPages::BuildIndexInfo)
-    {
-        return true;
+    if (page == TCgi::TPages::TransactionList) {
+        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page});
+    }
+    if (page == TCgi::TPages::TransactionInfo) {
+        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::TxId, TCgi::PartId});
+    }
+    if (page == TCgi::TPages::PathInfo) {
+        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::OwnerPathId, TCgi::LocalPathId});
+    }
+    if (page == TCgi::TPages::ShardInfoByTabletId) {
+        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::ShardID});
+    }
+    if (page == TCgi::TPages::ShardInfoByShardIdx) {
+        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::OwnerShardIdx, TCgi::LocalShardIdx});
+    }
+    if (page == TCgi::TPages::BuildIndexInfo) {
+        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::BuildIndexId});
     }
     return false;
 }

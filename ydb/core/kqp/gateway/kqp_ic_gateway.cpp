@@ -1042,8 +1042,8 @@ public:
         Y_UNUSED(existingOk);
     }
 
-    TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(NYql::TCreateTopicSettings&& settings) override {
-        auto schemaTxPromise = NewPromise<NPQ::NSchema::TCreateTopicResponse>();
+    TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(NYql::TCreateTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TSchemaResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();
 
         IActor* requestHandler = NPQ::NSchema::CreateCreateTopicActor(std::move(schemaTxPromise), {
@@ -1057,8 +1057,8 @@ public:
         return schemaTxFuture;
     }
 
-    TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
-        auto schemaTxPromise = NewPromise<NPQ::NSchema::TAlterTopicResponse>();
+    TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TSchemaResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();
 
         IActor* requestHandler = NPQ::NSchema::CreateAlterTopicActor(std::move(schemaTxPromise), {

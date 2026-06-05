@@ -1535,7 +1535,7 @@ public:
         return createPromise.GetFuture();
     }
 
-    NThreading::TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) override {
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) override {
         return Gateway->CreateTopicPrepared(std::move(settings));
     }
 
@@ -1584,7 +1584,7 @@ public:
         return alterPromise.GetFuture();
     }
 
-    NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
         return Gateway->AlterTopicPrepared(std::move(settings));
     }
 

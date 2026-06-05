@@ -27,7 +27,7 @@ public:
     void InitSource(NYql::NPq::NProto::TDqPqTopicSource&& settings) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
-            auto* partitioningParams = params.MutablePartitioningParams();
+            auto* partitioningParams = params.AddPartitioningParams();
             partitioningParams->SetTopicPartitionsCount(1);
             partitioningParams->SetEachTopicPartitionGroupId(0);
             partitioningParams->SetDqPartitionsCount(1);

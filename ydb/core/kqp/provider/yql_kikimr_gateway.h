@@ -1294,6 +1294,7 @@ public:
     using TPtr = TIntrusivePtr<IKikimrGateway>;
 
     struct TGenericResult : public NCommon::TOperationResult {
+        TMaybe<TString> OperationId;
     };
 
     struct TListPathResult : public TGenericResult {

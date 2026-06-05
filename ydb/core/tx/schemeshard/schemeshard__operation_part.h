@@ -743,6 +743,11 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, TTxState::ETxState state);
 
+ISubOperation::TPtr CreateNewFullBackupOp(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewFullBackupOp(TOperationId opId, TTxState::ETxState state);
+bool AppendFullBackupOpToBackupBackupCollection(TOperationId opId, const TPath& bcPath,
+    TVector<ISubOperation::TPtr>& result, ui32 expectedItemCount);
+
 // SysView
 // Create
 ISubOperation::TPtr CreateNewSysView(TOperationId id, const TTxTransaction& tx);

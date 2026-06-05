@@ -14,7 +14,7 @@ import time
 import urllib.parse
 import zipfile
 from typing import Set
-from mute_check import YaMuteCheck
+from mute.mute_check import YaMuteCheck
 
 
 def log_print(*args, **kwargs):

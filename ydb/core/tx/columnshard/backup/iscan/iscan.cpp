@@ -151,7 +151,9 @@ public:
     void Fail(const TString& errorMessage) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("error", errorMessage);
         Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(errorMessage));
-        Exporter->Finish(NTable::EStatus::Done);
+        if (Exporter) {
+            Exporter->Finish(NTable::EStatus::Done);
+        }
         PassAway();
     }
 

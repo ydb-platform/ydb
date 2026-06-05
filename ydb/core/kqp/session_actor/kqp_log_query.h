@@ -35,14 +35,14 @@ private:
 };
 
 // KQP_REQUEST [REQ_JSON] log contract:
-//   WARN  — only failed completed envelopes.
-//   DEBUG — successful completed too.
-//   TRACE — same events as DEBUG.
+//   WARN  — only failed completed envelopes, single record.
+//   DEBUG — adds successful completed at DEBUG, SQL cut to 10 KB, single record.
+//   TRACE — successful completed bumped to TRACE, full SQL, multi-part records.
 //
-// SQL is truncated to 10 KB at WARN and DEBUG; TRACE emits the full text.
-// req_id is the ProxyRequestId, correlates with STLOG proxy_request_id.
-// Queries prefixed with /*UI-QUERY-EXCLUDE*/ skip success-path logs;
-// failures still emit at WARN.
+// Failures are always emitted at WARN regardless of the operator-selected
+// verbosity. req_id is the ProxyRequestId, correlates with STLOG
+// proxy_request_id. Queries prefixed with /*UI-QUERY-EXCLUDE*/ skip
+// success-path logs; failures still emit at WARN.
 #define KQP_REQ_LOG(logQuery) \
     do { \
         if (IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::KQP_REQUEST, 0ull)) { \

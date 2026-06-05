@@ -2377,10 +2377,12 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
                 storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
                 ui32 endChannel = info->Channels.size();
                 if (storageChannelIdx >= endChannel) {
-                    storageChannelIdx = BLOB_CHANNEL;
-                    ALOG_INFO(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                            << " CmdWrite StorageChannel# " << storageChannelOffset
-                            << " does not exist, using MAIN");
+                    TStringStream str;
+                    str << "KeyValue# " << TabletId
+                        << " CmdWrite StorageChannel# " << storageChannelOffset
+                        << " doesn't exist Marker# KV92";
+                    ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+                    return true;
                 }
             }
         } else if (request.AutoselectChannelSize() && WeightManager) {
@@ -2536,10 +2538,12 @@ bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TK
             storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
             ui32 endChannel = info->Channels.size();
             if (storageChannelIdx >= endChannel) {
-                storageChannelIdx = BLOB_CHANNEL;
-                ALOG_INFO(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                        << " CmdPatch StorageChannel# " << storageChannelOffset
-                        << " does not exist, using MAIN");
+                TStringStream str;
+                str << "KeyValue# " << TabletId
+                    << " CmdPatch StorageChannel# " << storageChannelOffset
+                    << " doesn't exist Marker# KV93";
+                ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+                return true;
             }
         }
 
@@ -2570,10 +2574,10 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
         ui32 storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
         ui32 endChannel = info->Channels.size();
         if (storageChannelIdx >= endChannel) {
-            storageChannelIdx = BLOB_CHANNEL;
             msg = TStringBuilder() << "KeyValue# " << TabletId
                     << " CmdGetStatus StorageChannel# " << storageChannelOffset
-                    << " does not exist, using MAIN";
+                    << " does not exist, Marker# KV95";
+            return {true, msg};
         }
 
         cmd.StorageChannel = storageChannel;
@@ -2583,7 +2587,7 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
     return {false, msg};
 }
 
-bool TKeyValueState::PrepareCmdGetStatus(NKikimrClient::TKeyValueRequest &kvRequest,
+bool TKeyValueState::PrepareCmdGetStatus(const TActorContext& ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
     intermediate->GetStatuses.resize(kvRequest.CmdGetStatusSize());
     for (ui32 i = 0; i < kvRequest.CmdGetStatusSize(); ++i) {
@@ -2597,8 +2601,9 @@ bool TKeyValueState::PrepareCmdGetStatus(NKikimrClient::TKeyValueRequest &kvRequ
             storageChannel = request.GetStorageChannel();
         }
         TPrepareResult result = InitGetStatusCommand(interm, storageChannel, info);
-        if (result.ErrorMsg && !result.WithError) {
-            ALOG_INFO(NKikimrServices::KEYVALUE, result.ErrorMsg  << " Marker# KV76");
+        if (result.WithError) {
+            ReplyError(ctx, result.ErrorMsg, NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+            return true;
         }
     }
     return false;
@@ -2760,7 +2765,11 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
         storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
         ui32 endChannel = info->Channels.size();
         if (storageChannelIdx >= endChannel) {
-            storageChannelIdx = BLOB_CHANNEL;
+            TStringStream str;
+            str << "KeyValue# " << TabletId
+                << " Write storage_channel# " << storageChannel
+                << " doesn't exist Marker# KV94";
+            return {true, str.Str()};
         }
     }
     SplitIntoBlobs(cmd, isInline, storageChannelIdx);
@@ -3041,9 +3050,11 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
         DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
         Y_ABORT_UNLESS(intermediate->RefCountsIncr.empty());
 
-        ALOG_ERROR(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                << " PrepareExecuteTransactionRequest return flase, Marker# KV73"
-                << " Submsg# " << result.ErrorMsg);
+        if (!intermediate->IsReplied) {
+            ReplyError(ctx, result.ErrorMsg, NMsgBusProxy::MSTATUS_INTERNALERROR,
+                NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+        }
+
         return false;
     }
 
@@ -3094,8 +3105,9 @@ bool TKeyValueState::PrepareGetStorageChannelStatusRequest(const TActorContext &
     intermediate->GetStatuses.resize(request.storage_channel_size());
     for (i32 idx = 0; idx < request.storage_channel_size(); ++idx) {
         TPrepareResult result = PrepareOneGetStatus(intermediate->GetStatuses[idx], request.storage_channel(idx), info);
-        if (result.ErrorMsg && !result.WithError) {
-            ALOG_INFO(NKikimrServices::KEYVALUE, result.ErrorMsg  << " Marker# KV77");
+        if (result.WithError) {
+            ReplyError(ctx, result.ErrorMsg, NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
+            return false;
         }
     }
     return true;
@@ -3463,7 +3475,7 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     error = error || PrepareCmdDelete(ctx, request, intermediate);
     error = error || PrepareCmdWrite(ctx, request, *ev->Get(), intermediate, info);
     error = error || PrepareCmdPatch(ctx, request, *ev->Get(), intermediate, info);
-    error = error || PrepareCmdGetStatus(request, intermediate, info);
+    error = error || PrepareCmdGetStatus(ctx, request, intermediate, info);
     error = error || PrepareCmdTrimLeakedBlobs(ctx, request, intermediate, info);
     error = error || PrepareCmdSetExecutorFastLogPolicy(ctx, request, intermediate, info);
 

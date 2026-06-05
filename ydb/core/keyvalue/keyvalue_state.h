@@ -554,7 +554,7 @@ public:
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, TEvKeyValue::TEvRequest& ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
-    bool PrepareCmdGetStatus(NKikimrClient::TKeyValueRequest &kvRequest,
+    bool PrepareCmdGetStatus(const TActorContext& ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
         THolder<TIntermediate>& intermediate);

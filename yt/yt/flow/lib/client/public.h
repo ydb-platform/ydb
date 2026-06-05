@@ -33,6 +33,9 @@ YT_DEFINE_ERROR_ENUM(
     ((SpecVersionMismatch)             (3300))
     ((PipelineStateVersionMismatch)    (3301))
     ((FlowViewKeeperIsNotInitialized)  (3302))
+    // FlowCoreTarget value differs from the running controller binary; fail-fast.
+    ((FlowCoreTargetMismatch)          (3305))
+    // FlowCoreTarget version moved between read and CAS write; retryable.
     ((FlowCoreTargetVersionMismatch)   (3303))
     ((GracefulShutdown)                (3304))
 );

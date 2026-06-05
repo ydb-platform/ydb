@@ -85,12 +85,22 @@ class TFuseFiltersRule : public ISimplifiedRule {
 };
 
 /**
- * Push append-only map elements closer to sources through maps and joins.
+ * Push column-access append aliases closer to sources.
  * If only part of a map can move safely, leave the rest above.
  */
 class TPushAppendRule : public ISimplifiedRule {
   public:
     TPushAppendRule() : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Push non-column append expressions closer to sources.
+ */
+class TPushAppendExpressionRule : public ISimplifiedRule {
+  public:
+    TPushAppendExpressionRule() : ISimplifiedRule("Push append expressions", ERuleProperties::RequireParents) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

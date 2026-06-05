@@ -355,6 +355,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
         rules.emplace_back(std::make_unique<TPushAppendRule>());
+        rules.emplace_back(std::make_unique<TPushAppendExpressionRule>());
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
         rules.emplace_back(std::make_unique<TPushRenameRule>());
         rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());

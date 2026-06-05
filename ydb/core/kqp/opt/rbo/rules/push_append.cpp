@@ -39,6 +39,14 @@ bool CanMoveAppendElement(const TMapElement& mapElement, const TInfoUnitSet& blo
     return !mapElement.IsRename() && !blockedOutputs.contains(mapElement.GetElementName());
 }
 
+bool CanMoveAliasAppendElement(const TMapElement& mapElement, const TInfoUnitSet& blockedOutputs) {
+    return CanMoveAppendElement(mapElement, blockedOutputs) && mapElement.IsColumnAccess();
+}
+
+bool CanMoveExpressionAppendElement(const TMapElement& mapElement, const TInfoUnitSet& blockedOutputs) {
+    return CanMoveAppendElement(mapElement, blockedOutputs) && !mapElement.IsColumnAccess();
+}
+
 bool IsLeftPreserved(const TString& joinKind) {
     return joinKind == "Inner" || joinKind == "Cross" || joinKind == "Left" || joinKind == "LeftOnly" || joinKind == "LeftSemi";
 }
@@ -47,7 +55,25 @@ bool IsRightPreserved(const TString& joinKind) {
     return joinKind == "Inner" || joinKind == "Cross" || joinKind == "Right" || joinKind == "RightOnly" || joinKind == "RightSemi";
 }
 
-EPushTarget SelectJoinPushTarget(
+EPushTarget SelectAliasJoinPushTarget(
+    const TMapElement& mapElement,
+    const TVector<TInfoUnit>& leftOutput,
+    const TVector<TInfoUnit>& rightOutput,
+    const TString& joinKind)
+{
+    Y_UNUSED(joinKind);
+
+    const auto usedIUs = mapElement.GetExpression().GetInputIUs(false, true);
+    const bool leftAvailable = IUSetDiff(usedIUs, leftOutput).empty();
+    const bool rightAvailable = IUSetDiff(usedIUs, rightOutput).empty();
+    if (leftAvailable == rightAvailable) {
+        return EPushTarget::Top;
+    }
+
+    return leftAvailable ? EPushTarget::Left : EPushTarget::Right;
+}
+
+EPushTarget SelectExpressionJoinPushTarget(
     const TMapElement& mapElement,
     const TVector<TInfoUnit>& leftOutput,
     const TVector<TInfoUnit>& rightOutput,
@@ -129,7 +155,19 @@ bool TryComposeAliasAndPushToMap(
     return true;
 }
 
-TIntrusivePtr<IOperator> PushAppendElementsIntoMap(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
+using TCanMoveElement = bool (*)(const TMapElement&, const TInfoUnitSet&);
+using TSelectJoinPushTarget = EPushTarget (*)(
+    const TMapElement&,
+    const TVector<TInfoUnit>&,
+    const TVector<TInfoUnit>&,
+    const TString&);
+
+TIntrusivePtr<IOperator> PushAppendElementsIntoMap(
+    const TIntrusivePtr<TOpMap>& map,
+    const TPlanProps& props,
+    TCanMoveElement canMoveElement,
+    bool allowAliasComposition)
+{
     auto bottomMap = CastOperator<TOpMap>(map->GetInput());
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
     const auto blockedOutputs = GetRenameSources(map);
@@ -139,13 +177,13 @@ TIntrusivePtr<IOperator> PushAppendElementsIntoMap(const TIntrusivePtr<TOpMap>& 
     bool pushed = false;
 
     for (const auto& mapElement : map->MapElements) {
-        if (!CanMoveAppendElement(mapElement, blockedOutputs)) {
+        if (!canMoveElement(mapElement, blockedOutputs)) {
             topElements.push_back(mapElement);
             continue;
         }
 
         if (TryPushElementToMap(bottomMap, mapElement, bottomInputIUs, props) ||
-            TryComposeAliasAndPushToMap(bottomMap, mapElement, bottomInputIUs, props)) {
+            (allowAliasComposition && TryComposeAliasAndPushToMap(bottomMap, mapElement, bottomInputIUs, props))) {
             pushed = true;
         } else {
             topElements.push_back(mapElement);
@@ -167,7 +205,76 @@ TIntrusivePtr<IOperator> PushAppendElementsIntoMap(const TIntrusivePtr<TOpMap>& 
     return MakeIntrusive<TOpMap>(bottomMap, map->Pos, topElements, map->Ordered);
 }
 
-TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
+bool IsTransparentUnaryForAliasAppend(EOperator kind) {
+    switch (kind) {
+        case EOperator::Filter:
+        case EOperator::Limit:
+        case EOperator::Sort:
+        case EOperator::AddDependencies:
+            return true;
+        default:
+            return false;
+    }
+}
+
+TIntrusivePtr<IOperator> PushAliasAppendElementsThroughUnary(const TIntrusivePtr<TOpMap>& map, const TPlanProps& props) {
+    auto unary = CastOperator<IUnaryOperator>(map->GetInput());
+    if (!unary->IsSingleConsumer()) {
+        return map;
+    }
+
+    const auto inputIUs = unary->GetInput()->GetOutputIUs();
+    const auto blockedOutputs = GetRenameSources(map);
+
+    TVector<TMapElement> pushedElements;
+    TVector<TMapElement> topElements;
+    for (const auto& mapElement : map->MapElements) {
+        if (CanMoveAliasAppendElement(mapElement, blockedOutputs) && DependenciesAvailable(mapElement, inputIUs)) {
+            pushedElements.push_back(mapElement);
+        } else {
+            topElements.push_back(mapElement);
+        }
+    }
+
+    if (pushedElements.empty()) {
+        return map;
+    }
+
+    const auto oldUnaryInput = unary->GetInput();
+    auto pushedMap = MakeIntrusive<TOpMap>(oldUnaryInput, map->Pos, pushedElements);
+    if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
+        return map;
+    }
+
+    unary->SetInput(pushedMap);
+    if (HasOutputConflicts(unary->GetOutputIUs())) {
+        unary->SetInput(oldUnaryInput);
+        return map;
+    }
+
+    if (topElements.empty()) {
+        if (!CanReplaceInParents(map, unary, props)) {
+            unary->SetInput(oldUnaryInput);
+            return map;
+        }
+        return unary;
+    }
+
+    auto newTopMap = MakeIntrusive<TOpMap>(unary, map->Pos, topElements, map->Ordered);
+    if (!CanExposeOutput(map, newTopMap->GetOutputIUs(), props)) {
+        unary->SetInput(oldUnaryInput);
+        return map;
+    }
+
+    return newTopMap;
+}
+
+TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(
+    const TIntrusivePtr<TOpMap>& map,
+    const TPlanProps& props,
+    TCanMoveElement canMoveElement,
+    TSelectJoinPushTarget selectJoinPushTarget)
+{
     auto join = CastOperator<TOpJoin>(map->GetInput());
     const auto blockedOutputs = GetRenameSources(map);
     const auto originalLeftInput = join->GetLeftInput();
@@ -186,10 +293,10 @@ TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMa
     const auto rightOutput = join->GetRightInput()->GetOutputIUs();
 
     for (const auto& mapElement : map->MapElements) {
-        if (!CanMoveAppendElement(mapElement, blockedOutputs)) {
+        if (!canMoveElement(mapElement, blockedOutputs)) {
             classifiedElements.emplace_back(mapElement, EPushTarget::Top);
         } else {
-            const auto target = SelectJoinPushTarget(mapElement, leftOutput, rightOutput, join->JoinKind);
+            const auto target = selectJoinPushTarget(mapElement, leftOutput, rightOutput, join->JoinKind);
             if (target == EPushTarget::Left) {
                 leftMapElements.push_back(mapElement);
             } else if (target == EPushTarget::Right) {
@@ -264,12 +371,11 @@ TIntrusivePtr<IOperator> PushAppendElementsThroughJoin(const TIntrusivePtr<TOpMa
 
 } // anonymous namespace
 
-// Push append-only map elements closer to sources. If only some elements can move, leave the rest above.
+// Push column-access append aliases closer to sources. If only some elements can move, leave the rest above.
 // Semantic renames are a barrier: they change visible bindings, so this rule does not move them.
 
 TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
-    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return input;
@@ -278,11 +384,37 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
     auto map = CastOperator<TOpMap>(input);
 
     if (map->GetInput()->Kind == EOperator::Map && map->GetInput()->IsSingleConsumer()) {
-        return PushAppendElementsIntoMap(map, props);
+        return PushAppendElementsIntoMap(map, props, CanMoveAliasAppendElement, true);
+    }
+
+    if (IsTransparentUnaryForAliasAppend(map->GetInput()->Kind)) {
+        return PushAliasAppendElementsThroughUnary(map, props);
     }
 
     if (map->GetInput()->Kind == EOperator::Join) {
-        return PushAppendElementsThroughJoin(map, props);
+        return PushAppendElementsThroughJoin(map, props, CanMoveAliasAppendElement, SelectAliasJoinPushTarget);
+    }
+
+    return input;
+}
+
+// Push non-column append expressions closer to sources. Filter crossing is intentionally excluded:
+// PushFilterUnderMap owns that direction to avoid a fixpoint cycle and unnecessary expression evaluation.
+TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(ctx);
+
+    if (input->Kind != EOperator::Map) {
+        return input;
+    }
+
+    auto map = CastOperator<TOpMap>(input);
+
+    if (map->GetInput()->Kind == EOperator::Map && map->GetInput()->IsSingleConsumer()) {
+        return PushAppendElementsIntoMap(map, props, CanMoveExpressionAppendElement, false);
+    }
+
+    if (map->GetInput()->Kind == EOperator::Join) {
+        return PushAppendElementsThroughJoin(map, props, CanMoveExpressionAppendElement, SelectExpressionJoinPushTarget);
     }
 
     return input;

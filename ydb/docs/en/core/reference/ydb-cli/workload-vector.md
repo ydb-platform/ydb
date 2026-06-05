@@ -1,6 +1,6 @@
 # Vector load
 
-Allows you to test {{ ydb-short-name }} [vector search](../../concepts/query_execution/vector_search.md) performance and recall using exact and approximate search. Supports both global and [filtered](../../yql/reference/syntax/create_table/vector_index.md) [vector indexes](../../yql/reference/syntax/create_table/vector_index.md).
+Allows you to test {{ ydb-short-name }} [vector search](../../concepts/query_execution/vector_search.md) performance and recall using exact and approximate search. Supports both global and [filtered vector indexes](../../yql/reference/syntax/create_table/vector_index.md).
 
 The workload supports importing vectors from a real dataset (e.g., [Wikipedia embeddings](https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings)) or generating synthetic random vectors. After loading data, you can build a vector index, run search queries to measure recall and performance, and clean up the workload tables.
 
@@ -13,7 +13,7 @@ The workload supports importing vectors from a real dataset (e.g., [Wikipedia em
 Subcommands:
 
 ```text
-vector                YDB vector workload. Reference: https://ydb.tech/docs/concepts/vector_search
+vector                YDB vector workload.
 ├─ init                 Create and initialize tables for the workload
 ├─ import               Fill workload tables with data
 │   ├─ files              Import vectors from files

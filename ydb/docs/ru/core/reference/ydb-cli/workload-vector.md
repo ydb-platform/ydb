@@ -13,7 +13,7 @@
 Подкоманды:
 
 ```text
-vector                YDB vector workload. Reference: https://ydb.tech/docs/concepts/vector_search
+vector                YDB vector workload.
 ├─ init                 Инициализация таблиц для нагрузки
 ├─ import               Загрузка данных в таблицы нагрузки
 │   ├─ files              Импорт векторов из файлов

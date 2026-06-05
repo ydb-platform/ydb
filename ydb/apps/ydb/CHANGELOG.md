@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 * Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
 * Added CPU Time statistics to benchmarks run commands.
 * `ydb sql`: add `--resource-pool` option
@@ -17,7 +15,6 @@
 * Added the `ydb export nfs` and `ydb import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
 * Added `--compact` option to `ydb workload tpcc import` command.
 * When a profile is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
->>>>>>> 9133605d2f6 (LOGBROKER-10375 Add new fields to sdk + cli (#40818))
 * Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
 
 ## 2.29.0 ##

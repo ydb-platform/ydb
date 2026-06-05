@@ -232,9 +232,12 @@ private:
         Schedule(NodeRequestTimeout, new TEvPrivate::TEvNodeRequestTimeout(nodeId), NodeRequestTimeoutCookieHolder.Get());
     }
 
-    void SkipCurrentNode(const char* reason, ui32 nodeId) {
+    void SkipCurrentNode(const char* reason, ui32 nodeId, const NYql::TIssues* peerIssues = nullptr) {
         LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Skipping compile cache scan for node_id=" << nodeId << ": " << reason);
+            "Skipping compile cache scan for node_id=" << nodeId << ": " << reason
+            << (peerIssues && !peerIssues->Empty()
+                ? TStringBuilder() << ", peer issues: " << peerIssues->ToOneLineString()
+                : TString()));
 
         if (auto& counters = AppData()->Counters) {
             counters
@@ -243,8 +246,16 @@ private:
                 ->Inc();
         }
 
-        PartialIssues.AddIssue(NYql::TIssue(
-            TStringBuilder() << "compile cache scan skipped node_id=" << nodeId << ": " << reason));
+        // Preserve the peer-reported reason (tenant mismatch, auth, etc.) as sub-issues
+        // so the final SendScanWarning summary stays actionable.
+        NYql::TIssue skipIssue(
+            TStringBuilder() << "compile cache scan skipped node_id=" << nodeId << ": " << reason);
+        if (peerIssues) {
+            for (const auto& issue : *peerIssues) {
+                skipIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+            }
+        }
+        PartialIssues.AddIssue(std::move(skipIssue));
 
         CancelNodeRequestTimeout();
         PendingRequest = false;
@@ -397,7 +408,9 @@ private:
         }
 
         if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            SkipCurrentNode("node returned error", responseNodeId);
+            NYql::TIssues peerIssues;
+            NYql::IssuesFromMessage(record.GetIssues(), peerIssues);
+            SkipCurrentNode("node returned error", responseNodeId, &peerIssues);
             return;
         }
 

@@ -14,6 +14,9 @@ SRCS(
     kqp_rbo.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
+    logical_aliases.cpp
+    logical_liveness.cpp
+    logical_name_constraints.cpp
 )
 
 PEERDIR(

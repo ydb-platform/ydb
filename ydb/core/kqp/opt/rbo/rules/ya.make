@@ -14,6 +14,8 @@ SRCS(
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
     logical_liveness.cpp
+    logical_liveness_helpers.cpp
+    narrow_by_liveness.cpp
     peephole_predicate.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp

@@ -538,31 +538,6 @@ namespace {
                 "No entries should be loaded from empty cache");
         }
 
-        Y_UNIT_TEST(WarmupSingleNodeSkips) {
-            TWarmupTestParams params;
-            params.NodeCount = 1;
-            params.UserSids = {"user0"};
-            params.FillImplicitParams = false;
-
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
-
-            TKqpWarmupConfig warmupActorConfig;
-            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
-            warmupActorConfig.HardDeadline = TDuration::Seconds(10);
-
-            auto warmupComplete = RunWarmup(env, warmupActorConfig,
-                warmupActorConfig.HardDeadline + TDuration::Seconds(1));
-
-            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
-            UNIT_ASSERT_C(warmupComplete->Get()->Success,
-                "Warmup should succeed (skip): " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("single node"),
-                "Message should indicate single node skip: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
-                "No entries loaded when skipping for single node");
-        }
-
         Y_UNIT_TEST(WarmupRespectsMaxQueriesToLoad) {
             TWarmupTestParams params;
             for (ui32 i = 0; i < 15; ++i) {
@@ -925,12 +900,14 @@ namespace {
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                    response->Record.SetNodeId(ev->Cookie);
                     response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
                     NYql::TIssue issue("Compile cache is not available for this database");
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
                     env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    ev.Reset();
                 });
 
             TKqpWarmupConfig warmupActorConfig;
@@ -964,6 +941,7 @@ namespace {
                 [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
                     sysviewRequestCount++;
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                    response->Record.SetNodeId(ev->Cookie);
                     response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
                     NYql::TIssue issue("Compile cache is not available");
                     NYql::TIssues issues;

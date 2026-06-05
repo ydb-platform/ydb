@@ -193,6 +193,30 @@ function findUnknownFieldRange(model, path, name) {
     return findUnknownFieldRanges(model, path, name).leaf;
 }
 
+function lineIndent(model, lineNumber) {
+    return model.getLineContent(lineNumber).match(/^\s*/)[0].length;
+}
+
+// Whole-line ranges for every descendant of the field whose key is at leafRange: the indented
+// block beneath it (blanks skipped) until the YAML dedents back to the field's own level. Lets
+// us mark the field's whole subtree as a consequence of the same issue.
+function childLineRanges(model, leafRange) {
+    var startLn = leafRange.startLineNumber;
+    var baseIndent = lineIndent(model, startLn);
+    var total = model.getLineCount();
+    var ranges = [];
+    for (var ln = startLn + 1; ln <= total; ++ln) {
+        if (/^\s*$/.test(model.getLineContent(ln))) {
+            continue;                       // blank line inside the block
+        }
+        if (lineIndent(model, ln) <= baseIndent) {
+            break;                          // dedent -> end of this field's subtree
+        }
+        ranges.push({startLineNumber: ln, startColumn: 1, endLineNumber: ln, endColumn: 1});
+    }
+    return ranges;
+}
+
 // Highlights unknown (red) / deprecated (amber) fields in a monaco editor and
 // renders a clickable list into listContainer. Clicking a list item scrolls the
 // editor to the field occurrence.
@@ -208,8 +232,21 @@ function highlightUnknownFields(editor, listContainer, fields) {
 
     var decorations = [];
     var located = [];
-    var leafLines = {};       // line numbers that carry a strong (leaf) highlight
-    var parentByLine = {};    // line number -> {range, unknown} for ancestor tinting
+    var leafLines = {};            // line numbers that carry a strong (leaf) highlight
+    var consequenceByLine = {};    // line -> {range, unknown}: parents + children of a field
+
+    // A consequence line (ancestor or descendant of a flagged field) gets a light tint and a
+    // dimmed gutter -- it is only fallout from the real issue. Unknown (red) outranks
+    // deprecated (amber) when a line is fallout from both kinds.
+    function markConsequence(range, unknown) {
+        var ln = range.startLineNumber;
+        var prev = consequenceByLine[ln];
+        consequenceByLine[ln] = {
+            range: range,
+            unknown: !!unknown || !!(prev && prev.unknown)
+        };
+    }
+
     fields.forEach(function(f) {
         var cls = f.deprecated ? 'deprecated-field-amber' : 'unknown-field-red';
         var found = findUnknownFieldRanges(model, f.path, f.name);
@@ -233,40 +270,38 @@ function highlightUnknownFields(editor, listContainer, fields) {
                     }
                 }
             });
+            // The field's own subtree is a consequence of the same issue.
+            childLineRanges(model, range).forEach(function(childRange) {
+                markConsequence(childRange, !f.deprecated);
+            });
         }
-        // Remember each ancestor so we can lightly tint it: a collapsed parent then still
-        // hints that something invalid is nested inside. Unknown (red) outranks deprecated
-        // (amber) when a parent contains both kinds.
+        // Ancestors are consequences too: a collapsed parent still hints at trouble inside.
         found.ancestors.forEach(function(anc) {
-            var ln = anc.startLineNumber;
-            var prev = parentByLine[ln];
-            parentByLine[ln] = {
-                range: anc,
-                unknown: (!f.deprecated) || !!(prev && prev.unknown)
-            };
+            markConsequence(anc, !f.deprecated);
         });
         located.push({field: f, range: range});
     });
 
-    // Light parent tints, skipping lines that already carry a strong leaf highlight.
-    Object.keys(parentByLine).forEach(function(ln) {
+    // Light tint + dimmed gutter for consequence lines (parents and children), skipping lines
+    // that already carry a strong leaf highlight.
+    Object.keys(consequenceByLine).forEach(function(ln) {
         if (leafLines[ln]) {
             return;
         }
-        var p = parentByLine[ln];
-        var pcls = p.unknown ? 'unknown-parent-light' : 'deprecated-parent-light';
+        var c = consequenceByLine[ln];
+        var ccls = c.unknown ? 'unknown-consequence' : 'deprecated-consequence';
         decorations.push({
-            range: p.range,
+            range: c.range,
             options: {
                 isWholeLine: true,
-                className: pcls,
-                linesDecorationsClassName: pcls + '-gutter',
+                className: ccls,
+                linesDecorationsClassName: ccls + '-gutter',
                 overviewRuler: {
-                    color: p.unknown ? 'rgba(221, 51, 51, 0.5)' : 'rgba(216, 162, 0, 0.5)',
+                    color: c.unknown ? 'rgba(221, 51, 51, 0.5)' : 'rgba(216, 162, 0, 0.5)',
                     position: monaco.editor.OverviewRulerLane.Left
                 },
                 hoverMessage: {
-                    value: 'Contains ' + (p.unknown ? 'unknown' : 'deprecated') + ' field(s)'
+                    value: 'Part of ' + (c.unknown ? 'an unknown' : 'a deprecated') + ' field'
                 }
             }
         });

@@ -24,6 +24,11 @@ A vector index supports a distance or similarity function [from the Knn extensio
 
 A vector index isn't automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer) and must be specified explicitly using the `VIEW IndexName` expression.
 
+<<<<<<< HEAD
+=======
+If the `VIEW` expression is not used, the query will perform a full table scan with pairwise comparison of vectors. It is recommended to check the optimality of the written query using [query plan analysis](../../../../dev/query-execution-optimization/query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
+
+>>>>>>> d0dd62b7f9b (modify menu for optimization plans in 'for developers' menu (#38242))
 {% endnote %}
 
 {% note warning %}

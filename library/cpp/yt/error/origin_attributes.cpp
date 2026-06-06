@@ -88,7 +88,7 @@ std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData()
 
 std::string FormatOrigin(const TOriginAttributes& attributes)
 {
-    using TFunctor = TString(*)(const TOriginAttributes&);
+    using TFunctor = std::string(*)(const TOriginAttributes&);
 
     if (auto strong = NGlobal::GetErasedVariable(FormatOriginTag)) {
         return strong->AsConcrete<TFunctor>()(attributes);

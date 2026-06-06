@@ -61,8 +61,8 @@ public:
     TRefCountedTypeKey GetTypeKey() const;
     const TSourceLocation& GetLocation() const;
 
-    TString GetTypeName() const;
-    TString GetFullName() const;
+    std::string GetTypeName() const;
+    std::string GetFullName() const;
 
     size_t GetObjectsAllocated() const;
     size_t GetObjectsFreed() const;

@@ -98,7 +98,7 @@ Connection without credentials. Used for local or test installations of {{ ydb-s
 
 ### Static Credentials (login and password) {#auth-static}
 
-Authentication by login and password. Enter the username in the **Username** field and the password in the **Password** field. on the {{ ydb-short-name }} server. Used if [login and password authentication](../../security/authentication.md#static-credentials) is enabled
+Authentication by login and password. Enter the username in the **Username** field and the password in the **Password** field. Used if [login and password authentication](../../security/authentication.md#static-credentials) is enabled on the {{ ydb-short-name }} server.
 
 {% note info %}
 

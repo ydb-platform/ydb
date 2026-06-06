@@ -543,7 +543,7 @@ After starting the static nodes, verify their operation through the built-in web
 2. Go to the **Nodes** tab
 3. Make sure all 3 static nodes are displayed in the list.
 
-! [Manual installation, running static nodes](%E2%9F%A6S1%E2%9F%A7)
+![Manual installation, running static nodes](../_assets/manual_installation_1.png)
 
 ## Initialize the cluster {#initialize-cluster}
 
@@ -722,7 +722,7 @@ When executing commands to create user accounts and assign groups, the {{ ydb-sh
 ## Test the created database {#try-first-db}
 
 1. Install the {{ ydb-short-name }} CLI as described in the [documentation](../../../reference/ydb-cli/install.md).
-2. Create a test row (`test_row_table`) or column table (`test_column_table`):
+2. Create a test row (`test_row_table`) or columnar table (`test_column_table`):
 
 {% list tabs %}
 
@@ -762,7 +762,7 @@ Typically, to provide access to the built-in web interface {{ ydb-short-name }},
 
 {% note warning %}
 
-We do not recommend using the insecure mode of {{ ydb-short-name }} either during operation or during application development.
+We do not recommend using the unsecured mode of {{ ydb-short-name }} either during operation or during application development.
 
 {% endnote %}
 

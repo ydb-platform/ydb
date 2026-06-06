@@ -109,7 +109,6 @@ public:
  */
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
 void ComputePlanLiveness(TOpRoot& root);
-void ComputePlanNameConstraints(TOpRoot& root);
 void ComputePlanAliases(TOpRoot& root);
 
 TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);

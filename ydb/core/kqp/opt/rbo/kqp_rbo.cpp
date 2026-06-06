@@ -1,5 +1,5 @@
 #include "kqp_rbo.h"
-#include "kqp_rbo_utils.h"
+#include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -19,57 +19,6 @@ void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
 }
 
 } // anonymous namespace
-
-void TPlanNameConstraints::Clear() {
-    ForbiddenOut.clear();
-}
-
-bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnit& iu) {
-    Y_ENSURE(child);
-    return ForbiddenOut[TPlanEdgeKey{parent, childIdx, child}].insert(iu).second;
-}
-
-bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnitSet& ius) {
-    bool changed = false;
-    for (const auto& iu : ius) {
-        changed |= AddForbiddenOut(parent, childIdx, child, iu);
-    }
-    return changed;
-}
-
-const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child) const {
-    const auto it = ForbiddenOut.find(TPlanEdgeKey{parent, childIdx, child});
-    return it == ForbiddenOut.end() ? EmptyInfoUnitSet() : it->second;
-}
-
-const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOut(IOperator* parent, ui32 childIdx) const {
-    Y_ENSURE(parent);
-    Y_ENSURE(childIdx < parent->Children.size());
-    return GetForbiddenOut(parent, childIdx, parent->Children[childIdx].get());
-}
-
-const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOutForSingleConsumer(IOperator* op) const {
-    if (!op || op->Parents.size() != 1) {
-        return EmptyInfoUnitSet();
-    }
-
-    const auto& [parent, childIdx] = op->Parents.front();
-    return GetForbiddenOut(parent, childIdx, op);
-}
-
-bool TPlanNameConstraints::IsForbiddenAtOutput(IOperator* op, const TInfoUnit& iu) const {
-    if (!op) {
-        return false;
-    }
-
-    for (const auto& [parent, childIdx] : op->Parents) {
-        if (GetForbiddenOut(parent, childIdx, op).contains(iu)) {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 

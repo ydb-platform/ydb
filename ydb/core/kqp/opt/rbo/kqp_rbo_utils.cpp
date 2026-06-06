@@ -1,8 +1,6 @@
 #include "kqp_rbo_utils.h"
 #include "kqp_operator.h"
 
-#include <tuple>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -82,92 +80,6 @@ TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
     }
 
     return op->GetOutputIUs();
-}
-
-bool HasOutputConflicts(const TVector<TInfoUnit>& outputIUs) {
-    TInfoUnitSet seen;
-    for (const auto& iu : outputIUs) {
-        if (!seen.insert(iu).second) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool CanExposeOutput(IOperator* op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props) {
-    if (HasOutputConflicts(outputIUs)) {
-        return false;
-    }
-
-    for (const auto& [parent, childIdx] : op->Parents) {
-        const auto& forbidden = props.NameConstraints.GetForbiddenOut(parent, childIdx, op);
-        for (const auto& iu : outputIUs) {
-            if (forbidden.contains(iu)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-bool CanExposeOutput(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props) {
-    return CanExposeOutput(op.get(), outputIUs, props);
-}
-
-bool CanExposeToParents(IOperator* op, const TPlanProps& props, THashSet<IOperator*>& visited) {
-    if (!op || !visited.insert(op).second) {
-        return true;
-    }
-
-    if (!CanExposeOutput(op, op->GetOutputIUs(), props)) {
-        return false;
-    }
-
-    for (const auto& [parent, _] : op->Parents) {
-        if (!CanExposeToParents(parent, props, visited)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool CanExposeToParents(IOperator* op, const TPlanProps& props) {
-    THashSet<IOperator*> visited;
-    return CanExposeToParents(op, props, visited);
-}
-
-bool CanReplaceInParents(
-    const TIntrusivePtr<IOperator>& oldOp,
-    const TIntrusivePtr<IOperator>& replacement,
-    const TPlanProps& props)
-{
-    if (!CanExposeOutput(oldOp, replacement->GetOutputIUs(), props)) {
-        return false;
-    }
-
-    TVector<std::tuple<IOperator*, ui32, TIntrusivePtr<IOperator>>> oldChildren;
-    oldChildren.reserve(oldOp->Parents.size());
-    for (const auto& [parent, childIdx] : oldOp->Parents) {
-        oldChildren.emplace_back(parent, childIdx, parent->Children[childIdx]);
-        parent->Children[childIdx] = replacement;
-    }
-
-    bool valid = true;
-    THashSet<IOperator*> visited;
-    for (const auto& [parent, _] : oldOp->Parents) {
-        if (!CanExposeToParents(parent, props, visited)) {
-            valid = false;
-            break;
-        }
-    }
-
-    for (const auto& [parent, childIdx, oldChild] : oldChildren) {
-        parent->Children[childIdx] = oldChild;
-    }
-
-    return valid;
 }
 
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {

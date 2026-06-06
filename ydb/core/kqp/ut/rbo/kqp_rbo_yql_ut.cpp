@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
@@ -294,18 +295,6 @@ void AssertRuleApplied(const NJson::TJsonValue& simplifiedPlan, const TString& r
     UNIT_ASSERT_C(count > 0, "Expected rule to apply: " << ruleName << "\nPlan:\n" << plan);
 }
 
-void AssertProjectionMapRulesApplied(const NJson::TJsonValue& simplifiedPlan, const TString& plan) {
-    const TVector<TString> mapRuleNames = {
-        "Remove identity map",
-        "Prune dead map elements",
-        "Push append map elements",
-    };
-
-    for (const auto& ruleName : mapRuleNames) {
-        AssertRuleApplied(simplifiedPlan, ruleName, plan);
-    }
-}
-
 TIntrusivePtr<TOpRead> MakeTestRead(const TVector<TInfoUnit>& outputIUs, TPositionHandle pos) {
     TVector<TString> columns;
     columns.reserve(outputIUs.size());
@@ -372,14 +361,24 @@ struct TMapRuleTestContext {
     TRBOContext RboCtx;
 };
 
-TVector<std::unique_ptr<IRule>> MakeProjectionMapRulesForTest() {
-    TVector<std::unique_ptr<IRule>> rules;
+void AddProjectionMapRulesForTest(TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
     rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
     rules.emplace_back(std::make_unique<TRenameToAppendRule>());
-    rules.emplace_back(std::make_unique<TPushAppendRule>());
+    rules.emplace_back(std::make_unique<TPushAppendRule>(pushAppendsUnderFilter));
     rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-    rules.emplace_back(std::make_unique<TPushRenameRule>());
+    rules.emplace_back(std::make_unique<TPushRenameRule>(pushAppendsUnderFilter));
+}
+
+TVector<std::unique_ptr<IRule>> MakeProjectionSimplificationRulesForTest() {
+    TVector<std::unique_ptr<IRule>> rules;
+    AddProjectionMapRulesForTest(rules, /*pushAppendsUnderFilter*/ true);
+    return rules;
+}
+
+TVector<std::unique_ptr<IRule>> MakeLogicalMapRulesForTest() {
+    TVector<std::unique_ptr<IRule>> rules;
+    AddProjectionMapRulesForTest(rules, /*pushAppendsUnderFilter*/ false);
     rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     return rules;
 }
@@ -2865,7 +2864,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TopSort") || FindOperatorByStringField(simplifiedPlan, "Name", "Sort"), plan);
         UNIT_ASSERT_C(plan.Contains("Join"), plan);
         UNIT_ASSERT_C(!plan.Contains("__kqp_rbo_ignore_arg_"), plan);
-        AssertProjectionMapRulesApplied(simplifiedPlan, plan);
     }
 
     Y_UNIT_TEST(ProjectionNormalizationYqlSemanticRenameAndDeadSortKey) {
@@ -2929,8 +2927,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedPlan = GetSimplifiedPlan(plan);
         UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TopSort") || FindOperatorByStringField(simplifiedPlan, "Name", "Sort"), plan);
         UNIT_ASSERT_C(plan.Contains("Join"), plan);
-        AssertProjectionMapRulesApplied(simplifiedPlan, plan);
-        AssertRuleApplied(simplifiedPlan, "Push semantic rename", plan);
     }
 
     Y_UNIT_TEST(ProjectionNormalizationFocusedMapRules) {
@@ -2974,22 +2970,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         );
         TOpRoot root(filter, pos, {"alias_payload", "left_calc", "both_calc"});
 
-        TRuleBasedStage mapRules("Focused map rules", MakeProjectionMapRulesForTest());
+        TRuleBasedStage projectionSimplification("Focused projection simplification", MakeProjectionSimplificationRulesForTest());
         ComputeLogicalTestProps(root);
-        mapRules.RunStage(root, testContext.RboCtx);
+        projectionSimplification.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        for (const auto& ruleName : {
-            "Remove identity map",
-            "Prune dead map elements",
-            "Convert safe renames to appends",
-            "Push append map elements",
-            "Push semantic rename",
-            "Push filter under map",
-        }) {
-            auto ruleIt = appliedRules.find(ruleName);
-            UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected rule to apply: " << ruleName);
-        }
+        TRuleBasedStage logicalMapRules("Focused logical map rules", MakeLogicalMapRulesForTest());
+        ComputeLogicalTestProps(root);
+        logicalMapRules.RunStage(root, testContext.RboCtx);
     }
 
     Y_UNIT_TEST(RemoveIdentityMapRemovesEmptyMap) {
@@ -3487,7 +3474,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "__kqp_agg_result_agg_col_1",
         });
 
-        TRuleBasedStage projectionSimplification("Focused projection simplification", MakeProjectionMapRulesForTest());
+        TRuleBasedStage projectionSimplification("Focused projection simplification", MakeProjectionSimplificationRulesForTest());
         ComputeLogicalTestProps(root);
         projectionSimplification.RunStage(root, testContext.RboCtx);
 

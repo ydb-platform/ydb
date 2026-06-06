@@ -14,9 +14,9 @@ SRCS(
     kqp_rbo.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
-    logical_aliases.cpp
-    logical_liveness.cpp
-    logical_name_constraints.cpp
+    analysis/logical_aliases.cpp
+    analysis/logical_liveness.cpp
+    analysis/logical_name_constraints.cpp
     logical_renames.cpp
 )
 

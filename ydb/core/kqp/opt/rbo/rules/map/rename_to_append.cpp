@@ -1,4 +1,4 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
 
 namespace NKikimr {
 namespace NKqp {

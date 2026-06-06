@@ -1,4 +1,4 @@
-#include "projection_pruning_helpers.h"
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 #include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
 

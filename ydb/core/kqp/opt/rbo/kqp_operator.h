@@ -352,6 +352,7 @@ public:
     void SetElementName(const TInfoUnit& elementName);
     TExpression GetExpression() const;
     TExpression& GetExpressionRef();
+    bool DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const;
     void SetExpression(TExpression expr);
 
 private:
@@ -375,6 +376,8 @@ public:
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
     virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
+    TInfoUnitSet GetRenameSources() const;
+    bool IsExtractableAppend(const TMapElement& element) const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetPropertyPreservingMappings(TPlanProps& props) const;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
@@ -393,6 +396,9 @@ public:
     }
 
     TVector<TMapElement>& GetMapElements() { return MapElements; }
+    TMapElement* FindOutputElement(const TInfoUnit& output);
+    const TMapElement* FindOutputElement(const TInfoUnit& output) const;
+    bool HasOutputElement(const TInfoUnit& output) const;
     bool HasRenames() const;
 
     TVector<TMapElement> MapElements;

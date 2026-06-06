@@ -1,5 +1,5 @@
-#include "kqp_rbo.h"
-#include "kqp_rbo_utils.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
 #include <algorithm>
 #include <functional>

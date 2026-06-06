@@ -1,5 +1,8 @@
-#include "kqp_rbo.h"
-#include "kqp_rbo_utils.h"
+#include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+
+#include <tuple>
 
 namespace NKikimr {
 namespace NKqp {
@@ -46,7 +49,144 @@ private:
     TPlanProps& Props;
 };
 
+bool CanExposeToParents(IOperator* op, const TPlanProps& props, THashSet<IOperator*>& visited) {
+    if (!op || !visited.insert(op).second) {
+        return true;
+    }
+
+    if (!CanExposeOutput(op, op->GetOutputIUs(), props)) {
+        return false;
+    }
+
+    for (const auto& [parent, _] : op->Parents) {
+        if (!CanExposeToParents(parent, props, visited)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 } // anonymous namespace
+
+void TPlanNameConstraints::Clear() {
+    ForbiddenOut.clear();
+}
+
+bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnit& iu) {
+    Y_ENSURE(child);
+    return ForbiddenOut[TPlanEdgeKey{parent, childIdx, child}].insert(iu).second;
+}
+
+bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnitSet& ius) {
+    bool changed = false;
+    for (const auto& iu : ius) {
+        changed |= AddForbiddenOut(parent, childIdx, child, iu);
+    }
+    return changed;
+}
+
+const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child) const {
+    const auto it = ForbiddenOut.find(TPlanEdgeKey{parent, childIdx, child});
+    return it == ForbiddenOut.end() ? EmptyInfoUnitSet() : it->second;
+}
+
+const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOut(IOperator* parent, ui32 childIdx) const {
+    Y_ENSURE(parent);
+    Y_ENSURE(childIdx < parent->Children.size());
+    return GetForbiddenOut(parent, childIdx, parent->Children[childIdx].get());
+}
+
+const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOutForSingleConsumer(IOperator* op) const {
+    if (!op || op->Parents.size() != 1) {
+        return EmptyInfoUnitSet();
+    }
+
+    const auto& [parent, childIdx] = op->Parents.front();
+    return GetForbiddenOut(parent, childIdx, op);
+}
+
+bool TPlanNameConstraints::IsForbiddenAtOutput(IOperator* op, const TInfoUnit& iu) const {
+    if (!op) {
+        return false;
+    }
+
+    for (const auto& [parent, childIdx] : op->Parents) {
+        if (GetForbiddenOut(parent, childIdx, op).contains(iu)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool HasOutputConflicts(const TVector<TInfoUnit>& outputIUs) {
+    TInfoUnitSet seen;
+    for (const auto& iu : outputIUs) {
+        if (!seen.insert(iu).second) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool CanExposeOutput(IOperator* op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props) {
+    if (HasOutputConflicts(outputIUs)) {
+        return false;
+    }
+
+    for (const auto& [parent, childIdx] : op->Parents) {
+        const auto& forbidden = props.NameConstraints.GetForbiddenOut(parent, childIdx, op);
+        for (const auto& iu : outputIUs) {
+            if (forbidden.contains(iu)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool CanExposeOutput(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props) {
+    return CanExposeOutput(op.get(), outputIUs, props);
+}
+
+bool CanExposeToParents(IOperator* op, const TPlanProps& props) {
+    THashSet<IOperator*> visited;
+    return CanExposeToParents(op, props, visited);
+}
+
+bool CanReplaceInParents(
+    const TIntrusivePtr<IOperator>& oldOp,
+    const TIntrusivePtr<IOperator>& replacement,
+    const TPlanProps& props)
+{
+    if (!CanExposeOutput(oldOp, replacement->GetOutputIUs(), props)) {
+        return false;
+    }
+
+    TVector<std::tuple<IOperator*, ui32, TIntrusivePtr<IOperator>>> oldChildren;
+    oldChildren.reserve(oldOp->Parents.size());
+    for (const auto& [parent, childIdx] : oldOp->Parents) {
+        oldChildren.emplace_back(parent, childIdx, parent->Children[childIdx]);
+        parent->Children[childIdx] = replacement;
+    }
+
+    bool valid = true;
+    THashSet<IOperator*> visited;
+    for (const auto& [parent, _] : oldOp->Parents) {
+        if (!CanExposeToParents(parent, props, visited)) {
+            valid = false;
+            break;
+        }
+    }
+
+    for (const auto& [parent, childIdx, oldChild] : oldChildren) {
+        parent->Children[childIdx] = oldChild;
+    }
+
+    return valid;
+}
 
 bool IOperator::PropagateNameConstraints(INameConstraintsContext& ctx) {
     Y_UNUSED(ctx);

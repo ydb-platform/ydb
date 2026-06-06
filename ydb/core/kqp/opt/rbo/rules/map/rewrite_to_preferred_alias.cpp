@@ -1,4 +1,4 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -129,13 +129,24 @@ bool RewriteMapInputs(TOpMap& map, const TInfoUnitSet& liveOut, TRBOContext& ctx
     }
 
     bool changed = false;
+    TRenameMap mapRenameMap;
     for (auto& mapElement : map.MapElements) {
         if (mapElement.IsRename()) {
             continue;
         }
-        changed |= RenameExpression(mapElement.GetExpressionRef(), renameMap);
+
+        TRenameMap elementRenameMap;
+        for (const auto& [from, to] : renameMap) {
+            if (to == mapElement.GetElementName()) {
+                continue;
+            }
+            elementRenameMap.emplace(from, to);
+            mapRenameMap.emplace(from, to);
+        }
+
+        changed |= RenameExpression(mapElement.GetExpressionRef(), elementRenameMap);
     }
-    const bool subplansChanged = props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
+    const bool subplansChanged = props.Subplans.RenameIUs(mapRenameMap, ctx.ExprCtx);
     return changed || subplansChanged;
 }
 

@@ -239,6 +239,11 @@ TExpression& TMapElement::GetExpressionRef() {
     return Expr;
 }
 
+bool TMapElement::DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const {
+    const auto usedIUs = Expr.GetInputIUs(false, true);
+    return IUSetDiff(usedIUs, availableIUs).empty();
+}
+
 TInfoUnit TMapElement::GetRename() const {
     Y_ENSURE(Rename, "Map element is not a semantic rename");
     return GetColumnAccess();
@@ -270,19 +275,63 @@ TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysi
     , Ordered(ordered) {
 }
 
+TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) {
+    for (auto& mapElement : MapElements) {
+        if (mapElement.GetElementName() == output) {
+            return &mapElement;
+        }
+    }
+    return nullptr;
+}
+
+const TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) const {
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.GetElementName() == output) {
+            return &mapElement;
+        }
+    }
+    return nullptr;
+}
+
+bool TOpMap::HasOutputElement(const TInfoUnit& output) const {
+    return FindOutputElement(output) != nullptr;
+}
+
+TInfoUnitSet TOpMap::GetRenameSources() const {
+    TInfoUnitSet result;
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            result.insert(mapElement.GetRename());
+        }
+    }
+    return result;
+}
+
+bool TOpMap::IsExtractableAppend(const TMapElement& element) const {
+    bool found = false;
+    bool usedByRename = false;
+    const auto output = element.GetElementName();
+
+    for (const auto& mapElement : MapElements) {
+        if (&mapElement == &element) {
+            found = true;
+        }
+        if (mapElement.IsRename() && mapElement.GetRename() == output) {
+            usedByRename = true;
+        }
+    }
+
+    Y_ENSURE(found, "Map element does not belong to this map");
+    return !element.IsRename() && !usedByRename;
+}
+
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {
     if (const auto& outputIUs = GetOutputIUsOverride()) {
         return *outputIUs;
     }
 
     TVector<TInfoUnit> res = GetInput()->GetOutputIUs();
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
-
-    for (const auto& mapElement : MapElements) {
-        if (mapElement.IsRename()) {
-            renameSources.insert(mapElement.GetRename());
-        }
-    }
+    const auto renameSources = GetRenameSources();
 
     if (!renameSources.empty()) {
         TVector<TInfoUnit> kept;

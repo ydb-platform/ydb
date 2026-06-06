@@ -33,7 +33,7 @@ The following parameters can be specified in the `WITH` block:
 * You can also view and manage operations using the [Embedded UI](../../../../reference/embedded-ui/index.md). To do this, go to the database page, open the `Operations` tab, and select the operation type `Compaction`.
 * If a compaction operation is already running for the same table (or for one of its secondary indexes when `CASCADE = TRUE`), the launch will fail with an error. You need to either wait for the previous operation to complete or cancel it.
 * Running the command requires the same permissions as other `ALTER TABLE` actions. Parallel changes to the table schema are not blocked.
-* Forced compaction also materializes borrowed data. As a result, the total data volume in the database may increase. The borrowing mechanism is used, for example, to implement [CoW](https://en.wikipedia.org/wiki/%D0%9A%D0%BE%D0%BF%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5_%D0%BF%D1%80%D0%B8_%D0%B7%D0%B0%D0%BF%D0%B8%D1%81%D0%B8) [table copying](../../../../reference/ydb-cli/tools-copy.md), so when compacting copied tables, their volume may ultimately increase by the size of the original table.
+* Forced compaction also materializes borrowed data. As a result, the total data volume in the database may increase. The borrowing mechanism is used, for example, to implement [CoW](https://en.wikipedia.org/wiki/Copy-on-write) [table copying](../../../../reference/ydb-cli/tools-copy.md), so when compacting copied tables, their volume may ultimately increase by the size of the original table.
 
 ## Examples {#examples}
 

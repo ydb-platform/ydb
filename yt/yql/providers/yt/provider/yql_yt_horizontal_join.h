@@ -25,6 +25,12 @@
 
 namespace NYql {
 
+struct TGroupedInputKey {
+    const TExprNode* Section;
+    bool WeakFields;
+    bool operator<(const TGroupedInputKey& other) const;
+};
+
 class THorizontalJoinBase {
 public:
     THorizontalJoinBase(const TYtState::TPtr& state, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
@@ -111,8 +117,7 @@ private:
     // out_num -> TVector{section_num, path_num}. Cannot be joined with other outputs
     TMap<size_t, TVector<std::pair<size_t, size_t>>> ExclusiveOuts;
     size_t InputCount = 0;
-    // {section or table, ranges, qlFilter, section settings, WeakField}
-    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
+    TSet<TGroupedInputKey> GroupedInputs;
 
     // {section_num, path_num} -> {joined_map, out_num}
     TMap<std::pair<size_t, size_t>, TMaybe<std::pair<NNodes::TYtMap, size_t>>> InputSubsts;
@@ -140,8 +145,7 @@ private:
 private:
     TSyncMap Worlds;
     size_t InputCount = 0;
-    // {section or table, ranges, qlFilter, section settings, WeakField}
-    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
+    TSet<TGroupedInputKey> GroupedInputs;
 
     TNodeMap<std::pair<NNodes::TYtMap, size_t>> OutputSubsts; // original map -> joined map, out index
 };

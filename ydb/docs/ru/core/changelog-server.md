@@ -102,16 +102,16 @@
 
 * Включены по умолчанию:
 
-  * [векторный индекс](./dev/vector-indexes.md?version=v25.2) для приближённого векторного поиска;
-  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md?version=v25.2) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka);
-  * поддержка [автопартиционирования топиков](./concepts/cdc.md?version=v25.2#topic-partitions) в CDC для строковых таблиц;
+  * [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска;
+  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka);
+  * поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц;
   * поддержка автопартиционирования топиков для асинхронной репликации;
-  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md?version=v25.2#numeric);
-  * поддержка [типа DateTime64](./yql/reference/types/primitive.md?version=v25.2#datetime);
+  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric);
+  * поддержка [типа DateTime64](./yql/reference/types/primitive.md#datetime);
   * автоудаление временных директорий и таблиц при экспорте в S3;
-  * поддержка [потока изменений](./concepts/cdc.md?version=v25.2) в операциях резервного копирования и восстановления;
-  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md?version=v25.2) для вторичного индекса;
-  * системные представления с [историей перегруженных партиций](./dev/system-views?version=v25.2#top-overload-partitions).
+  * поддержка [потока изменений](./concepts/cdc.md) в операциях резервного копирования и восстановления;
+  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса;
+  * системные представления с [историей перегруженных партиций](./dev/system-views#top-overload-partitions).
 
 #### Исправления ошибок
 

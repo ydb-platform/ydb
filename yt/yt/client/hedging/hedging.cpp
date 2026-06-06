@@ -237,10 +237,10 @@ public:
     UNSUPPORTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const std::string&, const TRequestRestartOptions&));
     UNSUPPORTED_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (const std::string&, const TCollectCoverageOptions&));
     UNSUPPORTED_METHOD(TFuture<TPullRowsResult>, PullRows, (const TYPath&, const TPullRowsOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const TString&, const TString&, const TSetUserPasswordOptions&));
-    UNSUPPORTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const TString&, const TIssueTokenOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const TString&, const TString&, const TRevokeTokenOptions&));
-    UNSUPPORTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const TString&, const TListUserTokensOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const std::string&, const std::string&, const TSetUserPasswordOptions&));
+    UNSUPPORTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const std::string&, const TIssueTokenOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const std::string&, const std::string&, const TRevokeTokenOptions&));
+    UNSUPPORTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const std::string&, const TListUserTokensOptions&));
     UNSUPPORTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const TString&, const TStartQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortQuery, (NQueryTrackerClient::TQueryId, const TAbortQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<TQueryResult>, GetQueryResult, (NQueryTrackerClient::TQueryId, i64, const TGetQueryResultOptions&));

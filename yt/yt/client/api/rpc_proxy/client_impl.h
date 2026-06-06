@@ -605,24 +605,24 @@ public:
 
     virtual TFuture<void> SetUserPassword(
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options) override;
 
     TFuture<TIssueTokenResult> IssueToken(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options) override;
 
     TFuture<void> RevokeToken(
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options) override;
 
     TFuture<TListUserTokensResult> ListUserTokens(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options) override;
 
     // Bundle Controller

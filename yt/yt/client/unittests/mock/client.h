@@ -823,27 +823,27 @@ public:
 
     MOCK_METHOD(TFuture<void>, SetUserPassword, (
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RevokeToken, (
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options),
         (override));
 

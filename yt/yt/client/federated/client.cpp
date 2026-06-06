@@ -493,10 +493,10 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (const std::string&, const std::vector<TGuid>&, const TResurrectChunkLocationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const std::string&, const TRequestRestartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TCollectCoverageResult>, CollectCoverage, (const std::string&, const TCollectCoverageOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const TString&, const TString&, const TSetUserPasswordOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const TString&, const TIssueTokenOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const TString&, const TString&, const TRevokeTokenOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const TString&, const TListUserTokensOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, SetUserPassword, (const std::string&, const std::string&, const std::string&, const TSetUserPasswordOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const std::string&, const TIssueTokenOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const std::string&, const std::string&, const TRevokeTokenOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const std::string&, const TListUserTokensOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const TString&, const TStartQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbortQuery, (NQueryTrackerClient::TQueryId, const TAbortQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IUnversionedRowsetPtr>, ReadQueryResult, (NQueryTrackerClient::TQueryId, i64, const TReadQueryResultOptions&));

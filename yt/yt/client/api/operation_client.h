@@ -456,10 +456,10 @@ struct TJob
     NYson::TYsonString CoreInfos;
     NYson::TYsonString Events;
     NYson::TYsonString ExecAttributes;
-    std::optional<TString> TaskName;
-    std::optional<TString> PoolTree;
-    std::optional<TString> Pool;
-    std::optional<TString> MonitoringDescriptor;
+    std::optional<std::string> TaskName;
+    std::optional<std::string> PoolTree;
+    std::optional<std::string> Pool;
+    std::optional<std::string> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
     std::optional<int> CollectiveMemberRank;
     NYson::TYsonString ArchiveFeatures;

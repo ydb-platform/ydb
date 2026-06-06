@@ -444,22 +444,13 @@ namespace {
     }
 
     NYdb::NQuery::TExecuteQueryResult ExecuteQueryQueryApi(
-        TKikimrRunner& kikimr, const TString& userSid,
+        TKikimrRunner& kikimr, NYdb::NQuery::TSession& session,
         const TString& query, bool isThreadLocked)
     {
         auto impl = [&] {
-            TDriverConfig driverConfig;
-            driverConfig
-                .SetEndpoint(kikimr.GetEndpoint())
-                .SetDatabase("/Root")
-                .SetAuthToken(userSid + "@builtin");
-
-            auto driver = NYdb::TDriver(driverConfig);
-            auto queryClient = NYdb::NQuery::TQueryClient(driver);
-
             auto settings = NYdb::NQuery::TExecuteQuerySettings()
                 .StatsMode(NYdb::NQuery::EStatsMode::Basic);
-            return queryClient.ExecuteQuery(
+            return session.ExecuteQuery(
                 query,
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
                 settings).ExtractValueSync();
@@ -467,21 +458,7 @@ namespace {
         return isThreadLocked ? kikimr.RunCall(impl) : impl();
     }
 
-    void FillCacheQueryApi(TKikimrRunner& kikimr, const TVector<TString>& userSids, bool isThreadLocked) {
-        ui32 key = 0;
-        for (const auto& userSid : userSids) {
-            TString query = TStringBuilder()
-                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = "
-                << key++ << " /* qapi */;";
-
-            auto result = ExecuteQueryQueryApi(kikimr, userSid, query, isThreadLocked);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
-                "Query API populate failed for user " << userSid << ": "
-                << result.GetIssues().ToString());
-        }
-    }
-
-    void VerifyQueriesServedFromCacheQueryApi(TKikimrRunner& kikimr,
+    void FillCacheQueryApi(TKikimrRunner& kikimr, NYdb::NQuery::TSession& session,
         const TVector<TString>& userSids, bool isThreadLocked)
     {
         ui32 key = 0;
@@ -490,7 +467,23 @@ namespace {
                 << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = "
                 << key++ << " /* qapi */;";
 
-            auto result = ExecuteQueryQueryApi(kikimr, userSid, query, isThreadLocked);
+            auto result = ExecuteQueryQueryApi(kikimr, session, query, isThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Query API populate failed for user " << userSid << ": "
+                << result.GetIssues().ToString());
+        }
+    }
+
+    void VerifyQueriesServedFromCacheQueryApi(TKikimrRunner& kikimr, NYdb::NQuery::TSession& session,
+        const TVector<TString>& userSids, bool isThreadLocked)
+    {
+        ui32 key = 0;
+        for (const auto& userSid : userSids) {
+            TString query = TStringBuilder()
+                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = "
+                << key++ << " /* qapi */;";
+
+            auto result = ExecuteQueryQueryApi(kikimr, session, query, isThreadLocked);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
                 "Query API verify failed for user " << userSid << ": "
                 << result.GetIssues().ToString());
@@ -1400,7 +1393,16 @@ namespace {
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             const bool isThreadLocked = !params.UseRealThreads;
             GrantPermissions(kikimr, "/Root/KeyValue", params.UserSids, isThreadLocked);
-            FillCacheQueryApi(kikimr, params.UserSids, isThreadLocked);
+
+            NYdb::TDriver pinnedDriver(NYdb::TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken(params.UserSids[0] + "@builtin")
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Off));
+            NYdb::NQuery::TQueryClient pinnedClient(pinnedDriver);
+            auto pinnedSession = pinnedClient.GetSession().GetValueSync().GetSession();
+
+            FillCacheQueryApi(kikimr, pinnedSession, params.UserSids, isThreadLocked);
 
             // Cache is filled via Query API, not PrepareWarmupTest, so build env manually.
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -1421,7 +1423,8 @@ namespace {
             UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
                 "Warmup must populate at least one Query API entry");
 
-            VerifyQueriesServedFromCacheQueryApi(kikimr, env.UserSids, env.IsThreadLocked);
+            VerifyQueriesServedFromCacheQueryApi(kikimr, pinnedSession,
+                env.UserSids, env.IsThreadLocked);
 
             const i64 hitsAfterFirstClientRound = counters.WarmupHitsInWindow->Val();
             const i64 savedMsAfterFirstClientRound = counters.WarmupSavedCompileMs->Val();
@@ -1434,11 +1437,14 @@ namespace {
                 "[QueryAPI] WarmupSavedCompileMs must be non-decreasing (was "
                 << savedMsBeforeWarmup << ", now " << savedMsAfterFirstClientRound << ")");
 
-            VerifyQueriesServedFromCacheQueryApi(kikimr, env.UserSids, env.IsThreadLocked);
+            VerifyQueriesServedFromCacheQueryApi(kikimr, pinnedSession,
+                env.UserSids, env.IsThreadLocked);
 
             const i64 hitsAfterSecondClientRound = counters.WarmupHitsInWindow->Val();
             UNIT_ASSERT_VALUES_EQUAL_C(hitsAfterSecondClientRound, hitsAfterFirstClientRound,
                 "[QueryAPI] Repeated client hits on the same warmup uid must not be counted again");
+
+            pinnedDriver.Stop(true);
         }
 
         Y_UNIT_TEST(ObservationWindowCountsMissesOnly) {

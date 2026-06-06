@@ -411,8 +411,15 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             bool isChangeNotNullConstraint = col.HasNotNull();
+            bool isChangeSetNotNullInProgress = col.HasSetNotNullInProgress();
 
-            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault() && !col.HasDefaultFromLiteral()) {
+            if (!isChangeNotNullConstraint
+                && !isChangeSetNotNullInProgress
+                && !columnFamily
+                && !col.HasDefaultFromSequence()
+                && !col.HasEmptyDefault()
+                && !col.HasDefaultFromLiteral()) 
+            {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -497,13 +504,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
 
-            // TODO(flown4qqqq): SetNotNullInProgress
             if (isChangeNotNullConstraint) {
-                if (col.GetNotNull()) { // SET NOT NULL
-                    column.NotNull = true;
-                } else { // DROP NOT NULL
-                    column.NotNull = false;
-                }
+                column.NotNull = col.GetNotNull();
+            }
+
+            if (isChangeSetNotNullInProgress) {
+                column.SetNotNullInProgress = col.GetSetNotNullInProgress();
             }
 
             if (columnFamily) {

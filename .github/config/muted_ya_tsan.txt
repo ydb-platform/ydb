@@ -297,6 +297,7 @@ ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grp
 ydb/tests/functional/backup Backup.UuidValue
 ydb/tests/functional/benchmarks_init py3test.[test_generator.py */*] chunk
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1
+ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_parts
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state_and_parts
 ydb/tests/functional/dstool py3test.sole chunk
@@ -761,13 +762,18 @@ ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbe
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_clickbench
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpcds
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpch
+ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.ERROR]
+ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.WARNING]
+ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.1.sql]
+ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.2.yql]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[second_query_set.join.sql]
+ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsv.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test
@@ -781,8 +787,11 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[18]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[1]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[20]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[21]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[22]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[2]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[4]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[5]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[6]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[7]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
@@ -974,6 +983,7 @@ ydb/tests/stress/ctas/tests py3test.sole chunk
 ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka_serverless/tests py3test.sole chunk
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kv/tests py3test.sole chunk
 ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[column]

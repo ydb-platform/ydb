@@ -329,7 +329,7 @@ public:
         const TKillProcessOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TString>, WriteCoreDump, (
+    MOCK_METHOD(TFuture<std::string>, WriteCoreDump, (
         const std::string& address,
         const TWriteCoreDumpOptions& options),
         (override));
@@ -339,7 +339,7 @@ public:
         const TWriteLogBarrierOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (
+    MOCK_METHOD(TFuture<std::string>, WriteOperationControllerCoreDump, (
         NJobTrackerClient::TOperationId operationId,
         const TWriteOperationControllerCoreDumpOptions& options),
         (override));
@@ -388,7 +388,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options),
         (override));
 

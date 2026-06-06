@@ -734,7 +734,7 @@ public:
         const TKillProcessOptions& options),
         (address, options))
 
-    DELEGATE_METHOD(TFuture<TString>, WriteCoreDump, (
+    DELEGATE_METHOD(TFuture<std::string>, WriteCoreDump, (
         const std::string& address,
         const TWriteCoreDumpOptions& options),
         (address, options))
@@ -744,7 +744,7 @@ public:
         const TWriteLogBarrierOptions& options),
         (address, options))
 
-    DELEGATE_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (
+    DELEGATE_METHOD(TFuture<std::string>, WriteOperationControllerCoreDump, (
         NJobTrackerClient::TOperationId operationId,
         const TWriteOperationControllerCoreDumpOptions& options),
         (operationId, options))
@@ -793,7 +793,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options),
         (component, address, type, comment, options))
 

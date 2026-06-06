@@ -2315,7 +2315,7 @@ TFuture<void> TClient::KillProcess(
     ThrowUnimplemented("KillProcess");
 }
 
-TFuture<TString> TClient::WriteCoreDump(
+TFuture<std::string> TClient::WriteCoreDump(
     const std::string& /*address*/,
     const TWriteCoreDumpOptions& /*options*/)
 {
@@ -2329,7 +2329,7 @@ TFuture<TGuid> TClient::WriteLogBarrier(
     ThrowUnimplemented("WriteLogBarrier");
 }
 
-TFuture<TString> TClient::WriteOperationControllerCoreDump(
+TFuture<std::string> TClient::WriteOperationControllerCoreDump(
     TOperationId /*operationId*/,
     const TWriteOperationControllerCoreDumpOptions& /*options*/)
 {
@@ -2433,7 +2433,7 @@ TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     EMaintenanceComponent component,
     const std::string& address,
     EMaintenanceType type,
-    const TString& comment,
+    const std::string& comment,
     const TAddMaintenanceOptions& options)
 {
     ValidateMaintenanceComment(comment);

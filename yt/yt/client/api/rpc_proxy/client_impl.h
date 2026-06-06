@@ -482,7 +482,7 @@ public:
         const std::string& address,
         const NApi::TKillProcessOptions& options) override;
 
-    TFuture<TString> WriteCoreDump(
+    TFuture<std::string> WriteCoreDump(
         const std::string& address,
         const NApi::TWriteCoreDumpOptions& options) override;
 
@@ -490,7 +490,7 @@ public:
         const std::string& address,
         const TWriteLogBarrierOptions& options) override;
 
-    TFuture<TString> WriteOperationControllerCoreDump(
+    TFuture<std::string> WriteOperationControllerCoreDump(
         NJobTrackerClient::TOperationId operationId,
         const NApi::TWriteOperationControllerCoreDumpOptions& options) override;
 
@@ -530,7 +530,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options) override;
 
     TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(

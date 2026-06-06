@@ -632,7 +632,7 @@ public:
 
     DELEGATE_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (
         NJobTrackerClient::TJobId jobId,
-        const std::optional<TString>& shellName,
+        const std::optional<std::string>& shellName,
         const NYson::TYsonString& parameters,
         const TPollJobShellOptions& options),
         (jobId, shellName, parameters, options))

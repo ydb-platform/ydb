@@ -3128,7 +3128,7 @@ void TPlan::CalcHotPath() {
             ui32 hotStageId = 0;
             ui64 hotStageCpu = 0;
             for (const auto& [stageId, cpu] : cpuPerStageTask) {
-                if (cpu > hotStageCpu) {
+                if (cpu >= hotStageCpu) {
                     hotStageCpu = cpu;
                     hotStageId = stageId;
                 }

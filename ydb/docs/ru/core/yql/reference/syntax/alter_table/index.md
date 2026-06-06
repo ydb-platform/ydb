@@ -17,5 +17,9 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 {% if backend_name == "YDB" and oss == true %}
 * Изменение [дополнительных параметров таблиц](set.md).
 {% endif %}
+<<<<<<< HEAD
 * [Запуск принудительного компакшена](compact.md).
 * [Выставление и сброс ограничения NOT NULL](not_null.md).
+=======
+* [Запуск принудительного компакшена](compact.md).
+>>>>>>> 0e0be1f8e7c (Documentation: add docs for ALTER TABLE table COMPACT (#42414))

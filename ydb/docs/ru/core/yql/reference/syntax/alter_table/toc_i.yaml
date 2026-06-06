@@ -9,4 +9,9 @@ items:
 - { name: SET,        href: set.md,             when: backend_name == "YDB"   }
 - { name: CHANGEFEED, href: changefeed.md,      when: feature_changefeed and backend_name == "YDB" }
 - { name: RENAME,     href: rename.md,          when: feature_map_tables      }
+<<<<<<< HEAD
 - { name: COMPACT,    href: compact.md,         when: backend_name == "YDB"   }
+=======
+- { name: FAMILY,     href: family.md,          when: backend_name == "YDB"   }
+- { name: COMPACT,    href: compact.md,         when: backend_name == "YDB"   }
+>>>>>>> 0e0be1f8e7c (Documentation: add docs for ALTER TABLE table COMPACT (#42414))

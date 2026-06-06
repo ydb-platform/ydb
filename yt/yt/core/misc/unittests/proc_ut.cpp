@@ -3,6 +3,8 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/system/process_id.h>
+
 namespace NYT {
 namespace {
 
@@ -90,7 +92,7 @@ TEST(TProcTest, TestParseMemoryMappings)
 
 TEST(TProcTest, TestGetSelfMemoryMappings)
 {
-    auto pid = GetCurrentProcessId();
+    auto pid = GetProcessId();
     auto memoryMappings = GetProcessMemoryMappings(pid);
 
     TMemoryMappingStatistics statistics;

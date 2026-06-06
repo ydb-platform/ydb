@@ -49,6 +49,7 @@
 #include <library/cpp/yt/string/raw_formatter.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
@@ -211,7 +212,7 @@ public:
             while (initializerThreadId == NThreading::InvalidThreadId) {
                 initializerThreadId = InitializerThreadId_.load(std::memory_order::relaxed);
             }
-            if (GetCurrentThreadId() == initializerThreadId) {
+            if (GetSystemThreadId() == initializerThreadId) {
                 // Recursive call -- bail out.
                 return;
             }
@@ -219,7 +220,7 @@ public:
             InitializationFinished_.Wait();
             return;
         }
-        InitializerThreadId_.store(GetCurrentThreadId(), std::memory_order::relaxed);
+        InitializerThreadId_.store(GetSystemThreadId(), std::memory_order::relaxed);
 
         // NB: Cannot place this logic inside ctor since it may boot up Compression threads unexpected
         // and these will try to access TLogManager instance causing a deadlock.
@@ -301,7 +302,7 @@ public:
 
         auto config = Config_.Acquire();
 
-        if (LoggingThread_->GetThreadId() == GetCurrentThreadId()) {
+        if (LoggingThread_->GetThreadId() == GetSystemThreadId()) {
             FlushWriters();
         } else {
             // Wait for all previously enqueued messages to be flushed

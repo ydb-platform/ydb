@@ -5,7 +5,7 @@
 Подробно будут разобраны операции:
 
 - [Векторный поиск](#векторный-поиск)
-  - [Подключение к {{ ydb-short-name }} {#connect-ydb}](#подключение-к--ydb-short-name--connect-ydb)
+  - [Подключение к {{ ydb-short-name }} {#connect-ydb}](#connect-ydb)
   - [Создание таблицы {#create-table}](#создание-таблицы-create-table)
   - [Вставка векторов {#insert-vectors}](#вставка-векторов-insert-vectors)
   - [Добавление индекса {#add-vector-index}](#добавление-индекса-add-vector-index)

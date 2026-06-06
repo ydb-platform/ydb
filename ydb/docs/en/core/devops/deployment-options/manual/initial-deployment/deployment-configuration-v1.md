@@ -7,7 +7,7 @@ Before deploying the system, be sure to perform the preparatory steps. Refer to 
 ## Prepare configuration files {#config}
 
 Prepare the {{ ydb-short-name }} configuration file depending on the topology you selected (see [topology selection](../../../deployment-options/ansible/initial-deployment/deployment-preparation.md#topology-select)). Examples for each supported topology are provided below in the tabs — select and use the one suitable for your case.
-Also, if you need to enable Kafka API for topics, add the ⟦C1⟧ section to the configuration file (see [Kafka API configuration](../../../reference/configuration/kafka_proxy_config)).
+Also, if you need to enable Kafka API for topics, add the kafka_proxy_config section to the configuration file (see [Kafka API configuration](../../../reference/configuration/kafka_proxy_config)).
 
 {% list tabs %}
 
@@ -668,7 +668,7 @@ After starting the static nodes, verify their operation through the built-in web
 2. Go to the **Nodes** tab
 3. Make sure all 3 static nodes are displayed in the list.
 
-! [Manual installation, running static nodes](%E2%9F%A6U1%E2%9F%A7)
+![Manual installation, running static nodes](../../_assets/manual_installation_1.png)
 
 ## Initialize the cluster {#initialize-cluster}
 
@@ -722,9 +722,9 @@ If the database is created successfully, the exit code of the command displayed 
 
 The command example above uses the following parameters:
 
-- `/Root` — the name of the root domain automatically generated during cluster initialization
-- `testdb` — the name of the database being created
-- `ssd:8` — specifies the storage pool for the database and the number of groups in it. The pool name (`ssd`) must match the disk type specified in the cluster configuration (for example, in `default_disk_type`) and is case-insensitive. The number after the colon is the number of allocated storage groups.
+- `/Root` - the name of the root domain automatically generated during cluster initialization
+- `testdb` - the name of the database being created
+- `ssd:8` - specifies the storage pool for the database and the number of groups in it. The pool name (`ssd`) must match the disk type specified in the cluster configuration (for example, in `default_disk_type`) and is case-insensitive. The number after the colon is the number of allocated storage groups.
 
 ## Start dynamic nodes {#start-dynnode}
 

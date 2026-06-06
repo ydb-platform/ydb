@@ -476,7 +476,7 @@ We do not recommend using the unsecured mode of {{ ydb-short-name }} either duri
 
 The installation procedure described above provides for deploying {{ ydb-short-name }} in the standard secure mode.
 
-The unsecured operation mode of {{ ydb-short-name }} is designed for test tasks, primarily related to software development and testing {{ ydb-short-name }}. In unsecured mode:
+The unsecured operation mode of {{ ydb-short-name }} is designed for test tasks, primarily related to the development and testing of {{ ydb-short-name }} software. In unsecured mode:
 
 * Traffic between cluster nodes, as well as between applications and the cluster, uses unencrypted connections.
 * user authentication is not used (enabling authentication without traffic encryption is pointless, since login and password would be transmitted over the network in plain text in such a configuration).

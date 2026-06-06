@@ -66,12 +66,24 @@ TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
         return {};
     }
 
-    if(IUSetDiff(leftKeys, rightKeys).empty()) {
-        return rightKeys;
+    TVector<TInfoUnit> leftJoinKeys;
+    TVector<TInfoUnit> rightJoinKeys;
+
+    for (const auto & [l, r] : join->JoinKeys) {
+        leftJoinKeys.push_back(l);
+        rightJoinKeys.push_back(r);
     }
-    else if (IUSetDiff(rightKeys, leftKeys).empty()) {
+
+    // If right join keys covers all the keys of the right hand side,
+    // we don't need the key of the right side at all
+    if (IUIsSubset(rightKeys, rightJoinKeys)) {
         return leftKeys;
     }
+    // Same for the left side
+    else if(IUIsSubset(leftKeys, leftJoinKeys)) {
+        return rightKeys;
+    }
+
     else {
         auto concatKeys = leftKeys;
         AddUnique<TInfoUnit>(rightKeys, concatKeys);
@@ -371,7 +383,14 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     // where the group-by list is empty, then we always produce a single tuple
     Props.Metadata->LogicalCard = KeyColumns.empty() ? ELogicalCardinality::One : inputMetadata.LogicalCard;
     Props.Metadata->Type = EStatisticsType::BaseTable;
-    Props.Metadata->KeyColumns = KeyColumns;
+
+    // If the aggregate just adds more columns to existing key columns, use original key columns
+    if (IUSetDiff(inputMetadata.KeyColumns, KeyColumns).empty())
+    {
+        Props.Metadata->KeyColumns = inputMetadata.KeyColumns;
+    } else {
+        Props.Metadata->KeyColumns = KeyColumns;
+    }
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
     Props.Metadata->ShuffledByColumns = {};
@@ -454,7 +473,6 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         FindCardHint(unionOfAliases, *hints.BytesHints));
 
     Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
-    Props.Metadata->KeyColumns = ComputeKeysAfterJoin(this);
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 
@@ -466,6 +484,8 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
+
+    Props.Metadata->KeyColumns = ComputeKeysAfterJoin(this);
 
     NKqp::EJoinAlgoType algo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
     if (algo == NKqp::EJoinAlgoType::MapJoin) {

@@ -21,6 +21,8 @@ class TestViewer(object):
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
+            'enable_local_bloom_filter_index': True,
+            'enable_local_index_as_scheme_object': True,
             'enable_extra_sids_control_for_http_viewer': True,
             },
             enable_static_auth=True)
@@ -1203,6 +1205,7 @@ class TestViewer(object):
             res = cls.replace_values_by_key(resp, ['CreateTimestamp',
                                                    'WriteTimestamp',
                                                    'ProducerId',
+                                                   'Ip',
                                                    ])
             res = cls.replace_types_by_key(res, ['TimestampDiff'])
             logging.info(res)
@@ -2062,4 +2065,43 @@ class TestViewer(object):
                 'datashards_delta': count_tablets(after_drop_node_tablets, 'DataShard') - baseline_datashards,
                 'non_green_datashards': non_green_datashards(after_drop_node_tablets),
             },
+        }
+
+    @classmethod
+    def test_viewer_describe_column_table_local_index(cls):
+        cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': '''CREATE TABLE TestColumnTable (
+                `timestamp` Timestamp NOT NULL,
+                `data` Utf8,
+                PRIMARY KEY (`timestamp`),
+                INDEX bloom_data LOCAL USING bloom_filter ON (`data`) WITH (false_positive_probability = 0.05)
+            ) WITH (STORE = COLUMN)''',
+            'schema': 'multi'
+        })
+
+        describe_table = cls.call_viewer("/viewer/describe", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db + '/TestColumnTable',
+            'subs': '1',
+        })
+
+        table_children = [
+            {'Name': c['Name'], 'PathType': c['PathType']}
+            for c in describe_table['PathDescription']['Children']
+        ]
+
+        describe_root = cls.call_viewer("/viewer/describe", {
+            'path': cls.domain_name,
+            'subs': '1',
+        })
+
+        root_child_names = sorted([
+            c['Name'] for c in describe_root['PathDescription']['Children']
+        ])
+
+        return {
+            'table_children_exist': describe_table['PathDescription']['Self']['ChildrenExist'],
+            'table_children': table_children,
+            'root_child_names': root_child_names,
         }

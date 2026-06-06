@@ -5,16 +5,9 @@
 #include <unistd.h>
 
 extern "C" {
-    void __llvm_profile_initialize_file(void);
-    int __llvm_profile_write_file(void);
     void __llvm_profile_set_filename(const char* filename_pattern);
 
     // there might no llmv rt, for example for the targets from contrib
-    __attribute__((weak)) int __llvm_profile_write_file(void) {
-        return 0;
-    }
-    __attribute__((weak)) void __llvm_profile_initialize_file(void) {
-    }
     __attribute__((weak)) void __llvm_profile_set_filename(const char*) {
     }
 }
@@ -115,12 +108,4 @@ void parseAndSetFilename() {
 
 void __attribute__((constructor)) premain() {
     parseAndSetFilename();
-    if (getenv("YA_COVERAGE_DUMP_PROFILE_AND_EXIT")) {
-        __llvm_profile_initialize_file();
-        int rc = __llvm_profile_write_file();
-        if (!rc && getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE")) {
-            rc = atoi(getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE"));
-        }
-        _Exit(rc);
-    }
 }

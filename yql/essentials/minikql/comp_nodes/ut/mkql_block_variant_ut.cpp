@@ -198,7 +198,7 @@ std::shared_ptr<arrow::ArrayData> DoSerializerRoundtrip(
     deserializer->LoadMetadata([&]() -> ui64 { return metadata[metaIdx++]; });
     auto restored = deserializer->LoadArray(buffer, blockLen, TMaybe<size_t>(0));
 
-    ValidateDatum(restored, Nothing(), blockType, NYql::NUdf::EValidateDatumMode::Expensive);
+    ValidateDatum(restored, Nothing(), blockType, NYql::EDatumValidationMode::Expensive);
     UNIT_ASSERT_VALUES_EQUAL(restored->length, arrayData->length);
     return restored;
 }

@@ -1330,6 +1330,9 @@ enum EIndexType {
     EIndexTypeGlobalFulltextPlain = 5;
     EIndexTypeGlobalFulltextRelevance = 6;
     EIndexTypeGlobalJson = 7;
+    EIndexTypeLocalBloomFilter = 8;
+    EIndexTypeLocalBloomNgramFilter = 9;
+    EIndexTypeLocalMinMax = 10;
 }
 
 enum EIndexState {
@@ -1369,6 +1372,8 @@ message TIndexDescription {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
         TFulltextIndexDescription FulltextIndexDescription = 12;
+        TBloomFilter BloomFilterDescription = 13;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 14;
     }
 }
 
@@ -1382,6 +1387,8 @@ message TIndexCreationConfig {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
         TFulltextIndexDescription FulltextIndexDescription = 8;
+        TBloomFilter BloomFilterDescription = 9;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 10;
     }
 }
 
@@ -1399,6 +1406,12 @@ message TGenericTxInFlyExtraData {
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
+    repeated string KeyColumnNames = 4;
+    optional EIndexType Type = 5;
+    oneof SpecializedIndexDescription {
+        TBloomFilter BloomFilterDescription = 8;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+    }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
 }
 
@@ -2174,6 +2187,9 @@ enum EPathSubType {
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
     EPathSubTypeFulltextIndexImplTable = 5;
     EPathSubTypeJsonIndexImplTable = 6;
+    EPathSubTypeLocalBloomFilterIndex = 7;
+    EPathSubTypeLocalBloomNgramFilterIndex = 8;
+    EPathSubTypeLocalMinMaxIndex = 9;
 }
 
 enum EPathState {

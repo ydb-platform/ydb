@@ -172,15 +172,44 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx);
     YQL_ENSURE(indexes);
 
+    auto idxNeedsKqpEffect = [](const std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
+        switch (x.second->Type) {
+            case TIndexDescription::EType::GlobalSync:
+            case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalSyncUnique:
+                return false;
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalFulltextPlain:
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson:
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+            case TIndexDescription::EType::LocalMinMax:
+                return true;
+        }
+        Y_UNREACHABLE();
+        return false;
+    };
+    const bool needsKqpEffect = std::any_of(indexes.begin(), indexes.end(), idxNeedsKqpEffect);
+
+    const bool isSink = NeedSinks(table, kqpCtx);
+
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+
     // Skip lookup means that the input already has all required columns and we only need to project them
     auto settings = TKqpDeleteRowsIndexSettings::Parse(del);
 
-    if (settings.SkipLookup) {
-        auto lookupKeys = ProjectColumns(del.Input(), pk, ctx);
+    if (settings.SkipLookup || (useStreamIndex && !needsKqpEffect)) {
+        // Stream Index with DELETE WHERE can avoid lookup in this case.
+        TExprBase lookupKeys = (settings.SkipLookup && useStreamIndex)
+            ? del.Input()
+            : ProjectColumns(del.Input(), pk, ctx);
         return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
             return ProjectColumns(del.Input(), indexTableColumns, ctx);
         }, ctx, kqpCtx);
     }
+
+    AFL_ENSURE(!useStreamIndex || needsKqpEffect);
 
     auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
         .Args({"stub"})

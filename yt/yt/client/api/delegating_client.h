@@ -449,13 +449,13 @@ public:
 
     // Files
     DELEGATE_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (
-        const TString& md5,
+        const std::string& md5,
         const TGetFileFromCacheOptions& options),
         (md5, options))
 
     DELEGATE_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const TPutFileToCacheOptions& options),
         (path, expectedMD5, options))
 

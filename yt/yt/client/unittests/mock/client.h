@@ -581,13 +581,13 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (
-        const TString& md5,
+        const std::string& md5,
         const TGetFileFromCacheOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const TPutFileToCacheOptions& options),
         (override));
 

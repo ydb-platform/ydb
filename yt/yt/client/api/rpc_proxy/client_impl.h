@@ -214,12 +214,12 @@ public:
 
     // Files.
     TFuture<NApi::TGetFileFromCacheResult> GetFileFromCache(
-        const TString& md5,
+        const std::string& md5,
         const NApi::TGetFileFromCacheOptions& options) override;
 
     TFuture<NApi::TPutFileToCacheResult> PutFileToCache(
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.

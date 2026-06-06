@@ -1879,7 +1879,7 @@ TFuture<void> TClient::DumpJobProxyLog(
 }
 
 TFuture<TGetFileFromCacheResult> TClient::GetFileFromCache(
-    const TString& md5,
+    const std::string& md5,
     const TGetFileFromCacheOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1900,7 +1900,7 @@ TFuture<TGetFileFromCacheResult> TClient::GetFileFromCache(
 
 TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
     const TYPath& path,
-    const TString& expectedMD5,
+    const std::string& expectedMD5,
     const TPutFileToCacheOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

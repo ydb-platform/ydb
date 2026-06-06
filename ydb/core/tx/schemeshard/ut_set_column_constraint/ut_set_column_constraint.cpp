@@ -816,4 +816,67 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         CheckColumnsNotNull(runtime, tablePath, {{"value", true}});
     }
+
+    Y_UNIT_TEST(NullDataValidationFailsPreservesOtherColumns) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"          Type: "Uint32" }
+              Columns { Name: "notnull_col"  Type: "Utf8"   NotNull: true }
+              Columns { Name: "nullable_col" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        CheckColumnsNotNull(runtime, tablePath, {
+            {"notnull_col",  true},
+            {"nullable_col", false},
+        });
+
+        {
+            TString notnullVal = "hello";
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1),
+                TCell(notnullVal.data(), notnullVal.size()),
+                TCell() // NULL
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2, 3}, TSerializedCellMatrix(cells, 1, 3), true);
+        }
+
+        ui64 setConstraintTxId = ++txId;
+        auto response = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"notnull_col", "nullable_col"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response.ShortDebugString());
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        CheckColumnsNotNull(runtime, tablePath, {
+            {"notnull_col",  true},
+            {"nullable_col", false},
+        });
+    }
+
 } // Y_UNIT_TEST_SUITE(SetColumnConstraintTest)

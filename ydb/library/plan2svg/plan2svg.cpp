@@ -1,5 +1,6 @@
 #include "plan2svg.h"
 
+#include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 
@@ -91,23 +92,23 @@ TString FormatInteger(ui64 bytes) {
     return FormatIntegerValue(bytes);
 }
 
-TString FormatTimeMs(ui64 time, bool shortFormat) {
-    if (shortFormat) {
-        time /= 10;
-        return Sprintf("%lu.%.2lu", time / 100, time % 100);
+TString FormatTimeMs(ui64 time) {
+    time /= 10;
+    auto sec = time / 100;
+    if (sec >= 3600) {
+        auto hours = sec / 3600;
+        sec = sec % 3600;
+        return Sprintf("%lu:%02lu:%02lu", hours, sec / 60, sec % 60);
+    } else if (sec < 10) {
+        return Sprintf("0:%02lu.%02lu", sec, time % 100);
     } else {
-        time /= 1000;
-        return Sprintf("%lu:%.2lu", time / 60, time % 60);
+        return Sprintf("%lu:%02lu", sec / 60, sec % 60);
     }
 }
 
-TString FormatTimeMs(ui64 time) {
-    return FormatTimeMs(time, time < 60000);
-}
-
-TString FormatTimeAgg(const TAggregation& agg, bool shortFormat) {
+TString FormatTimeAgg(const TAggregation& agg) {
     TStringBuilder result;
-    result << FormatTimeMs(agg.Min, shortFormat) << " | " << FormatTimeMs(agg.Avg, shortFormat) << " | " << FormatTimeMs(agg.Max, shortFormat);
+    result << FormatTimeMs(agg.Min) << " | " << FormatTimeMs(agg.Avg) << " | " << FormatTimeMs(agg.Max);
     return result;
 }
 
@@ -695,7 +696,7 @@ void TPlan::ResolveCteRefs() {
                 for (const auto& subNode : inputNode->GetArray()) {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(it->second->PlanNodeId) == nameNode->GetStringSafe()) {
-                            if (auto* pushNode = subNode.GetValueByPath("Push")) {
+                            if (auto* pushNode = subNode.GetValueByPath("Pop")) {
                                 if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
                                     cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
                                         *bytesNode, 0, 0,
@@ -737,7 +738,7 @@ void TPlan::ResolveCteRefs() {
                 for (const auto& subNode : outputNode->GetArray()) {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(cteRef.second->Stage.PlanNodeId) == nameNode->GetStringSafe()) {
-                            if (auto* popNode = subNode.GetValueByPath("Pop")) {
+                            if (auto* popNode = subNode.GetValueByPath("Push")) {
                                 if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
                                     cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
                                         *bytesNode, 0, 0,
@@ -1195,7 +1196,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     }
                                 }
                                 if (!ingressNode) {
-                                    ingressNode = ingress0.GetValueByPath("Push");
+                                    ingressNode = ingress0.GetValueByPath("Pop");
                                 }
                                 if (ingressNode) {
                                     if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
@@ -1304,7 +1305,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 if (auto* nameNode = subNode.GetValueByPath("Name")) {
                     auto name = nameNode->GetStringSafe();
                     if ((outputConnection && name == ToString(outputConnection->Stage.PlanNodeId)) || name == "RESULT") {
-                        if (auto* popNode = subNode.GetValueByPath("Pop")) {
+                        if (auto* popNode = subNode.GetValueByPath("Push")) {
                             if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
                                 stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
                                     *bytesNode, 0, 0,
@@ -1424,7 +1425,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 for (const auto& subNode : inputNode->GetArray()) {
                                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                                         if (planNodeId == nameNode->GetStringSafe()) {
-                                            if (auto* pushNode = subNode.GetValueByPath("Push")) {
+                                            if (auto* pushNode = subNode.GetValueByPath("Pop")) {
                                                 if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
                                                     connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
                                                         *bytesNode, 0, 0,
@@ -1544,7 +1545,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 }
                             }
                             if (!ingressNode) {
-                                ingressNode = ingress0.GetValueByPath("Push");
+                                ingressNode = ingress0.GetValueByPath("Pop");
                             }
                             if (ingressNode) {
                                 if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
@@ -1592,7 +1593,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         // CTE Refs are NOT processed yet, so we don't know their Min/MaxTime - parse it explicitly
         if (inputNode) {
             for (const auto& subNode : inputNode->GetArray()) {
-                if (auto* pushNode = subNode.GetValueByPath("Push")) {
+                if (auto* pushNode = subNode.GetValueByPath("Pop")) {
                     if (auto* firstMessageMaxNode = pushNode->GetValueByPath("FirstMessageMs.Min")) {
                         Min0(stage->MinTime, firstMessageMaxNode->GetIntegerSafe());
                     }
@@ -1755,7 +1756,7 @@ void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, co
     auto lastMax = lastMessage.Max * w / MaxTime;
 
     background
-        << "<g><title>" << title << ", Duration: " << FormatTimeMs(lastMessage.Max - firstMessage.Min) << " (" << FormatTimeAgg(firstMessage, lastMessage.Max < 60000) << " - " << FormatTimeAgg(lastMessage, lastMessage.Max < 60000) << ")</title>";
+        << "<g><title>" << title << ", Duration: " << FormatTimeMs(lastMessage.Max - firstMessage.Min) << " (" << FormatTimeAgg(firstMessage) << " - " << FormatTimeAgg(lastMessage) << ")</title>";
 
     if (backgroundRect) {
         background << SvgRect(Config.TimelineLeft, y, Config.TimelineWidth, h, "background");
@@ -2249,6 +2250,58 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         s->_Builder
             << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, s->External ? "E" : ToString(s->PhysicalStageId));
 
+        // timeline backgrounds
+        {
+            ui32 y0 = INTERNAL_GAP_Y;
+            if (s->EgressBytes) {
+                if (s->External) {
+                    s->_Builder
+                    << "<g data-group='g" << StageToExternalConnection[s.get()]->GroupId << "' class='selectable'><title>Egress</title>" << Endl
+                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+                    << "</g>" << Endl;
+                }
+                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+            }
+            if (s->OutputBytes) {
+                if (s->OutputPlanNodeId) {
+                    s->_Builder
+                    << "<g data-group='g" << NodeToConnection[s->OutputPlanNodeId]->GroupId << "' class='selectable'><title>Output</title>" << Endl
+                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+                    << "</g>" << Endl;
+                }
+                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+            }
+            // memory
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+            // cpu
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+            for (auto& c : s->Connections) {
+                if (c->InputBytes) {
+                    s->_Builder
+                    << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl
+                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+                    << "</g>" << Endl;
+                    y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+                }
+            }
+            if (s->IngressBytes) {
+                if (s->IngressConnection) {
+                    s->_Builder
+                    << "<g data-group='g" << s->IngressConnection->GroupId << "' class='selectable'><title>Ingress</title>" << Endl
+                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+                    << "</g>" << Endl;
+                }
+                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+            }
+        }
+
+        for (auto& region : s->HotRegions) {
+            auto px = Config.TimelineLeft + region.first * (Config.TimelineWidth - timelineDelta) / maxTime;
+            auto pw = (region.second - region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
+            s->_Builder
+            << SvgRect(px, 0, pw, "100%", "hot");
+        }
+
         ui32 y0 = INTERNAL_GAP_Y;
 
         auto tx0 = Config.TimelineLeft;
@@ -2278,7 +2331,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             TStringBuilder connCanvas;
 
-            PrintTimeline(builder, connCanvas, title, s->EgressBytes->FirstMessage, s->EgressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.EgressMedium, s->External);
+            PrintTimeline(builder, connCanvas, title, s->EgressBytes->FirstMessage, s->EgressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.EgressMedium, false);
 
             if (!s->EgressBytes->WaitTime.Deriv.empty()) {
                 PrintWaitTime(builder, s->EgressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.EgressLight);
@@ -2347,7 +2400,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             TStringBuilder connCanvas;
 
-            PrintTimeline(builder, connCanvas, title, s->OutputBytes->FirstMessage, s->OutputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.OutputMedium, s->OutputPlanNodeId);
+            PrintTimeline(builder, connCanvas, title, s->OutputBytes->FirstMessage, s->OutputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.OutputMedium, false);
 
             if (!s->OutputBytes->WaitTime.Deriv.empty()) {
                 PrintWaitTime(builder, s->OutputBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.OutputLight);
@@ -2726,7 +2779,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
                 TStringBuilder connCanvas;
 
-                PrintTimeline(s->_Builder, connCanvas, title, c->InputBytes->FirstMessage, c->InputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.InputMedium, true);
+                PrintTimeline(s->_Builder, connCanvas, title, c->InputBytes->FirstMessage, c->InputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.InputMedium, false);
 
                 if (!c->InputBytes->WaitTime.Deriv.empty()) {
                     PrintWaitTime(s->_Builder, c->InputBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.InputLight);
@@ -2770,7 +2823,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             TStringBuilder connCanvas;
 
-            PrintTimeline(builder, connCanvas, title, s->IngressBytes->FirstMessage, s->IngressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressMedium, s->IngressConnection);
+            PrintTimeline(builder, connCanvas, title, s->IngressBytes->FirstMessage, s->IngressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressMedium, false);
 
             if (!s->IngressBytes->WaitTime.Deriv.empty()) {
                 PrintWaitTime(builder, s->IngressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressLight);
@@ -3031,6 +3084,68 @@ void TPlan::PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta) 
     builder << "</svg>" << Endl;
 }
 
+struct TVS {
+    ui64 Time;
+    ui64 Value;
+    ui32 StageId;
+};
+
+void TPlan::CalcHotPath() {
+    std::vector<TVS> cpuTimes;
+    std::unordered_map<ui32, TStage*> StageIdToStage;
+    for (auto s : Stages) {
+        if (!s->External && s->CpuTime && s->Tasks && !s->CpuTime->History.Values.empty()) {
+            auto stageId = s->PhysicalStageId;
+            StageIdToStage.emplace(stageId, s.get());
+            for (const auto& [t, v] : s->CpuTime->History.Values) {
+                cpuTimes.push_back(TVS{.Time = t, .Value = v / s->Tasks, .StageId = stageId});
+            }
+            cpuTimes.push_back(TVS{.Time = s->CpuTime->History.Values.back().first + 1, .Value = 0, .StageId = stageId});
+        }
+    }
+    if (cpuTimes.size() < 2) {
+        return;
+    }
+    std::sort(cpuTimes.begin(), cpuTimes.end(), [](const TVS& a, const TVS& b) { return a.Time < b.Time; });
+    auto first = true;
+    ui32 currentStageId = 0;
+    ui64 leftTime = 0;
+    std::unordered_map<ui32, ui64> cpuPerStageTask;
+    for (const auto& tvs : cpuTimes) {
+        if (cpuPerStageTask.contains(tvs.StageId)) {
+            cpuPerStageTask[tvs.StageId] = tvs.Value;
+        } else {
+            cpuPerStageTask.emplace(tvs.StageId, tvs.Value);
+        }
+        if (first) {
+            currentStageId = tvs.StageId;
+            leftTime = tvs.Time;
+            first = false;
+        } else {
+            if (leftTime == tvs.Time) {
+                continue;
+            }
+            ui32 hotStageId = 0;
+            ui32 hotStageCpu = 0;
+            for (const auto& [stageId, cpu] : cpuPerStageTask) {
+                if (cpu > hotStageCpu) {
+                    hotStageCpu = cpu;
+                    hotStageId = stageId;
+                }
+            }
+            if (currentStageId != hotStageId) {
+                StageIdToStage.at(currentStageId)->HotRegions.emplace_back(leftTime, tvs.Time);
+                currentStageId = hotStageId;
+                leftTime = tvs.Time;
+            }
+        }
+    }
+    auto& last = cpuTimes.back();
+    if (last.Time != leftTime) {
+        StageIdToStage.at(currentStageId)->HotRegions.emplace_back(leftTime, last.Time);
+    }
+}
+
 TColorPalette::TColorPalette() {
     StageMain     = "var(--stage-main, #F2F2F2)";
     StageClone    = "var(--stage-clone, #D9D9D9)";
@@ -3147,6 +3262,10 @@ void TPlanVisualizer::PostProcessPlans() {
         MaxTime = std::max(MaxTime, p->TimeOffset + p->MaxTime);
         UpdateTime = std::max(UpdateTime, p->TimeOffset + p->UpdateTime);
     }
+    // Calc hot path
+    for (auto& p : Plans) {
+        p->CalcHotPath();
+    }
 }
 
 TString TPlanVisualizer::PrintSvgSafe() {
@@ -3190,12 +3309,17 @@ TString TPlanVisualizer::PrintSvg() {
     auto x = Config.TimelineLeft + INTERNAL_GAP_X;
     auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
 
-    for (auto plan : Plans) {
-        for (ui64 t = 0; t <= maxSec; t += deltaSec) {
-            ui64 x1 = t * w * 1000 / MaxTime;
-            auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
-            plan->SummaryBuilder << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, timeLabel);
+    for (ui64 t = 0; t <= maxSec; t += deltaSec) {
+        ui64 x1 = t * w * 1000 / MaxTime;
+        TString timeLabel = TStringBuilder()
+            << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
+            << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, Sprintf("%lu:%.2lu", t / 60, t % 60)) << Endl
+            << "</g>" << Endl;
+        for (auto plan : Plans) {
+            plan->SummaryBuilder << timeLabel;
         }
+    }
+    for (auto plan : Plans) {
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
 
@@ -3269,6 +3393,7 @@ TString TPlanVisualizer::PrintSvg() {
         << "  rect.stage { stroke-width:0; fill:" << Config.Palette.StageMain << "; }" << Endl
         << "  rect.clone { stroke-width:0; fill:" << Config.Palette.StageClone << "; }" << Endl
         << "  rect.blocks { stroke-width:0; fill:" << Config.Palette.BlockMedium << "; }" << Endl
+        << "  rect.hot { stroke-width:0; fill:" << Config.Palette.StageTextHighlight << "; opacity:0.3; }" << Endl
         << "  .texts { text-anchor:start; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .textm { text-anchor:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .texte { text-anchor:end; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl

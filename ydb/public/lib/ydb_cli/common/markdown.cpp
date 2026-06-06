@@ -18,11 +18,17 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
+// Markdown treats spaces and tabs alike as horizontal whitespace; one predicate keeps marker
+// detection (TrimSpaces/IsHeading) and marker stripping consistent.
+bool IsSpaceOrTab(char c) {
+    return c == ' ' || c == '\t';
+}
+
 TStringBuf TrimSpaces(TStringBuf s) {
-    while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) {
+    while (!s.empty() && IsSpaceOrTab(s.front())) {
         s.Skip(1);
     }
-    while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) {
+    while (!s.empty() && IsSpaceOrTab(s.back())) {
         s.Chop(1);
     }
     return s;
@@ -109,15 +115,15 @@ void RemovePairedEmphasis(TString& s, char marker) {
 // inline, where backticks quote identifiers, so they must survive verbatim. Used for prose.
 TString StripInlineMarkdownKeepStyles(TStringBuf line) {
     size_t start = 0;
-    while (start < line.size() && line[start] == ' ') {
+    while (start < line.size() && IsSpaceOrTab(line[start])) {
         ++start;
     }
 
     bool strippedBlock = false;
-    // Blockquote markers: '>' optionally followed by a space, possibly repeated for nesting.
+    // Blockquote markers: '>' optionally followed by a space or tab, possibly repeated for nesting.
     while (start < line.size() && line[start] == '>') {
         ++start;
-        if (start < line.size() && line[start] == ' ') {
+        if (start < line.size() && IsSpaceOrTab(line[start])) {
             ++start;
         }
         strippedBlock = true;
@@ -132,7 +138,7 @@ TString StripInlineMarkdownKeepStyles(TStringBuf line) {
         strippedBlock = true;
     }
 
-    // Keep the original leading spaces unless a block marker was stripped.
+    // Keep the original leading whitespace unless a block marker was stripped.
     TString result(strippedBlock ? line.substr(start) : line);
     RemovePairedEmphasis(result, '*'); // italic; keeps "SELECT *" and '**' bold markers intact
     RemovePairedEmphasis(result, '_'); // italic; keeps snake_case identifiers intact

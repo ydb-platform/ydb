@@ -107,6 +107,27 @@ Y_UNIT_TEST_SUITE(MarkdownToElementTests) {
         AssertNotContains(out, ">");
     }
 
+    Y_UNIT_TEST(TabIndentedHeadingStripsMarker) {
+        // A tab-indented heading is still detected (TrimSpaces tolerates tabs), so its '#' marker
+        // must be stripped too, not rendered raw.
+        const TString out = RenderMarkdown("\t# Section title");
+        AssertContains(out, "Section title");
+        AssertNotContains(out, "#");
+    }
+
+    Y_UNIT_TEST(TabIndentedBlockquoteStripsMarker) {
+        const TString out = RenderMarkdown("\t> quoted line");
+        AssertContains(out, "quoted line");
+        AssertNotContains(out, ">");
+    }
+
+    Y_UNIT_TEST(BlockquoteTabAfterMarkerStripped) {
+        // '>' followed by a tab must be fully consumed, like '>' followed by a space.
+        const TString out = RenderMarkdown(">\tquoted line");
+        AssertContains(out, "quoted line");
+        AssertNotContains(out, ">");
+    }
+
     Y_UNIT_TEST(TableIsRenderedWithBorders) {
         const TString out = RenderMarkdown(
             "| Name | Age |\n"

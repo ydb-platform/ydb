@@ -14,6 +14,7 @@ SRCS(
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
     logical_output_pruning.cpp
+    inline_generic_in_exists_subplan.cpp
     peephole_predicate.cpp
     map/projection_pruning.cpp
     map/projection_pruning_helpers.cpp

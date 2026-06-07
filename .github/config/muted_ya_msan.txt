@@ -4,7 +4,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirro
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
 ydb/core/blobstorage/ut_blobstorage/ut_bridge unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferWithRestarts
 ydb/core/blobstorage/ut_blobstorage/ut_donor Donor.ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestDisabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestEnabling
@@ -220,7 +219,6 @@ ydb/tests/functional/api test_read_table.py.TestReadTableWithTabletKills.test_re
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
-ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/sqs/cloud test_common.py.TestCommonYandexWithPath.test_private_create_queue[tables_format_v0-fifo]
 ydb/tests/functional/sqs/cloud test_common.py.TestCommonYandexWithPath.test_private_create_queue[tables_format_v0-std]
 ydb/tests/functional/sqs/cloud test_common.py.TestCommonYandexWithPath.test_private_create_queue[tables_format_v1-fifo]

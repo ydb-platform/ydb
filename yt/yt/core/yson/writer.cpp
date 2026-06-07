@@ -257,7 +257,7 @@ void TYsonWriter::OnDoubleScalar(double value)
         char buf[256];
         auto str = TStringBuf(buf, NYT::NDetail::FloatToStringWithNanInf(value, buf, sizeof(buf)));
         Stream_->Write(str);
-        if (str.find('.') == TString::npos && str.find('e') == TString::npos && std::isfinite(value)) {
+        if (str.find('.') == std::string::npos && str.find('e') == std::string::npos && std::isfinite(value)) {
             Stream_->Write(".");
         }
     }

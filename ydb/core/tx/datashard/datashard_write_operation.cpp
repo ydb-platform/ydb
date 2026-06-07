@@ -162,6 +162,11 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
             for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx) {
                 const TCell& cell = Matrix.GetCell(rowIdx, colIdx);
                 if (cell.IsNull()) {
+                    if (col->SetNotNullInProgress) {
+                        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+                            << "NULL value is not allowed for column " << columnTag
+                            << ": `SET NOT NULL` operation is currently in progress for this column"};
+                    }
                     return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "NULL value for NON NULL column " << columnTag};
                 }
             }
@@ -175,6 +180,11 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         auto columnIdsSet = THashSet<ui32>(ColumnIds.begin(), ColumnIds.end());
         for (const auto& [id, column] : tableInfo.Columns) {
             if ((column.NotNull || column.SetNotNullInProgress) && !columnIdsSet.contains(id)) {
+                if (column.SetNotNullInProgress) {
+                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+                        << "Missing inserted values for column " << id
+                        << ": `SET NOT NULL` operation is currently in progress for this column"};
+                }
                 return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Missing inserted values for NON NULL column " << id};
             }
         }

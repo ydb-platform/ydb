@@ -978,18 +978,30 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     if (!upsertSettings.IsUpdate) {
         for (auto& [name, meta] : table.second->Metadata->Columns) {
             if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                    << "Missing not null column in input: " << name
-                    << ". All not null columns should be initialized"));
+                if (meta.SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                        << "Missing column in input: " << name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                        << "Missing not null column in input: " << name
+                        << ". All not null columns should be initialized"));
+                }
                 return TStatus::Error;
             }
 
 
             if ((meta.NotNull || meta.SetNotNullInProgress) && rowType->FindItemType(name)->HasOptionalOrNull()) {
                 if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
-                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                        << "Can't set optional or NULL value to not null column: " << name
-                        << ". All not null columns should be initialized"));
+                    if (meta.SetNotNullInProgress) {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set optional or NULL value to column: " << name
+                            << ". `SET NOT NULL` operation is currently in progress for this column"));
+                    } else {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set optional or NULL value to not null column: " << name
+                            << ". All not null columns should be initialized"));
+                    }
                     return TStatus::Error;
                 }
             }
@@ -1055,17 +1067,29 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 
     for (auto& [name, meta] : table.second->Metadata->Columns) {
         if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                << "Missing not null column in input: " << name
-                << ". All not null columns should be initialized"));
+            if (meta.SetNotNullInProgress) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                    << "Missing column in input: " << name
+                    << ". `SET NOT NULL` operation is currently in progress for this column"));
+            } else {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                    << "Missing not null column in input: " << name
+                    << ". All not null columns should be initialized"));
+            }
             return TStatus::Error;
         }
 
         if ((meta.NotNull || meta.SetNotNullInProgress) && rowType->FindItemType(name)->HasOptionalOrNull()) {
             if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set optional or NULL value to not null column: " << name
-                    << ". All not null columns should be initialized"));
+                if (meta.SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to column: " << name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to not null column: " << name
+                        << ". All not null columns should be initialized"));
+                }
                 return TStatus::Error;
             }
         }
@@ -1135,8 +1159,14 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         YQL_ENSURE(column);
         if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
             if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set optional or NULL value to not null column: " << column->Name));
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to column: " << column->Name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to not null column: " << column->Name));
+                }
                 return TStatus::Error;
             }
         }

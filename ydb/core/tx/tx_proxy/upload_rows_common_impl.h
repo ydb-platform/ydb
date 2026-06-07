@@ -1475,7 +1475,12 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
         }
 
         if ((fd.NotNull || fd.SetNotNullInProgress) && cells.back().IsNull()) {
-            err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
+            if (fd.SetNotNullInProgress) {
+                err = TStringBuilder() << "Received NULL value for column " << fd.ColName
+                    << ": `SET NOT NULL` operation is currently in progress for this column";
+            } else {
+                err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
+            }
             return false;
         }
     }

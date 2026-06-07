@@ -763,7 +763,7 @@ private:
         THashSet<TString> generateColumnsIfInsertColumnsSet;
 
         for(const auto& [name, info] : table->Metadata->Columns) {
-            if ((info.IsBuildInProgress || info.SetNotNullInProgress) && rowType->FindItem(name)) {
+            if (info.IsBuildInProgress && rowType->FindItem(name)) {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
                     << "Column is under build operation, write operation is not allowed to column: " << name
                     << " for table: " << table->Metadata->Name));
@@ -796,9 +796,15 @@ private:
             for (const auto& [name, meta] : table->Metadata->Columns) {
                 if (meta.NotNull || meta.SetNotNullInProgress) {
                     if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                            << "Missing not null column in input: " << name
-                            << ". All not null columns should be initialized"));
+                        if (meta.SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                                << "Missing column in input: " << name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                                << "Missing not null column in input: " << name
+                                << ". All not null columns should be initialized"));
+                        }
                         return TStatus::Error;
                     }
 
@@ -809,9 +815,15 @@ private:
                     }
 
                     if (itemType && itemType->HasOptionalOrNull()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                            << "Can't set NULL or optional value to not null column: " << name
-                            << ". All not null columns should be initialized"));
+                        if (meta.SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to column: " << name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to not null column: " << name
+                                << ". All not null columns should be initialized"));
+                        }
                         return TStatus::Error;
                     }
                 }
@@ -827,8 +839,14 @@ private:
                 YQL_ENSURE(column);
                 if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
                     if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                            << "Can't set NULL or optional value to not null column: " << column->Name));
+                        if (column->SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to column: " << column->Name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to not null column: " << column->Name));
+                        }
                         return TStatus::Error;
                     }
                 }
@@ -992,8 +1010,14 @@ private:
             }
 
             if (column->IsBuildInProgress || column->SetNotNullInProgress) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-                    << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                        << "Column '" << item->GetName() << "' is under `SET NOT NULL` operation for table '"
+                        << node.Table().Value() << "'."));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                        << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+                }
                 return TStatus::Error;
             }
 
@@ -1002,8 +1026,14 @@ private:
                     //no type-level notnull check for pg types.
                     continue;
                 }
-                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set NULL or optional value to not null column: " << column->Name));
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to column: " << column->Name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to not null column: " << column->Name));
+                }
                 return TStatus::Error;
             }
         }

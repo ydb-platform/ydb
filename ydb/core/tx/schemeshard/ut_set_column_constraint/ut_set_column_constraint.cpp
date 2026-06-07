@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::StatusIds::SUCCESS,
             response.ShortDebugString());
 
-        if (!delayedValidateRequest) {
+        {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&delayedValidateRequest](IEventHandle&) -> bool {
                 return bool(delayedValidateRequest);
@@ -926,16 +926,12 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::StatusIds::SUCCESS,
             response.ShortDebugString());
 
-        if (!delayedValidateRequest) {
-            Cerr << "WATFACK 1" << Endl;
-
+        {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&delayedValidateRequest](IEventHandle&) -> bool {
                 return bool(delayedValidateRequest);
             });
             runtime.DispatchEvents(opts);
-        } else {
-            Cerr << "WATFACK 2" << Endl;
         }
 
         UNIT_ASSERT_C(delayedValidateRequest, "Failed to intercept first TEvValidateRowConditionRequest");

@@ -92,6 +92,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         forcedCompactionInfo.ShardsInFlight.clear();
 
         Self->CancellingForcedCompactions.emplace_back(*forcedCompactionInfoPtr, Request->Sender, request.GetTxId(), Request->Cookie);
+        Self->HasUnpersistedCompletedForcedCompactions = true;
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }

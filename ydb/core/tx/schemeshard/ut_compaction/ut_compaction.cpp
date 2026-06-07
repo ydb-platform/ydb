@@ -2083,7 +2083,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
         ui64 compactionId1 = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
         ui64 compactionId2 = txId;
 
@@ -2109,7 +2108,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true);
         ui64 compactionId1 = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex/indexImplTable", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
         ui64 compactionId2 = txId;
 
@@ -2133,7 +2131,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         TestCompact(runtime, schemeshardId, ++txId, "/MyRoot/User", "Simple", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
         ui64 compactionId = txId;
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
         TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
@@ -2163,7 +2160,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
         ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
-        env.SimulateSleep(runtime, TDuration::Seconds(16));
+        env.SimulateSleep(runtime, TDuration::Seconds(15));
 
         UNIT_ASSERT_VALUES_EQUAL(
             TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
@@ -2219,7 +2216,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
         ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         {
             auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
@@ -2319,7 +2315,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
         ui64 compactionId = txId;
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         // wrong db
         TestGetCompaction(runtime, compactionId, "/UnknownDb", Ydb::StatusIds::NOT_FOUND);
@@ -2346,7 +2341,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
         ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
 
@@ -2386,7 +2380,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true, 5);
         ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
 
@@ -2427,7 +2420,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
         ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         block.Stop().Unblock(1); // complete one shard
         env.SimulateSleep(runtime, TDuration::Seconds(1));
@@ -2540,7 +2532,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
         ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId);
         TestCancelCompaction(runtime, ++txId, "/MyRoot", compactionId, Ydb::StatusIds::PRECONDITION_FAILED);
@@ -2588,7 +2579,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
         ui64 compactionId = txId;
         runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         {
             auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
@@ -2815,7 +2805,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-        env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         for (auto shard: info.Shards) {
             CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
@@ -2852,7 +2841,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
             TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
             ui64 compactionId = txId;
-            runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 2; });
+            runtime.WaitFor("TEvCompactTable", [&]{ return block.size() >= 2; });
 
             UNIT_ASSERT_VALUES_EQUAL(
                 TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),

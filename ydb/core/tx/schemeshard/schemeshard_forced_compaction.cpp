@@ -145,10 +145,9 @@ void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, c
 
     if (compaction->ShardsInFlight.erase(shardIdx)) {
         ForcedCompactionsDoneShardsToPersist[shardIdx] = compaction;
-    }
-
-    if (IsForcedCompactionCompleted(*compaction)) {
-        HasUnpersistedCompletedForcedCompactions = true;
+        if (IsForcedCompactionCompleted(*compaction)) {
+            HasUnpersistedCompletedForcedCompactions = true;
+        }
     }
 
     ScheduleForcedCompactionProgress(ctx);
@@ -231,12 +230,16 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr&, const 
     ForcedCompactionProgressScheduled = false;
 
     const auto now = ctx.Now();
-    if (HasUnpersistedCompletedForcedCompactions
-        || ForcedCompactionsDoneShardsToPersist.size() >= ForcedCompactionPersistBatchSize
-        || now - ForcedCompactionProgressStartTime > ForcedCompactionPersistBatchMaxTime)
-    {
-        ForcedCompactionProgressStartTime = now;
-        Execute(CreateTxProgressForcedCompaction());
+    const bool hasAnythingToPersist = !ForcedCompactionsDoneShardsToPersist.empty()
+         || !CancellingForcedCompactions.empty();
+    if (hasAnythingToPersist) {
+        if (HasUnpersistedCompletedForcedCompactions
+            || ForcedCompactionsDoneShardsToPersist.size() >= ForcedCompactionPersistBatchSize
+            || now - ForcedCompactionProgressStartTime >= ForcedCompactionPersistBatchMaxTime)
+        {
+            ForcedCompactionProgressStartTime = now;
+            Execute(CreateTxProgressForcedCompaction());
+        }
     }
     ProcessForcedCompactionQueues();
 }
@@ -244,7 +247,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr&, const 
 void TSchemeShard::ScheduleForcedCompactionProgress(const TActorContext& ctx) {
     if (!ForcedCompactionProgressScheduled) {
         ForcedCompactionProgressScheduled = true;
-        ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvProgressForcedCompaction());
+        ctx.Schedule(TDuration::Zero(), new TEvPrivate::TEvProgressForcedCompaction());
     }
 }
 

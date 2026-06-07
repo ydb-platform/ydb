@@ -6428,11 +6428,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ScheduleForcedCompactionProgress(ctx);
-        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
-            // for cleanup and to progress cancelling forced compactions after restart
-            Self->ForcedCompactionProgressStartTime = ctx.Now();
-            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
-        }
     }
 };
 

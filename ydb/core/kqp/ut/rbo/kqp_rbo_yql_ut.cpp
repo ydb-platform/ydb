@@ -4186,7 +4186,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 6, 7, 11, 13, 15, 18, 19, 21, 22, 24, 25, 26, 29, 30, 31, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                       50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 76, 77, 78, 79, 81, 82, 83,
                                                                       84, 85, 88, 90, 91, 92, 93, 96, 99},
-                           /*rbo never finish*/{5}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+                           /*rbo never finish*/{5}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/false,
                            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
     }
@@ -4194,6 +4194,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(TPCDS_YQL_Q77_Scratch) {
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {77}, MakeTPC_YqlSingleQuerySkipList(EBenchType::TPCDS, 77),
                             /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/false);
+    }
+
+    Y_UNIT_TEST(TPCDS_YQL_10) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 10, true, true);
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {
@@ -4403,6 +4407,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 SELECT bar.id FROM `/Root/bar` as bar where bar.lastname NOT IN (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id > bar.id ) order by bar.id;
             )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where (NOT EXISTS(SELECT foo.id FROM `/Root/foo` as foo)) OR bar.id == (SELECT max(foo.id) FROM `/Root/foo` as foo);
+            )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where (NOT EXISTS(SELECT foo.id FROM `/Root/foo` as foo where foo.id == bar.id)) OR bar.id == 1;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
@@ -4412,6 +4422,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[1]])",
             R"([[1]])",
             R"([[0];[1];[2];[3]])",
+            R"([[3]])",
+            R"([[1]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

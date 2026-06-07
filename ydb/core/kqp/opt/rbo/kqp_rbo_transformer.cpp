@@ -375,6 +375,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     TVector<std::unique_ptr<IRule>> inlineSimpleSubPlanStageRules;
     inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
+    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineGenericInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline in/exists subplans", std::move(inlineSimpleSubPlanStageRules)));
 
     // Normalize aliases and simple maps before the broader logical rewrites start.

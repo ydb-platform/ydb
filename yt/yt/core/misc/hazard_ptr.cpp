@@ -5,6 +5,8 @@
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/finally.h>
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/threading/at_fork.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
@@ -288,7 +290,7 @@ YT_PREVENT_TLS_CACHING THazardThreadState* THazardPointerManager::AllocateThread
     if (auto* logFile = TryGetShutdownLogFile()) {
         ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state allocated (ThreadId: %" PRISZT ")\n",
             GetInstant().ToString().c_str(),
-            GetCurrentThreadId());
+            GetSystemThreadId());
     }
 
     return threadState;
@@ -370,7 +372,7 @@ void THazardPointerManager::DestroyThreadState(THazardThreadState* threadState)
     if (auto* logFile = TryGetShutdownLogFile()) {
         ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state destroyed (ThreadId: %" PRISZT ", RetiredPtrCount: %d)\n",
             GetInstant().ToString().c_str(),
-            GetCurrentThreadId(),
+            GetSystemThreadId(),
             count);
     }
 

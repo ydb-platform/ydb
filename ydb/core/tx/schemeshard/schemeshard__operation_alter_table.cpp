@@ -166,6 +166,30 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
+    if (copyAlter.HasTTLSettings() && copyAlter.GetTTLSettings().HasEnabled()) {
+        for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
+            if (!context.SS->PathsById.contains(childPathId)) {
+                continue;
+            }
+
+            auto childPath = context.SS->PathsById.at(childPathId);
+            if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                continue;
+            }
+
+            if (!context.SS->Indexes.contains(childPathId)) {
+                continue;
+            }
+
+            const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
+            if (!DoesIndexSupportTTL(indexInfo->Type)) {
+                errStr = TStringBuilder() << "Table with " << indexInfo->Type << " index doesn't support TTL";
+                status = NKikimrScheme::StatusInvalidParameter;
+                return nullptr;
+            }
+        }
+    }
+
     const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;

@@ -309,6 +309,8 @@ ydb/core/kqp/ut/pg KqpPg.TempTablesDrop
 ydb/core/kqp/ut/pg KqpPg.TempTablesWithCache
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
+ydb/core/kqp/ut/rbo KqpRboYql.Aggregation+ColumnStore
+ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.UnionAll
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk

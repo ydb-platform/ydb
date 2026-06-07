@@ -107,6 +107,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     if (settings.EnableRealSystemViewPaths) {
         featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
     }
+    featureFlags.SetEnableLocalMinMaxIndex(settings.EnableLocalMinMaxIndex);
 
     Settings->SetFeatureFlags(featureFlags);
 

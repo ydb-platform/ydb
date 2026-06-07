@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/transformer/abstract.h>
@@ -24,6 +25,7 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, PKColumnIndex);
     YDB_READONLY_DEF(TString, ColumnName);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ArrowField);
+    YDB_READONLY_DEF(NScheme::TTypeInfo, TypeInfo);
     YDB_READONLY(NArrow::NSerialization::TSerializerContainer, Serializer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     YDB_READONLY(
         NArrow::NAccessor::TConstructorContainer, DataAccessorConstructor, NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor());
@@ -36,7 +38,8 @@ private:
 public:
     TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
         const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
-        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex);
+        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex,
+        const NScheme::TTypeInfo& typeInfo = {});
 
     TColumnSaver GetColumnSaver() const {
         AFL_VERIFY(Serializer);

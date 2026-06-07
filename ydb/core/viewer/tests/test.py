@@ -1789,17 +1789,6 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
 
-        result['status_pdisk_monitoring_force'] = cls.post_viewer("/pdisk/status", body={
-            'pdisk_id': '1-1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['evict_vdisk_monitoring_force'] = cls.post_viewer("/vdisk/evict", body={
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
         return result
 
     @classmethod

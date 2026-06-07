@@ -367,6 +367,7 @@ ydb/core/kqp/ut/view TCreateAndDropViewTest.DropNonexistingView
 ydb/core/kqp/ut/view TCreateAndDropViewTest.DropViewIfExists
 ydb/core/kqp/ut/view TCreateAndDropViewTest.InvalidColumnRef
 ydb/core/kqp/ut/view TCreateAndDropViewTest.InvalidIndexRef
+ydb/core/kqp/ut/view TCreateAndDropViewTest.InvalidTableRef
 ydb/core/kqp/ut/view TCreateAndDropViewTest.ParsingSecurityInvoker
 ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma

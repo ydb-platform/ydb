@@ -97,8 +97,8 @@ NDataShard::IExport::TTableColumns MakeYdbColumns3Cols() {
 
 THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>> MakeYdbSchema() {
     return {
-        { 0, { "key", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } },
-        { 1, { "value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } },
+        { 1, { "key", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } },
+        { 2, { "value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } },
     };
 }
 

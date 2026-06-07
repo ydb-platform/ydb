@@ -255,17 +255,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
     if (item.ParentIdx == Max<ui32>()) {
         const TPath sourcePath = TPath::Init(item.SourcePathId, ss);
-        TString exportPathName;
-        TString tableName;
-        if (sourcePath.IsResolved() && sourcePath->IsColumnTable()) {
-            exportPathName = sourcePath.Parent().PathString();
-            tableName = sourcePath->Name;
-        } else {
-            exportPathName = exportPath.PathString();
-            tableName = ToString(itemIdx);
-        }
-        modifyScheme.SetWorkingDir(exportPathName);
-        task.SetTableName(tableName);
+        modifyScheme.SetWorkingDir(exportPath.PathString());
+        task.SetTableName(ToString(itemIdx));
 
         FillTableDescription(ss, task, sourcePath, exportPath.Child(ToString(itemIdx)));
     } else {

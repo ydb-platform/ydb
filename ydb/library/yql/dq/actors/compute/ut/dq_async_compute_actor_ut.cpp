@@ -504,7 +504,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 dqTaskTransformFactory,
                 patternCache, false);
         auto taskRunnerActorFactory = NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
+            [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TPriorityLogFunc& )
                 {
                     return factory->Get(alloc, task, statsMode);
                 });

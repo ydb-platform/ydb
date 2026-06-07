@@ -95,6 +95,17 @@ private:
         TMap<ui64, ui64> VolatileVersions;
     };
 
+    struct TEvPrivate {
+        enum EEv {
+            EvProcessSendQueue = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+        struct TEvProcessSendQueue : public TEventLocal<TEvProcessSendQueue, EvProcessSendQueue> {};
+    };
+
     /**
      * Structure to describe configs subscription shared by multiple
      * dispatcher subscribers.
@@ -119,13 +130,19 @@ private:
         std::optional<TYamlVersion> YamlVersion;
 
         // Config update which is currently delivered to subscribers.
+        // Record carries metadata only; the config lives in UpdateInProcessConfig.
         THolder<TEvConsole::TEvConfigNotificationRequest> UpdateInProcess = nullptr;
+        TIntrusiveConstPtr<TEvConsole::TSharedAppConfig> UpdateInProcessConfig = nullptr;
         NKikimrConfig::TConfigVersion UpdateInProcessConfigVersion;
         ui64 UpdateInProcessCookie;
         std::optional<TYamlVersion> UpdateInProcessYamlVersion;
 
-        // Subscribers who didn't respond yet to the latest config update.
+        // Subscribers who didn't respond yet to the latest config update. Populated
+        // upfront, so the update can't complete while sends still wait in SendQueue.
         THashSet<TActorId> SubscribersToUpdate;
+
+        // Deliveries of the in-flight update still waiting in SendQueue.
+        ui32 PendingEnqueuedSends = 0;
 
     };
 
@@ -141,6 +158,7 @@ private:
         TActorId Subscriber;
         THashSet<TSubscription::TPtr> Subscriptions;
         NKikimrConfig::TConfigVersion CurrentConfigVersion;
+        bool UseSharedConfig = true;
     };
 
 public:
@@ -157,6 +175,12 @@ public:
     void ProcessEnqueuedEvents();
 
     void SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber);
+
+    // Paced delivery of config notifications (see TConfigsDispatcherConfig knobs).
+    const NKikimrConfig::TConfigsDispatcherConfig& GetDispatcherPacingConfig() const;
+    void ProcessSendQueue();
+    void ScheduleSendQueueProcessing();
+    void Handle(TEvPrivate::TEvProcessSendQueue::TPtr &ev);
 
     TSubscription::TPtr FindSubscription(const TActorId &subscriber);
     TSubscription::TPtr FindSubscription(const TDynBitMap &kinds);
@@ -281,6 +305,8 @@ public:
             // Pretend we got this
             hFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
             hFuncTraced(TEvConsole::TEvGetNodeConfigurationVersionRequest, Handle);
+            // Paced notification delivery
+            hFuncTraced(TEvPrivate::TEvProcessSendQueue, Handle);
         default:
             break;
         }
@@ -316,6 +342,15 @@ private:
     THashMap<TActorId, TSubscription::TPtr> SubscriptionsBySubscriber;
     THashMap<TDynBitMap, TSubscription::TPtr> SubscriptionsByKinds;
     THashMap<TActorId, TSubscriber::TPtr> Subscribers;
+
+    // A single pending delivery of a subscription's in-flight update.
+    struct TSendQueueItem {
+        TSubscription::TPtr Subscription;
+        TActorId Subscriber;
+        ui64 Cookie;
+    };
+    TDeque<TSendQueueItem> SendQueue;
+    bool SendQueueProcessScheduled = false;
 
     TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
@@ -403,16 +438,95 @@ void TConfigsDispatcher::ProcessEnqueuedEvents()
 void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber)
 {
     Y_ABORT_UNLESS(subscription->UpdateInProcess);
+    Y_ABORT_UNLESS(subscription->UpdateInProcessConfig);
 
     subscription->SubscribersToUpdate.insert(subscriber);
 
     auto notification = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
 
+    bool useSharedConfig = false;
+    if (auto it = Subscribers.find(subscriber); it != Subscribers.end()) {
+        useSharedConfig = it->second->UseSharedConfig;
+    }
+
+    if (useSharedConfig) {
+        notification->SharedConfig = subscription->UpdateInProcessConfig;
+    } else {
+        notification->Record.MutableConfig()->CopyFrom(*subscription->UpdateInProcessConfig);
+    }
+
     BLOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
                 << ": " << notification->Record.ShortDebugString());
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
+}
+
+const NKikimrConfig::TConfigsDispatcherConfig& TConfigsDispatcher::GetDispatcherPacingConfig() const
+{
+    if (YamlConfigEnabled && YamlProtoConfig.HasConfigsDispatcherConfig()) {
+        return YamlProtoConfig.GetConfigsDispatcherConfig();
+    }
+    if (CurrentConfig.HasConfigsDispatcherConfig()) {
+        return CurrentConfig.GetConfigsDispatcherConfig();
+    }
+    return BaseConfig.GetConfigsDispatcherConfig();
+}
+
+void TConfigsDispatcher::ProcessSendQueue()
+{
+    const ui32 batchSize = GetDispatcherPacingConfig().GetNotificationsBatchSize();
+
+    ui32 sent = 0;
+    while (!SendQueue.empty() && (batchSize == 0 || sent < batchSize)) {
+        TSendQueueItem item = std::move(SendQueue.front());
+        SendQueue.pop_front();
+
+        auto &subscription = item.Subscription;
+
+        // The update this item belongs to was superseded or completed.
+        if (!subscription->UpdateInProcess || subscription->UpdateInProcessCookie != item.Cookie) {
+            continue;
+        }
+
+        Y_ABORT_UNLESS(subscription->PendingEnqueuedSends > 0);
+        --subscription->PendingEnqueuedSends;
+
+        // Unsubscribed, or already served and acked via the direct send path.
+        if (!subscription->SubscribersToUpdate.contains(item.Subscriber)) {
+            continue;
+        }
+
+        SendUpdateToSubscriber(subscription, item.Subscriber);
+        if (auto it = subscription->Subscribers.find(item.Subscriber); it != subscription->Subscribers.end()) {
+            ++it->second;
+        }
+        ++sent;
+    }
+
+    if (!SendQueue.empty()) {
+        ScheduleSendQueueProcessing();
+    }
+}
+
+void TConfigsDispatcher::ScheduleSendQueueProcessing()
+{
+    if (SendQueueProcessScheduled || SendQueue.empty()) {
+        return;
+    }
+    SendQueueProcessScheduled = true;
+
+    if (const ui32 delayMs = GetDispatcherPacingConfig().GetNotificationsBatchDelayMs()) {
+        Schedule(TDuration::MilliSeconds(delayMs), new TEvPrivate::TEvProcessSendQueue);
+    } else {
+        Send(SelfId(), new TEvPrivate::TEvProcessSendQueue);
+    }
+}
+
+void TConfigsDispatcher::Handle(TEvPrivate::TEvProcessSendQueue::TPtr &/*ev*/)
+{
+    SendQueueProcessScheduled = false;
+    ProcessSendQueue();
 }
 
 TConfigsDispatcher::TSubscription::TPtr TConfigsDispatcher::FindSubscription(const TDynBitMap &kinds)
@@ -711,7 +825,8 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                                     : s == &TThis::StateInit      ? "StateInit"
                                                                                   : "Unknown" ) << Endl;
                                 str << "YamlConfigEnabled: " << YamlConfigEnabled << Endl;
-                                
+                                str << "PendingNotificationSends: " << SendQueue.size() << Endl;
+
                                 str << Endl << "=== Configuration Source ===" << Endl;
                                 auto state = GetState();
                                 str << state.ToDebugString() << Endl;
@@ -1161,12 +1276,20 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
         bool hasAffectedKinds = false;
 
+        // Set when an in-flight update with deliveries still waiting in SendQueue is
+        // cancelled below: a replacement must be sent even if the new config matches
+        // CurrentConfig, since some subscribers already applied the cancelled one.
+        bool cancelledPendingUnsent = false;
+
         if (subscription->Yaml && YamlConfigEnabled) {
             if (!isYamlChanged && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
                 continue;
             }
             if (subscription->UpdateInProcess) {
+                cancelledPendingUnsent = subscription->PendingEnqueuedSends > 0;
                 subscription->UpdateInProcess = nullptr;
+                subscription->UpdateInProcessConfig = nullptr;
+                subscription->PendingEnqueuedSends = 0;
                 subscription->SubscribersToUpdate.clear();
             }
             ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
@@ -1183,15 +1306,20 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             }
 
             if (subscription->UpdateInProcess) {
+                cancelledPendingUnsent = subscription->PendingEnqueuedSends > 0;
                 subscription->UpdateInProcess = nullptr;
+                subscription->UpdateInProcessConfig = nullptr;
+                subscription->PendingEnqueuedSends = 0;
                 subscription->SubscribersToUpdate.clear();
             }
             ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, FilterKinds(kinds), BaseConfig);
         }
 
-        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc, FilterKinds(kinds)) || CurrentStateFunc() == &TThis::StateInit) {
+        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc, FilterKinds(kinds)) || CurrentStateFunc() == &TThis::StateInit || cancelledPendingUnsent) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
-            subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
+            auto sharedConfig = MakeIntrusive<TEvConsole::TSharedAppConfig>();
+            sharedConfig->Swap(&trunc);
+            subscription->UpdateInProcessConfig = std::move(sharedConfig);
             subscription->UpdateInProcess->Record.SetLocal(true);
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
@@ -1203,11 +1331,14 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 UpdateYamlVersion(subscription);
             }
 
-            for (auto &[subscriber, updates] : subscription->Subscribers) {
-                auto k = kinds;
-                BLOG_TRACE("Sending for kinds: " << KindsToString(k));
-                SendUpdateToSubscriber(subscription, subscriber);
-                ++updates;
+            // Completion is gated on the full recipient snapshot, including
+            // deliveries still waiting in SendQueue.
+            subscription->PendingEnqueuedSends = subscription->Subscribers.size();
+            for (const auto &[subscriber, updates] : subscription->Subscribers) {
+                Y_UNUSED(updates);
+                BLOG_TRACE("Enqueue update for kinds: " << KindsToString(kinds) << " to " << subscriber);
+                subscription->SubscribersToUpdate.insert(subscriber);
+                SendQueue.push_back(TSendQueueItem{subscription, subscriber, subscription->UpdateInProcessCookie});
             }
         } else if (YamlConfigEnabled && subscription->Yaml) {
             UpdateYamlVersion(subscription);
@@ -1215,6 +1346,9 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             subscription->YamlVersion = std::nullopt;
         }
     }
+
+    // First batch inline; the remainder is drained in subsequent activations.
+    ProcessSendQueue();
 
     if (CurrentStateFunc() == &TThis::StateInit) {
         BLOG_D("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
@@ -1322,6 +1456,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         Subscribers.emplace(subscriberActor, subscriber);
     }
     subscriber->Subscriptions.insert(subscription);
+    subscriber->UseSharedConfig = ev->Get()->UseSharedConfig;
 
     // We don't care about versions and kinds here
     Send(ev->Sender, new TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
@@ -1336,7 +1471,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             } else {
                 ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);
             }
-            subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
+            auto sharedConfig = MakeIntrusive<TEvConsole::TSharedAppConfig>();
+            sharedConfig->Swap(&trunc);
+            subscription->UpdateInProcessConfig = std::move(sharedConfig);
             Y_FOR_EACH_BIT(kind, kinds) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
@@ -1362,11 +1499,13 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptio
         if (subscription->SubscribersToUpdate.empty()) {
             if (subscription->UpdateInProcess) {
                 subscription->CurrentConfig.Version = subscription->UpdateInProcessConfigVersion;
-                subscription->CurrentConfig.Config = subscription->UpdateInProcess->Record.GetConfig();
+                subscription->CurrentConfig.Config = *subscription->UpdateInProcessConfig;
             }
             subscription->YamlVersion = subscription->UpdateInProcessYamlVersion;
             subscription->UpdateInProcessYamlVersion = std::nullopt;
             subscription->UpdateInProcess = nullptr;
+            subscription->UpdateInProcessConfig = nullptr;
+            subscription->PendingEnqueuedSends = 0;
         }
 
         subscription->Subscribers.erase(subscriberActor);
@@ -1415,11 +1554,13 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
     subscription->SubscribersToUpdate.erase(ev->Sender);
 
     if (subscription->SubscribersToUpdate.empty()) {
-        subscription->CurrentConfig.Config = subscription->UpdateInProcess->Record.GetConfig();
+        subscription->CurrentConfig.Config = *subscription->UpdateInProcessConfig;
         subscription->CurrentConfig.Version = subscription->UpdateInProcessConfigVersion;
         subscription->YamlVersion = subscription->UpdateInProcessYamlVersion;
         subscription->UpdateInProcessYamlVersion = std::nullopt;
         subscription->UpdateInProcess = nullptr;
+        subscription->UpdateInProcessConfig = nullptr;
+        subscription->PendingEnqueuedSends = 0;
     }
 }
 

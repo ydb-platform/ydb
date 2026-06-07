@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
+import logging
 import os
+
 import pytest
 import yatest
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.stress.fixtures import StressFixture
 from ydb.tests.library.harness.util import LogLevels
-import logging
+from ydb.tests.library.stress.fixtures import StressFixture
 
 logger = logging.getLogger(__name__)
 
@@ -18,26 +19,27 @@ class TestYdbWorkload(StressFixture):
             erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_streaming_queries": True,
-                "enable_topics_sql_io_operations": True,
+            },
+            query_service_config={
+                "available_external_data_sources": ["Solomon"],
             },
             additional_log_configs={
-                'KQP_COMPUTE': LogLevels.DEBUG,
-                'STREAMS_CHECKPOINT_COORDINATOR': LogLevels.DEBUG,
-                'STREAMS_STORAGE_SERVICE': LogLevels.DEBUG,
-                'FQ_ROW_DISPATCHER': LogLevels.DEBUG,
-                'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTOR': LogLevels.DEBUG}
+                "KQP_COMPUTE": LogLevels.DEBUG,
+                "KQP_PROXY": LogLevels.DEBUG,
+                "KQP_EXECUTOR": LogLevels.DEBUG,
+            },
+            table_service_config={
+                "dq_channel_version": 1,
+            },
         )
 
     def test(self):
         logger.info("TestYdbWorkload::start test")
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
-            "--endpoint",  f"localhost:{self.cluster.nodes[1].port}",
+            "--endpoint", f"localhost:{self.cluster.nodes[1].port}",
             "--database", self.database,
             "--duration", self.base_duration,
-            "--partitions-count", "10",
-            "--prefix", "streaming_stress"
+            "--prefix", "federated_queries_stress",
         ]
         yatest.common.execute(cmd, wait=True)

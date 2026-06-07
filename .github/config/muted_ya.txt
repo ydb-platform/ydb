@@ -9,7 +9,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithMetadataSizeBackPressure
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/olap KqpOlapTiering.TieringGC
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -57,7 +56,6 @@ ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut LocalityOperation.LocksFromAnotherTenants-UseSink
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
-ydb/tests/fq/s3 py3test.[test_format_setting.py] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario

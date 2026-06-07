@@ -2661,6 +2661,8 @@ public:
                             return SyncError();
                         }
 
+
+
                         TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
                         TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
                         bool useBloomFilter = false;
@@ -2686,6 +2688,20 @@ public:
 
                         auto add_index = alterTableRequest.add_add_indexes();
                         add_index->set_name(alterIndexName);
+                        const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
+
+                        if (indexIter->Type == NYql::TIndexDescription::EType::LocalBloomFilter) {
+                            for (auto&& is : alterIndexSettings) {
+                                TString bloomErr;
+                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), bloomErr);
+                                if (bloomErr) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), ngramErr));
+                                    return SyncError();
+                                }
+                            }
+                        } else {
+                            
+                        }
 
                         if (!useBloomFilter) {
                             if (table.Metadata->Kind != EKikimrTableKind::Datashard &&

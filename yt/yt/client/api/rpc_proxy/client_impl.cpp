@@ -3225,6 +3225,9 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     if (options.Schema) {
         ToProto(req->mutable_schema(), options.Schema);
     }
+    if (options.PushConfig) {
+        req->set_push_config(ToProto(*options.PushConfig));
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
         return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));

@@ -272,29 +272,6 @@ NJson::TJsonValue GetSimplifiedPlan(const TString& plan) {
     return simplifiedPlan->second;
 }
 
-ui64 GetRuleApplicationCount(const NJson::TJsonValue& simplifiedPlan, const TString& ruleName) {
-    const auto& planMap = simplifiedPlan.GetMapSafe();
-    const auto optimizerStats = planMap.find("OptimizerStats");
-    if (optimizerStats == planMap.end()) {
-        return 0;
-    }
-
-    const auto& statsMap = optimizerStats->second.GetMapSafe();
-    const auto ruleApplications = statsMap.find("RuleApplications");
-    if (ruleApplications == statsMap.end()) {
-        return 0;
-    }
-
-    const auto& rulesMap = ruleApplications->second.GetMapSafe();
-    const auto ruleIt = rulesMap.find(ruleName);
-    return ruleIt == rulesMap.end() ? 0 : ruleIt->second.GetUIntegerSafe();
-}
-
-void AssertRuleApplied(const NJson::TJsonValue& simplifiedPlan, const TString& ruleName, const TString& plan) {
-    const ui64 count = GetRuleApplicationCount(simplifiedPlan, ruleName);
-    UNIT_ASSERT_C(count > 0, "Expected rule to apply: " << ruleName << "\nPlan:\n" << plan);
-}
-
 TIntrusivePtr<TOpRead> MakeTestRead(const TVector<TInfoUnit>& outputIUs, TPositionHandle pos) {
     TVector<TString> columns;
     columns.reserve(outputIUs.size());
@@ -2992,10 +2969,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage removeIdentity("Focused remove identity map", std::move(rules));
         ComputeLogicalTestProps(root);
         removeIdentity.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Remove identity map");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Remove identity map to apply");
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
     }
 
@@ -3018,10 +2991,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         removeIdentity.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Remove identity map");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Remove identity map to apply");
-
         auto rewrittenUnion = CastOperator<TOpUnionAll>(root.GetInput());
         UNIT_ASSERT_C(rewrittenUnion->GetLeftInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
         UNIT_ASSERT(rewrittenUnion->GetLeftInput() == leftRead);
@@ -3043,10 +3012,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage removeIdentity("Focused remove identity map", std::move(rules));
         ComputeLogicalTestProps(root);
         removeIdentity.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Remove identity map");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Remove identity map to apply");
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
         UNIT_ASSERT(root.GetInput() == read);
     }
@@ -3063,10 +3028,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pruneRead("Focused read pruning", std::move(rules));
         ComputeLogicalTestProps(root);
         pruneRead.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Prune dead read columns");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Prune dead read columns to apply");
 
         UNIT_ASSERT_VALUES_EQUAL(read->Columns.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(read->OutputIUs.size(), 1);
@@ -3131,12 +3092,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pruneAggregateAndRead.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto aggregateRuleIt = appliedRules.find("Prune dead aggregate traits");
-        UNIT_ASSERT_C(aggregateRuleIt != appliedRules.end() && aggregateRuleIt->second > 0, "Expected Prune dead aggregate traits to apply");
-        auto readRuleIt = appliedRules.find("Prune dead read columns");
-        UNIT_ASSERT_C(readRuleIt != appliedRules.end() && readRuleIt->second > 0, "Expected Prune dead read columns to apply");
-
         UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);
         UNIT_ASSERT(aggregate->AggregationTraitsList.front().ResultColName == TInfoUnit("sum_value"));
 
@@ -3173,10 +3128,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
         auto rewrittenAggregate = CastOperator<TOpAggregate>(root.GetInput());
@@ -3223,10 +3174,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
         auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
@@ -3277,10 +3224,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
-
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
         auto rewrittenAggregate = CastOperator<TOpAggregate>(root.GetInput());
         UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
@@ -3318,10 +3261,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push append map elements");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append map elements to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());
@@ -3367,10 +3306,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push append map elements");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append map elements to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
         auto rewrittenAggregate = CastOperator<TOpAggregate>(root.GetInput());
@@ -3525,10 +3460,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
-
         const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
         UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("l_a"));
@@ -3584,10 +3515,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
-
         const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.DependentIUs.size(), 1);
         UNIT_ASSERT(rewrittenEntry.DependentIUs.front() == TInfoUnit("l_a"));
@@ -3631,10 +3558,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
-
         const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
         UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("a"));
@@ -3661,10 +3584,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
@@ -3701,10 +3620,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push semantic rename to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
         auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
@@ -3747,12 +3662,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         aliasRules.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto rewriteIt = appliedRules.find("Rewrite expressions to preferred aliases");
-        UNIT_ASSERT_C(rewriteIt != appliedRules.end() && rewriteIt->second > 0, "Expected preferred-alias rewrite to apply");
-        auto renameIt = appliedRules.find("Push semantic rename");
-        UNIT_ASSERT_C(renameIt != appliedRules.end() && renameIt->second > 0, "Expected Push semantic rename to apply");
-
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
@@ -3785,10 +3694,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
-
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
         UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
         UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("a"));
@@ -3815,10 +3720,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
 
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
         UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
@@ -3856,10 +3757,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
-
         UNIT_ASSERT_VALUES_EQUAL(join->JoinKeys.size(), 1);
         UNIT_ASSERT(join->JoinKeys.front().first == TInfoUnit("a"));
         UNIT_ASSERT(join->JoinKeys.front().second == TInfoUnit("r"));
@@ -3895,10 +3792,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
 
         UNIT_ASSERT_VALUES_EQUAL(aggregate->KeyColumns.size(), 2);
         UNIT_ASSERT(aggregate->KeyColumns[0] == TInfoUnit("a"));
@@ -3936,10 +3829,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage rewriteAliases("Focused alias rewrite", std::move(rules));
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Rewrite expressions to preferred aliases");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected preferred-alias rewrite to apply");
 
         const auto limitInputs = limit->LimitCond.GetInputIUs(false, true);
         UNIT_ASSERT(std::find(limitInputs.begin(), limitInputs.end(), TInfoUnit("a")) != limitInputs.end());
@@ -3992,10 +3881,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push append map elements");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append map elements to apply");
-
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
         auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
         UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Limit, root.PlanToString(testContext.ExprCtx));
@@ -4037,7 +3922,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto topMap = CastOperator<TOpMap>(root.GetInput());
         UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(!testContext.RboCtx.AppliedRules.contains("Push append map elements"));
     }
 
     Y_UNIT_TEST(PushAppendAliasCrossesFullJoinSide) {
@@ -4064,10 +3948,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushAppend("Focused push append", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push append map elements");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append map elements to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
         auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
@@ -4106,10 +3986,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
 
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push append expressions");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append expressions to apply");
-
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
@@ -4143,7 +4019,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto topMap = CastOperator<TOpMap>(root.GetInput());
         UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(!testContext.RboCtx.AppliedRules.contains("Push append expressions"));
     }
 
     Y_UNIT_TEST(PushAppendExpressionConstantChoosesPreservedJoinSide) {
@@ -4169,10 +4044,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRuleBasedStage pushAppend("Focused push append expressions", std::move(rules));
         ComputeLogicalTestProps(root);
         pushAppend.RunStage(root, testContext.RboCtx);
-
-        const auto& appliedRules = testContext.RboCtx.AppliedRules;
-        auto ruleIt = appliedRules.find("Push append expressions");
-        UNIT_ASSERT_C(ruleIt != appliedRules.end() && ruleIt->second > 0, "Expected Push append expressions to apply");
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
         auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
@@ -4213,7 +4084,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
         UNIT_ASSERT(topMap->MapElements.front().GetElementName() == TInfoUnit("one"));
-        UNIT_ASSERT(!testContext.RboCtx.AppliedRules.contains("Push append expressions"));
     }
 
     Y_UNIT_TEST(TPCH_YQL) {

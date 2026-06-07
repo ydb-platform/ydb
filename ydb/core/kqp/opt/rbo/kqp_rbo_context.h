@@ -36,7 +36,6 @@ public:
     NYql::IGraphTransformer& TypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     NOpt::TKqpProviderContext CBOCtx;
-    THashMap<TString, ui64> AppliedRules;
     std::optional<NJson::TJsonValue> ExecutionJson;
     std::optional<NJson::TJsonValue> ExplainJson;
 };

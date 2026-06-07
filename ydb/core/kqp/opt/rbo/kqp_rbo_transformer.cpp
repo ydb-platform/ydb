@@ -8,8 +8,6 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 
-#include <algorithm>
-
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -19,26 +17,12 @@ using namespace NYql::NDq;
 
 namespace {
 
-NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx, const THashMap<TString, ui64>& appliedRules) {
+NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
     const auto& cboStats = kqpCtx.CBOStats;
 
     NJson::TJsonValue optimizerStats(NJson::EJsonValueType::JSON_MAP);
     optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;
     optimizerStats["CBOTreesOptimized"] = cboStats.TreesOptimized;
-
-    NJson::TJsonValue ruleApplications(NJson::EJsonValueType::JSON_MAP);
-    TVector<TString> ruleNames;
-    ruleNames.reserve(appliedRules.size());
-    for (const auto& ruleApplication : appliedRules) {
-        ruleNames.push_back(ruleApplication.first);
-    }
-    std::sort(ruleNames.begin(), ruleNames.end());
-
-    for (const auto& ruleName : ruleNames) {
-        ruleApplications[ruleName] = appliedRules.at(ruleName);
-    }
-    optimizerStats["RuleApplications"] = ruleApplications;
-
     return optimizerStats;
 }
 
@@ -267,7 +251,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 auto output = RBO.Optimize(*OpRoot, rboCtx);
-                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson, rboCtx.AppliedRules);
+                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;
             } else {
                 return node;
@@ -297,7 +281,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode:
 }
 
 //FIXME: We currently support only a single plan, throw an exception if that's not the case
-void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan, const THashMap<TString, ui64>& appliedRules) {
+void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan) {
     if (!execPlan.has_value() || !explainPlan.has_value()) {
         Y_ENSURE(false, "Explain plan wasn't computed in the optimizer");
     }
@@ -309,7 +293,7 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
     plans.AppendValue(execPlan.value());
     planJson["Plans"] = plans;
     planJson["SimplifiedPlan"] = explainPlan.value();
-    planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx, appliedRules);
+    planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx);
 
     TransformCtx->PlanJson = planJson;
 }

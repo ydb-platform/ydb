@@ -94,7 +94,6 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                 if (rule->MatchAndApply(op, ctx, root.PlanProps)) {
                     fired = true;
 
-                    ++ctx.AppliedRules[rule->RuleName];
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
                     // If the original operator had parents, update all parents

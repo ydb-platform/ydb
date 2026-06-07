@@ -55,6 +55,10 @@ TVector<size_t> GetTokenPositions(const TParsedTokenList& tokens) {
     return positions;
 }
 
+bool IsWhitespace(const TParsedToken& token) {
+    return token.Name == "WS";
+}
+
 } // namespace
 
 bool TRichParsedToken::IsLiteral() const {
@@ -96,19 +100,40 @@ TMaybe<TRichParsedToken> TCursorTokenContext::Enclosing() const {
 }
 
 TMaybe<TRichParsedToken> TCursorTokenContext::MatchCursorPrefix(const TVector<TStringBuf>& pattern) const {
-    const auto prefix = std::span{Tokens.begin(), Cursor.NextTokenIndex};
-    if (prefix.size() < pattern.size()) {
+    if (pattern.empty()) {
         return Nothing();
     }
 
+    size_t index = Cursor.NextTokenIndex;
+    if (auto enclosing = Enclosing()) {
+        index = enclosing->Index;
+    }
+
+    const auto prefix = std::span{Tokens.begin(), index};
+
     ssize_t i = static_cast<ssize_t>(prefix.size()) - 1;
     ssize_t j = static_cast<ssize_t>(pattern.size()) - 1;
-    for (; 0 <= j; --i, --j) {
+    for (; 0 <= j && 0 <= i; --i) {
+        Y_ENSURE(pattern[j] != "WS");
+
+        if (IsWhitespace(prefix[i])) {
+            continue;
+        }
+
         if (!pattern[j].empty() && prefix[i].Name != pattern[j]) {
             return Nothing();
         }
+
+        --j;
     }
-    return TokenAt(*this, prefix.size() - pattern.size());
+
+    if (0 <= j) {
+        return Nothing();
+    }
+
+    Y_ENSURE(-1 <= i);
+    Y_ENSURE(-1 == j);
+    return TokenAt(*this, i + 1);
 }
 
 bool GetStatement(

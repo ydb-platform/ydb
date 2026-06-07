@@ -2664,7 +2664,7 @@ TFuture<TCollectCoverageResult> TClient::CollectCoverage(
 
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     NQueryTrackerClient::EQueryEngine engine,
-    const TString& query,
+    const std::string& query,
     const TStartQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

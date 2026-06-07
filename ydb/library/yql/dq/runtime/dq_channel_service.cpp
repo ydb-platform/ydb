@@ -1123,28 +1123,34 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
-        // do not auto create if not leading and fail sender
-        SendAckWithError(ev->Cookie,
-            TStringBuilder() << "Can't find peer for Info: {ChannelId: " << info.ChannelId
-            << ", OutputActorId: " << info.OutputActorId
-            << ", InputActorId: " << info.InputActorId << "} Leading:" << record.GetLeading()
-        );
+        // do not auto create if not leading and fail sender except finish confirmation
+        TString errorMessage = TStringBuilder() << "NOT FOUND ID, ChannelId=" << info.ChannelId
+        << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+        << ", Bytes=" << record.GetBytes() << ", L=" << record.GetLeading()
+        << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
+        << ", Log=" << GetReconciliationLog();
+        LOG_W(LogPrefix << errorMessage);
+        if (!record.GetConfirmFinish()) {
+            SendAckWithError(ev->Cookie, errorMessage);
+        }
         return;
     }
 
     if (descriptor->PeerGenMajor) {
         if (descriptor->PeerActorId != PeerActorId || descriptor->PeerGenMajor != PeerGenMajor.load()) {
             descriptor->Terminate();
-            LOG_T(LogPrefix << "ID ERASE/GEN, ChannelId=" << descriptor->Info.ChannelId
-                << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
-                << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
-                << ", Finishing=" << descriptor->Finishing.load() << ", Finished=" << descriptor->Finished.load()
-            );
+            TString errorMessage = TStringBuilder() << "MISMATCH G=" << descriptor->PeerGenMajor
+                << ", Peer=" << descriptor->PeerGenMajor << " vs G=" << PeerGenMajor.load()
+                << ", Peer=" << PeerActorId
+                << ", ChannelId=" << info.ChannelId
+                << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                << ", Bytes=" << record.GetBytes() << ", L=" << record.GetLeading()
+                << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
+                << ", Log=" << GetReconciliationLog();
+
+            LOG_T(LogPrefix << "ID ERASE/GEN " << errorMessage);
             InputDescriptors.erase(info);
-            SendAckWithError(ev->Cookie,
-                TStringBuilder() << "Generation mismatch: " << descriptor->PeerActorId << " vs "
-                << PeerActorId << " (actual), " << descriptor->PeerGenMajor << " vs " << PeerGenMajor.load() << " (actual)"
-            );
+            SendAckWithError(ev->Cookie, errorMessage);
             return;
         }
     } else {

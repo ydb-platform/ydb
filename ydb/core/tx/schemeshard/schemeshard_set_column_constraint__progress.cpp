@@ -656,8 +656,7 @@ ITransaction* TSchemeShard::CreateTxSetColumnConstraintProgress(TIndexBuildId op
     return new TIndexBuilder::TTxProgressSetColumnConstraint(this, operationId);
 }
 
-struct TSchemeShard::TIndexBuilder::TTxReplyRetrySetColumnConstraint
-    : public TSchemeShard::TIndexBuilder::TTxBase
+struct TTxReplyRetrySetColumnConstraint : public TSchemeShard::TIndexBuilder::TTxBase
 {
 private:
     TTabletId ShardId;
@@ -697,13 +696,11 @@ public:
             return true;
         }
 
-        // Reschedule shard for re-validation
         if (operationInfo.InProgressValidationShards.erase(shardIdx)) {
             operationInfo.ToValidateShards.emplace_front(shardIdx);
 
             Self->SetColumnConstraintPipes.Close(BuildId, ShardId, ctx);
 
-            // Re-send the validate request
             Progress(BuildId);
         }
 

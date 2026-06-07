@@ -2625,6 +2625,30 @@ public:
                         : 0;
 
                     if (table.Metadata->StoreType == EStoreType::Column) {
+                        const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {
+                            return index.Name == alterIndexName;
+                        });
+                        if (indexIter == table.Metadata->Indexes.end()) {
+                            TStringBuilder allIndexes;
+                            allIndexes << "[";
+                            bool firstIndex = true;
+                            for (auto& index: table.Metadata->Indexes) {
+                                if (!firstIndex) allIndexes << ", ";
+                                allIndexes << index.Name;
+                                firstIndex = false;
+                            }
+                            allIndexes << "]";
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " does not exist in table " << table.Metadata->Name << ". Only these do exist: " << allIndexes));
+                            return SyncError();
+                        }
+
+                        if (indexIter->Type != NYql::TIndexDescription::EType::LocalBloomFilter && indexIter->Type != NYql::TIndexDescription::EType::LocalBloomNgramFilter ) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " is " << indexIter->Type << " index. "
+                                 << "Only BLOOM_FILTER and BLOOM_NGRAMM_FILTER indexes can be used in ALTER INDEX statement in Column Shards"));
+                            return SyncError();
+                        }
                         if (tableSettingsCount > 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                 "ALTER INDEX option 'tableSettings' is not supported for column tables; use 'indexSettings'"));

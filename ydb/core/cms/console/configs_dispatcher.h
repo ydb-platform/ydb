@@ -76,6 +76,10 @@ namespace TEvConfigsDispatcher {
 
         TVector<ui32> ConfigItemKinds;
         const TActorId Subscriber;
+        // Receive the config via the shared immutable payload (see
+        // TEvConfigNotificationRequest::SharedConfig). Subscribers mutating the
+        // notification record inline must opt out to get a private inline copy.
+        bool UseSharedConfig = true;
     };
 
     struct TEvSetConfigSubscriptionResponse : public TEventLocal<TEvSetConfigSubscriptionResponse, EvSetConfigSubscriptionResponse> {

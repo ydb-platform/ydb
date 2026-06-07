@@ -298,8 +298,18 @@ namespace TEvConsole {
 
     struct TEvReplaceConfigSubscriptionsResponse : public TEventShortDebugPB<TEvReplaceConfigSubscriptionsResponse, NKikimrConsole::TReplaceConfigSubscriptionsResponse, EvReplaceConfigSubscriptionsResponse> {};
 
+    // Immutable config shared between locally delivered notifications of one config update.
+    struct TSharedAppConfig
+        : public TThrRefBase
+        , public NKikimrConfig::TAppConfig
+    {};
+
     struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {
-        const NKikimrConfig::TAppConfig& GetConfig() const { return Record.GetConfig(); }
+        // Set for local deliveries instead of an inline Record config; never serialized.
+        // Read the config through GetConfig().
+        TIntrusiveConstPtr<TSharedAppConfig> SharedConfig;
+
+        const NKikimrConfig::TAppConfig& GetConfig() const { return SharedConfig ? *SharedConfig : Record.GetConfig(); }
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {

@@ -201,6 +201,25 @@ TString DivP1(ui32 divisible, ui32 divisor) {
     return result;
 }
 
+const NJson::TJsonValue* GetOutputStatNode(const NJson::TJsonValue& node) {
+    // if Push.Bytes found, use Push (channels 1.0 do not report Output.Push.Bytes)
+    auto* pushNode = node.GetValueByPath("Push");
+    if (pushNode && pushNode->GetValueByPath("Bytes")) {
+        return pushNode;
+    }
+    // else if Pop.Bytes found, use Push
+    auto* popNode = node.GetValueByPath("Pop");
+    if (popNode && popNode->GetValueByPath("Bytes")) {
+        return popNode;
+    }
+    // else Push as default
+    return pushNode;
+}
+
+const NJson::TJsonValue* GetInputStatNode(const NJson::TJsonValue& node) {
+    return node.GetValueByPath("Pop");
+}
+
 bool TAggregation::Load(const NJson::TJsonValue& node) {
     if (auto* countNode = node.GetValueByPath("Count")) {
         Count = countNode->GetIntegerSafe();
@@ -696,13 +715,13 @@ void TPlan::ResolveCteRefs() {
                 for (const auto& subNode : inputNode->GetArray()) {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(it->second->PlanNodeId) == nameNode->GetStringSafe()) {
-                            if (auto* pushNode = subNode.GetValueByPath("Pop")) {
-                                if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
+                            if (auto* statNode = GetInputStatNode(subNode)) {
+                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                     cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
                                         *bytesNode, 0, 0,
-                                        pushNode->GetValueByPath("FirstMessageMs"),
-                                        pushNode->GetValueByPath("LastMessageMs"),
-                                        pushNode->GetValueByPath("WaitTimeUs.History")
+                                        statNode->GetValueByPath("FirstMessageMs"),
+                                        statNode->GetValueByPath("LastMessageMs"),
+                                        statNode->GetValueByPath("WaitTimeUs.History")
                                     );
                                     Min0(cteRef.second->Stage.MinTime, cteRef.second->InputBytes->MinTime);
                                     Max0(cteRef.second->Stage.MaxTime, cteRef.second->InputBytes->MaxTime);
@@ -710,12 +729,12 @@ void TPlan::ResolveCteRefs() {
                                 } else {
                                     cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
                                 }
-                                if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
+                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
                                 } else {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                 }
-                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                     if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                         cteRef.second->InputChunks = sumNode->GetIntegerSafe();
                                         if (cteRef.second->InputChunks) {
@@ -738,13 +757,13 @@ void TPlan::ResolveCteRefs() {
                 for (const auto& subNode : outputNode->GetArray()) {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(cteRef.second->Stage.PlanNodeId) == nameNode->GetStringSafe()) {
-                            if (auto* popNode = subNode.GetValueByPath("Push")) {
-                                if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
+                            if (auto* statNode = GetOutputStatNode(subNode)) {
+                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                     cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
                                         *bytesNode, 0, 0,
-                                        popNode->GetValueByPath("FirstMessageMs"),
-                                        popNode->GetValueByPath("LastMessageMs"),
-                                        popNode->GetValueByPath("WaitTimeUs.History")
+                                        statNode->GetValueByPath("FirstMessageMs"),
+                                        statNode->GetValueByPath("LastMessageMs"),
+                                        statNode->GetValueByPath("WaitTimeUs.History")
                                     );
                                     Min0(cteRef.second->FromStage->MinTime, cteRef.second->CteOutputBytes->MinTime);
                                     Max0(cteRef.second->FromStage->MaxTime, cteRef.second->CteOutputBytes->MaxTime);
@@ -752,13 +771,13 @@ void TPlan::ResolveCteRefs() {
                                 } else {
                                     cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
                                 }
-                                if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
+                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
                                     cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
                                 } else {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows);
                                 }
-                                if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                     if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                         cteRef.second->CteOutputChunks = sumNode->GetIntegerSafe();
                                         if (cteRef.second->CteOutputChunks) {
@@ -1196,7 +1215,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     }
                                 }
                                 if (!ingressNode) {
-                                    ingressNode = ingress0.GetValueByPath("Pop");
+                                    ingressNode = GetInputStatNode(ingress0);
                                 }
                                 if (ingressNode) {
                                     if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
@@ -1305,20 +1324,20 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 if (auto* nameNode = subNode.GetValueByPath("Name")) {
                     auto name = nameNode->GetStringSafe();
                     if ((outputConnection && name == ToString(outputConnection->Stage.PlanNodeId)) || name == "RESULT") {
-                        if (auto* popNode = subNode.GetValueByPath("Push")) {
-                            if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
+                        if (auto* statNode = GetOutputStatNode(subNode)) {
+                            if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                 stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
                                     *bytesNode, 0, 0,
-                                    popNode->GetValueByPath("FirstMessageMs"),
-                                    popNode->GetValueByPath("LastMessageMs"),
-                                    popNode->GetValueByPath("WaitTimeUs.History")
+                                    statNode->GetValueByPath("FirstMessageMs"),
+                                    statNode->GetValueByPath("LastMessageMs"),
+                                    statNode->GetValueByPath("WaitTimeUs.History")
                                 );
                                 Min0(stage->MinTime, stage->OutputBytes->MinTime);
                                 Max0(stage->MaxTime, stage->OutputBytes->MaxTime);
                             } else {
                                 stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
                             }
-                            if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
+                            if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                 stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
 
                                 if (!stage->Operators.front().OutputRows) {
@@ -1331,7 +1350,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows);
                                 }
                             }
-                            if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                            if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                 if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                     stage->OutputChunks = sumNode->GetIntegerSafe();
                                     if (stage->OutputChunks) {
@@ -1425,13 +1444,13 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 for (const auto& subNode : inputNode->GetArray()) {
                                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                                         if (planNodeId == nameNode->GetStringSafe()) {
-                                            if (auto* pushNode = subNode.GetValueByPath("Pop")) {
-                                                if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
+                                            if (auto* statNode = GetInputStatNode(subNode)) {
+                                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                                     connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
                                                         *bytesNode, 0, 0,
-                                                        pushNode->GetValueByPath("FirstMessageMs"),
-                                                        pushNode->GetValueByPath("LastMessageMs"),
-                                                        pushNode->GetValueByPath("WaitTimeUs.History")
+                                                        statNode->GetValueByPath("FirstMessageMs"),
+                                                        statNode->GetValueByPath("LastMessageMs"),
+                                                        statNode->GetValueByPath("WaitTimeUs.History")
                                                     );
                                                     Min0(stage->MinTime, connection->InputBytes->MinTime);
                                                     Max0(stage->MaxTime, connection->InputBytes->MaxTime);
@@ -1439,7 +1458,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 } else {
                                                     connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
                                                 }
-                                                if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
+                                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
                                                     for (auto& op : stage->Operators) {
                                                         for(auto& input : op.Inputs) {
@@ -1451,7 +1470,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 } else {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                                 }
-                                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                                     if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                                         connection->InputChunks = sumNode->GetIntegerSafe();
                                                         if (connection->InputChunks) {
@@ -1545,7 +1564,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 }
                             }
                             if (!ingressNode) {
-                                ingressNode = ingress0.GetValueByPath("Pop");
+                                ingressNode = GetInputStatNode(ingress0);
                             }
                             if (ingressNode) {
                                 if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
@@ -1593,11 +1612,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         // CTE Refs are NOT processed yet, so we don't know their Min/MaxTime - parse it explicitly
         if (inputNode) {
             for (const auto& subNode : inputNode->GetArray()) {
-                if (auto* pushNode = subNode.GetValueByPath("Pop")) {
-                    if (auto* firstMessageMaxNode = pushNode->GetValueByPath("FirstMessageMs.Min")) {
+                if (auto* statNode = GetInputStatNode(subNode)) {
+                    if (auto* firstMessageMaxNode = statNode->GetValueByPath("FirstMessageMs.Min")) {
                         Min0(stage->MinTime, firstMessageMaxNode->GetIntegerSafe());
                     }
-                    if (auto* lastMessageMaxNode = pushNode->GetValueByPath("LastMessageMs.Max")) {
+                    if (auto* lastMessageMaxNode = statNode->GetValueByPath("LastMessageMs.Max")) {
                         Max0(stage->MaxTime, lastMessageMaxNode->GetIntegerSafe());
                     }
                 }
@@ -1929,7 +1948,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         if (iconRef) {
             width -= INTERNAL_WIDTH;
         }
-        auto x2 = x0 + width - scalar->Value * width / scalar->Summary->Max;
+        auto x2 = x0 + width - (scalar->Summary->Max ? scalar->Value * width / scalar->Summary->Max : 0);
         background
         << "  <line x1='" << x0 << "' y1='" << y0 + h - 3 << "' x2='" << x2 << "' y2='" << y0 + h - 3
         << "' stroke-width='3' stroke='" << lightColor << "' stroke-dasharray='1,1'/>" << Endl;

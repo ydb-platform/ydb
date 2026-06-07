@@ -6355,6 +6355,135 @@ PRAGMA ydb.OptShuffleElimination = "true";
                              << plan << "\n" << ast);
     }
 
+    Y_UNIT_TEST(ShuffleEliminationCompositeSourceSubsetKeyExecute) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(
+            NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/a": {"n_rows": 1000000, "byte_size": 16000000},
+            "/Root/b": {"n_rows": 1000000, "byte_size": 24000000}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto result = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/a` (
+                id Int64 NOT NULL,
+                payload Int64 NOT NULL,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/b` (
+                id Int64 NOT NULL,
+                k Int64 NOT NULL,
+                payload Int64 NOT NULL,
+                PRIMARY KEY (id, k)
+            )
+            PARTITION BY HASH(id, k)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 id : {1, 2, 3}) {
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("id").Int64(id)
+                    .AddMember("payload").Int64(id * 10)
+                    .EndStruct();
+            }
+            rows.EndList();
+
+            auto upsert = tableClient.BulkUpsert("/Root/a", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        }
+
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(1)
+                .AddMember("k").Int64(10)
+                .AddMember("payload").Int64(101)
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(1)
+                .AddMember("k").Int64(11)
+                .AddMember("payload").Int64(102)
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(2)
+                .AddMember("k").Int64(20)
+                .AddMember("payload").Int64(200)
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(4)
+                .AddMember("k").Int64(40)
+                .AddMember("payload").Int64(400)
+                .EndStruct();
+            rows.EndList();
+
+            auto upsert = tableClient.BulkUpsert("/Root/b", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(b a Shuffle)
+                JoinOrder(b a)
+            ';
+
+            SELECT b.id, b.k, b.payload
+            FROM `/Root/b` AS b
+            JOIN `/Root/a` AS a ON b.id = a.id
+            ORDER BY b.id, b.k
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto explain = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+
+        auto execute = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(execute.GetResultSet(0)), R"([[1;10;101];[1;11;102];[2;20;200]])");
+    }
+
     // All-ColumnShardHashV1 chain: no accidental HashV2 transition.
     Y_UNIT_TEST(ShuffleEliminationThreeJoinsColumnShardHashCompatibility) {
         const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "d"}, R"(

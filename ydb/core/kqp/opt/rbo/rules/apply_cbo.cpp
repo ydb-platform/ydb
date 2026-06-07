@@ -376,13 +376,19 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
         if (!metadata.ShuffledByColumns.empty()) {
             auto& shuffledBy = resolvedLeafShufflings[i];
             shuffledBy.reserve(metadata.ShuffledByColumns.size());
+            bool allShufflingColumnsResolved = true;
             for (const auto& col : metadata.ShuffledByColumns) {
                 if (const auto it = leaf.ColumnsToCBO.find(col); it != leaf.ColumnsToCBO.end()) {
                     shuffledBy.emplace_back(it->second.GetAlias(), it->second.GetColumnName());
+                } else {
+                    allShufflingColumnsResolved = false;
+                    break;
                 }
             }
-            if (!shuffledBy.empty()) {
+            if (allShufflingColumnsResolved && !shuffledBy.empty()) {
                 fdStorage.AddShuffling(TShuffling(shuffledBy), &tableAliasMap);
+            } else {
+                shuffledBy.clear();
             }
         }
 
@@ -414,6 +420,7 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
             TShuffling(resolvedLeafShufflings[i]), &tableAliasMap);
         if (orderingIdx != std::numeric_limits<std::size_t>::max()) {
             rels[i]->Stats.LogicalOrderings = fsm->CreateState(orderingIdx);
+            rels[i]->Stats.LogicalOrderings.SetShuffleHashFuncArgsCount(resolvedLeafShufflings[i].size());
         }
     }
 

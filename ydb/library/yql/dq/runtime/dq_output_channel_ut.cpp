@@ -25,7 +25,7 @@ namespace {
 
 // #define DEBUG_LOGS
 
-void Log(TStringBuf msg) {
+void Log(NLog::EPrio, TStringBuf msg) {
 #ifdef DEBUG_LOGS
     Cerr << msg << Endl;
 #else

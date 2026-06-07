@@ -44,13 +44,10 @@ TKqpComputeActor::TKqpComputeActor(
 void TKqpComputeActor::DoBootstrap() {
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
-    TLogFunc logger;
-    if (IsDebugLogEnabled(actorSystem)) {
-        logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
-                << ", task: " << taskId << ": " << message);
-        };
-    }
+    TLogFunc logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (NActors::NLog::EPrio priority, const TString& message) {
+        LOG_LOG_S(*actorSystem, static_cast<NActors::NLog::EPriority>(priority), NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
+            << ", task: " << taskId << ": " << message);
+    };
 
     TDqTaskRunnerContext execCtx;
 

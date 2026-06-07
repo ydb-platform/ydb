@@ -12,7 +12,7 @@
 
 namespace NYql::NDq {
 
-#define LOG(s) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(TStringBuilder() << "channelId: " << PopStats.ChannelId << ". " << s); } } while (0)
+#define LOG(s) do { if (LogFunc) { LogFunc(NActors::NLog::EPrio::Debug, TStringBuilder() << "channelId: " << PopStats.ChannelId << ". " << s); } } while (0)
 
 #ifndef NDEBUG
 #define DLOG(s) LOG(s)

@@ -12,7 +12,7 @@
 
 namespace NYql::NDq {
 
-#define LOG(s) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(EPrio::Debug, TStringBuilder() << "channelId: " << PopStats.ChannelId << ". " << s); } } while (0)
+#define LOG(s) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(NActors::NLog::EPrio::Debug, TStringBuilder() << "channelId: " << PopStats.ChannelId << ". " << s); } } while (0)
 
 #ifndef NDEBUG
 #define DLOG(s) LOG(s)
@@ -23,7 +23,6 @@ namespace NYql::NDq {
 namespace {
 
 using namespace NKikimr;
-using NActors::NLog::EPrio;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

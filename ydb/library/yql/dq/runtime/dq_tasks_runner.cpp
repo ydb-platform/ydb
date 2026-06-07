@@ -42,7 +42,7 @@ namespace NYql::NDq {
 
 namespace {
 
-constexpr const ui32 COMPUTATION_LOG_TAIL_MAX_ENTRIES = 300;
+constexpr const ui32 COMPUTATION_LOG_TAIL_MAX_ENTRIES = 100;
 
 void ValidateParamValue(std::string_view paramName, const TType* type, const NUdf::TUnboxedValuePod& value) {
     switch (type->GetKind()) {
@@ -153,7 +153,7 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 
 } // namespace
 
-#define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
+#define LOG(...) do { if (LogFunc) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(
     const NDqProto::TTaskInput& inputDesc,

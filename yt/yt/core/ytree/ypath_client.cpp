@@ -579,7 +579,7 @@ TFuture<std::vector<std::string>> AsyncYPathList(
 
 INodePtr WalkNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const TNodeWalkOptions& options)
 {
     auto currentNode = root;
@@ -637,7 +637,7 @@ INodePtr WalkNodeByYPath(
 
 void SetNodeByYPath(
     const INodePtr& root,
-    const TYPath& path,
+    TYPathBuf path,
     const INodePtr& value,
     bool force)
 {
@@ -724,9 +724,7 @@ void SetNodeByYPath(
     factory->Commit();
 }
 
-bool RemoveNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path)
+bool RemoveNodeByYPath(const INodePtr& root, TYPathBuf path)
 {
     auto node = WalkNodeByYPath(root, path, FindNodeByYPathOptions);
     if (!node) {
@@ -738,9 +736,7 @@ bool RemoveNodeByYPath(
     return true;
 }
 
-void ForceYPath(
-    const INodePtr& root,
-    const TYPath& path)
+void ForceYPath(const INodePtr& root, TYPathBuf path)
 {
     auto currentNode = root;
 
@@ -979,23 +975,17 @@ TNodeWalkOptions FindNodeByYPathNoThrowOptions {
     },
 };
 
-INodePtr GetNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path)
+INodePtr GetNodeByYPath(const INodePtr& root, TYPathBuf path)
 {
     return WalkNodeByYPath(root, path, GetNodeByYPathOptions);
 }
 
-INodePtr FindNodeByYPath(
-    const INodePtr& root,
-    const TYPath& path)
+INodePtr FindNodeByYPath(const INodePtr& root, TYPathBuf path)
 {
     return WalkNodeByYPath(root, path, FindNodeByYPathOptions);
 }
 
-INodePtr FindNodeByYPathNoThrow(
-    const INodePtr& root,
-    const TYPath& path)
+INodePtr FindNodeByYPathNoThrow(const INodePtr& root, TYPathBuf path)
 {
     return WalkNodeByYPath(root, path, FindNodeByYPathNoThrowOptions);
 }

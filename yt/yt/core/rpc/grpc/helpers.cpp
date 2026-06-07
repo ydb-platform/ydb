@@ -446,6 +446,7 @@ TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)
 
 std::string SerializeError(const TError& error)
 {
+    // TODO(babenko): migrate to std::string
     TString serializedError;
     google::protobuf::io::StringOutputStream output(&serializedError);
     NYT::NProto::TError protoError;
@@ -473,9 +474,9 @@ TGrpcPemKeyCertPair LoadPemKeyCertPair(const TSslPemKeyCertPairConfigPtr& config
 
 TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfigPtr& config)
 {
-    TString rootCerts;
-    TString identityCerts;
-    TString identityPrivateKey;
+    std::optional<std::string> rootCerts;
+    std::optional<std::string> identityCerts;
+    std::optional<std::string> identityPrivateKey;
     if (config->PemRootCerts) {
         rootCerts = config->PemRootCerts->LoadBlob();
     }
@@ -489,12 +490,12 @@ TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfi
         tlsPairs = grpc_tls_identity_pairs_create();
         grpc_tls_identity_pairs_add_pair(
             tlsPairs,
-            identityPrivateKey.c_str(),
-            identityCerts.c_str());
+            identityPrivateKey->c_str(),
+            identityCerts->c_str());
     }
 
     TGrpcTlsCertificateProviderPtr certProvider(grpc_tls_certificate_provider_static_data_create(
-        rootCerts ? rootCerts.c_str() : nullptr,
+        rootCerts ? rootCerts->c_str() : nullptr,
         tlsPairs));
 
     grpc_tls_credentials_options* tlsOptions = grpc_tls_credentials_options_create();

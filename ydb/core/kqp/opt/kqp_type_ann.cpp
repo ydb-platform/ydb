@@ -918,6 +918,26 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     auto rowType = itemType->Cast<TStructExprType>();
+
+    const bool isStructOfRows = rowType->GetSize() == 2 && [&]() {
+            THashSet<TStringBuf> names;
+            for (const auto& item : rowType->GetItems()) {
+                names.insert(item->GetName());
+                if (item->GetItemType()->GetKind() != NYql::ETypeAnnotationKind::Struct) {
+                    return false;
+                }
+            }
+            return names.contains("new") && names.contains("old");
+        }();
+    if (isStructOfRows) {
+        for (const auto& item : rowType->GetItems()) {
+            if (item->GetName() == "new") {
+                rowType = item->GetItemType()->Cast<TStructExprType>();
+                break;
+            }
+        }
+    }
+
     for (const auto& column : columns) {
         if (!rowType->FindItem(column.Value())) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
@@ -1169,16 +1189,6 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
         }
-    }
-
-    bool allowNonKey = false;
-    if (TKqlDeleteRowsIndex::Match(node.Get())) {
-        auto settings = TKqpDeleteRowsIndexSettings::Parse(TExprBase(node).Cast<TKqlDeleteRowsIndex>());
-        allowNonKey = settings.SkipLookup;
-    }
-    if (!allowNonKey && rowType->GetItems().size() != table.second->Metadata->KeyColumnNames.size()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Input type contains non-key columns"));
-        return TStatus::Error;
     }
 
     auto effectType = MakeKqpEffectType(ctx);
@@ -2672,12 +2682,7 @@ TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
-    if (std::stoi(TString(pgSyntax->Content()))) {
-        node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
-    } else {
-        node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
-    }
+    node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
 
     return TStatus::Ok;
 }
@@ -2768,8 +2773,7 @@ TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& c
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    if (auto maybeForceOptional = mapElementLambda.ForceOptional();
-        maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True" && !lambdaType->IsOptionalOrNull()) {
+    if (mapElementLambda.ForceOptional().StringValue() == "True" && !lambdaType->IsOptionalOrNull()) {
         lambdaType = ctx.MakeType<TOptionalExprType>(lambdaType);
     }
 
@@ -2857,6 +2861,28 @@ TStatus AnnotateOpProject(const TExprNode::TPtr& input, TExprContext& ctx) {
 
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpProject done: " << *resultAnn;
 
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto structType = input->ChildPtr(TKqpOpReplaceAlias::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes;
+    auto typeItems = structType->GetItems();
+
+    for (const auto& item: typeItems) {
+        auto columnName = TString(item->GetName());
+        if (auto it = columnName.find("."); it != TString::npos) {
+            columnName = columnName.substr(it+1);
+        }
+
+        auto alias = TString(input->ChildPtr(TKqpOpReplaceAlias::idx_Alias)->Content());
+        columnName = alias + "." + columnName;
+        structItemTypes.push_back(ctx.MakeType<TItemExprType>(columnName, item->GetItemType()));
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+    input->SetTypeAnn(resultAnn);
     return TStatus::Ok;
 }
 
@@ -2949,10 +2975,26 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateOpUnionAll(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
     auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
-    // TODO: Add sanity checks.
-    input->SetTypeAnn(leftInputType);
+    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+    auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto leftItems = leftStructType->GetItems();
+    auto rightItems = rightStructType->GetItems();
+    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for Union all.");
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
+        if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
+            newItemTypes.push_back(leftItems[i]);
+        } else {
+            newItemTypes.push_back(rightItems[i]);
+        }
+    }
+
+    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    input->SetTypeAnn(resultType);
+
     return TStatus::Ok;
 }
 
@@ -2992,6 +3034,8 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opAggregate = TKqpOpAggregate(input);
+    const bool scalarAggregation = opAggregate.KeyColumns().Empty();
+    auto pos = input->Pos();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
@@ -3012,17 +3056,23 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
         const auto resultColName = TString(traits.ResultColName());
         auto it = aggTraitsMap.find(originalColName);
         Y_ENSURE(it != aggTraitsMap.end());
-        const auto *aggFieldType = it->second;
-        TPositionHandle dummyPos;
+        auto aggFieldType = it->second;
 
         if (aggFunction == "count") {
             aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         } else if (aggFunction == "sum") {
-            Y_ENSURE(GetSumResultType(dummyPos, *it->second, aggFieldType, ctx),
-                        "Unsupported type for sum aggregation function");
+            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for sum aggregation function.");
         } else if (aggFunction == "avg") {
-            Y_ENSURE(GetAvgResultType(dummyPos, *it->second, aggFieldType, ctx),
-                        "Unsupported type for avg aggregation function");
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for avg aggregation function.");
+        } else if (aggFunction == "variance_1_1") {
+            // I guess it's a same as avg.
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx), "Unsupported type for variance aggregation function.");
+        }
+
+        // Special case for scalar aggregation (aka aggregation with empty keys).
+        if (scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1")) {
+            aggFieldType = ctx.MakeType<TOptionalExprType>(aggFieldType);
         }
 
         newItemTypes.push_back(ctx.MakeType<TItemExprType>(resultColName, aggFieldType));
@@ -3158,6 +3208,7 @@ public:
         AddHandler({TKqpOpLimit::CallableName()}, Hndl(&AnnotateOpLimit));
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));
+        AddHandler({TKqpOpReplaceAlias::CallableName()}, Hndl(&AnnotateOpReplaceAlias));
         AddHandler({TKqpOpAggregate::CallableName()}, Hndl(&AnnotateOpAggregate));
         AddHandler({TKqpOpRoot::CallableName()}, Hndl(&AnnotateOpRoot));
     }

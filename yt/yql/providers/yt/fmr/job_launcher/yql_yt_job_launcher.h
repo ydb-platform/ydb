@@ -32,6 +32,8 @@ public:
 
     bool RunInSeperateProcess() const;
 
+    TString GetFmrJobBinaryPath() const;
+
 private:
     void InitializeJobEnvironment(
         const TString& jobEnvironmentDir,

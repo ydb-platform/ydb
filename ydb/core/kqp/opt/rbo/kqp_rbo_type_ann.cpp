@@ -1,4 +1,5 @@
 #include "kqp_operator.h"
+#include "kqp_rbo_utils.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -19,7 +20,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
+const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg", "variance_1_1"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -132,9 +133,11 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
         const TTypeAnnotationNode* subplanType;
         auto subplanEntry = props.Subplans.PlanMap.at(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
-            auto subplan = subplanEntry.Plan;
-            auto subplanTupleType = CastOperator<IOperator>(subplan)->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            subplanType = subplanTupleType->GetItems()[0]->GetItemType();
+            auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
+            const auto resultIUs = GetSubplanResultIUs(subplan);
+            Y_ENSURE(!resultIUs.empty(), "Scalar subplan has no result columns");
+            subplanType = subplan->GetIUType(resultIUs.front());
+            Y_ENSURE(subplanType, "Cannot infer scalar subplan result type for " << resultIUs.front().GetFullName());
         } else {
             if (!props.PgSyntax) {
                 subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
@@ -217,13 +220,17 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto typeItems = structType->GetItems();
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
-    if (!map->Project) {
-        const TTypeAnnotationNode* inputType = map->GetInput()->Type;
-        auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto& mapElement : map->MapElements) {
+        if (mapElement.IsRename()) {
+            Y_ENSURE(mapElement.IsColumnAccess(), "Rename map element must be a plain column access");
+            renameSources.insert(mapElement.GetRename());
+        }
+    }
 
-        for (const auto* item : structType->GetItems()) {
+    for (const auto* item : structType->GetItems()) {
+        if (!renameSources.contains(TInfoUnit(TString(item->GetName())))) {
             resStructItemTypes.push_back(item);
         }
     }
@@ -286,6 +293,9 @@ TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
 TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const bool scalarAggregation = aggregate->KeyColumns.empty();
+    TPositionHandle pos = aggregate->Pos;
+    const auto aggregationPhase = aggregate->GetAggregationPhase();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
@@ -294,29 +304,56 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
         aggTraitsMap.emplace(itemName, itemType->GetItemType());
     }
 
-    for (const auto& keyColumn : aggregate->KeyColumns) {
-        auto it = aggTraitsMap.find(keyColumn.GetFullName());
-        Y_ENSURE(it != aggTraitsMap.end());
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+    if (!aggregate->IsDistinctAll()) {
+        for (const auto& keyColumn : aggregate->KeyColumns) {
+            const auto it = aggTraitsMap.find(keyColumn.GetFullName());
+            Y_ENSURE(it != aggTraitsMap.end());
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+        }
+    }
+
+    // In case type annotation is running for final aggregation.
+    // (resultColName, (aggFunction, isOptional)).
+    THashMap<TString, std::pair<TString, bool>> intermediateAggregation;
+    if (aggregate->GetInput()->GetKind() == EOperator::Aggregate && aggregationPhase == EOpPhase::Final) {
+        const auto& aggTraitsList = CastOperator<TOpAggregate>(aggregate->GetInput())->AggregationTraitsList;
+        for (const auto& aggTraits : aggTraitsList) {
+            const auto resultColName = aggTraits.ResultColName.GetFullName();
+            const auto& aggFunc = aggTraits.AggFunction;
+            const auto itemType = structType->FindItemType(resultColName);
+            Y_ENSURE(itemType, "Cannot find field name in input type.");
+            intermediateAggregation.emplace(resultColName, std::make_pair(aggFunc, itemType->IsOptionalOrNull()));
+        }
     }
 
     for (const auto& traits : aggregate->AggregationTraitsList) {
         const auto originalColName = traits.OriginalColName.GetFullName();
         const auto& aggFunction = traits.AggFunction;
+        Y_ENSURE(SupportedAggregationFunctions.contains(aggFunction), TStringBuilder() << "Unsupported aggregation function: " << aggFunction;);
         const auto resultColName = traits.ResultColName.GetFullName();
-        auto it = aggTraitsMap.find(originalColName);
-        Y_ENSURE(it != aggTraitsMap.end());
-        const auto* aggFieldType = it->second;
-        TPositionHandle dummyPos;
+        const auto it = aggTraitsMap.find(originalColName);
+        Y_ENSURE(it != aggTraitsMap.end(), "Cannot find aggregation input " << originalColName
+            << " for " << aggregate->ToString(ctx.ExprCtx) << " in input type " << *inputType);
+        auto aggFieldType = it->second;
 
         if (aggFunction == "count") {
             aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
         } else if (aggFunction == "sum") {
-            Y_ENSURE(GetSumResultType(dummyPos, *it->second, aggFieldType, ctx.ExprCtx),
-                        "Unsupported type for sum aggregation function");
+            Y_ENSURE(GetSumResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for sum aggregation function");
         } else if (aggFunction == "avg") {
-            Y_ENSURE(GetAvgResultType(dummyPos, *it->second, aggFieldType, ctx.ExprCtx),
-                        "Unsupported type for avg aggregation function");
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for avg aggregation function");
+        } else if (aggFunction == "variance_1_1") {
+            Y_ENSURE(GetAvgResultType(pos, *it->second, aggFieldType, ctx.ExprCtx), "Unsupported type for variance aggregation function");
+        }
+
+        // Special case for scalar aggregation (aka aggregation with empty keys).
+        if (aggregationPhase != EOpPhase::Intermediate && scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1")) {
+            const auto it = intermediateAggregation.find(originalColName);
+            // count -> count::intermediate + sum::final
+            if ((it == intermediateAggregation.end()) || (it->second.first != "count")) {
+                aggFieldType = ctx.ExprCtx.MakeType<TOptionalExprType>(aggFieldType);
+            }
         }
 
         newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(resultColName, aggFieldType));

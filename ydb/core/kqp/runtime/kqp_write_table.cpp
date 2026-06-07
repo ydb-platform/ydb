@@ -720,8 +720,6 @@ public:
     }
 
     void AddRow(TConstArrayRef<TCell> row) {
-        AFL_ENSURE(row.size() == ColumnCount);
-
         const i64 newMemory = EstimateSize(row);
         const i64 newMemorySerialized = newMemory + GetCellHeaderSize() * ColumnCount;
         if (Batches.empty() || (MaxBytesPerBatch && newMemorySerialized + Batches.back()->GetMemorySerialized() > *MaxBytesPerBatch)) {
@@ -827,6 +825,61 @@ private:
     const std::vector<ui32> ReadIndex;
     TRowsBatcher RowBatcher;
 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+};
+
+class TStructOfRowsDataBatcher : public IDataBatcher {
+public:
+    TStructOfRowsDataBatcher(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> newColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> oldColumns,
+        std::vector<ui32> writeIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        : NewColumns(BuildColumns(newColumns))
+        , OldColumns(BuildColumns(oldColumns))
+        , WriteIndex(std::move(writeIndex))
+        , RowBatcher(NewColumns.size() + OldColumns.size(), std::nullopt, alloc)
+        , Alloc(std::move(alloc)) {
+    }
+
+    void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
+        TRowBuilder rowBuilder(NewColumns.size() + OldColumns.size());
+        data.ForEachRow([&](const auto& row) {
+            auto newStruct = row.GetElement(0);
+            auto oldStruct = row.GetElement(1);
+            for (size_t i = 0; i < NewColumns.size(); ++i) {
+                rowBuilder.AddCell(
+                    WriteIndex[i],
+                    NewColumns[i].PType,
+                    newStruct.GetElement(i),
+                    NewColumns[i].PTypeMod);
+            }
+            for (size_t i = 0; i < OldColumns.size(); ++i) {
+                rowBuilder.AddCell(
+                    NewColumns.size() + i,
+                    OldColumns[i].PType,
+                    oldStruct.GetElement(i),
+                    OldColumns[i].PTypeMod);
+            }
+            auto cells = rowBuilder.BuildCells();
+            AFL_ENSURE(cells.size() == NewColumns.size() + OldColumns.size());
+            RowBatcher.AddRow(cells);
+        });
+    }
+
+    i64 GetMemory() const override {
+        return RowBatcher.GetMemory();
+    }
+
+    IDataBatchPtr Build() override {
+        return RowBatcher.Flush(true);
+    }
+
+private:
+    const TVector<TSysTables::TTableColumnInfo> NewColumns;
+    const TVector<TSysTables::TTableColumnInfo> OldColumns;
+    const std::vector<ui32> WriteIndex;
+    TRowsBatcher RowBatcher;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
 
@@ -1020,6 +1073,14 @@ IRowsBatcherPtr CreateRowsBatcher(
         size_t columnsCount,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TRowsBatcherProxy>(columnsCount, std::move(alloc));
+}
+
+IDataBatcherPtr CreateStructOfRowsDataBatcher(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> columns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
+        std::vector<ui32> writeIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return IDataBatcherPtr(MakeIntrusive<TStructOfRowsDataBatcher>(columns, lookupColumns, std::move(writeIndex), std::move(alloc)));
 }
 
 std::vector<ui32> CreateMapping(

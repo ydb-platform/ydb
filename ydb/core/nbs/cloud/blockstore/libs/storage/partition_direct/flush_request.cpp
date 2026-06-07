@@ -42,7 +42,7 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 void TFlushRequestExecutor::Run()
 {
     auto future = DirectBlockGroup->SyncWithPBuffer(
-        VChunkConfig.VChunkIndex,
+        VChunkConfig.GetVChunkIndex(),
         Route.SourceHostIndex,
         Route.DestinationHostIndex,
         Hint.Segments,

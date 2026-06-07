@@ -16,6 +16,8 @@
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/fs.h>
 
+#include <library/cpp/yt/system/process_id.h>
+
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NLogging {
@@ -49,7 +51,7 @@ TString FormatFileName(const TString& fileNamePattern)
 {
     TPatternFormatter formatter;
     formatter
-        .SetProperty("process_id", ToString(GetCurrentProcessId()))
+        .SetProperty("process_id", ToString(GetProcessId()))
         .SetProperty("process_name", SanitizeFileName(GetCurrentProcessName()))
         .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessCommandLine()));
     return formatter.Format(fileNamePattern);

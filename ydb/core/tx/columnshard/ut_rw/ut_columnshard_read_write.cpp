@@ -2585,6 +2585,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
         TTester::Setup(runtime);
         runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
+        runtime.GetAppData(0).ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
         runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
 

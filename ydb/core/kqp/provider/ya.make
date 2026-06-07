@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
+    yql_kikimr_constraints.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp
     yql_kikimr_exec.cpp
@@ -26,23 +27,30 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/protos
     ydb/core/docapi
-    ydb/core/scheme
+    ydb/core/kqp/expr_nodes
+    ydb/core/kqp/opt/cbo
+    ydb/core/local_indexes/bloom
     ydb/core/kqp/query_data
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
     ydb/library/aclib
     ydb/library/aclib/protos
-    yql/essentials/types/binary_json
-    yql/essentials/types/dynumber
-    ydb/core/kqp/opt/cbo
-    yql/essentials/core/services
-    yql/essentials/minikql
-    yql/essentials/public/decimal
+    ydb/library/ydb_issue/proto
+    ydb/library/yql/dq/common
+    ydb/library/yql/dq/constraints
+    ydb/library/yql/dq/expr_nodes
+    ydb/library/yql/dq/opt
+    ydb/library/yql/providers/dq/expr_nodes
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/metadata/optimization
+    yql/essentials/core
     yql/essentials/core/expr_nodes
+    yql/essentials/core/services
     yql/essentials/core/peephole_opt
+    yql/essentials/minikql
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
@@ -50,19 +58,21 @@ PEERDIR(
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/expr
-    ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
-    ydb/library/yql/providers/dq/expr_nodes
+    yql/essentials/providers/common/transform
     yql/essentials/providers/pg/expr_nodes
     yql/essentials/providers/result/expr_nodes
     yql/essentials/providers/result/provider
+    yql/essentials/public/decimal
+    yql/essentials/public/issue
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
     yql/essentials/sql
+    yql/essentials/sql/settings
     yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
-    ydb/library/ydb_issue/proto
-    yql/essentials/public/issue
     yql/essentials/utils/log
 )
 

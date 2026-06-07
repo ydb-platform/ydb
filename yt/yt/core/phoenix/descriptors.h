@@ -27,7 +27,7 @@ class TTypeSchemaBuilderRegistar;
 class TFieldDescriptor
 {
 public:
-    const TString& GetName() const;
+    const std::string& GetName() const;
     TFieldTag GetTag() const;
 
     const TFieldSchemaPtr& GetSchema() const;
@@ -36,7 +36,7 @@ private:
     friend class NDetail::TTypeSchemaBuilderRegistar;
     friend class NDetail::TFieldSchemaRegistrar;
 
-    TString Name_;
+    std::string Name_;
     TFieldTag Tag_;
     int MinVersion_ = std::numeric_limits<int>::min();
     int MaxVersion_ = std::numeric_limits<int>::max();
@@ -48,7 +48,7 @@ private:
 class TTypeDescriptor
 {
 public:
-    const TString& GetName() const;
+    const std::string& GetName() const;
     TTypeTag GetTag() const;
     const std::vector<std::unique_ptr<TFieldDescriptor>>& Fields() const;
     const std::vector<TTypeTag>& BaseTypeTags() const;
@@ -66,7 +66,7 @@ private:
     friend class NDetail::TTypeRegistry;
     friend class NDetail::TTypeSchemaBuilderRegistar;
 
-    TString Name_;
+    std::string Name_;
     std::vector<const std::type_info*> TypeInfos_;
     TTypeTag Tag_;
     std::vector<std::unique_ptr<TFieldDescriptor>> Fields_;

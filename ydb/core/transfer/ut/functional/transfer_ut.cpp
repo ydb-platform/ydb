@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-        )", MainTestCase::CreateTransferSettings::WithExpectedError(TStringBuilder() << "Path does not exist"));
+        )", MainTestCase::CreateTransferSettings::WithExpectedError(TStringBuilder() << "Path `/local/" << testCase.TableName << "` does not exist"));
 
         testCase.DropTopic();
     }
@@ -1167,7 +1167,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithExpectedError("Path does not exist"));
+            )", MainTestCase::CreateTransferSettings::WithExpectedError(TStringBuilder() << "Path `/local/" << testCase.TableName << "` does not exist"));
 
         testCase.DropTopic();
     }

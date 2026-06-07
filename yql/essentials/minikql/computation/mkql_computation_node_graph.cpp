@@ -490,7 +490,8 @@ private:
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
             name == "KqpReadTable" ||
-            name == "MultiHoppingCore") {
+            name == "MultiHoppingCore" ||
+            name == "DqWatermarkGenerator") {
             PatternNodes->SuitableForCache = false;
         }
 
@@ -820,6 +821,14 @@ public:
 
     TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() override {
         return NotConsumedLinear_;
+    }
+
+    bool GetFlushingMode() const override {
+        return Ctx->FlushingMode;
+    }
+
+    void SetFlushingMode(bool value) override {
+        Ctx->FlushingMode = value;
     }
 
 private:

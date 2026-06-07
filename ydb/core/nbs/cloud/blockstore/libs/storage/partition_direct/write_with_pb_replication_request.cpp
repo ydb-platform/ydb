@@ -57,51 +57,39 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     TChildLogTitle logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TBlockRange64 vChunkRange,
-    TCallContextPtr callContext,
-    std::shared_ptr<TWriteBlocksLocalRequest> request,
-    ui64 lsn,
-    NWilson::TTraceId traceId)
+    std::shared_ptr<TWriteRequestBundle> bundle)
     : TBaseWriteRequestExecutor(
           actorSystem,
           std::move(logTitle),
           vChunkConfig,
           directBlockGroup,
-          vChunkRange,
-          std::move(callContext),
-          std::move(request),
-          lsn,
-          std::move(traceId))
+          std::move(bundle))
     , PbufferReplyTimeout(
           directBlockGroup->GetOracle()->GetPBufferReplyTimeout())
 {
-    const auto& pbufferHosts = VChunkConfig.PBufferHosts;
-    AvailableHostsForDirectSending =
-        pbufferHosts.GetPrimary().Include(pbufferHosts.GetHandOff());
+    AvailableHostsForDirectSending = VChunkConfig.GetDesiredPBuffers().Include(
+        VChunkConfig.GetSecondaryPBuffers());
 }
 
 void TWriteWithPbReplicationRequestExecutor::Run()
 {
+    Bundle->GetSpan().Event("Run");
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
 
-    SendWriteRequestToManyPBuffers(
-        VChunkConfig.PBufferHosts.GetPrimary().Hosts());
+    SendWriteRequestToManyPBuffers(VChunkConfig.GetDesiredPBuffers().Hosts());
 }
 
 void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
     TVector<THostIndex> hosts)
 {
-    if (Promise.IsReady()) {
-        return;
-    }
+    Y_ABORT_IF(IsAlreadyReplied());
 
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "SendWriteRequestToManyPBuffers %s %s",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+        "%s SendWriteRequestToManyPBuffers",
+        LogTitle.GetWithTime().c_str());
 
     const THostIndex coordinatorHostIndex =
         DirectBlockGroup->GetOracle()->SelectBestPBufferHost(
@@ -115,22 +103,20 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         RequestedWrites.Set(host);
     }
 
-    auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
-        VChunkConfig.VChunkIndex,
+    DirectBlockGroup->WriteBlocksToManyPBuffers(
+        VChunkConfig.GetVChunkIndex(),
         coordinatorHostIndex,
         std::move(hosts),
-        Lsn,
-        VChunkRange,
+        Bundle->GetLsn(),
+        Bundle->GetVChunkRange(),
         PbufferReplyTimeout,
-        Request->Sglist,
-        NWilson::TTraceId(TraceId));
-
-    future.Subscribe(
+        Bundle->GetSgList(),
+        Bundle->GetSpan().GetTraceId(),
         [self =
              std::static_pointer_cast<TWriteWithPbReplicationRequestExecutor>(
                  shared_from_this())](
-            const NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>& f)
-        { self->OnWriteToManyPBuffersResponse(f.GetValue()); });
+            TDBGWriteBlocksToManyPBuffersResponse response)
+        { self->OnWriteToManyPBuffersResponse(response); });
 }
 
 void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
@@ -140,41 +126,43 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse fatal error %s %s %s",
-            FormatError(response.OverallError).c_str(),
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            "%s OnWriteToManyPBuffersResponse fatal: %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(response.OverallError).c_str());
         TryToSendDirectWrites(false);
         return;
     }
 
+    THostMask completedWritesOfCurrentResponse;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
         AvailableHostsForDirectSending.Reset(host);
+
         if (!HasError(pbufferResponse.Error)) {
             LOG_DEBUG(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "OnWriteToManyPBuffersResponse ok on host %d %s %s",
-                host,
-                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                Request->Headers.Range.Print().c_str());
-            CompletedWrites.Set(host);
+                "%s OnWriteToManyPBuffersResponse ok on %s",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostIndex(host).c_str());
+
+            completedWritesOfCurrentResponse.Set(host);
         } else {
             LOG_WARN(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "OnWriteToManyPBuffersResponse error on host %d: %s %s %s",
-                host,
-                FormatError(pbufferResponse.Error).c_str(),
-                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-                Request->Headers.Range.Print().c_str());
+                "%s OnWriteToManyPBuffersResponse error on host %s: %s",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostIndex(host).c_str(),
+                FormatError(pbufferResponse.Error).c_str());
             // The error will be set and replied below.
         }
     }
 
+    CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
+
     if (ShouldReplyOk()) {
-        Reply(MakeError(S_OK));
+        ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
         return;
     }
 
@@ -183,16 +171,15 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
 
 void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
 {
-    LOG_INFO(
+    LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse isHedge: %s considering to send fallback"
-        " %s %s",
-        BoolToString(isHedge),
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+        "%s OnWriteToManyPBuffersResponse isHedge: %s considering to send "
+        "fallback",
+        LogTitle.GetWithTime().c_str(),
+        BoolToString(isHedge));
 
-    bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber <
+    bool needToSend = CompletedWrites.Count() + ActiveDirectWrites.Count() <
                       QuorumDirectBlockGroupHostCount;
 
     // We are relying on the IC layer: a reply will eventually arrive,
@@ -203,7 +190,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
 
     size_t neededRequestsNumber = QuorumDirectBlockGroupHostCount -
                                   CompletedWrites.Count() -
-                                  ActiveDirectWritesNumber;
+                                  ActiveDirectWrites.Count();
     bool haveEnoughAvailableHostsForSending =
         neededRequestsNumber <= AvailableHostsForDirectSending.Count();
 
@@ -213,33 +200,31 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse isHedge: %s : %s %s %s",
+            "%s OnWriteToManyPBuffersResponse isHedge: %s : %s",
+            LogTitle.GetWithTime().c_str(),
             BoolToString(isHedge),
-            FormatError(resultError).c_str(),
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            FormatError(resultError).c_str());
 
-        Reply(resultError);
+        ReplyOrNotifyBelated(resultError, {});
         return;
     }
 
     TVector<std::optional<THostIndex>> mainCandidates = {
-        VChunkConfig.PBufferHosts.GetHandOff().Nth(0),
-        VChunkConfig.PBufferHosts.GetHandOff().Nth(1)};
+        VChunkConfig.GetSecondaryPBuffers().Nth(0),
+        VChunkConfig.GetSecondaryPBuffers().Nth(1)};
     for (auto host: TakeNHosts(
              std::move(mainCandidates),
              AvailableHostsForDirectSending,
              neededRequestsNumber))
     {
-        LOG_INFO(
+        LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse isHedge: %s: trying to send "
-            "fallback writeRequest to %d host %s %s",
+            "%s OnWriteToManyPBuffersResponse isHedge: %s: trying to send "
+            "fallback writeRequest to %s",
+            LogTitle.GetWithTime().c_str(),
             BoolToString(isHedge),
-            host,
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+            PrintHostIndex(host).c_str());
 
         SendDirectWriteRequest(host);
     }
@@ -253,33 +238,30 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse DirectResponse on %d host %s %s",
-        host,
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+        "%s OnWriteToManyPBuffersResponse DirectResponse on %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(host).c_str());
 
-    --ActiveDirectWritesNumber;
-    if (Promise.IsReady()) {
-        return;
-    }
+    ActiveDirectWrites.Reset(host);
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
         if (ShouldReplyOk()) {
-            Reply(MakeError(S_OK));
+            ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
     }
+    // There is no necessity of vchunk's notifying in case of error.
+    // Notifying has sense only for CompletedWrites.
+    // RequestedWrites will be registered in any case.
 
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse DirectResponse error on %d host %s"
-        " %s %s",
-        host,
+        "%s OnWriteToManyPBuffersResponse DirectResponse %s on %s",
+        LogTitle.GetWithTime().c_str(),
         FormatError(response.Error).c_str(),
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+        PrintHostIndex(host).c_str());
 
     auto spanEnder = TEndSpanWithError(std::move(span), response.Error);
 
@@ -288,12 +270,11 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
 
 void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 {
-    LOG_INFO(
+    LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "SendWriteRequestToManyPBuffers: schedule hedge %s %s",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+        "%s SendWriteRequestToManyPBuffers: schedule hedge",
+        LogTitle.GetWithTime().c_str());
 
     DirectBlockGroup->Schedule(
         HedgingDelay,
@@ -302,7 +283,7 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
             if (auto self = std::static_pointer_cast<
                     TWriteWithPbReplicationRequestExecutor>(weakSelf.lock()))
             {
-                if (!self->Promise.IsReady()) {
+                if (!self->IsAlreadyReplied()) {
                     self->TryToSendDirectWrites(true);
                 }
             }
@@ -312,8 +293,19 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
     THostIndex host)
 {
-    ++ActiveDirectWritesNumber;
+    ActiveDirectWrites.Set(host);
     SendWriteRequest(host);
+}
+
+TString TWriteWithPbReplicationRequestExecutor::ExtendedDebugState() const
+{
+    TStringBuilder result;
+    result << TBaseWriteRequestExecutor::ExtendedDebugState();
+    result << "AvailableHostsForDirectSending: "
+           << AvailableHostsForDirectSending.Print() << ";";
+    result << "ActiveDirectWrites: " << ActiveDirectWrites.Print() << ";";
+
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

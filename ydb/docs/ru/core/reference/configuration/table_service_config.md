@@ -2,6 +2,35 @@
 
 Секция `table_service_config` содержит параметры конфигурации для сервиса таблиц, включая настройки спиллинга.
 
+## resource_manager {#resource-manager}
+
+В подсекции `resource_manager` задаются параметры управления ресурсами сервиса таблиц.
+
+### Кэш level table векторного индекса
+
+Level table (`indexImplLevelTable`) векторного индекса [`vector_kmeans_tree`](../../dev/vector-indexes-kmeans-tree-type.md#index-structure) хранит центроиды, к которым {{ ydb-short-name }} обращается на каждом шаге спуска по дереву кластеров во время векторного поиска. Чтобы не перечитывать эти центроиды из распределённого хранилища при каждом запросе, {{ ydb-short-name }} может кэшировать их в памяти на каждом узле базы данных.
+
+Кэш создаётся отдельно на каждом узле, использует LRU-вытеснение и наращивает свой размер до указанного лимита постепенно.
+
+```yaml
+table_service_config:
+  resource_manager:
+    kqp_level_cache_max_size_bytes: 0
+    kqp_level_cache_increase_batch_size_bytes: 33554432
+```
+
+#### resource_manager.kqp_level_cache_max_size_bytes
+
+**Тип:** `uint64`  
+**По умолчанию:** `0` (кэш отключён)  
+**Описание:** Максимальный размер кэша level table векторного индекса в байтах на один узел базы данных. Установка ненулевого значения включает кэш.
+
+#### resource_manager.kqp_level_cache_increase_batch_size_bytes
+
+**Тип:** `uint64`  
+**По умолчанию:** `33554432` (32 МиБ)  
+**Описание:** Шаг увеличения размера кэша level table. Кэш растёт порциями такого размера до значения `kqp_level_cache_max_size_bytes` и уменьшается такими же порциями при снижении лимита.
+
 ## spilling_service_config
 
 [Спиллинг](../../concepts/query_execution/spilling.md) — это механизм управления памятью в {{ ydb-short-name }}, который временно сохраняет данные на диск при нехватке оперативной памяти.

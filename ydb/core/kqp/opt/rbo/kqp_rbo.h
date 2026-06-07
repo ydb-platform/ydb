@@ -13,7 +13,10 @@ enum ERuleProperties: ui32 {
     RequireParents = 0x01,
     RequireTypes = 0x02,
     RequireMetadata = 0x04,
-    RequireStatistics = 0x08
+    RequireStatistics = 0x08,
+    RequireLiveness = 0x10,
+    RequireNameConstraints = 0x20,
+    RequireAliases = 0x40
   };
 
 /**
@@ -27,7 +30,7 @@ enum ERuleProperties: ui32 {
 class IRule {
   public:
     IRule(TString name) : RuleName(name) {}
-    IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
+    IRule(TString name, ui32 props, bool logRule = true) : RuleName(name), Props(props), LogRule(logRule) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -45,7 +48,7 @@ class IRule {
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
-    ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
+    ISimplifiedRule(TString name, ui32 props, bool logRule = true) : IRule(name, props, logRule) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -105,6 +108,8 @@ public:
  * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
+void ComputePlanLiveness(TOpRoot& root);
+void ComputePlanAliases(TOpRoot& root);
 
 TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");

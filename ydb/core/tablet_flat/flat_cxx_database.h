@@ -4,6 +4,8 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/subdomain.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
@@ -20,6 +22,21 @@ using TToughDb = NTable::TDatabase;
 using NTable::TUpdateOp;
 using NTable::ELookup;
 using NTable::TBackupExclusion;
+
+template <typename T>
+struct TTriviallySerializable : std::bool_constant<std::is_scalar<T>::value && !std::is_pointer<T>::value> {};
+
+template <typename T, typename U>
+struct TTriviallySerializable<std::pair<T, U>> : std::bool_constant<TTriviallySerializable<T>::value && TTriviallySerializable<U>::value> {};
+
+template <>
+struct TTriviallySerializable<TActorId> : std::true_type {};
+
+template<>
+struct TTriviallySerializable<TSubDomainKey> : std::true_type {};
+
+template <typename T>
+concept CTriviallySerializable = TTriviallySerializable<T>::value;
 
 class TTypeValue : public TRawTypeValue {
 public:
@@ -58,7 +75,7 @@ public:
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
         : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
     {}
@@ -195,9 +212,8 @@ public:
         return *reinterpret_cast<const std::pair<ui64, i64>*>(Data());
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     operator TVector<ElementType>() const {
-        static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_ENSURE(Size() % sizeof(ElementType) == 0);
         std::size_t count = Size() / sizeof(ElementType);
@@ -206,9 +222,8 @@ public:
         return TVector<ElementType>(begin, end);
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     void ExtractArray(THashSet<ElementType> &container) const {
-        static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_ENSURE(Size() % sizeof(ElementType) == 0);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
@@ -277,7 +292,7 @@ public:
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(value.SerializeAsString());
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TVector<ElementType>& value) {
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(
             TString(
@@ -525,7 +540,7 @@ struct TConvertValueFromRawTypeValueToPod {
     }
 };
 
-template <typename ColumnType, typename VectorType>
+template <typename ColumnType, CTriviallySerializable VectorType>
 struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     TVector<VectorType> Value;
 
@@ -545,7 +560,7 @@ struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     }
 };
 
-template <typename TColumnType, typename VectorType>
+template <typename TColumnType, CTriviallySerializable VectorType>
 struct TConvertValue<TColumnType, TRawTypeValue, TVector<VectorType>> {
     TTypeValue Value;
 

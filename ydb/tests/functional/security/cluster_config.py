@@ -10,11 +10,14 @@ def create_ydb_configurator(
     require_counters_authentication=None,
     require_healthcheck_authentication=None,
     enable_tablet_dev_ui_secure_path=None,
+    extra_feature_flags=None,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
         'enforce_user_token_requirement': enforce_user_token_requirement,
     }
+    if extra_feature_flags:
+        cluster_config['extra_feature_flags'] = extra_feature_flags
     config_generator = KikimrConfigGenerator(**cluster_config)
 
     if 'grpc_config' not in config_generator.yaml_config:

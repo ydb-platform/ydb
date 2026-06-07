@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "kafka_messages_int.h"
+#include <ydb/library/kafka/kafka_messages_int.h>
 
 namespace NKafka {
 

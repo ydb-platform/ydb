@@ -48,6 +48,7 @@ CFLAGS(
     -DVERSION=\"3.13\"
     -DVPATH=\"\"
     -DPLATLIBDIR=\"lib\"
+    $CORE_LIBS_OPTIMIZATION
 )
 
 IF (CLANG_CL)

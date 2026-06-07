@@ -23,6 +23,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
@@ -307,6 +308,12 @@ public:
             }
         }
 
+        // Create finalize script service
+        const auto& finalizeScriptService = Register(CreateKqpFinalizeScriptService(
+            QueryServiceConfig, FederatedQuerySetup, S3ActorsFactory
+        ));
+        TActivationContext::ActorSystem()->RegisterLocalService(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), finalizeScriptService);
+
         // Create compile service
         CompileService = TActivationContext::Register(CreateKqpCompileService(
             QueryCache,
@@ -375,22 +382,10 @@ public:
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
-        // A lot of tests create ProxyService but don't create KqpServiceInitializer
-        if (!TActivationContext::ActorSystem()->LookupLocalService(MakeKqpSchedulerServiceId(SelfId().NodeId()))) {
-            NScheduler::TOptions schedulerOptions {
-                .DelayParams = {
-                    .MaxDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
-                    .MinDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
-                    .AttemptBonus = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
-                    .MaxRandomDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
-                },
-                .UpdateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs()),
-            };
-
-            KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
-            TActivationContext::ActorSystem()->RegisterLocalService(
-                MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
-        }
+        auto updateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs());
+        KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(updateFairSharePeriod));
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -509,9 +504,7 @@ public:
         Send(KqpNodeService, new TEvents::TEvPoison);
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
-        if (KqpComputeSchedulerService) {
-            Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
-        }
+        Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
         Send(KqpQueryTextCacheService, new TEvents::TEvPoison());
         if (RowDispatcherService) {
             Send(RowDispatcherService, new TEvents::TEvPoison());

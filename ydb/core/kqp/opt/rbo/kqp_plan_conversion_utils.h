@@ -14,6 +14,8 @@ struct TIOperatorSharedPtrHash {
     size_t operator()(const TIntrusivePtr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
 };
 
+void RepairPlanOutputIUs(TOpRoot& root, TExprContext& ctx);
+
 class PlanConverter {
   public:
     PlanConverter(TTypeAnnotationContext &typeCtx, TExprContext &ctx) : TypeCtx(typeCtx), Ctx(ctx) {}
@@ -31,6 +33,7 @@ class PlanConverter {
     TIntrusivePtr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpReplaceAlias(TExprNode::TPtr node);
 
     TExprNode::TPtr RemoveSubplans(TExprNode::TPtr lambda);
 

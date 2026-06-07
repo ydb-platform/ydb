@@ -69,6 +69,41 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             UNIT_ASSERT_C(ast.Contains("SqueezeToDict"), ast);
         }
     }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionLagMultiPartitionKeyAst, UseSortForPartitionsByKeys) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TStringBuilder query;
+        query << "--!syntax_v1\n"
+              << "PRAGMA ydb.OptUseSortForPartitionsByKeys = \""
+              << (UseSortForPartitionsByKeys ? "true" : "false") << "\";\n\n"
+              << "SELECT Key, Text, Data,\n"
+              << "    LAG(Data) OVER w AS prev_data\n"
+              << "FROM `/Root/EightShard`\n"
+              << "WINDOW w AS (\n"
+              << "    PARTITION BY Key, Text\n"
+              << "    ORDER BY Data\n"
+              << ");\n";
+
+        auto result = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        const TString ast{result.GetAst()};
+
+        Cerr << "=== Explain AST (LagMultiPartitionKey), UseSortForPartitionsByKeys="
+             << (UseSortForPartitionsByKeys ? "true" : "false")
+             << " ===\n" << ast << Endl;
+
+        if (UseSortForPartitionsByKeys) {
+            UNIT_ASSERT_C(ast.Contains("WideSort"), ast);
+            UNIT_ASSERT_C(ast.Contains("Chopper") || ast.Contains("WideChopper"), ast);
+            UNIT_ASSERT_C(ast.Contains("HashShuffle"), ast);
+            UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
+        } else {
+            UNIT_ASSERT_C(ast.Contains("SqueezeToDict"), ast);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -1,10 +1,7 @@
-from typing import Union, Tuple
-
 from clickhouse_connect.driver.common import unescape_identifier
 
 
-# pylint: disable=too-many-branches
-def parse_callable(expr) -> Tuple[str, Tuple[Union[str, int], ...], str]:
+def parse_callable(expr) -> tuple[str, tuple[str | int, ...], str]:
     """
     Parses a single level ClickHouse optionally 'callable' function/identifier.  The identifier is returned as the
     first value in the response tuple.  If the expression is callable -- i.e. an identifier followed by 0 or more
@@ -19,16 +16,16 @@ def parse_callable(expr) -> Tuple[str, Tuple[Union[str, int], ...], str]:
     :return: Tuple of the identifier, a tuple of arguments, and remaining text
     """
     expr = expr.strip()
-    pos = expr.find('(')
-    space = expr.find(' ')
+    pos = expr.find("(")
+    space = expr.find(" ")
     if pos == -1 and space == -1:
-        return expr, (), ''
+        return expr, (), ""
     if space != -1 and (pos == -1 or space < pos):
         return expr[:space], (), expr[space:].strip()
     name = expr[:pos]
     pos += 1  # Skip first paren
     values = []
-    value = ''
+    value = ""
     in_str = False
     level = 0
 
@@ -45,39 +42,39 @@ def parse_callable(expr) -> Tuple[str, Tuple[Union[str, int], ...], str]:
             value += char
             if char == "'":
                 in_str = False
-            elif char == '\\' and expr[pos] == "'" and expr[pos:pos + 4] != "' = " and expr[pos:pos + 2] != "')":
+            elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos : pos + 2] != "')":
                 value += expr[pos]
                 pos += 1
         else:
             if level == 0:
-                if char == ' ':
+                if char == " ":
                     space = pos
                     temp_char = expr[space]
-                    while temp_char == ' ':
+                    while temp_char == " ":
                         space += 1
                         temp_char = expr[space]
                     if not value or temp_char in "()',=><0":
                         char = temp_char
                         pos = space + 1
-                if char == ',':
+                if char == ",":
                     add_value()
-                    value = ''
+                    value = ""
                     continue
-                if char == ')':
+                if char == ")":
                     break
-            if char == "'" and (not value or 'Enum' in value):
+            if char == "'" and (not value or "Enum" in value):
                 in_str = True
-            elif char == '(':
+            elif char == "(":
                 level += 1
-            elif char == ')' and level:
+            elif char == ")" and level:
                 level -= 1
             value += char
-    if value != '':
+    if value != "":
         add_value()
     return name, tuple(values), expr[pos:].strip()
 
 
-def parse_enum(expr) -> Tuple[Tuple[str], Tuple[int]]:
+def parse_enum(expr) -> tuple[tuple[str], tuple[int]]:
     """
     Parse a ClickHouse enum definition expression of the form ('key1' = 1, 'key2' = 2)
     :param expr: ClickHouse enum expression/arguments
@@ -85,7 +82,7 @@ def parse_enum(expr) -> Tuple[Tuple[str], Tuple[int]]:
     """
     keys = []
     values = []
-    pos = expr.find('(') + 1
+    pos = expr.find("(") + 1
     in_key = False
     key = []
     value = []
@@ -94,20 +91,20 @@ def parse_enum(expr) -> Tuple[Tuple[str], Tuple[int]]:
         pos += 1
         if in_key:
             if char == "'":
-                keys.append(''.join(key))
+                keys.append("".join(key))
                 key = []
                 in_key = False
-            elif char == '\\' and expr[pos] == "'" and expr[pos:pos + 4] != "' = " and expr[pos:] != "')":
+            elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos:] != "')":
                 key.append(expr[pos])
                 pos += 1
             else:
                 key.append(char)
-        elif char not in (' ', '='):
-            if char == ',':
-                values.append(int(''.join(value)))
+        elif char not in (" ", "="):
+            if char == ",":
+                values.append(int("".join(value)))
                 value = []
-            elif char == ')':
-                values.append(int(''.join(value)))
+            elif char == ")":
+                values.append(int("".join(value)))
                 break
             elif char == "'" and not value:
                 in_key = True
@@ -129,7 +126,7 @@ def parse_columns(expr: str):
     pos = 1
     named = False
     level = 0
-    label = ''
+    label = ""
     quote = None
     while True:
         char = expr[pos]
@@ -137,30 +134,30 @@ def parse_columns(expr: str):
         if quote:
             if char == quote:
                 quote = None
-            elif char == '\\' and expr[pos] == "'" and expr[pos:pos + 4] != "' = " and expr[pos:pos + 2] != "')":
+            elif char == "\\" and expr[pos] == "'" and expr[pos : pos + 4] != "' = " and expr[pos : pos + 2] != "')":
                 label += expr[pos]
                 pos += 1
         else:
             if level == 0:
-                if char in (' ', '='):
+                if char in (" ", "="):
                     if label and not named:
                         names.append(unescape_identifier(label))
-                        label = ''
+                        label = ""
                         named = True
-                    char = ''
-                elif char == ',':
+                    char = ""
+                elif char == ",":
                     columns.append(label)
                     named = False
-                    label = ''
+                    label = ""
                     continue
-                elif char == ')':
+                elif char == ")":
                     columns.append(label)
                     break
-            if char in ("'", '`') and (not label or 'Enum' in label):
+            if char in ("'", "`") and (not label or "Enum" in label):
                 quote = char
-            elif char == '(':
+            elif char == "(":
                 level += 1
-            elif char == ')':
+            elif char == ")":
                 level -= 1
         label += char
     return tuple(names), tuple(columns)

@@ -3453,19 +3453,22 @@ TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
 
 void TExprCycleDetector::Reset() {
     Queue_.clear();
-    Set_.clear();
+    Map_.clear();
 }
 
-void TExprCycleDetector::AddNode(const TExprNode& node) {
+void TExprCycleDetector::AddNode(const TExprNode& node, ui64 repeatTransformCount) {
     auto hash = MakeCacheKey(node);
-    if (!Set_.insert(hash).second) {
-        throw yexception() << "Graph cycle detected";
+    auto [it, inserted] = Map_.emplace(hash, repeatTransformCount);
+    if (!inserted) {
+        YQL_CLOG(ERROR, Core) << "Old node at " << it->second << "\n";
+        YQL_CLOG(ERROR, Core) << "New node at " << repeatTransformCount << "\n";
+        throw TErrorException(0) << "Graph cycle detected";
     }
 
     Queue_.push(hash);
     if (Queue_.size() > MaxQueueSize_) {
         auto prevHash = Queue_.front();
-        Set_.erase(prevHash);
+        Map_.erase(prevHash);
         Queue_.pop();
     }
 }

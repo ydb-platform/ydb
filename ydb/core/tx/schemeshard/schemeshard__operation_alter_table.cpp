@@ -135,7 +135,14 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             return nullptr;
         }
 
-        if (col.GetNotNull() && !hasDefault) {
+        auto colId = table->GetColumnIdByNameSlow(col.GetName());
+        bool altersExistingColumn = (colId != TTableInfo::InvalidColumnId);
+
+        // Adding a new NOT NULL column to an existing table requires a default,
+        // otherwise pre-existing rows would have no value for that column and
+        // would violate the constraint immediately. Altering an existing column (SET NOT NULL way)
+        // is handled separately and may validate existing data instead.
+        if (col.GetNotNull() && !hasDefault && !altersExistingColumn) {
             errStr = Sprintf("Not null columns without defaults are not supported.");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
@@ -159,6 +166,30 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
+    if (copyAlter.HasTTLSettings() && copyAlter.GetTTLSettings().HasEnabled()) {
+        for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
+            if (!context.SS->PathsById.contains(childPathId)) {
+                continue;
+            }
+
+            auto childPath = context.SS->PathsById.at(childPathId);
+            if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                continue;
+            }
+
+            if (!context.SS->Indexes.contains(childPathId)) {
+                continue;
+            }
+
+            const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
+            if (!DoesIndexSupportTTL(indexInfo->Type)) {
+                errStr = TStringBuilder() << "Table with " << indexInfo->Type << " index doesn't support TTL";
+                status = NKikimrScheme::StatusInvalidParameter;
+                return nullptr;
+            }
+        }
+    }
+
     const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
@@ -175,7 +206,6 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
-        .EnableSetColumnConstraint = AppData()->FeatureFlags.GetEnableSetColumnConstraint(),
     };
 
 
@@ -205,7 +235,7 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
             : TTxState::ConfigureParts;
 
     txState.Shards.reserve(table->GetPartitionStore().size());
-    for (auto& [shardIdx, shard] : table->GetPartitionStore()) {
+    for (const auto& shardIdx : table->GetPartitionStore() | std::views::keys) {
         TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
 
         auto shardOp = commonShardOp;
@@ -408,7 +438,7 @@ public:
             table->ScheduleAllCondErase();
 
             const auto now = context.Ctx.Now();
-            for (const auto& [_, shard] : table->GetPartitionStore()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -420,7 +450,7 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Sub(1);
             table->ClearCondEraseSchedule();
 
-            for (const auto& [_, shard] : table->GetPartitionStore()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 if (auto& lag = shard.LastCondEraseLag) {
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                     lag.Clear();

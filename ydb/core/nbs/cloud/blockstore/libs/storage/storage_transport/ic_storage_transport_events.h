@@ -1,5 +1,7 @@
 #pragma once
 
+#include "storage_transport.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/kikimr/events.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -7,6 +9,8 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
+
+#include <functional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -261,6 +265,7 @@ struct TEvTransportPrivate
     struct TWriteToManyPBuffers: TDisableCopyMove
     {
         using TResult = TProtoEvWriteToManyPersistentBuffersResult;
+        using TCallback = std::function<void(TResult)>;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
@@ -272,8 +277,8 @@ struct TEvTransportPrivate
 
         const TGuardedSgList Data;
         NWilson::TTraceId TraceId;
-        NThreading::TPromise<TResult> Promise =
-            NThreading::NewPromise<TResult>();
+        TCallback Callback;
+        ui32 NumberOfCallbackCalls = 0;
 
         TWriteToManyPBuffers(
             const NActors::TActorId serviceId,

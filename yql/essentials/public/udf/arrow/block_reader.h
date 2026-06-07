@@ -2,10 +2,15 @@
 
 #include "block_item.h"
 #include "block_io_buffer.h"
+#include "dense_union.h"
+#include "dense_union_scalar.h"
 #include "dispatch_traits.h"
 #include "util.h"
 
+#include <arrow/array/array_nested.h>
 #include <arrow/datum.h>
+#include <arrow/scalar.h>
+#include <arrow/type.h>
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
@@ -20,7 +25,7 @@ public:
     virtual TBlockItem GetScalarItem(const arrow::Scalar& scalar) = 0;
 
     virtual ui64 GetDataWeight(const arrow::ArrayData& data) const = 0;
-    virtual ui64 GetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const = 0;
+    virtual ui64 GetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const = 0;
     virtual ui64 GetDataWeight(TBlockItem item) const = 0;
     virtual ui64 GetDefaultValueWeight() const = 0;
 
@@ -36,7 +41,7 @@ struct TBlockItemSerializeProps {
 
 class TBlockReaderBase: public IBlockReader {
 public:
-    ui64 GetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 GetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const final {
         Y_ENSURE(0 <= offset && offset < data.length);
         Y_ENSURE(offset + length >= offset);
         Y_ENSURE(offset + length <= data.length);
@@ -44,9 +49,9 @@ public:
     }
 
 protected:
-    virtual ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const = 0;
+    virtual ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const = 0;
 
-    static ui64 GetBitmaskDataWeight(int64_t dataLength) {
+    static ui64 GetBitmaskDataWeight(i64 dataLength) {
         if (dataLength <= 0) {
             return 0;
         }
@@ -90,7 +95,7 @@ public:
         return GetDataWeightImpl(data.length);
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const final {
         Y_UNUSED(data, offset);
         return GetDataWeightImpl(length);
     }
@@ -137,7 +142,7 @@ public:
     }
 
 private:
-    ui64 GetDataWeightImpl(int64_t dataLength) const {
+    ui64 GetDataWeightImpl(i64 dataLength) const {
         ui64 size = sizeof(T) * dataLength;
         if constexpr (Nullable) {
             size += GetBitmaskDataWeight(dataLength);
@@ -200,7 +205,7 @@ public:
         return GetDataWeightImpl(data.length, data.GetValues<TOffset>(1));
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const final {
         return GetDataWeightImpl(length, data.GetValues<TOffset>(1, offset));
     }
 
@@ -248,7 +253,7 @@ public:
     }
 
 private:
-    ui64 GetDataWeightImpl(int64_t dataLength, const TOffset* offsets) const {
+    ui64 GetDataWeightImpl(i64 dataLength, const TOffset* offsets) const {
         ui64 size = 0;
         if constexpr (Nullable) {
             size += GetBitmaskDataWeight(dataLength);
@@ -291,7 +296,7 @@ public:
         return size;
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const final {
         ui64 size = 0;
         if constexpr (Nullable) {
             size += GetBitmaskDataWeight(length);
@@ -392,7 +397,7 @@ public:
         return size;
     }
 
-    size_t GetChildrenDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const {
+    size_t GetChildrenDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const {
         size_t size = 0;
         for (ui32 i = 0; i < Children_.size(); ++i) {
             size += Children_[i]->GetSliceDataWeight(*data.child_data[i], offset, length);
@@ -453,7 +458,7 @@ public:
         return size;
     }
 
-    size_t GetChildrenDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const {
+    size_t GetChildrenDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const {
         Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
 
         size_t size = 0;
@@ -521,7 +526,7 @@ public:
         return 0;
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const final {
         Y_UNUSED(data, offset, length);
         return 0;
     }
@@ -542,6 +547,84 @@ public:
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const override {
         Y_UNUSED(scalar, out);
     }
+};
+
+class TVariantBlockReader final: public TBlockReaderBase {
+public:
+    explicit TVariantBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
+        : Children_(std::move(children))
+    {
+    }
+
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+        const auto* typeCodes = data.GetValues<i8>(1);
+        const auto* valueOffsets = data.GetValues<i32>(2);
+        const i8 typeCode = typeCodes[index];
+        const i32 valueOffset = valueOffsets[index];
+        InnerItem_ = Children_[typeCode]->GetItem(*data.child_data[typeCode], valueOffset);
+        return TBlockItem(static_cast<ui32>(typeCode), &InnerItem_);
+    }
+
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+        const auto* variantScalar = arrow::internal::checked_cast<const TDenseUnionScalar*>(&scalar);
+        InnerItem_ = Children_[variantScalar->Index]->GetScalarItem(*variantScalar->value);
+        return TBlockItem(variantScalar->Index, &InnerItem_);
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+        return DoGetSliceDataWeight(data, 0, data.length);
+    }
+
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const final {
+        ui64 size = GetIndexAndOffsetDataWeight(length);
+        auto slicedData = DeepSlice(data, offset, length);
+        auto childrenUsage = CalculateDenseUnionChildrenUsage(*slicedData);
+        for (size_t childIndex = 0; childIndex < Children_.size(); ++childIndex) {
+            const auto& usage = childrenUsage[childIndex];
+            size += Children_[childIndex]->GetSliceDataWeight(*data.child_data[childIndex], usage.Offset, usage.Length);
+        }
+        return size;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const final {
+        const ui32 idx = item.GetVariantIndex();
+        constexpr size_t ExtraWeight = 1;
+        return Children_[idx]->GetDataWeight(item.GetVariantItem()) + ExtraWeight;
+    }
+
+    ui64 GetIndexAndOffsetDataWeight(size_t length) const {
+        return static_cast<ui64>(length) * (sizeof(i8) + sizeof(i32));
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        return GetIndexAndOffsetDataWeight(1) + Children_[0]->GetDefaultValueWeight();
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+        const auto* typeCodes = data.GetValues<i8>(1);
+        const auto* valueOffsets = data.GetValues<i32>(2);
+        const i8 typeCode = typeCodes[index];
+        const i32 valueOffset = valueOffsets[index];
+        out.PushChar(static_cast<char>(typeCode));
+        Children_[typeCode]->SaveItem(*data.child_data[typeCode], valueOffset, out);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+        const auto* variantScalar = arrow::internal::checked_cast<const TDenseUnionScalar*>(&scalar);
+        out.PushChar(static_cast<char>(variantScalar->Index));
+        Children_[variantScalar->Index]->SaveScalarItem(*variantScalar->value, out);
+    }
+
+private:
+    ui64 GetChildDataWeight(const arrow::ArrayData& data) const {
+        ui64 size = 0;
+        for (size_t idx = 0; idx < Children_.size(); ++idx) {
+            size += Children_[idx]->GetDataWeight(*data.child_data[idx]);
+        }
+        return size;
+    }
+    const TVector<std::unique_ptr<IBlockReader>> Children_;
+    mutable TBlockItem InnerItem_;
 };
 
 class TExternalOptionalBlockReader final: public TBlockReaderBase {
@@ -572,7 +655,7 @@ public:
         return GetBitmaskDataWeight(data.length) + Inner_->GetDataWeight(*data.child_data.front());
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, i64 offset, i64 length) const final {
         return GetBitmaskDataWeight(length) + Inner_->GetSliceDataWeight(*data.child_data.front(), offset, length);
     }
 
@@ -614,6 +697,7 @@ struct TReaderTraits {
     using TResult = IBlockReader;
     template <bool Nullable>
     using TTuple = TTupleBlockReader<Nullable>;
+    using TVariant = TVariantBlockReader;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockReader<T, Nullable>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>

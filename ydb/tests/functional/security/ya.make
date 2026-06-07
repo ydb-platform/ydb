@@ -9,6 +9,7 @@ TEST_SRCS(
     test_grants.py
     test_mon_endpoints_auth.py
     test_mon_mtls_auth.py
+    test_mon_viewer_access_controls.py
     test_paths_lookup.py
     test_tablets_dev_ui_mon_auth.py
 )

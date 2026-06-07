@@ -516,6 +516,23 @@ const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwn
 TString SerializeToString(TUnversionedRow row);
 TString SerializeToString(TUnversionedValueRange range);
 
+//! Returns an upper bound on the number of bytes |SerializeRowToBuffer| writes for |range|.
+size_t GetUnversionedRowByteSizeForWire(TUnversionedValueRange range);
+
+//! Serializes |range| in the same compact wire format as |SerializeToString| directly into |dst|.
+//! The buffer must hold at least |GetUnversionedRowByteSizeForWire(range)| bytes.
+//! Returns the pointer past the written bytes.
+char* SerializeRowToBuffer(char* dst, TUnversionedValueRange range);
+
+//! Reads the row header written by |SerializeRowToBuffer| from |input|, stores the value count
+//! into |valueCount|, and returns the pointer to the first value.
+const char* ReadUnversionedRowHeaderFromBuffer(const char* input, ui32* valueCount);
+
+//! Reads a single value written by |SerializeRowToBuffer| from |input| into |value|.
+//! String-like values point into the source buffer and are not copied.
+//! Returns the pointer past the consumed bytes.
+const char* ReadUnversionedValueFromBuffer(const char* input, TUnversionedValue* value);
+
 void ToProto(TProtobufString* protoRow, TUnversionedRow row);
 void ToProto(TProtobufString* protoRow, const TUnversionedOwningRow& row);
 void ToProto(TProtobufString* protoRow, TUnversionedValueRange range);

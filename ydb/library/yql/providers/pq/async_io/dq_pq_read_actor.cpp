@@ -872,6 +872,7 @@ private:
     }
 
     static TPartitionKey MakePartitionKey(const TString& cluster, const NYdb::NTopic::TPartitionSession::TPtr& partitionSession) {
+        Y_DEBUG_ABORT_UNLESS(partitionSession, "Missing partition session for partition key creation");
         return { cluster, partitionSession->GetPartitionId() };
     }
 
@@ -1200,7 +1201,7 @@ private:
                 usedSpace += data.size();
 
                 for (const auto& [name, extractor] : Self.MetadataFields) {
-                    auto [ub, size] = extractor(message);
+                    auto [ub, size] = extractor(message, Cluster);
                     *(itemPtr++) = std::move(ub);
                     usedSpace += size;
                 }

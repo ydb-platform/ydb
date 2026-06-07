@@ -32,6 +32,11 @@ public:
                 << "Index build with id '" << BuildId << "' already exists");
         }
 
+        if (Self->SetColumnConstraintOperations.contains(BuildId)) {
+            return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
+                << "Another long-running operation with id '" << BuildId << "' already exists");
+        }
+
         const TString& uid = GetUid(request.GetOperationParams());
         if (uid && Self->IndexBuildsByUid.contains(uid)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
@@ -156,7 +161,7 @@ public:
 
             if (tableInfo->IsTTLEnabled() && !DoesIndexSupportTTL(buildInfo->IndexType)) {
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED,
-                    TStringBuilder() << buildInfo->IndexType << " index doesn't support TTL");
+                    TStringBuilder() << "Table with " << buildInfo->IndexType << " index doesn't support TTL");
             }
 
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;

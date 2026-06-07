@@ -4,6 +4,8 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
+#include <ydb/public/lib/value/value.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>  // for Y_UNIT_TEST_FLAGS_N
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
@@ -11,6 +13,10 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
+// defined in ut_table_partitions_format.cpp
+TString PostSwitchAction(TTestActorRuntime& runtime, ui64 schemeShard, TPathId pathId, TStringBuf format);
+TPathId GetPathId(TTestActorRuntime& runtime, const TString& path);
 
 namespace {
 
@@ -829,6 +835,328 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {NLs::PartitionCount(20)});
+    }
+
+    Y_UNIT_TEST(SplitRestartRoundTrip) {
+        // Split a table into 3 partitions, restart schemeshard, then verify
+        // that the partition count, shard identities, and boundaries survive
+        // TTxInit loading from TablePartitionsByShardIdx (ShardIdx format).
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatShardIdx(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 100500
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Split into 2.
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            const ui64 shard0 = describe.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+            TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "M" } } } }
+            )", shard0));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Split into 3.
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            const ui64 shard1 = describe.GetPathDescription().GetTablePartitions(1).GetDatashardId();
+            TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "T" } } } }
+            )", shard1));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({"M", "T", ""})});
+
+        // Record shard IDs before restart.
+        TVector<ui64> preShardIds;
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            for (const auto& p : describe.GetPathDescription().GetTablePartitions()) {
+                preShardIds.push_back(p.GetDatashardId());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(preShardIds.size(), 3u);
+
+        // Restart schemeshard — forces TTxInit to re-load from persistent tables.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({"M", "T", ""})});
+
+        TVector<ui64> postShardIds;
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            for (const auto& p : describe.GetPathDescription().GetTablePartitions()) {
+                postShardIds.push_back(p.GetDatashardId());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(preShardIds, postShardIds);
+    }
+
+    Y_UNIT_TEST(ShardIdxFormatMigration) {
+        // Start in positional format, do one split, enable ShardIdx format,
+        // do another split (triggers migration to ShardIdx format), then restart
+        // schemeshard and verify the partition state survives the round-trip.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatShardIdx(false);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 100500
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // First split in positional format.
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            const ui64 shard0 = describe.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+            TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "M" } } } }
+            )", shard0));
+            env.TestWaitNotification(runtime, txId);
+        }
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({"M", ""})});
+
+        // Enable ShardIdx format.  The next split migrates from positional rows
+        // to ShardIdx rows and sets PartitionsInShardIdxFormat.
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatShardIdx(true);
+
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            const ui64 shard1 = describe.GetPathDescription().GetTablePartitions(1).GetDatashardId();
+            TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "T" } } } }
+            )", shard1));
+            env.TestWaitNotification(runtime, txId);
+        }
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({"M", "T", ""})});
+
+        // Record shard IDs before restart.
+        TVector<ui64> preShardIds;
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            for (const auto& p : describe.GetPathDescription().GetTablePartitions()) {
+                preShardIds.push_back(p.GetDatashardId());
+            }
+        }
+
+        // Restart schemeshard: forces TTxInit to load from ShardIdx rows.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Verify boundaries and shard identities survived the round-trip.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({"M", "T", ""})});
+        {
+            auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+            TVector<ui64> postShardIds;
+            for (const auto& p : describe.GetPathDescription().GetTablePartitions()) {
+                postShardIds.push_back(p.GetDatashardId());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(preShardIds, postShardIds);
+        }
+    }
+
+    Y_UNIT_TEST(DropTableShardIdxFormatNoOrphanRows) {
+        // PersistRemoveTable should delete from TablePartitionsByShardIdx.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        // To be independent from current flag defaults
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatShardIdxByDefault(false);
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatAutoConvert(false);
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatShardIdx(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "M" } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "T" } } } }
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 3
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathId = GetPathId(runtime, "/MyRoot/Table");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+            {NLs::PartitionKeys({"M", "T", ""})}
+        );
+
+        // Switch table to shardidx format
+        auto r = PostSwitchAction(runtime, TTestTxConfig::SchemeShard, pathId, "shardidx");
+        UNIT_ASSERT_C(r.Contains("OK\n"), r);
+
+        // Counts all rows in TablePartitionsByShardIdx via a full composite-key range scan.
+        // ReadLocalTableRecords() only works for single-column keys, so we issue the
+        // MiniKQL query directly, specifying all four key columns in the range.
+        auto countShardIdxRows = [&]() -> ui64 {
+            const auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+                (
+                    (let range '(
+                        '('OwnerPathId  (Null) (Void))
+                        '('LocalPathId  (Null) (Void))
+                        '('OwnerShardIdx (Null) (Void))
+                        '('LocalShardIdx (Null) (Void))
+                    ))
+                    (let fields '('OwnerPathId))
+                    (return (AsList
+                        (SetResult 'Result (SelectRange 'TablePartitionsByShardIdx range fields '()))
+                    ))
+                )
+            )");
+            return NKikimr::NClient::TValue::Create(result)[0]["List"].Size();
+        };
+
+        // After switching to shardidx format, TablePartitionStatsByShardIdx should have exactly 3 rows
+        UNIT_ASSERT_VALUES_EQUAL(countShardIdxRows(), 3u);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+            {NLs::PartitionKeys({"M", "T", ""})}
+        );
+
+        // Drop the table — PersistRemoveTable must delete those rows.
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
+        env.TestWaitNotification(runtime, txId);
+
+        // TablePartitionsByShardIdx must now be empty.
+        UNIT_ASSERT_VALUES_EQUAL(countShardIdxRows(), 0u);
+
+        // Restart schemeshard — before the fix, TTxInit crashed here because
+        // orphaned TablePartitionsByShardIdx rows referenced the dropped pathId.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+            {NLs::PathNotExist}
+        );
+    }
+
+    Y_UNIT_TEST(FormatDowngradeNoOrphanStatsRows) {
+        // PersistTablePartitioningDeletion should delete from
+        // TablePartitionStatsByShardIdx when PartitionsInShardIdxFormat=true.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnablePersistentPartitionStats(true);
+
+        // To be independent from current flag defaults
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatShardIdxByDefault(false);
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatAutoConvert(false);
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsFormatShardIdx(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "M" } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "T" } } } }
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 3
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathId = GetPathId(runtime, "/MyRoot/Table");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+            {NLs::PartitionKeys({"M", "T", ""})}
+        );
+
+        // Switch table to shardidx format
+        auto r = PostSwitchAction(runtime, TTestTxConfig::SchemeShard, pathId, "shardidx");
+        UNIT_ASSERT_C(r.Contains("OK\n"), r);
+
+        auto countStatsShardIdxRows = [&]() -> ui64 {
+            const auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+                (
+                    (let range '(
+                        '('OwnerPathId  (Null) (Void))
+                        '('LocalPathId  (Null) (Void))
+                        '('OwnerShardIdx (Null) (Void))
+                        '('LocalShardIdx (Null) (Void))
+                    ))
+                    (let fields '('OwnerPathId))
+                    (return (AsList
+                        (SetResult 'Result (SelectRange 'TablePartitionStatsByShardIdx range fields '()))
+                    ))
+                )
+            )");
+            return NKikimr::NClient::TValue::Create(result)[0]["List"].Size();
+        };
+
+        // After switching to shardidx format, TablePartitionStatsByShardIdx should have exactly 3 rows
+        UNIT_ASSERT_VALUES_EQUAL(countStatsShardIdxRows(), 3u);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+            {NLs::PartitionKeys({"M", "T", ""})}
+        );
+
+        // Switch table back to position format
+        r = PostSwitchAction(runtime, TTestTxConfig::SchemeShard, pathId, "position");
+        UNIT_ASSERT_C(r.Contains("OK\n"), r);
+
+        // After switching to position format, TablePartitionStatsByShardIdx must be empty, no orphaned rows
+        UNIT_ASSERT_VALUES_EQUAL(countStatsShardIdxRows(), 0u);
+
+        // Restart to verify no crash loading orphaned rows
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+            {NLs::PartitionKeys({"M", "T", ""})}
+        );
     }
 
 }
@@ -2564,5 +2892,113 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
             SourceTabletId: 72075186233409546
             SourceTabletId: 72075186233409546
         )", {{NKikimrScheme::StatusInvalidParameter, "Duplicate SourceTabletId"}});
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeShardConsistencyCheckCounter) {
+    // COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS accumulates the wall-clock
+    // nanoseconds spent in TTableInfo::VerifyConsistency(), gated by the
+    // EnableTablePartitionsConsistencyCheck feature flag (default on).
+    static constexpr const char* CounterName = "SchemeShard/TablePartitionsConsistencyCheckTimeNs";
+
+    Y_UNIT_TEST(ZeroWhenFlagOff) {
+        // With the check disabled, VerifyConsistency() returns early and resets
+        // LastVerifyConsistencyTime to 0, so every report site increments by 0
+        // and the cumulative counter stays exactly 0.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsConsistencyCheck(false);
+
+        // Many partitions: a verify here would be measurable if it ran at all.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 200
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Exercise ApplySplitMerge as well (the first shard of a uniform table).
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 1 } } } }
+        )", TTestTxConfig::FakeHiveTablets + 0));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, CounterName), 0u);
+    }
+
+    Y_UNIT_TEST(ReportedWhenFlagOn) {
+        // With the check enabled (default), the cumulative counter accumulates a
+        // non-zero time across the partitioning report sites. A 200-partition
+        // verify reliably exceeds 1us, so create/copy/move alone guarantee > 0;
+        // split and merge additionally cover the ApplySplitMerge report sites and
+        // assert the verification invariants hold on real operation results.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTablePartitionsConsistencyCheck(true);
+
+        // Small table with explicit, predictable shard ids for split/merge.
+        // Partitions: (-inf,"A") -> F+0, ["A","B") -> F+1, ["B",+inf) -> F+2.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "SplitMe"
+            Columns { Name: "key"   Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } } } }
+            PartitionConfig {
+                PartitioningPolicy { MinPartitionsCount: 1 SizeToSplit: 100500 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Split the first partition -> ApplySplitMerge (split).
+        TestSplitTable(runtime, ++txId, "/MyRoot/SplitMe", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "0" } } } }
+            )",
+            TTestTxConfig::FakeHiveTablets + 0
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        // Merge the two non-first partitions F+1, F+2 -> ApplySplitMerge (merge).
+        TestSplitTable(runtime, ++txId, "/MyRoot/SplitMe", Sprintf(R"(
+                SourceTabletId: %lu
+                SourceTabletId: %lu
+            )",
+            TTestTxConfig::FakeHiveTablets + 1,
+            TTestTxConfig::FakeHiveTablets + 2
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        // Big table to force a measurable verify time.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "BigTable"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 200
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Copy -> SetPartitioning on the new table.
+        TestCopyTable(runtime, ++txId, "/MyRoot", "BigCopy", "/MyRoot/BigTable");
+        env.TestWaitNotification(runtime, txId);
+
+        // Move -> MovePartitioning + the move_table report site.
+        TestMoveTable(runtime, ++txId, "/MyRoot/BigTable", "/MyRoot/BigMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, CounterName), 0u);
     }
 }

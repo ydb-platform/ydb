@@ -1983,6 +1983,9 @@ enum EFulltextIndexType {
     FulltextPlain = 0;
     FulltextRelevance = 1;
     Json = 2;
+    FulltextCompact = 3;
+    FulltextCompactRelevance = 4;
+    JsonCompact = 5;
 }
 
 message TEvBuildFulltextIndexRequest {
@@ -2046,10 +2049,10 @@ message TEvBuildFulltextDictRequest {
     optional uint64 SeqNoGeneration = 7;
     optional uint64 SeqNoRound = 8;
 
-    optional string OutputName = 9;
+    optional string DictTableName = 9;
     optional string DatabaseName = 10;
 
-    optional Ydb.Table.FulltextIndexSettings Settings = 11; // also has key columns
+    reserved 11;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 12;
 
@@ -2057,6 +2060,10 @@ message TEvBuildFulltextDictRequest {
     // in the shard require cross-shard aggregation which is performed by the scheme shard
     optional bool SkipFirstToken = 13;
     optional bool SkipLastToken = 14;
+
+    optional EFulltextIndexType IndexType = 15;
+    optional string PostingTableName = 16;
+    optional uint64 MaxSegmentDocuments = 17;
 }
 
 message TEvBuildFulltextDictResponse {
@@ -2424,8 +2431,8 @@ message TEvReadResult {
     optional uint64 DeferredVictimQuerySpanId = 16;
 
     // Indicates that initial read was throttled by KQP Compute Scheduler due to lack of read quota.
-    // The reader should retry after some reasonable delay.
-    optional bool Throttled = 17;
+    // The reader should retry only after this delay.
+    optional uint64 ThrottleDelayMs = 17;
 
     // Data for the possibly partial result
     oneof ReadResult {

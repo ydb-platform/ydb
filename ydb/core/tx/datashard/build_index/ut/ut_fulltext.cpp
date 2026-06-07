@@ -107,13 +107,13 @@ namespace NKikimr {
             return std::move(index);
         }
 
-        void CreateMainTable(Tests::TServer::TPtr server, TActorId sender) {
+        void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, const char* keyType = "Uint64") {
             TShardedTableOptions options;
             options.EnableOutOfOrder(true);
             options.Shards(1);
             options.AllowSystemColumnNames(false);
             options.Columns({
-                {"key", "Uint32", true, true},
+                {"key", keyType, true, true},
                 {"text", "String", false, false},
                 {"data", "String", false, false},
             });
@@ -138,26 +138,26 @@ namespace NKikimr {
             if (withRelevance) {
                 options.Columns({
                     {TokenColumn, "String", true, true},
-                    {"key", "Uint32", true, true},
+                    {"key", "Uint64", true, true},
                     {FreqColumn, TokenCountTypeName, false, true},
                 });
             } else {
                 options.Columns({
                     {TokenColumn, "String", true, true},
-                    {"key", "Uint32", true, true},
+                    {"key", "Uint64", true, true},
                     {"data", "String", false, false},
                 });
             }
             CreateShardedTable(server, sender, "/Root", "table-index", options);
         }
 
-        void CreateDocsTable(Tests::TServer::TPtr server, TActorId sender) {
+        void CreateDocsTable(Tests::TServer::TPtr server, TActorId sender, const char* keyType = "Uint64") {
             TShardedTableOptions options;
             options.EnableOutOfOrder(true);
             options.Shards(1);
             options.AllowSystemColumnNames(true);
             options.Columns({
-                {"key", "Uint32", true, true},
+                {"key", keyType, true, true},
                 {"data", "String", false, false},
                 {DocLengthColumn, TokenCountTypeName, false, false},
             });
@@ -310,7 +310,7 @@ __ydb_token = yellow, key = 3, data = three
                 options.AllowSystemColumnNames(true);
                 options.Columns({
                     {TokenColumn, "String", true, true},
-                    {"key", "Uint32", true, true},
+                    {"key", "Uint64", true, true},
                     {"text", "String", false, false},
                     {"data", "String", false, false},
                 });
@@ -354,9 +354,9 @@ __ydb_token = yellow, key = 3, text = yellow apple, data = three
                 options.Shards(1);
                 options.AllowSystemColumnNames(false);
                 options.Columns({
-                    {"key", "Uint32", true, true},
+                    {"key", "Uint64", true, true},
                     {"text", "String", true, true},
-                    {"subkey", "Uint32", true, true},
+                    {"subkey", "Uint64", true, true},
                     {"data", "String", false, false},
                 });
                 CreateShardedTable(server, sender, "/Root", "table-main", options);
@@ -377,9 +377,9 @@ __ydb_token = yellow, key = 3, text = yellow apple, data = three
                 options.AllowSystemColumnNames(true);
                 options.Columns({
                     {TokenColumn, "String", true, true},
-                    {"key", "Uint32", true, true},
+                    {"key", "Uint64", true, true},
                     {"text", "String", true, true},
-                    {"subkey", "Uint32", true, true},
+                    {"subkey", "Uint64", true, true},
                     {"data", "String", false, false},
                 });
                 CreateShardedTable(server, sender, "/Root", "table-index", options);
@@ -448,7 +448,7 @@ __ydb_token = yellow, key = 3, text = yellow apple, subkey = 33, data = three
             // Parse the last ack key and check it equals key=4 (the largest key in the table)
             TSerializedCellVec lastAck(record.GetLastKeyAck());
             UNIT_ASSERT_VALUES_EQUAL(lastAck.GetCells().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(lastAck.GetCells()[0].AsValue<ui32>(), 4u);
+            UNIT_ASSERT_VALUES_EQUAL(lastAck.GetCells()[0].AsValue<ui64>(), 4u);
         }
 
         Y_UNIT_TEST(InProgressResponsesCarryLastKeyAck) {
@@ -474,13 +474,13 @@ __ydb_token = yellow, key = 3, text = yellow apple, subkey = 33, data = three
             // We must have received at least one IN_PROGRESS response with LastKeyAck
             UNIT_ASSERT_C(!progressReplies.empty(), "Expected at least one IN_PROGRESS response");
 
-            ui32 prevKey = 0;
+            ui64 prevKey = 0;
             for (const auto& progress : progressReplies) {
                 const auto& rec = progress->Get()->Record;
                 UNIT_ASSERT_C(rec.HasLastKeyAck(), "IN_PROGRESS response must have LastKeyAck");
                 TSerializedCellVec ack(rec.GetLastKeyAck());
                 UNIT_ASSERT_VALUES_EQUAL(ack.GetCells().size(), 1u);
-                ui32 currentKey = ack.GetCells()[0].AsValue<ui32>();
+                ui64 currentKey = ack.GetCells()[0].AsValue<ui64>();
                 UNIT_ASSERT_C(currentKey > prevKey,
                               "LastKeyAck must be strictly increasing: prev=" << prevKey << " current=" << currentKey);
                 prevKey = currentKey;
@@ -506,7 +506,7 @@ __ydb_token = yellow, key = 3, text = yellow apple, subkey = 33, data = three
 
             // Resume from "after key=2": exclusive lower bound key=2
             auto result = DoBuild(server, sender, [](auto& request) {
-                TCell fromCell = TCell::Make(ui32(2));
+                TCell fromCell = TCell::Make(ui64(2));
                 TSerializedTableRange range({&fromCell, 1}, false /*exclusive*/, {}, false);
                 range.Serialize(*request.MutableKeyRange());
             });
@@ -533,14 +533,14 @@ __ydb_token = yellow, key = 3, data = (empty maybe)
 
             // First half: keys 1..2 (inclusive on both ends)
             DoBuild(server, sender, [](auto& request) {
-                TCell toCell = TCell::Make(ui32(2));
+                TCell toCell = TCell::Make(ui64(2));
                 TSerializedTableRange range({}, false, {&toCell, 1}, true /*inclusive*/);
                 range.Serialize(*request.MutableKeyRange());
             });
 
             // Second half: keys > 2 (i.e., 3 and 4)
             DoBuild(server, sender, [](auto& request) {
-                TCell fromCell = TCell::Make(ui32(2));
+                TCell fromCell = TCell::Make(ui64(2));
                 TSerializedTableRange range({&fromCell, 1}, false /*exclusive*/, {}, false);
                 range.Serialize(*request.MutableKeyRange());
             });
@@ -555,7 +555,7 @@ __ydb_token = yellow, key = 3, data = (empty maybe)
                 options.AllowSystemColumnNames(true);
                 options.Columns({
                     {NTableIndex::NFulltext::TokenColumn, "String", true, true},
-                    {"key", "Uint32", true, true},
+                    {"key", "Uint64", true, true},
                     {"data", "String", false, false},
                 });
                 CreateShardedTable(server, sender, "/Root", "table-index-full", options);
@@ -684,7 +684,7 @@ __ydb_token = yellow, key = 3, data = (empty maybe)
                 options.AllowSystemColumnNames(true);
                 options.Columns({
                     {NTableIndex::NFulltext::TokenColumn, "String", true, true},
-                    {"key", "Uint32", true, true},
+                    {"key", "Uint64", true, true},
                     {"data", "String", false, false},
                 });
                 CreateShardedTable(server, sender, "/Root", "table-index-full", options);
@@ -737,7 +737,7 @@ __ydb_token = yellow, key = 3, data = (empty maybe)
             // Parse the acked key to know how far the first scan reached
             TSerializedCellVec ackedCells(lastKeyAck);
             UNIT_ASSERT_VALUES_EQUAL(ackedCells.GetCells().size(), 1u);
-            ui32 ackedKey = ackedCells.GetCells()[0].AsValue<ui32>();
+            ui64 ackedKey = ackedCells.GetCells()[0].AsValue<ui64>();
 
             // Resume scan from LastKeyAck (exclusive)
             {
@@ -833,6 +833,121 @@ key = 3, data = (empty maybe), __ydb_length = 2
 key = 4, data = (empty maybe), __ydb_length = 2
 )");
         }
+
+        void DoTestBuildCompact(bool WithRelevance, const char *keyType = "Uint64") {
+            TPortManager pm;
+            TServerSettings serverSettings(pm.GetPort(2134));
+            serverSettings.SetDomainName("Root");
+
+            Tests::TServer::TPtr server = new TServer(serverSettings);
+            auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+            server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+            server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+            InitRoot(server, sender);
+
+            CreateMainTable(server, sender, keyType);
+            if (keyType[0] == 'U') {
+                FillMainTable(server, sender);
+            } else {
+                ExecSQL(server, sender, R"(
+                    UPSERT INTO `/Root/table-main` (key, text, data) VALUES
+                    (-2, "green apple", "one"),
+                    (-1, "red apple and blue apple", "two"),
+                    (3, "yellow apple", "three"),
+                    (4, "red car", "four")
+                )");
+            }
+            CreateFulltextCompactTable(server, sender, "table-index", keyType);
+            if (WithRelevance) {
+                CreateDocsTable(server, sender, keyType);
+            }
+
+            auto reply = DoBuildRaw(server, sender, [&](auto& request) {
+                if (WithRelevance) {
+                    request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
+                } else {
+                    request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompact);
+                }
+            });
+
+            auto index = ReadShardedTable(server, kIndexTable);
+            Cerr << "Index:" << Endl;
+            Cerr << index << Endl;
+
+            if (WithRelevance) {
+                auto docs = ReadShardedTable(server, kDocsTable);
+                Cerr << "Docs:" << Endl;
+                Cerr << docs << Endl;
+                if (keyType[0] == 'U') {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x41\x02\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+");
+                    UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = 1, data = (empty maybe), __ydb_length = 2
+key = 2, data = (empty maybe), __ydb_length = 5
+key = 3, data = (empty maybe), __ydb_length = 2
+key = 4, data = (empty maybe), __ydb_length = 2
+)");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\x41\x02\x04\n\
+__ydb_token = blue, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = -2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x05\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
+");
+                    UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = -2, data = (empty maybe), __ydb_length = 2
+key = -1, data = (empty maybe), __ydb_length = 5
+key = 3, data = (empty maybe), __ydb_length = 2
+key = 4, data = (empty maybe), __ydb_length = 2
+)");
+                }
+            } else {
+                if (keyType[0] == 'U') {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
+__ydb_token = blue, __ydb_max_id = 2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_max_id = 1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(index, "__ydb_token = and, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = apple, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\x01\x04\n\
+__ydb_token = blue, __ydb_max_id = -1, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = car, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_max_id = -2, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x03\n\
+__ydb_token = red, __ydb_max_id = 4, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x01\x05\n\
+__ydb_token = yellow, __ydb_max_id = 3, __ydb_generation = 4294967295, __ydb_added = 1, __ydb_segment = \x06\n\
+");
+                }
+            }
+        }
+
+        Y_UNIT_TEST_TWIN(BuildCompactUint64, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Uint64");
+        }
+
+        Y_UNIT_TEST_TWIN(BuildCompactInt64, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Int64");
+        }
+
+        Y_UNIT_TEST_TWIN(BuildCompactUint32, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Uint32");
+        }
+
+        Y_UNIT_TEST_TWIN(BuildCompactInt32, WithRelevance) {
+            DoTestBuildCompact(WithRelevance, "Int32");
+        }
+
     } // Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan)
 
 } // namespace NKikimr

@@ -1873,6 +1873,10 @@ private:
             }
         }
 
+        if (ForcedTokenStr_.Defined()) {
+            str = *std::exchange(ForcedTokenStr_, Nothing());
+        }
+
         Out(str);
 
         if (TokenIndex_ + 1 >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_ + 1].Line > LastLine_) {
@@ -2357,7 +2361,8 @@ private:
 
     void VisitFlattenSource(const TRule_flatten_source& msg) {
         const auto& namedSingleSource = msg.GetRule_named_single_source1();
-        bool indentBeforeSource = namedSingleSource.GetRule_single_source1().Alt_case() == TRule_single_source::kAltSingleSource1;
+        const auto& singleSource = namedSingleSource.GetRule_hinted_single_source1().GetRule_single_source1();
+        bool indentBeforeSource = singleSource.Alt_case() == TRule_single_source::kAltSingleSource1;
 
         if (indentBeforeSource) {
             NewLine();
@@ -2379,7 +2384,7 @@ private:
     }
 
     void VisitNamedSingleSource(const TRule_named_single_source& msg) {
-        Visit(msg.GetRule_single_source1());
+        Visit(msg.GetRule_hinted_single_source1());
         if (msg.HasBlock2()) {
             Visit(msg.GetBlock2());
         }
@@ -2411,6 +2416,15 @@ private:
         if (msg.HasBlock4()) {
             NewLine();
             Visit(msg.GetBlock4());
+        }
+    }
+
+    void VisitHintedSingleSource(const TRule_hinted_single_source& msg) {
+        Visit(msg.GetRule_single_source1());
+
+        if (msg.HasBlock2()) {
+            const auto hints = msg.GetBlock2().GetRule_table_hints1();
+            Visit(hints);
         }
     }
 
@@ -2590,10 +2604,6 @@ private:
             }
             default:
                 ythrow yexception() << "Alt is not supported";
-        }
-
-        if (msg.HasBlock4()) {
-            Visit(msg.GetBlock4());
         }
     }
 
@@ -2796,6 +2806,11 @@ private:
         Visit(msg.GetToken4());
         Visit(msg.GetRule_type_name_simple5());
         Visit(msg.GetToken6());
+    }
+
+    void VisitTypeNameNull(const TRule_type_name_null& msg) {
+        ForcedTokenStr_ = msg.GetToken1().GetValue();
+        Visit(msg.GetToken1());
     }
 
     void VisitExtOrderByClause(const TRule_ext_order_by_clause& msg) {
@@ -3176,6 +3191,7 @@ private:
     TMarkTokenStack MarkTokenStack_;
     TVector<TTokenInfo> MarkedTokens_;
     ui64 InsideExpr_ = 0;
+    TMaybe<TString> ForcedTokenStr_;
 };
 
 template <typename T>
@@ -3228,6 +3244,7 @@ TStaticData::TStaticData()
           {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
           {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
           {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},
+          {TRule_hinted_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitHintedSingleSource)},
           {TRule_table_hints::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableHints)},
           {TRule_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSimpleTableRef)},
           {TRule_into_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoSimpleTableRef)},
@@ -3245,6 +3262,7 @@ TStaticData::TStaticData()
           {TRule_select_kind_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindParenthesis)},
           {TRule_cast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCastExpr)},
           {TRule_bitcast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitCastExpr)},
+          {TRule_type_name_null::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTypeNameNull)},
           {TRule_ext_order_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExtOrderByClause)},
           {TRule_key_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitKeyExpr)},
           {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},

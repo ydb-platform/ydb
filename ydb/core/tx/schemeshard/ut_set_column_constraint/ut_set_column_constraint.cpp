@@ -983,4 +983,4 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         tryToUpsert();
     }
 
-} // Y_UNIT_TEST_SUITE(SetColumnConstraintTest)
+} // Y_UNIT_TEST_SUITE(SetNotNullTest)

@@ -82,22 +82,39 @@ std::map<ui32, std::shared_ptr<arrow::Field>> TDuplicateManager::GetFetchingColu
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)( \
         "borders_flow_controller", BordersFlowController.DebugString())
 
+namespace {
+
+std::deque<std::shared_ptr<TPortionInfo>> FilterPortionsByRequestSnapshot(
+    const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TSnapshot& requestSnapshot) {
+    std::deque<std::shared_ptr<TPortionInfo>> result;
+    for (const auto& portion : portions) {
+        if (portion->RecordSnapshotMax() > requestSnapshot) {
+            continue;
+        }
+        result.emplace_back(portion);
+    }
+    return result;
+}
+
+}   // namespace
+
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions)
     : TActor(&TDuplicateManager::StateMain)
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
     , PKColumns(context.GetPKColumns())
     , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
-    , Portions(MakePortionsIndex(portions))
+    , Portions(MakePortionsIndex(FilterPortionsByRequestSnapshot(portions, context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
-    , BordersFlowController(
-          std::make_shared<TMergeContext>(
-              std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
-                  context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
-                  GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
-                  GetVersionBatch(TSnapshot::Max(), 0)), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
-              GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
+    , BordersFlowController(std::make_shared<TMergeContext>(
+                                std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
+                                    context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
+                                    GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(),
+                                        std::numeric_limits<ui64>::max()), GetVersionBatch(TSnapshot::Max(), 0)), Counters,
+                                context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions, GetFetchingColumns()),
+          FilterPortionsByRequestSnapshot(portions, context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot()),
+          context.GetCommonContext()->GetReadMetadata(), Counters)
     , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , AbortionFlag(std::make_shared<TAtomicCounter>(0))
 {

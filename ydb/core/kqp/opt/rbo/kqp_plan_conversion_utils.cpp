@@ -237,7 +237,7 @@ void RepairUnionAllOutputIUs(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprCo
         return;
     }
 
-    auto buildProject = [&](const TIntrusivePtr<IOperator>& input, const TVector<TInfoUnit>& output) {
+    auto buildOutputMap = [&](const TIntrusivePtr<IOperator>& input, const TVector<TInfoUnit>& output) {
         if (input->GetOutputIUs() == output) {
             return input;
         }
@@ -264,8 +264,8 @@ void RepairUnionAllOutputIUs(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprCo
         Y_ENSURE(!commonOutput.empty(),
             "UnionAll inputs have different column counts and no common columns: " << leftOutput.size() << " vs " << rightOutput.size());
 
-        unionAll->GetLeftInput() = buildProject(unionAll->GetLeftInput(), commonOutput);
-        unionAll->GetRightInput() = buildProject(unionAll->GetRightInput(), commonOutput);
+        unionAll->GetLeftInput() = buildOutputMap(unionAll->GetLeftInput(), commonOutput);
+        unionAll->GetRightInput() = buildOutputMap(unionAll->GetRightInput(), commonOutput);
         ValidateUniqueOutputIUs(unionAll, ctx);
         return;
     }

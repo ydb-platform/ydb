@@ -334,7 +334,7 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 }
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
-    auto addProjectionAndAliasSimplificationRules = [](TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
+    auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
         rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
         rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
@@ -377,14 +377,14 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline in/exists subplans", std::move(inlineSimpleSubPlanStageRules)));
 
-    // Clean up aliases and trivial projections before the broader logical rewrites start.
-    TVector<std::unique_ptr<IRule>> projectionSimplificationRules;
-    addProjectionAndAliasSimplificationRules(projectionSimplificationRules, /*pushAppendsUnderFilter*/ true);
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Simplify projections and aliases", std::move(projectionSimplificationRules)));
+    // Normalize aliases and simple maps before the broader logical rewrites start.
+    TVector<std::unique_ptr<IRule>> mapAliasRules;
+    addMapAliasRules(mapAliasRules, /*pushAppendsUnderFilter*/ true);
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize maps and aliases", std::move(mapAliasRules)));
 
     // Logical stage.
     TVector<std::unique_ptr<IRule>> logicalStageRules;
-    addProjectionAndAliasSimplificationRules(logicalStageRules, /*pushAppendsUnderFilter*/ false);
+    addMapAliasRules(logicalStageRules, /*pushAppendsUnderFilter*/ false);
     logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());

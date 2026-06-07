@@ -338,7 +338,7 @@ struct TMapRuleTestContext {
     TRBOContext RboCtx;
 };
 
-void AddProjectionMapRulesForTest(TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
+void AddMapAliasRulesForTest(TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
     rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
     rules.emplace_back(std::make_unique<TRenameToAppendRule>());
@@ -347,15 +347,15 @@ void AddProjectionMapRulesForTest(TVector<std::unique_ptr<IRule>>& rules, bool p
     rules.emplace_back(std::make_unique<TPushRenameRule>(pushAppendsUnderFilter));
 }
 
-TVector<std::unique_ptr<IRule>> MakeProjectionSimplificationRulesForTest() {
+TVector<std::unique_ptr<IRule>> MakeMapAliasCleanupRulesForTest() {
     TVector<std::unique_ptr<IRule>> rules;
-    AddProjectionMapRulesForTest(rules, /*pushAppendsUnderFilter*/ true);
+    AddMapAliasRulesForTest(rules, /*pushAppendsUnderFilter*/ true);
     return rules;
 }
 
 TVector<std::unique_ptr<IRule>> MakeLogicalMapRulesForTest() {
     TVector<std::unique_ptr<IRule>> rules;
-    AddProjectionMapRulesForTest(rules, /*pushAppendsUnderFilter*/ false);
+    AddMapAliasRulesForTest(rules, /*pushAppendsUnderFilter*/ false);
     rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     return rules;
 }
@@ -2722,7 +2722,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(ProjectionNormalizationComplexPropagation) {
+    Y_UNIT_TEST(MapAliasCleanupComplexQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -2843,7 +2843,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!plan.Contains("__kqp_rbo_ignore_arg_"), plan);
     }
 
-    Y_UNIT_TEST(ProjectionNormalizationYqlSemanticRenameAndDeadSortKey) {
+    Y_UNIT_TEST(MapAliasCleanupSemanticRenameAndDeadSortKey) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -2906,7 +2906,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(plan.Contains("Join"), plan);
     }
 
-    Y_UNIT_TEST(ProjectionNormalizationFocusedMapRules) {
+    Y_UNIT_TEST(FocusedMapAliasRules) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -2947,9 +2947,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         );
         TOpRoot root(filter, pos, {"alias_payload", "left_calc", "both_calc"});
 
-        TRuleBasedStage projectionSimplification("Focused projection simplification", MakeProjectionSimplificationRulesForTest());
+        TRuleBasedStage mapAliasCleanup("Focused map alias cleanup", MakeMapAliasCleanupRulesForTest());
         ComputeLogicalTestProps(root);
-        projectionSimplification.RunStage(root, testContext.RboCtx);
+        mapAliasCleanup.RunStage(root, testContext.RboCtx);
 
         TRuleBasedStage logicalMapRules("Focused logical map rules", MakeLogicalMapRulesForTest());
         ComputeLogicalTestProps(root);
@@ -3359,7 +3359,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(aggregate->KeyColumns.front() == TInfoUnit("key"));
     }
 
-    Y_UNIT_TEST(SimplifyProjectionAliasesOverAggregateKeysAndResult) {
+    Y_UNIT_TEST(MapAliasCleanupOverAggregate) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -3409,9 +3409,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "__kqp_agg_result_agg_col_1",
         });
 
-        TRuleBasedStage projectionSimplification("Focused projection simplification", MakeProjectionSimplificationRulesForTest());
+        TRuleBasedStage mapAliasCleanup("Focused map alias cleanup", MakeMapAliasCleanupRulesForTest());
         ComputeLogicalTestProps(root);
-        projectionSimplification.RunStage(root, testContext.RboCtx);
+        mapAliasCleanup.RunStage(root, testContext.RboCtx);
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());

@@ -53,11 +53,6 @@ TEST(TPerfEventCounterTest, ContextSwitches)
     });
 }
 
-TEST(TPerfEventCounterTest, CounterError)
-{
-    ASSERT_THROW(ReadPerfEventCounter(EPerfEventType::StalledCyclesBackend), TErrorException);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

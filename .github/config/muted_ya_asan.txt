@@ -57,6 +57,7 @@ ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthLower
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthNone
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthHigher
+ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthLower
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthNone
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine0
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine1
@@ -169,6 +170,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueueMultipleQueriesInflight
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestUntagQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestAuthPriority
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchMixedTimeouts
@@ -187,6 +189,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithAtt
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithBadSecurityToken
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithCustomConsumer
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithEmptyName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithEmptySecurityToken
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithSameNameAndDifferentParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithSameNameAndSameParams
@@ -279,9 +282,11 @@ ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/federated_query/actors/ut_service/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphBasic
+ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphGroupByHop
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.RestoreScriptPhysicalGraphOnRetry
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryMatchRecognize
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryWithDefineAction
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.OffsetsAndStateRecoveryAfterQueryTextChange
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReplaceAfterError
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess+EnableKqpConstraintsTransformer
@@ -467,16 +472,14 @@ ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEn
 ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.CommitMessages_ReloadPQRB-autoPartitioningSupport-false
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.CommitMessages_ReloadPQRB-autoPartitioningSupport-true
-ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommit-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommitCDC-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommit_LongReadSession-autoPartitioningSupport-true
+ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.SkipMessagesWithObsoleteTimestamp
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.TestBasicRemote
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorerWithScaling.TestRootPartitionOverlap
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionMerge_PreferedPartition_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionMerge_PreferedPartition_BeforeAutoscaleAwareSDK
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_AutosplitByLoad_AfterAlter
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_AutosplitByLoad_MessagesBasedSplit_WithPartitioningKeys
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_PQv1
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.Simple_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.Simple_PQv1
@@ -661,6 +664,7 @@ ydb/public/sdk/cpp/src/client/topic/ut TxUsage.WriteToTopic_Demo_24_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Write_And_Read_Small_Messages_2
 ydb/public/sdk/cpp/src/client/topic/ut/slow TxUsage.WriteToTopic_Demo_44_Query
 ydb/public/sdk/cpp/src/client/topic/ut/slow TxUsage.Write_Random_Sized_Messages_In_Wide_Transactions_Query
+ydb/public/sdk/cpp/src/client/topic/ut/slow TxUsage.Write_Random_Sized_Messages_In_Wide_Transactions_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.AutoPartitioning_Producer_SmallMessages
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_TimeoutError
@@ -751,7 +755,6 @@ ydb/tests/compatibility test_node_broker_delta_protocol.py.TestNodeBrokerDeltaPr
 ydb/tests/compatibility test_show_create_table.py.TestShowCreateTable.test_show_create_table_after_version_change[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderMixedCluster.test_simple_reader_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
-ydb/tests/compatibility test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column-date64]
@@ -759,6 +762,7 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-row]
 ydb/tests/compatibility test_system_tablet_backup.py.TestSystemTabletBackupRestartToAnotherVersion.test[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_table_operations_in_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRestart.test_create_alter_drop_columns_on_one_version_continue_on_another[restart_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_table_operations_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-2-1_to_prestable-26-3]
@@ -770,6 +774,7 @@ ydb/tests/compatibility test_unique_index.py.TestUniqueIndex.test_unique_index[r
 ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerMixedCluster.test_workload_manager_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransfer.test_workload_manager_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest.py.TestDigest.test_digest_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest_regression.py.TestDigest.test_digest_regression[mixed_prestable-26-3_and_stable-26-2-1]
@@ -778,6 +783,7 @@ ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExter
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityMixedCluster.test_external_data_source_secret_object_schema_compatibility[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityRestartToAnotherVersion.test_external_data_source_secret_object_schema_compatibility[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/olap test_min_max_index.py.TestMinMaxIndex.test_min_max_index[rolling_stable-26-2-1_to_prestable-26-3]
@@ -871,7 +877,9 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[28]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[30]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[31]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[32]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[41]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[65]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[59]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]

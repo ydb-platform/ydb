@@ -169,6 +169,7 @@ public:
         NScheme::TTypeInfo Type;
         i32 Typmod;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
     };
 protected:
     TVector<TString> KeyColumnNames;
@@ -458,10 +459,6 @@ private:
                 return TConclusionStatus::Fail(Sprintf("Column %s is under build operation", name.c_str()));
             }
 
-            if (ci.SetNotNullInProgress) {
-                return TConclusionStatus::Fail(Sprintf("Column %s is under set not null operation", name.c_str()));
-            }
-
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
@@ -524,11 +521,11 @@ private:
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }
@@ -1477,7 +1474,7 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
             return false;
         }
 
-        if (fd.NotNull && cells.back().IsNull()) {
+        if ((fd.NotNull || fd.SetNotNullInProgress) && cells.back().IsNull()) {
             err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
             return false;
         }

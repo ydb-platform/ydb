@@ -59,6 +59,6 @@ public:
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {
 };
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc = {});
+IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TPriorityLogFunc& logFunc = {});
 
 } // namespace NYql::NDq

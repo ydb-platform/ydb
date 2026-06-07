@@ -12,7 +12,7 @@
 
 namespace NYql::NDq {
 
-#define LOG(s) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(TStringBuilder() << "channelId: " << PopStats.ChannelId << ". " << s); } } while (0)
+#define LOG(s) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(EPrio::Debug, TStringBuilder() << "channelId: " << PopStats.ChannelId << ". " << s); } } while (0)
 
 #ifndef NDEBUG
 #define DLOG(s) LOG(s)
@@ -23,6 +23,7 @@ namespace NYql::NDq {
 namespace {
 
 using namespace NKikimr;
+using NActors::NLog::EPrio;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -32,7 +33,7 @@ public:
     TDqOutputStats PushStats;
     TDqOutputChannelStats PopStats;
 
-    TDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
+    TDqOutputChannel(const TDqChannelSettings& settings, const TPriorityLogFunc& logFunc)
         : OutputType(settings.RowType)
         , Packer(settings.RowType, settings.PackerVersion, settings.BufferPageAllocSize)
         , Width(settings.RowType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(settings.RowType)->GetElementsCount() : 1u)
@@ -466,7 +467,7 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     NArrow::IBlockSplitter::TPtr BlockSplitter;
     bool IsLocalChannel = false;
-    TLogFunc LogFunc;
+    TPriorityLogFunc LogFunc;
 
     struct TSerializedBatch {
         TChunkedBuffer Buffer;
@@ -497,7 +498,7 @@ private:
 } // anonymous namespace
 
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
+IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TPriorityLogFunc& logFunc)
 {
     YQL_ENSURE(settings.HolderFactory);
 

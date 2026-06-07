@@ -1373,10 +1373,10 @@ class TestPqRowDispatcher(TestYdsBase):
 
         text_size = 1000000
         element_size = 100
-        filter = " OR ".join([ 'data = "' + ''.join(random.choices(string.ascii_uppercase, k=element_size - 13)) + '"' for c in range(int(text_size / element_size))])
+        filter = " OR ".join(['data = "' + ''.join(random.choices(string.ascii_uppercase, k=element_size - 13)) + '"' for c in range(int(text_size / element_size))])
 
         sql = Rf'''INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-                    SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}` 
+                    SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
                     WITH (format=json_each_row, SCHEMA (data String NOT NULL))
                     WHERE data = "100" OR {filter};'''
 

@@ -856,86 +856,9 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
     // Column Table (OLAP)
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
-        TExportEnv<IsFs> env(TTestData::Items(EPathTypeColumnTable));
-
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            env.SetupRuntime(runtime);
-            runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-            {
-                TInactiveZone inactive(activeZone);
-                CreateSchemeObjects(t, runtime, {
-                    TTestData::ColumnTable()
-                });
-
-                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
-            }
-
-            const ui64 exportId = t.TxId;
-            t.TestEnv->TestWaitNotification(runtime, exportId);
-
-            {
-                TInactiveZone inactive(activeZone);
-
-                auto response = TestGetExport(runtime, exportId, "/MyRoot", {
-                    Ydb::StatusIds::SUCCESS,
-                    Ydb::StatusIds::NOT_FOUND
-                });
-
-                if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
-                    return;
-                }
-
-                TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
-                t.TestEnv->TestWaitNotification(runtime, exportId);
-
-                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-            }
-        });
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
-        TExportEnv<IsFs> env(TTestData::Items(EPathTypeColumnTable));
-
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            env.SetupRuntime(runtime);
-            runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-            {
-                TInactiveZone inactive(activeZone);
-                CreateSchemeObjects(t, runtime, {
-                    TTestData::ColumnTable()
-                });
-            }
-
-            TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
-            const ui64 exportId = t.TxId;
-
-            t.TestEnv->ReliablePropose(runtime, CancelExportRequest(++t.TxId, "/MyRoot", exportId), {
-                Ydb::StatusIds::SUCCESS,
-                Ydb::StatusIds::NOT_FOUND
-            });
-            t.TestEnv->TestWaitNotification(runtime, exportId);
-
-            {
-                TInactiveZone inactive(activeZone);
-
-                auto response = TestGetExport(runtime, exportId, "/MyRoot", {
-                    Ydb::StatusIds::SUCCESS,
-                    Ydb::StatusIds::CANCELLED,
-                    Ydb::StatusIds::NOT_FOUND
-                });
-
-                if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
-                    return;
-                }
-
-                TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
-                t.TestEnv->TestWaitNotification(runtime, exportId);
-
-                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-            }
-        });
+        RunExport<IsFs>(t, {
+            TTestData::ColumnTable()
+        }, TTestData::Items(EPathTypeColumnTable));
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {

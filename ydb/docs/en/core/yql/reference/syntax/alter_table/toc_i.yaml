@@ -7,4 +7,8 @@ items:
  - { name: SET,         href: set.md,             when: backend_name == "YDB"   }
  - { name: CHANGEFEED,  href: changefeed.md,      when: feature_changefeed      }
  - { name: RENAME,      href: rename.md,          when: feature_map_tables      }
+<<<<<<< HEAD
+=======
+ - { name: FAMILY,      href: family.md                                         }
+>>>>>>> cf41a0702ee (Auto-translate docs from PR #42414 (#42745))
  - { name: COMPACT,    href: compact.md,         when: backend_name == "YDB"   }

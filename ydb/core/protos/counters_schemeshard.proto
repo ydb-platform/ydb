@@ -522,6 +522,11 @@ enum EPercentileCounters {
         Name: "NumShardsByTtlLag"
         Integral: true
         Ranges: { Value: 0        Name: "0"     }
+        Ranges: { Value: 30       Name: "30"    }
+        Ranges: { Value: 60       Name: "60"    }
+        Ranges: { Value: 120      Name: "120"   }
+        Ranges: { Value: 300      Name: "300"   }
+        Ranges: { Value: 600      Name: "600"   }
         Ranges: { Value: 900      Name: "900"   }
         Ranges: { Value: 1800     Name: "1800"  }
         Ranges: { Value: 3600     Name: "3600"  }

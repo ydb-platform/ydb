@@ -80,12 +80,13 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
                                       const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
+    const auto& appConfig = ev->Get()->GetConfig();
 
     LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS,
                "TLogSettingsConfigurator: got new config: "
-               << rec.GetConfig().ShortDebugString());
+               << appConfig.ShortDebugString());
 
-    const auto& logConfig = rec.GetConfig().GetLogConfig();
+    const auto& logConfig = appConfig.GetLogConfig();
 
     ApplyLogConfig(logConfig, ctx);
 

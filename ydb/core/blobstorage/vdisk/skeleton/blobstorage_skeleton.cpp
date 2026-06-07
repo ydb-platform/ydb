@@ -213,10 +213,7 @@ namespace NKikimr {
         void Handle(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
             auto& record = ev->Get()->Record;
             ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
-            if (!record.HasConfig() ) {
-                return;
-            }
-            if (const auto& config = record.GetConfig(); config.HasBlobStorageConfig() && config.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
+            if (const auto& config = ev->Get()->GetConfig(); config.HasBlobStorageConfig() && config.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
                 for (auto &type : config.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
                     if (!type.HasPDiskType() || Config->BaseInfo.DeviceType != PDiskTypeToPDiskType(type.GetPDiskType())) {
                         continue;

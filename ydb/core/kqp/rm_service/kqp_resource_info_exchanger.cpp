@@ -122,8 +122,11 @@ public:
 
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
 
+        auto exchSubReq = MakeHolder<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
+            TVector<ui32>{tableServiceConfigKind});
+        exchSubReq->UseSharedConfig = false; // mutates the notification record inline - needs a private copy
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             exchSubReq.Release(),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpResourceInfoExchangerActor::WorkState);

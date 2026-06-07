@@ -480,12 +480,13 @@ public:
                 const TActorContext &ctx)
     {
         auto &rec = ev->Get()->Record;
+        const auto& appConfig = ev->Get()->GetConfig();
 
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
                     LogPrefix << "Got new monitoring config: "
-                    << rec.GetConfig().ShortDebugString());
+                    << appConfig.ShortDebugString());
 
-        ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
+        ApplyConfig(appConfig.GetMonitoringConfig(), ctx);
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 

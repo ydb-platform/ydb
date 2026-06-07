@@ -162,6 +162,7 @@ struct TEnvironmentSetup {
             for (auto& id : Subscribers) {
                 auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
                 update->Record.CopyFrom(ev->Get()->Record);
+                if (ev->Get()->SharedConfig) { update->Record.MutableConfig()->CopyFrom(*ev->Get()->SharedConfig); }
                 Send(id, update.Release(), IEventHandle::FlagTrackDelivery, cookie);
                 task->RepliesPending.insert(id);
                 const auto [it, inserted] = TasksPending.emplace(std::make_tuple(id, cookie), task);

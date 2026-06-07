@@ -77,7 +77,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& event = ev->Get()->Record;
 
-        Scheduler->ToggleEnabled(event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
+        Scheduler->ToggleEnabled(ev->Get()->GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
         if (Scheduler->IsEnabled()) {
             LOG_I("Become enabled");
         } else {

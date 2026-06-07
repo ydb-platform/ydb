@@ -233,7 +233,7 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        const auto& config = record.GetConfig();
+        const auto& config = ev->Get()->GetConfig();
         if (config.HasFeatureFlags()) {
             const auto& featureFlags = config.GetFeatureFlags();
             EnableStatistics = featureFlags.GetEnableStatistics();

@@ -1421,7 +1421,7 @@ void TNodeBroker::TDirtyState::DbUpdateNodeAuthorizedByCertificate(const TNodeIn
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    const auto& appConfig = ev->Get()->Record.GetConfig();
+    const auto& appConfig = ev->Get()->GetConfig();
     if (appConfig.HasFeatureFlags()) {
         EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();
     }

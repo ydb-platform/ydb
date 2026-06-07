@@ -3951,8 +3951,9 @@ public:
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        if (record.GetConfig().HasHealthCheckConfig()) {
-            HealthCheckConfig.CopyFrom(record.GetConfig().GetHealthCheckConfig());
+        const auto& appConfig = ev->Get()->GetConfig();
+        if (appConfig.HasHealthCheckConfig()) {
+            HealthCheckConfig.CopyFrom(appConfig.GetHealthCheckConfig());
         }
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
     }

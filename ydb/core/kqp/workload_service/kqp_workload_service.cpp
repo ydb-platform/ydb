@@ -111,11 +111,12 @@ public:
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& event = ev->Get()->Record;
+        const auto& appConfig = ev->Get()->GetConfig();
 
-        WorkloadManagerConfig = event.GetConfig().GetWorkloadManagerConfig();
-        EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
-        EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
-        EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
+        WorkloadManagerConfig = appConfig.GetWorkloadManagerConfig();
+        EnabledResourcePools = appConfig.GetFeatureFlags().GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
+        EnabledResourcePoolsOnServerless = appConfig.GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
+        EnableResourcePoolsCounters = appConfig.GetFeatureFlags().GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
             LOG_I("Resource pools was enabled");
             InitializeWorkloadService();

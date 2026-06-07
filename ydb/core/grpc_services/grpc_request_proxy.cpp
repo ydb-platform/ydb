@@ -403,7 +403,7 @@ void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
     auto &event = ev->Get()->Record;
 
     ChannelBufferSize.store(
-        event.GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
+        ev->Get()->GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updated app config");
 
     auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);

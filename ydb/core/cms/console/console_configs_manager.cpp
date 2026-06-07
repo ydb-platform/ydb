@@ -256,7 +256,7 @@ void TConfigsManager::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 {
     auto &rec = ev->Get()->Record;
 
-    YamlReadOnly = !rec.GetConfig().GetAllowEditYamlInUi();
+    YamlReadOnly = !ev->Get()->GetConfig().GetAllowEditYamlInUi();
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);

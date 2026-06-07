@@ -61,8 +61,11 @@ public:
         UpdateCacheSize();
 
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
+        auto vecIdxSubReq = MakeHolder<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
+            TVector<ui32>{tableServiceConfigKind});
+        vecIdxSubReq->UseSharedConfig = false; // mutates the notification record inline - needs a private copy
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+            vecIdxSubReq.Release(),
             IEventHandle::FlagTrackDelivery);
     }
 

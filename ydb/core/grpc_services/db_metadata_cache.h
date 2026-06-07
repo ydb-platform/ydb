@@ -146,7 +146,8 @@ private:
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        ApplyConfig(record.GetConfig().GetMetadataCacheConfig(), record.GetConfig().GetFeatureFlags());
+        const auto& appConfig = ev->Get()->GetConfig();
+        ApplyConfig(appConfig.GetMetadataCacheConfig(), appConfig.GetFeatureFlags());
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
     }
 

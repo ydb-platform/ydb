@@ -1411,18 +1411,18 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
+        const auto& appConfig = ev->Get()->GetConfig();
 
         {
             auto* appData = AppData(ctx);
             NKikimrSharedCache::TSharedCacheConfig config;
-            if (record.GetConfig().HasBootstrapConfig() && record.GetConfig().GetBootstrapConfig().HasSharedCacheConfig()) {
-                config.MergeFrom(record.GetConfig().GetBootstrapConfig().GetSharedCacheConfig());
+            if (appConfig.HasBootstrapConfig() && appConfig.GetBootstrapConfig().HasSharedCacheConfig()) {
+                config.MergeFrom(appConfig.GetBootstrapConfig().GetSharedCacheConfig());
             } else if (appData->BootstrapConfig.HasSharedCacheConfig()) {
                 config.MergeFrom(appData->BootstrapConfig.GetSharedCacheConfig());
             }
-            if (record.GetConfig().HasSharedCacheConfig()) {
-                config.MergeFrom(record.GetConfig().GetSharedCacheConfig());
+            if (appConfig.HasSharedCacheConfig()) {
+                config.MergeFrom(appConfig.GetSharedCacheConfig());
             } else {
                 config.MergeFrom(appData->SharedCacheConfig);
             }

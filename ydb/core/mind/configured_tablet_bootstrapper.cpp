@@ -176,11 +176,12 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
         const auto &record = ev->Get()->Record;
+        const auto& appConfig = ev->Get()->GetConfig();
 
-        if (record.GetConfig().HasBootstrapConfig()) {
+        if (appConfig.HasBootstrapConfig()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
                 "Received bootstrap config update on node " << SelfId().NodeId());
-            const auto &bootstrapConfig = record.GetConfig().GetBootstrapConfig();
+            const auto &bootstrapConfig = appConfig.GetBootstrapConfig();
 
             ProcessTabletsFromConfig(bootstrapConfig);
         }

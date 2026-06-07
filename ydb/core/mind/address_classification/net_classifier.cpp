@@ -283,7 +283,7 @@ private:
     void HandleWhileWorking(TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& rec = ev->Get()->Record;
 
-        if (UpdateFromDistributableConfig(rec.GetConfig().GetNetClassifierDistributableConfig())) {
+        if (UpdateFromDistributableConfig(ev->Get()->GetConfig().GetNetClassifierDistributableConfig())) {
             ReportGoodConfig();
             UpdateNetDataSource(ENetDataSourceType::DistributableConfig);
 

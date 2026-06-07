@@ -61,10 +61,11 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
 
 void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
     auto& rec = ev->Get()->Record;
+    const auto& appConfig = ev->Get()->GetConfig();
 
-    LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: got new config: " << rec.GetConfig().ShortDebugString());
+    LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: got new config: " << appConfig.ShortDebugString());
 
-    ApplyConfigs(rec.GetConfig().GetTracingConfig());
+    ApplyConfigs(appConfig.GetTracingConfig());
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,

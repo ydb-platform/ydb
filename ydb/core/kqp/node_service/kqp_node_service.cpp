@@ -83,8 +83,11 @@ public:
 
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
+        auto nodeSubReq = MakeHolder<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
+            TVector<ui32>{tableServiceConfigKind});
+        nodeSubReq->UseSharedConfig = false; // mutates the notification record inline - needs a private copy
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             nodeSubReq.Release(),
              IEventHandle::FlagTrackDelivery);
 
         NActors::TMon* mon = AppData()->Mon;

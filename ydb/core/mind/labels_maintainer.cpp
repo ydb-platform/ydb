@@ -342,11 +342,12 @@ private:
                 const TActorContext &ctx)
     {
         auto &rec = ev->Get()->Record;
+        const auto& appConfig = ev->Get()->GetConfig();
 
         LOG_INFO_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                   "Got new config: " << rec.GetConfig().ShortDebugString());
+                   "Got new config: " << appConfig.ShortDebugString());
 
-        ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
+        ApplyConfig(appConfig.GetMonitoringConfig(), ctx);
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 

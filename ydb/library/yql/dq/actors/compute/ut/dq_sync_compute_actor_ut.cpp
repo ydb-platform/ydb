@@ -422,7 +422,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         // DstEndpoint
         // IsPersistent
         // EnableSpilling
-        TPriorityLogFunc logFunc = [this](NActors::NLog::EPrio priority, const TString& msg) {
+        TLogFunc logFunc = [this](NActors::NLog::EPrio priority, const TString& msg) {
             LOG(priority, msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
@@ -508,7 +508,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 dqTaskTransformFactory,
                 patternCache, false);
         auto taskRunnerActorFactory =
-            [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TPriorityLogFunc& )
+            [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
                     return factory->Get(alloc, task, statsMode);
                 };

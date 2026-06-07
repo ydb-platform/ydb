@@ -508,7 +508,7 @@ TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const TDqTaskRunnerContext& ctx,
     const TDqTaskRunnerSettings& settings,
-    const TPriorityLogFunc& logFunc
+    const TLogFunc& logFunc
 );
 
 } // namespace NYql::NDq

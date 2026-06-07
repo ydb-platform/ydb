@@ -260,7 +260,7 @@ public:
             settings.ReadRanges.push_back(readRange);
         }
         auto ctx = ExecutionContext;
-        TPriorityLogFunc logger;
+        TLogFunc logger;
         if (YQL_CLOG_ACTIVE(DEBUG, ProviderDq)) {
             // Legacy behavior: IDqTaskRunner can now emit actor system-specific message priorities but these are ignored here
             logger = [taskId = ToString(task.GetId()), traceId = traceId](NActors::NLog::EPrio, const TString& message) {

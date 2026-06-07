@@ -263,7 +263,7 @@ inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode st
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TDqTaskRunner : public IDqTaskRunner {
 public:
-    TDqTaskRunner(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings, const TPriorityLogFunc& logFunc)
+    TDqTaskRunner(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
         : Context(context)
         , Settings(settings)
         , LogFunc(logFunc)
@@ -1222,7 +1222,7 @@ private:
     ui32 StageId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;
-    TPriorityLogFunc LogFunc;
+    TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;
     TLangVersion LangVer = MinLangVersion;
@@ -1337,7 +1337,7 @@ private:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
-    const TPriorityLogFunc& logFunc)
+    const TLogFunc& logFunc)
 {
     return new TDqTaskRunner(*alloc, ctx, settings, logFunc);
 }

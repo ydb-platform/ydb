@@ -280,7 +280,7 @@ void TKqpScanComputeActor::DoBootstrap() {
         settings.ReadRanges.push_back(readRange);
     }
 
-    NDq::TPriorityLogFunc logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](NActors::NLog::EPrio priority, const TString& message) {
+    NDq::TLogFunc logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](NActors::NLog::EPrio priority, const TString& message) {
         LOG_LOG_S(*actorSystem, static_cast<NActors::NLog::EPriority>(priority), NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
             << ", task: " << taskId << ": " << message);
     };

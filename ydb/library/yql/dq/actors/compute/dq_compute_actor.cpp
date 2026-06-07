@@ -46,7 +46,7 @@ public:
 
         MemoryQuota = InitMemoryQuota();
 
-        TPriorityLogFunc logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (NActors::NLog::EPrio priority, const TString& message) {
+        TLogFunc logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (NActors::NLog::EPrio priority, const TString& message) {
                 LOG_LOG_S(*actorSystem, static_cast<NActors::NLog::EPriority>(priority), NKikimrServices::KQP_COMPUTE, "TxId: " << txId
                     << ", task: " << taskId << ": " << message);
             };

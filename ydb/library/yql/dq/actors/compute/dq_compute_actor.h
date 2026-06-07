@@ -387,7 +387,7 @@ struct TComputeMemoryLimits {
 };
 
 using TTaskRunnerFactory = std::function<
-    TIntrusivePtr<IDqTaskRunner>(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TPriorityLogFunc& logFunc)
+    TIntrusivePtr<IDqTaskRunner>(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logFunc)
 >;
 
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats);

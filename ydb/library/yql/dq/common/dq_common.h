@@ -10,7 +10,7 @@ namespace NYql::NDq {
 
 using TTxId = std::variant<ui64, TString>;
 
-using TPriorityLogFunc = std::function<void(const NActors::NLog::EPrio priority, const TString& message)>;
+using TLogFunc = std::function<void(const NActors::NLog::EPrio priority, const TString& message)>;
 
 using TWakeUpCallback = std::function<void()>;
 using TErrorCallback = std::function<void(const TString& error)>;

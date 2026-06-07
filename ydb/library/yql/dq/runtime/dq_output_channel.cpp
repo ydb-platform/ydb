@@ -33,7 +33,7 @@ public:
     TDqOutputStats PushStats;
     TDqOutputChannelStats PopStats;
 
-    TDqOutputChannel(const TDqChannelSettings& settings, const TPriorityLogFunc& logFunc)
+    TDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
         : OutputType(settings.RowType)
         , Packer(settings.RowType, settings.PackerVersion, settings.BufferPageAllocSize)
         , Width(settings.RowType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(settings.RowType)->GetElementsCount() : 1u)
@@ -467,7 +467,7 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     NArrow::IBlockSplitter::TPtr BlockSplitter;
     bool IsLocalChannel = false;
-    TPriorityLogFunc LogFunc;
+    TLogFunc LogFunc;
 
     struct TSerializedBatch {
         TChunkedBuffer Buffer;
@@ -498,7 +498,7 @@ private:
 } // anonymous namespace
 
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TPriorityLogFunc& logFunc)
+IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
 {
     YQL_ENSURE(settings.HolderFactory);
 

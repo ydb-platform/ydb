@@ -1230,14 +1230,16 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
-        // do not auto create if not leading and fail sender
+        // do not auto create if not leading and fail sender except finish confirmation
         TString errorMessage = TStringBuilder() << "NOT FOUND ID, ChannelId=" << info.ChannelId
-            << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
-            << ", Bytes=" << record.GetBytes() << ", L=" << record.GetLeading()
-            << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
-            << ", Log=" << GetReconciliationLog();
+        << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+        << ", Bytes=" << record.GetBytes() << ", L=" << record.GetLeading()
+        << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
+        << ", Log=" << GetReconciliationLog();
         LOG_W(LogPrefix << errorMessage);
-        SendAckWithError(ev->Cookie, errorMessage);
+        if (!record.GetConfirmFinish()) {
+            SendAckWithError(ev->Cookie, errorMessage);
+        }
         return;
     }
 

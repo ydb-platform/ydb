@@ -1919,7 +1919,6 @@ public:
 
         class TTxCreateSetColumnConstraint;
         struct TTxProgressSetColumnConstraint;
-        struct TTxReplyRetrySetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);

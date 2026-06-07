@@ -207,7 +207,7 @@ const NJson::TJsonValue* GetOutputStatNode(const NJson::TJsonValue& node) {
     if (pushNode && pushNode->GetValueByPath("Bytes")) {
         return pushNode;
     }
-    // else if Pop.Bytes found, use Push
+    // else if Pop.Bytes found, use Pop
     auto* popNode = node.GetValueByPath("Pop");
     if (popNode && popNode->GetValueByPath("Bytes")) {
         return popNode;

@@ -121,6 +121,7 @@ ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-En
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtlAndForgetAfter
+ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
@@ -138,6 +139,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFlightWhenStopEndpointOrStopServer
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_NoGroup_SameIds
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_TripleSplit_3min
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_AllNew
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_PartialOverlap
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_SameIds_6min
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
@@ -180,6 +182,7 @@ ydb/core/tx/columnshard/backup/iscan/ut IScan.MultiExport
 ydb/core/tx/columnshard/backup/iscan/ut IScan.UploaderExport
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.CreateDummyTabletsInDifferentDomains
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_describe_column_table_local_index
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.CreateTopicWithNameEqDB
@@ -317,9 +320,11 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_set_statu
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pool_estimated_usage
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
+ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
 ydb/tests/functional/nbs py3test.sole chunk
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_vhost_unaligned_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
@@ -768,6 +773,7 @@ ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_clickb
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpcds
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpch
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.ERROR]
+ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]
@@ -779,6 +785,7 @@ ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.2.yql]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[second_query_set.join.sql]
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsv.test
+ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsvArrow.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test
@@ -808,6 +815,7 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestTpchWMS0_1.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltp50.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
+ydb/tests/functional/tpc/medium/tpch py3test.[test_decimal.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s_float.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[10]
@@ -995,6 +1003,7 @@ ydb/tests/stress/kv/tests py3test.sole chunk
 ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[column]
 ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[row]
 ydb/tests/stress/kv_volume/tests py3test.sole chunk
+ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v1-ydb/tests/stress/kv_volume/tests/configs/common_channel_read.textproto]
 ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v1-ydb/tests/stress/kv_volume/tests/configs/write_read_delete.textproto]
 ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v2-ydb/tests/stress/kv_volume/tests/configs/common_channel_read.textproto]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
@@ -1004,6 +1013,7 @@ ydb/tests/stress/min_max_workload/tests test_workload.py.TestMinMaxWorkload.test
 ydb/tests/stress/mixedpy/tests py3test.sole chunk
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[column]
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[row]
+ydb/tests/stress/nfs_backups/tests test_workload.py.TestYdbNfsWorkload.test
 ydb/tests/stress/node_broker/tests py3test.sole chunk
 ydb/tests/stress/node_broker/tests test_workload.py.TestDeltaProtocol.test
 ydb/tests/stress/node_broker/tests test_workload.py.TestYdbWorkload.test
@@ -1014,6 +1024,7 @@ ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test_tli
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
+ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test

@@ -202,7 +202,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             " Actually that shouldn't have happened."
             " Note that tx body equality isn't granted."
             " StatusAccepted is just returned on retries.");
-        return std::move(response);
+        return response;
     }
 
     TOperation::TPtr operation = new TOperation(txId);
@@ -212,7 +212,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(quotaResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(quotaResult.Status, quotaResult.Reason);
-            return std::move(response);
+            return response;
         }
     }
 
@@ -237,7 +237,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !Rewrite(traits, tx); })) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusPreconditionFailed, "Invalid schema rewrite rule.");
-            return std::move(response);
+            return response;
         }
 
         rewrittenTransactions.push_back(std::move(tx));
@@ -256,7 +256,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
             response->SetError(splitResult.Status, splitResult.Reason);
-            return std::move(response);
+            return response;
         }
 
         std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(generatedTransactions));
@@ -279,7 +279,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         operation->PreparedParts += parts.size();
 
         if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
-            return std::move(response);
+            return response;
         }
     }
 
@@ -291,7 +291,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         operation->PreparedParts += parts.size();
 
         if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
-            return std::move(response);
+            return response;
         }
     }
 
@@ -307,7 +307,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
-    return std::move(response);
+    return response;
 }
 
 void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& context) {

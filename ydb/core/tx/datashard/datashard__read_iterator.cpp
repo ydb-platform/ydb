@@ -109,7 +109,8 @@ struct TReadIteratorVectorTop {
 
 namespace {
 
-constexpr ui64 MinRowsPerCheck = 1000;
+constexpr ui64 MinRowsPerCheck  = 1000;
+constexpr ui64 MinBytesPerCheck = 1_MB;
 
 TMaybe<ui64> ResolveVictimQuerySpanId(TMaybe<ui64> lockVictimQuerySpanId, ui64 currentQuerySpanId) {
     if (lockVictimQuerySpanId) {
@@ -410,7 +411,8 @@ class TReader {
 
     ui64 RowsRead = 0;
     ui64 RowsProcessed = 0;
-    ui64 RowsSinceLastCheck = 0;
+    ui64 RowsSinceLastCheck  = 0;
+    ui64 BytesSinceLastCheck = 0;
 
     ui64 BytesInResult = 0;
 
@@ -671,6 +673,16 @@ public:
                 ready = false;
             }
             --rowsLeft;
+
+            // Precharging one key (B-tree traversal + page requests) can be
+            // significantly more expensive than reading one user row, so we cannot
+            // afford to wait MinRowsPerCheck iterations before checking elapsed time.
+            // Bumping by MinRowsPerCheck makes ShouldStopByElapsedTime() fire on
+            // every call; the GetTimeFast() overhead is negligible vs. a B-tree walk.
+            RowsSinceLastCheck += MinRowsPerCheck;
+            if (ShouldStop()) {
+                break;
+            }
         }
         return ready;
     }
@@ -830,10 +842,12 @@ public:
     }
 
     bool ShouldStopByElapsedTime() {
-        // TODO: should we also check bytes for the case
-        // when rows are very heavy?
-        if (RowsSinceLastCheck >= MinRowsPerCheck) {
-            RowsSinceLastCheck = 0;
+        // Fire when either enough rows or enough bytes have been accumulated since
+        // the last check.  The byte threshold catches heavy rows (e.g. 1 MB blobs)
+        // that would otherwise let the time budget slip through the row-count gate.
+        if (RowsSinceLastCheck >= MinRowsPerCheck || BytesSinceLastCheck >= MinBytesPerCheck) {
+            RowsSinceLastCheck  = 0;
+            BytesSinceLastCheck = 0;
             UpdateCycles();
 
             return ElapsedCycles() >= MaxCyclesPerIteration;
@@ -1138,7 +1152,8 @@ private:
 
             keyAccessSampler->AddSample(TableId, rowKey.Cells());
             const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
-            RowsSinceLastCheck += processedRecords;
+            RowsSinceLastCheck  += processedRecords;
+            BytesSinceLastCheck += EstimateSize(rowValues.Cells());
             RowsProcessed += processedRecords;
 
             // note that if user requests key columns then they will be in
@@ -1206,6 +1221,8 @@ private:
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             const ui64 processedRecords = ResetRowSkips(iter->Stats);
             RowsSinceLastCheck += processedRecords;
+            // Skipped rows have no user-visible bytes; BytesSinceLastCheck is not
+            // updated here — the row-count gate above remains the trigger for skips.
             RowsProcessed += processedRecords;
         }
 

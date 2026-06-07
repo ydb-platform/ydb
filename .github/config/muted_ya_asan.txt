@@ -471,7 +471,6 @@ ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEn
 ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionNotExists_Test
 ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.CommitMessages_ReloadPQRB-autoPartitioningSupport-false
-ydb/core/persqueue/ut/ut_with_sdk CommitOffset.CommitMessages_ReloadPQRB-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommitCDC-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommit_LongReadSession-autoPartitioningSupport-true
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.SkipMessagesWithObsoleteTimestamp
@@ -481,7 +480,6 @@ ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionMerge_PreferedPartit
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionMerge_PreferedPartition_BeforeAutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_AutosplitByLoad_MessagesBasedSplit_WithPartitioningKeys
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_PQv1
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.Simple_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.Simple_PQv1
 ydb/core/persqueue/ut/ut_with_sdk TopicDescribe.CompactionPreserveStartOffset
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_Topic_offset+middle
@@ -708,7 +706,6 @@ ydb/services/persqueue_v1/ut/describes_ut TIcNodeCache.GetNodesInfoTest
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.CheckGrpcReadNoDC
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestReadAtTimestamp_10
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
-ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_ComplexLambdaInsideUsingReplace
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTopicAbsoluteTransferPath
@@ -836,7 +833,6 @@ ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_cluste
 ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-sync-False-2-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-async-False-1-2-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-async-False-2-1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/fq/s3 test_validation.py.TestS3.test_nested_type[v2-client0]
@@ -875,7 +871,6 @@ ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[28]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[30]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[31]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[32]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[41]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
@@ -883,6 +878,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[65]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[59]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[88]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[10]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[11]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[12]
@@ -1052,7 +1048,6 @@ ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[row]
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test

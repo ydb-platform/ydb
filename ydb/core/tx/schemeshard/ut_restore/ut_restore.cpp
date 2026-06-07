@@ -326,6 +326,9 @@ namespace {
             break;
         case EPathTypeColumnTable:
             result.Scheme = typedScheme.Scheme;
+            for (const auto& [keyPrefix, count] : shardsConfig) {
+                result.Data.emplace_back(GenerateTestData(codec, keyPrefix, count));
+            }
             break;
         case EPathTypeView:
         case EPathTypeReplication:
@@ -9090,7 +9093,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             R"(
                 columns {
                     name: "timestamp"
-                    type { optional_type { item { type_id: TIMESTAMP } } }
+                    type { type_id: TIMESTAMP }
                     not_null: true
                 }
                 columns {
@@ -9102,7 +9105,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         };
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
-        bucketContent.emplace("", GenerateTestData(columnTableScheme, {}, "", R"({"version": 1})"));
+        bucketContent.emplace("", GenerateTestData(columnTableScheme, {{"", 0}}, "", R"({"version": 1})"));
 
         TImportEnv<IsFs> env(ConvertTestData(bucketContent), {{"", "/MyRoot/ColumnTable"}});
 
@@ -9135,7 +9138,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             R"(
                 columns {
                     name: "timestamp"
-                    type { optional_type { item { type_id: TIMESTAMP } } }
+                    type { type_id: TIMESTAMP }
                     not_null: true
                 }
                 columns {
@@ -9147,7 +9150,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         };
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
-        bucketContent.emplace("", GenerateTestData(columnTableScheme, {}, "", R"({"version": 1})"));
+        bucketContent.emplace("", GenerateTestData(columnTableScheme, {{"", 0}}, "", R"({"version": 1})"));
 
         TImportEnv<IsFs> env(ConvertTestData(bucketContent), {{"", "/MyRoot/ColumnTable"}});
 

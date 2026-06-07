@@ -262,7 +262,8 @@ public:
         auto ctx = ExecutionContext;
         TLogFunc logger;
         if (YQL_CLOG_ACTIVE(DEBUG, ProviderDq)) {
-            // Legacy behavior: IDqTaskRunner can now emit actor system-specific message priorities but these are ignored here
+            // Legacy behavior: IDqTaskRunner can now emit actor system-specific message priorities but these are ignored here,
+            // everything from the task runner is emitted at YQL DEBUG level instead
             logger = [taskId = ToString(task.GetId()), traceId = traceId](NActors::NLog::EPrio, const TString& message) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId, taskId);
                 YQL_CLOG(DEBUG, ProviderDq) << message;

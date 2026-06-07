@@ -6607,7 +6607,10 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
         return;
     }
 
-    // TODO(flown4qqqq): add retry SetColumnConstraintPipes
+    if (SetColumnConstraintPipes.Has(clientId)) {
+        Execute(CreatePipeRetrySetColumnConstraint(SetColumnConstraintPipes.GetOwnerId(clientId), SetColumnConstraintPipes.GetTabletId(clientId)), ctx);
+        return;
+    }
 
     if (IncrementalRestorePipes.Has(clientId)) {
         RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
@@ -6674,7 +6677,10 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
         return;
     }
 
-    // TODO(flown4qqqq): SetColumnConstraintPipes
+    if (SetColumnConstraintPipes.Has(clientId)) {
+        Execute(CreatePipeRetrySetColumnConstraint(SetColumnConstraintPipes.GetOwnerId(clientId), SetColumnConstraintPipes.GetTabletId(clientId)), ctx);
+        return;
+    }
 
     if (IncrementalRestorePipes.Has(clientId)) {
         RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),

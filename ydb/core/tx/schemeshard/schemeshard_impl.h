@@ -1919,6 +1919,7 @@ public:
 
         class TTxCreateSetColumnConstraint;
         struct TTxProgressSetColumnConstraint;
+        struct TTxReplyRetrySetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);
@@ -1977,6 +1978,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReplyModifySetColumnConstraint(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxReplyCompletedSetColumnConstraint(TTxId completedTxId);
     NTabletFlatExecutor::ITransaction* CreateTxReplyValidateRowCondition(TIndexBuildId operationId, TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreatePipeRetrySetColumnConstraint(TIndexBuildId operationId, TTabletId tabletId);
 
     THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperations;
     THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;

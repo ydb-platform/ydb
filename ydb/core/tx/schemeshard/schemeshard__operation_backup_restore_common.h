@@ -73,19 +73,6 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TxType);
         Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
-        if (txState->Cancel) {
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        TKind::Name() << " TConfigurePart ProgressState"
-                            << ", opId: " << OperationId
-                            << ", at schemeshard: " << ssId
-                            << ", cancel detected, finishing without sending proposals");
-
-            NIceDb::TNiceDb db(context.GetDB());
-            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            TKind::Finish(OperationId, *txState, context);
-            return true;
-        }
-
         txState->ClearShardsInProgress();
         if constexpr (TKind::NeedSnapshotTime()) {
             TKind::ProposeTx(OperationId, *txState, context, GetSnapshotTime(context.SS, txState->TargetPathId));
@@ -442,16 +429,6 @@ public:
 
             auto event = MakeHolder<TEvCancel>(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
-
-            // For ColumnShards, subscribe for TEvNotifyTxCompletionResult so that
-            // the SchemeShard gets notified when the abort completes on the shard.
-            // Without this subscription, ColumnShards have no way to notify the
-            // SchemeShard that the abort is done, causing the Aborting state to hang.
-            if (txState->Shards[i].TabletType == TTabletTypes::ColumnShard) {
-                auto subscribeEvent = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
-                context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, subscribeEvent.release());
-            }
-            context.OnComplete.RouteByTablet(OperationId, datashardId);
         }
 
         txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
@@ -570,17 +547,8 @@ class TBackupRestoreOperationBase: public TSubOperation {
         case TTxState::Waiting:
         case TTxState::CreateParts:
             return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts: {
-            TTxState* txState = context.SS->FindTx(OperationId);
-            Y_ABORT_UNLESS(txState);
-            Y_ABORT_UNLESS(txState->TxType == TxType);
-
-            if (txState->Cancel) {
-                Y_ABORT_UNLESS(txState->State == TTxState::Done);
-                return TTxState::Done;
-            }
+        case TTxState::ConfigureParts:
             return TTxState::Propose;
-        }
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts: {

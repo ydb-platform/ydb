@@ -58,7 +58,7 @@ def test_viewer_v2_aliases_access_controls(ydb_cluster_with_external_access_cont
 
     for ep in ['/viewer/v2/json/sysinfo', '/viewer/v2/json/sysinfo' + db_qs]:
         _assert_status(base_url, ep, 'database@builtin', 403)
-        _assert_not_status(base_url, ep, 'viewer@builtin', 403)
+        _assert_status(base_url, ep, 'viewer@builtin', 403)
         _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
         _assert_not_status(base_url, ep, 'root@builtin', 403)
 

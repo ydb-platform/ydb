@@ -41,7 +41,8 @@ bool IsWordByte(unsigned char c) {
 }
 
 // A line made only of '|', '-', ':' and spaces (with at least one '-') is a Markdown table
-// separator or a horizontal rule. Such lines carry no information and only add noise.
+// separator row or a horizontal rule (the table separator is dropped inside a table because its
+// border already conveys it; a standalone such line is rendered as a horizontal rule).
 bool IsTableSeparatorLine(TStringBuf trimmed) {
     if (trimmed.empty()) {
         return false;
@@ -231,7 +232,7 @@ ftxui::Element BuildCodeBlock(const std::vector<TStringBuf>& codeLines, TStringB
     });
 }
 
-// Render a single prose line as a flexbox of space-separated tokens (mirroring how paragraph()
+// Render a single prose line as a flexbox of whitespace-separated tokens (mirroring how paragraph()
 // reflows words), turning "**...**" spans into bold. Single backticks are passed through verbatim:
 // the model uses them to quote YQL identifiers, so they must not be stripped or recolored. Inside a
 // token the style can change between pieces without inserting a space; tokens are separated by a gap.
@@ -267,7 +268,7 @@ ftxui::Element BuildStyledLine(TStringBuf line) {
     auto flushToken = [&]() {
         flushPiece();
         if (pieces.empty()) {
-            tokens.push_back(ftxui::text("")); // keep empty tokens so repeated spaces are preserved
+            tokens.push_back(ftxui::text("")); // keep empty tokens so repeated whitespace is preserved
         } else if (pieces.size() == 1) {
             tokens.push_back(std::move(pieces.front()));
         } else {
@@ -281,7 +282,7 @@ ftxui::Element BuildStyledLine(TStringBuf line) {
             flushPiece();
             bold = !bold;
             i += 2;
-        } else if (line[i] == ' ') {
+        } else if (IsSpaceOrTab(line[i])) {
             flushToken();
             ++i;
         } else {
@@ -376,6 +377,15 @@ ftxui::Element MarkdownToElement(TStringBuf text) {
         if (IsHeading(trimmed)) {
             flushProse();
             blocks.push_back(BuildStyledLine(StripInlineMarkdownKeepStyles(lines[i])) | ftxui::bold);
+            ++i;
+            continue;
+        }
+
+        // Standalone horizontal rule ("---", ":--:", "| --- |"): a table's separator is consumed in
+        // the table branch above, so on its own such a line is a horizontal rule. Draw it full width.
+        if (IsTableSeparatorLine(trimmed)) {
+            flushProse();
+            blocks.push_back(ftxui::separator() | ftxui::color(ftxui::Color::Grey42));
             ++i;
             continue;
         }

@@ -34,7 +34,7 @@ OUTPUT FORMATTING (this matters as much as the rules below):
 - Your reply is shown in a CLI terminal that renders plain text plus a small, fixed subset of Markdown. Write plain text by default and use only the constructs below for structure; any other markup is shown as raw characters and looks broken.
 - Code, queries, commands, and schema: always wrap them in a fenced code block with a language tag (e.g. ```yql ... ```, or ```sql / ```bash / ```json). It renders as a highlighted panel, so this is the only correct way to show code — never inline and never without a fence.
 - Tabular data: use a Markdown table (a header row, a |---|---| separator line, then one row per record). It renders as a real bordered table. Do not align columns with spaces — that breaks when the output is wrapped to the terminal width.
-- Everything else is plain text: short paragraphs separated by a blank line and "- " for list items (one per line). You may use **bold** and "# " headings for emphasis (they render as bold); avoid other markup (italics, blockquotes, links, inline `backticks`) — it is dropped or shown as raw characters.
+- Everything else is plain text: short paragraphs separated by a blank line and "- " for list items (one per line). You may use **bold** and "# " headings for emphasis (they render as bold). Avoid other inline markup (italics, blockquotes, links) — it is stripped or shown as raw characters. Inline `backticks` are the exception: they are shown verbatim, so they are safe for quoting identifiers like `/Root/series` in prose.
 - When you reuse documentation or tool output, extract the relevant facts and re-express them in these formats; do not paste large raw fragments.
 - Be concise.
 

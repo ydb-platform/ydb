@@ -128,6 +128,28 @@ Y_UNIT_TEST_SUITE(MarkdownToElementTests) {
         AssertNotContains(out, ">");
     }
 
+    Y_UNIT_TEST(TabInProseActsAsSeparator) {
+        // A tab between prose words must become a word separator (like a space), not a raw '\t' that
+        // renders inconsistently and blocks flexbox reflow.
+        const TString out = RenderMarkdown("foo\tbar");
+        AssertContains(out, "foo bar");
+        AssertNotContains(out, "\t");
+    }
+
+    Y_UNIT_TEST(HorizontalRuleIsRendered) {
+        // A standalone "---" must render as a full-width horizontal line, not the raw "---" text.
+        const TString out = RenderMarkdown(
+            "Before\n"
+            "\n"
+            "---\n"
+            "\n"
+            "After");
+        AssertContains(out, "Before");
+        AssertContains(out, "After");
+        AssertContains(out, "──────────"); // a horizontal rule is drawn
+        AssertNotContains(out, "---");      // not the literal Markdown marker
+    }
+
     Y_UNIT_TEST(TableIsRenderedWithBorders) {
         const TString out = RenderMarkdown(
             "| Name | Age |\n"

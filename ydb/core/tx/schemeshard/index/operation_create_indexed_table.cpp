@@ -133,8 +133,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
-
-        switch (GetIndexType(indexDescription)) {
+        const auto indexType = GetIndexType(indexDescription);
+        switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 // no feature flag, everything is fine
@@ -193,6 +193,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         if (indexes.contains(indexName)) {
             TString msg = TStringBuilder() << "Can't create indexes with not unique names for table, for example: " << indexDescription.GetName();
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        }
+
+        if (baseTableDescription.HasTTLSettings() && !DoesIndexSupportTTL(indexType)) {
+            auto msg = TStringBuilder() << "Table with " << indexType << " index doesn't support TTL";
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 

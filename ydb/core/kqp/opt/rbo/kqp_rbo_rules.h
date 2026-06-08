@@ -63,6 +63,13 @@ class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
+class TInlineGenericInExistsSubplanRule : public ISimplifiedRule {
+  public:
+    TInlineGenericInExistsSubplanRule() : ISimplifiedRule("Inline generic in or exists subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
 /**
  * Inline join filters
  */
@@ -85,14 +92,173 @@ class TFuseFiltersRule : public ISimplifiedRule {
 };
 
 /**
- * Push down a non-projecting map operator
- * Currently only pushes below joins that are immediately below
+ * Push append map elements closer to sources one topology at a time.
+ * If only part of a map can move safely, leave the rest above.
  */
-class TPushMapRule : public ISimplifiedRule {
+class TPushAppendIntoMapRule : public ISimplifiedRule {
   public:
-    TPushMapRule() : ISimplifiedRule("Push map operator", ERuleProperties::RequireParents) {}
+    TPushAppendIntoMapRule()
+        : ISimplifiedRule("Push append into map", ERuleProperties::RequireParents) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+class TPushAppendThroughUnaryRule : public ISimplifiedRule {
+  public:
+    explicit TPushAppendThroughUnaryRule(bool pushUnderFilter = true)
+        : ISimplifiedRule("Push append through unary", ERuleProperties::RequireParents)
+        , PushUnderFilter(pushUnderFilter) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+
+  private:
+    bool PushUnderFilter;
+};
+
+class TPushAppendThroughAggregateRule : public ISimplifiedRule {
+  public:
+    TPushAppendThroughAggregateRule()
+        : ISimplifiedRule("Push append through aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+class TPushAppendThroughJoinRule : public ISimplifiedRule {
+  public:
+    TPushAppendThroughJoinRule()
+        : ISimplifiedRule("Push append through join", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Compatibility wrapper for focused tests: applies one alias-append topology per rule firing.
+ */
+class TPushAppendRule : public ISimplifiedRule {
+  public:
+    explicit TPushAppendRule(bool pushUnderFilter = true)
+        : ISimplifiedRule("Push append map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness)
+        , PushUnderFilter(pushUnderFilter) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+
+  private:
+    bool PushUnderFilter;
+};
+
+/**
+ * Compatibility wrapper for focused tests: applies one expression-append topology per rule firing.
+ */
+class TPushAppendExpressionRule : public ISimplifiedRule {
+  public:
+    explicit TPushAppendExpressionRule(bool pushUnderFilter = true)
+        : ISimplifiedRule("Push append expressions", ERuleProperties::RequireParents)
+        , PushUnderFilter(pushUnderFilter) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+
+  private:
+    bool PushUnderFilter;
+};
+
+/**
+ * Convert semantic renames to append aliases when the original name may stay visible.
+ */
+class TRenameToAppendRule : public IRule {
+  public:
+    TRenameToAppendRule()
+        : IRule("Convert safe renames to appends", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Push semantic renames one topology at a time.
+ */
+class TPushRenameThroughTransparentUnaryRule : public IRule {
+  public:
+    explicit TPushRenameThroughTransparentUnaryRule(bool pushAppendAliasesUnderFilter = true)
+        : IRule("Push semantic rename through unary", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints)
+        , PushAppendAliasesUnderFilter(pushAppendAliasesUnderFilter) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+
+  private:
+    bool PushAppendAliasesUnderFilter;
+};
+
+class TPushRenameThroughPassThroughMapRule : public IRule {
+  public:
+    TPushRenameThroughPassThroughMapRule()
+        : IRule("Push semantic rename through map", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushRenameThroughAggregateKeyRule : public IRule {
+  public:
+    TPushRenameThroughAggregateKeyRule()
+        : IRule("Push semantic rename through aggregate key", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushRenameThroughJoinSideRule : public IRule {
+  public:
+    TPushRenameThroughJoinSideRule()
+        : IRule("Push semantic rename through join side", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushRenameIntoReadRule : public IRule {
+  public:
+    TPushRenameIntoReadRule()
+        : IRule("Push semantic rename into read", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushRenameIntoMapProducerRule : public IRule {
+  public:
+    TPushRenameIntoMapProducerRule()
+        : IRule("Push semantic rename into map producer", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushRenameIntoAggregateResultRule : public IRule {
+  public:
+    TPushRenameIntoAggregateResultRule()
+        : IRule("Push semantic rename into aggregate result", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Compatibility wrapper for focused tests: applies one rename topology per rule firing.
+ */
+class TPushRenameRule : public IRule {
+  public:
+    explicit TPushRenameRule(bool pushAppendAliasesUnderFilter = true)
+        : IRule("Push semantic rename", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints)
+        , PushAppendAliasesUnderFilter(pushAppendAliasesUnderFilter) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+
+  private:
+    bool PushAppendAliasesUnderFilter;
+};
+
+/**
+ * Rewrites local expressions to the alias already preferred by liveness.
+ */
+class TRewriteExpressionsToPreferredAliasesRule : public IRule {
+  public:
+    TRewriteExpressionsToPreferredAliasesRule()
+        : IRule("Rewrite expressions to preferred aliases", ERuleProperties::RequireLiveness | ERuleProperties::RequireAliases) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**
@@ -227,15 +393,6 @@ class TAssignStagesRule : public IRule {
 };
 
 /**
- * Separate global stage to remove extra renames and project out unneeded columns
- */
-class TRenameStage : public IRBOStage {
-  public:
-    TRenameStage();
-    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
-};
-
-/**
  * Separate global constant folding stage
  */
 class TConstantFoldingStage : public IRBOStage {
@@ -245,12 +402,45 @@ class TConstantFoldingStage : public IRBOStage {
 };
 
 /**
- * Prune unnecessary columns stage
+ * Remove append-only map elements whose outputs are not live.
  */
-class TPruneColumnsStage : public IRBOStage {
+class TPruneDeadMapElementsRule : public IRule {
   public:
-    TPruneColumnsStage();
-    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+    TPruneDeadMapElementsRule()
+        : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Remove read columns whose output IUs are not live.
+ */
+class TPruneDeadReadColumnsRule : public IRule {
+  public:
+    TPruneDeadReadColumnsRule()
+        : IRule("Prune dead read columns", ERuleProperties::RequireLiveness) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Remove aggregate result traits whose output IUs are not live.
+ */
+class TPruneDeadAggregateTraitsRule : public IRule {
+  public:
+    TPruneDeadAggregateTraitsRule()
+        : IRule("Prune dead aggregate traits", ERuleProperties::RequireLiveness) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Prune dead logical outputs using final liveness.
+ */
+class TLogicalOutputPruningStage : public IRBOStage {
+  public:
+    TLogicalOutputPruningStage();
+    virtual void RunStage(TOpRoot& root, TRBOContext& ctx) override;
 };
 
 /**

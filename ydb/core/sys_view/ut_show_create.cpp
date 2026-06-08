@@ -1349,7 +1349,6 @@ Y_UNIT_TEST(Table) {
                 INDEX Index2 GLOBAL USING vector_kmeans_tree ON (Value5) COVER (Value1, Value3) WITH (distance=manhattan, vector_type=float, vector_dimension=2, clusters=2, levels=1),
                 PRIMARY KEY (Key1, Key2, Key3),
             ) WITH (
-                TTL = Interval("PT1H") DELETE ON Value4,
                 KEY_BLOOM_FILTER = ENABLED,
                 PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde")),
                 AUTO_PARTITIONING_BY_LOAD = ENABLED
@@ -1373,8 +1372,7 @@ Y_UNIT_TEST(Table) {
             WITH (
                 AUTO_PARTITIONING_BY_LOAD = ENABLED,
                 PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
-                KEY_BLOOM_FILTER = ENABLED,
-                TTL = INTERVAL('PT1H') DELETE ON Value4
+                KEY_BLOOM_FILTER = ENABLED
             );
         )"
     );

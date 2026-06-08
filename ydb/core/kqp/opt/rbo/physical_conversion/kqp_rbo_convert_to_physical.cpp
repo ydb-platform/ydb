@@ -131,6 +131,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             .Done().Ptr();
             // clang-format on
 
+            if (limit->GetOutputIUs() != limit->GetInput()->GetOutputIUs()) {
+                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, limit->GetOutputIUs());
+            }
+
             if (!limit->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, limit->GetNumOfConsumers(), ctx, op->Pos);
             }
@@ -173,13 +177,53 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
         } else if (op->Kind == EOperator::UnionAll) {
             auto unionAll = CastOperator<TOpUnionAll>(op);
+            const auto unionOutput = unionAll->GetOutputIUs();
 
             auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(leftArg);
 
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
-            TVector<TExprNode::TPtr> extendArgs{leftArg, rightArg};
+
+            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) {
+                auto hasSameType = [&](const TInfoUnit& source, const TInfoUnit& target) {
+                    const auto* sourceType = inputOp->GetIUType(source);
+                    const auto* targetType = unionAll->GetIUType(target);
+                    return sourceType && targetType && IsSameAnnotation(*sourceType, *targetType);
+                };
+
+                const auto inputOutput = inputOp->GetOutputIUs();
+                if (inputOutput == unionOutput) {
+                    return input;
+                }
+                if (inputOutput.size() == unionOutput.size()) {
+                    THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
+                    inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
+                    TVector<std::pair<TString, TString>> renames;
+                    renames.reserve(unionOutput.size());
+                    for (size_t i = 0; i < unionOutput.size(); ++i) {
+                        TInfoUnit source = inputOutput[i];
+                        if (inputOutputSet.contains(unionOutput[i]) && hasSameType(unionOutput[i], unionOutput[i])) {
+                            source = unionOutput[i];
+                        } else if (!hasSameType(source, unionOutput[i])) {
+                            for (const auto& candidate : inputOutput) {
+                                if (candidate.GetColumnName() == unionOutput[i].GetColumnName() && hasSameType(candidate, unionOutput[i])) {
+                                    source = candidate;
+                                    break;
+                                }
+                            }
+                        }
+                        renames.emplace_back(source.GetFullName(), unionOutput[i].GetFullName());
+                    }
+                    return NPhysicalConvertionUtils::BuildRenameMap(input, renames, ctx);
+                }
+                return NPhysicalConvertionUtils::ExtractMembers(input, ctx, unionOutput);
+            };
+
+            TVector<TExprNode::TPtr> extendArgs{
+                projectInput(leftArg, unionAll->GetLeftInput()),
+                projectInput(rightArg, unionAll->GetRightInput())
+            };
 
             if (unionAll->Ordered) {
                 // clang-format off
@@ -193,6 +237,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                     .Add(extendArgs)
                 .Done().Ptr();
                 // clang-format on
+            }
+
+            if (unionOutput != unionAll->GetLeftInput()->GetOutputIUs()) {
+                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, unionOutput);
             }
 
             if (!unionAll->IsSingleConsumer()) {

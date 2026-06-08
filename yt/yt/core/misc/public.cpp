@@ -4,11 +4,11 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString YTCoreNoteName = "YT";
+const std::string YTCoreNoteName = "YT";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ProcessErrorCodeFormatter(int code)
+std::string ProcessErrorCodeFormatter(int code)
 {
     return TEnumTraits<EProcessErrorCode>::ToString(static_cast<EProcessErrorCode>(code));
 }

@@ -3,11 +3,9 @@
 #include "auth.h"
 #include "tablet_types.h"
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/mon.h>
-
-#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
+
+#include <array>
 
 namespace NKikimr {
 
@@ -15,16 +13,21 @@ namespace {
 
 const TString TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX = TStringBuilder() << "/" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
 
-// All-or-nothing tablets: /app/secure routing is always enabled
-// With the feature flag on the handler requires admin for every request (no public whitelist on /app).
-bool IsAllOrNothingTabletDevUiSecurePath(TTabletTypes::EType type) {
-    return type == TTabletTypes::DataShard
-        || type == TTabletTypes::Hive;
-}
+enum class ETabletDevUiSecurePathPolicy {
+    AlwaysOn,   // Always uses `/app/secure`.
+    FlagGated,  // Uses `/app/secure` only when EnableTabletDevUiSecurePath is set.
+};
 
-// Whitelist tablets: /app/secure routing is enabled only with EnableTabletDevUiSecurePath.
-const THashSet<TTabletTypes::EType> TABLET_TYPES_WITH_FLAGGED_SECURE_DEV_UI_PATH = {
-    TTabletTypes::GraphShard,
+struct TTabletDevUiSecurePathRule {
+    TTabletTypes::EType Type;
+    ETabletDevUiSecurePathPolicy Policy;
+};
+
+// Tablets that use the `/app/secure` DevUI path with their activation policy.
+constexpr std::array TABLET_DEV_UI_SECURE_PATH_RULES = {
+    TTabletDevUiSecurePathRule{TTabletTypes::DataShard,  ETabletDevUiSecurePathPolicy::AlwaysOn},
+    TTabletDevUiSecurePathRule{TTabletTypes::Hive,       ETabletDevUiSecurePathPolicy::AlwaysOn},
+    TTabletDevUiSecurePathRule{TTabletTypes::GraphShard, ETabletDevUiSecurePathPolicy::FlagGated},
 };
 
 } // namespace
@@ -37,28 +40,33 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
 }
 
 bool UsesTabletDevUiSecurePath(TTabletTypes::EType type, bool enableSecurePathFlag) {
-    if (IsAllOrNothingTabletDevUiSecurePath(type)) {
-        return true;
+    for (const auto& rule : TABLET_DEV_UI_SECURE_PATH_RULES) {
+        if (rule.Type != type) {
+            continue;
+        }
+        switch (rule.Policy) {
+            case ETabletDevUiSecurePathPolicy::AlwaysOn:
+                return true;
+            case ETabletDevUiSecurePathPolicy::FlagGated:
+                return enableSecurePathFlag;
+        }
     }
-    return enableSecurePathFlag && TABLET_TYPES_WITH_FLAGGED_SECURE_DEV_UI_PATH.contains(type);
+    return false;
 }
 
-bool CheckTabletDevUiAccess(
+bool IsTabletDevUiAccessAllowed(
     const TAppData* appData,
     bool securePathMode,
     TStringBuf pathInfo,
     const TString& userToken,
-    bool isPublicRequest,
-    const NActors::TActorId& sender)
+    bool isPublicRequest)
 {
     if (!securePathMode || isPublicRequest) {
         return true;
     }
-    if (!IsTabletDevUiSecurePath(pathInfo) || !IsAdministrator(appData, userToken)) {
-        TActivationContext::Send(new IEventHandle(sender, NActors::TActorId(), new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN)));
-        return false;
-    }
-    return true;
+    // Mutating handler requires BOTH `/app/secure` path (CGI dispatch can't bypass via `/app/`)
+    // AND administrator token (administration_allowed_sids).
+    return IsTabletDevUiSecurePath(pathInfo) && IsAdministrator(appData, userToken);
 }
 
 } // namespace NKikimr

@@ -189,14 +189,14 @@ public:
 void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
     const bool securePathMode = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath();
     const auto& cgi = ev->Get()->Cgi();
-    if (!CheckTabletDevUiAccess(
+    if (!IsTabletDevUiAccessAllowed(
             AppData(),
             securePathMode,
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            IsPublicGraphShardDevUiRequest(cgi),
-            ev->Sender))
+            IsPublicGraphShardDevUiRequest(cgi)))
     {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return;
     }
 

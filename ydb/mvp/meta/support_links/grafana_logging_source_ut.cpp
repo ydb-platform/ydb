@@ -64,6 +64,7 @@ struct TGrafanaLoggingTestContext {
         , HttpProxyId(2, "hp")
         , Context{
             .Place = 0,
+            .EntityType = NMVP::ESupportLinksEntityType::Cluster,
             .Owner = Owner,
             .HttpProxyId = HttpProxyId,
         }
@@ -125,6 +126,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "cd868168-09d4-4ece-82db-e646130697e5";
         context.UrlParameters = MakeUrlParameters("database=%2Froot%2Ftenant");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -141,6 +143,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         TGrafanaLoggingTestContext context("https://external.example.net/explore");
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -153,10 +156,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         );
     }
 
-    Y_UNIT_TEST(ResolveUsesDatabaseRequestParameter) {
+    Y_UNIT_TEST(ResolveUsesOnlyDatabaseRequestParameterForDatabaseEntity) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("custom_label=new-value&database=%2Fnew%2Fdb");
+        context.UrlParameters = MakeUrlParameters("custom_label=new-value&database=%2Fnew%2Fdb&node=static-node-1&host=host-1.example.net");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -169,10 +173,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsRequestParametersOtherThanDatabase) {
+    Y_UNIT_TEST(ResolveUsesOnlyNodeIdRequestParameterForNodeEntity) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("cluster=ignored-cluster&custom_label=ignored&database=%2Fnew%2Fdb");
+        context.UrlParameters = MakeUrlParameters("cluster=ignored-cluster&custom_label=ignored&database=%2Fnew%2Fdb&node=static-node-1&host=host-1.example.net");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Node;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -180,7 +185,24 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{database=\"/new/db\"}",
+            "{node_id=\"static-node-1\"}",
+            "ds-42"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveUsesOnlyHostRequestParameterForHostEntity) {
+        TGrafanaLoggingTestContext context;
+        context.ClusterInfo["datasource_logging"] = "ds-42";
+        context.UrlParameters = MakeUrlParameters("cluster=ignored-cluster&custom_label=ignored&database=%2Fnew%2Fdb&node=static-node-1&host=host-1.example.net");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Host;
+        auto result = context.Resolve();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
+        AssertPanesQuery(
+            result.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{k8s_node_name=\"host-1.example.net\"}",
             "ds-42"
         );
     }
@@ -189,6 +211,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);

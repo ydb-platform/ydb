@@ -13,13 +13,10 @@ namespace NMVP {
 
 class TSupportLinksResolver {
 public:
-    enum class EEntityType {
-        Cluster,
-        Database,
-    };
+    using EEntityType = ESupportLinksEntityType;
 
     struct TParams {
-        EEntityType EntityType = EEntityType::Cluster;
+        TVector<EEntityType> EntityTypes;
         const TMetaSettings* Settings = nullptr;
         THashMap<TString, TString> ClusterInfo;
         NHttp::TUrlParameters UrlParameters;
@@ -46,6 +43,7 @@ private:
     void HandleSourceTimeout(size_t place, NActors::TActorSystem* actorSystem);
 
     TVector<std::shared_ptr<ILinkSource>> Sources;
+    TVector<EEntityType> SourceEntityTypes;
     TVector<TResolveOutput> SourceOutputs;
     TVector<TMaybe<NActors::TActorId>> SourceActors;
     THashMap<TString, TString> ClusterInfo;

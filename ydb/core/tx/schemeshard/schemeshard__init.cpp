@@ -5492,6 +5492,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
                 }
 
+                if (rowset.HaveValue<Schema::ColumnTables::IsReadOnly>()) {
+                    tableInfo->IsReadOnly = rowset.GetValue<Schema::ColumnTables::IsReadOnly>();
+                }
+
                 if (!rowset.Next()) {
                     return false;
                 }

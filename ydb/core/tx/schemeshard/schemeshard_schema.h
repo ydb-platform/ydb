@@ -1783,9 +1783,10 @@ struct Schema : NIceDb::Schema {
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct StandaloneSharding : Column<5, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
         struct IsRestore : Column<6, NScheme::NTypeIds::Bool> {};
+        struct IsReadOnly : Column<7, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore, IsReadOnly>;
     };
 
     struct ColumnTablesAlters : Table<91> {

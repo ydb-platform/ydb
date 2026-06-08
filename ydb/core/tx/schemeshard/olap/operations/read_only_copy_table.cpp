@@ -559,6 +559,7 @@ public:
         {
             auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
             tableInfo->AlterVersion += 1;
+            tableInfo->IsReadOnly = true;
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
         context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "copy table info");

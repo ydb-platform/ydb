@@ -4462,7 +4462,8 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
             NIceDb::TUpdate<Schema::ColumnTables::Description>(serialized),
-            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding));
+            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding),
+            NIceDb::TUpdate<Schema::ColumnTables::IsReadOnly>(tableInfo.IsReadOnly));
         if (tableInfo.StandaloneSharding) {
             TString serializedOwnedShards;
             Y_ABORT_UNLESS(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));

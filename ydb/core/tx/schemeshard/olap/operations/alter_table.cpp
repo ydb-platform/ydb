@@ -299,6 +299,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsColumnTable()
+                .NotReadOnlyColumnTable()
                 .NotUnderOperation();
 
             if (!checks) {

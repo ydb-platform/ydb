@@ -428,6 +428,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveLocalIndex(TOperationId nextId,
             .IsResolved()
             .NotDeleted()
             .IsColumnTable()
+            .NotReadOnlyColumnTable()
             .NotUnderDeleting()
             .NotUnderOperation()
             .IsCommonSensePath();

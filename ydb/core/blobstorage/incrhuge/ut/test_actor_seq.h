@@ -72,7 +72,7 @@ public:
             if (!itemValid || stateIt->second.Lsn < itemIt->Lsn) {
                 // we have an entry in confirmed state that is not in msg->Items; this happens only if we had delete
                 // request in flight that succeeded, but we haven't received reply
-                YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "deleted Id# 16",
+                YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "deleted",
                     {"Id", stateIt->second.Id});
                 Y_ABORT_UNLESS(State.DeleteRequest);
                 Y_ABORT_UNLESS(*State.DeleteRequest == stateIt->second.Lsn);
@@ -81,7 +81,7 @@ public:
             } else if (!stateValid || itemIt->Lsn < stateIt->second.Lsn) {
                 // here we have entry in msg->Items that is not in confirmed state -- this happens only if we had
                 // in-flight write request, but haven't got reply
-                YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "added Id# 16",
+                YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "added",
                     {"Id", itemIt->Id});
                 Y_ABORT_UNLESS(State.WriteRequest);
                 Y_ABORT_UNLESS(itemIt->Lsn == State.WriteRequest->Lsn);
@@ -143,9 +143,9 @@ public:
             State.DeleteRequest = it->second.Lsn;
             ui64 seqNo = State.Lsn++;
             ctx.Send(KeeperId, new TEvIncrHugeDelete(Owner, seqNo, {it->second.Id}), 0, it->first);
-            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Delete Id# 16 SeqNo# ",
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Delete",
                 {"Id", it->second.Id},
-                {"seqNo", seqNo});
+                {"SeqNo", seqNo});
             return;
         } else {
             option -= deleteScore;
@@ -188,7 +188,7 @@ public:
 
     void Handle(TEvIncrHugeDeleteResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeDeleteResult *msg = ev->Get();
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# Id# 16",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Delete",
             {"Status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
             {"Id", ev->Cookie});
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
@@ -201,7 +201,7 @@ public:
     void Handle(TEvIncrHugeWriteResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeWriteResult *msg = ev->Get();
         TPayload *payload = static_cast<TPayload *>(msg->Payload.get());
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Write Status# Lsn# LogoBlobId# Id# 16",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Write",
             {"Status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
             {"Lsn", payload->Lsn},
             {"LogoBlobId", payload->LogoBlobId.ToString().data()},

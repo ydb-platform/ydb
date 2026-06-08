@@ -151,7 +151,7 @@ namespace NKikimr {
                     deletes ? deletes->Lsn : none));
             const bool added = Keeper.State.ChildActors.insert(actorId).second;
             Y_ABORT_UNLESS(added);
-            YDB_LOG_CTX_INFO((ctx), "[IncrHugeKeeper  starting ReadLog",
+            YDB_LOG_CTX_INFO((ctx), "starting ReadLog",
                 {"LogPrefix", LogPrefix},
                 {"PDisk", Keeper.State.Settings.PDiskId});
         }
@@ -162,7 +162,7 @@ namespace NKikimr {
 
             Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
 
-            YDB_LOG_CTX_INFO((ctx), "[IncrHugeKeeper finished ReadLog",
+            YDB_LOG_CTX_INFO((ctx), "finished ReadLog",
                 {"LogPrefix", LogPrefix},
                 {"PDisk", Keeper.State.Settings.PDiskId});
 
@@ -352,11 +352,12 @@ namespace NKikimr {
             // find matching chunk
             TChunkInfo& chunk = Keeper.State.Chunks.at(scanResult.ChunkIdx);
 
-            YDB_LOG_CTX_DEBUG((ctx), "",
+            YDB_LOG_CTX_DEBUG((ctx), "ProcessScanResult",
                 {"LogPrefix", LogPrefix},
                 {"ChunkIdx", scanResult.ChunkIdx},
-                {"IndexOnly", chunk.ChunkSerNum},
-                {"IndexValid", scanResult.IndexOnly});
+                {"ChunkSerNum", chunk.ChunkSerNum},
+                {"IndexOnly", scanResult.IndexOnly},
+                {"IndexValid", scanResult.IndexValid});
 
             if (scanResult.Status == NKikimrProto::NODATA) {
                 // this is really empty chunk, put it to write intent queue

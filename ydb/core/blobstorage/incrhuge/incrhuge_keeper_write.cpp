@@ -127,7 +127,7 @@ namespace NKikimr {
             };
             it->Callback = MakeCallback(std::move(callback));
 
-            YDB_LOG_CTX_DEBUG((ctx), "",
+            YDB_LOG_CTX_DEBUG((ctx), "HandleWrite",
                 {"LogPrefix", LogPrefix},
                 {"QueryId", it->QueryId},
                 {"Lsn", it->Lsn},

@@ -48,7 +48,7 @@ namespace NKikimr {
                 }
                 return s.Str();
             };
-            YDB_LOG_CTX_DEBUG((ctx), "",
+            YDB_LOG_CTX_DEBUG((ctx), "HandleDelete",
                 {"LogPrefix", LogPrefix},
                 {"Owner", msg->Owner},
                 {"SeqNo", msg->SeqNo},

@@ -294,9 +294,9 @@ public:
         // send request
         ctx.Send(KeeperId, new TEvIncrHugeWrite(Owner, lsn, meta, TString(data), std::make_unique<TPayload>(lsn, logoBlobId)));
 
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Write LogoBlobId# Lsn# NumReq# ",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Write",
             {"LogoBlobId", logoBlobId.ToString().data()},
-            {"lsn", lsn},
+            {"Lsn", lsn},
             {"NumReq", GetNumRequestsInFlight()});
 
         // register in-flight write
@@ -353,7 +353,7 @@ public:
         // store request info
         State.InFlightReads.emplace(State.Lsn, it->second);
 
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Read Id# 16 Lsn# ",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Read",
             {"Id", it->first},
             {"Lsn", State.Lsn});
         ++State.Lsn;
@@ -364,9 +364,9 @@ public:
     void Handle(TEvIncrHugeReadResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeReadResult *msg = ev->Get();
         ui64 lsn = ev->Cookie;
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Read Status# Lsn# ",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Read",
             {"Status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
-            {"lsn", lsn});
+            {"Lsn", lsn});
 
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
@@ -389,7 +389,7 @@ public:
 
         // send request to keeper
         ctx.Send(KeeperId, new TEvIncrHugeDelete(Owner, State.Lsn++, {it->first}), 0, it->first);
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Delete Id# 16 NumReq# ",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Delete",
             {"Id", it->first},
             {"NumReq", GetNumRequestsInFlight()});
 
@@ -406,9 +406,9 @@ public:
 
         TIncrHugeBlobId id = ev->Cookie;
 
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# Id# 16",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Delete",
             {"Status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
-            {"id", id});
+            {"Id", id});
 
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 

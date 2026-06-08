@@ -78,10 +78,10 @@ namespace NKikimr {
             }
 
             // notify
-            YDB_LOG_CTX_DEBUG((ctx), "",
+            YDB_LOG_CTX_DEBUG((ctx), "starting defrag",
                 {"LogPrefix", LogPrefix},
                 {"ChunkInProgress", ChunkInProgress},
-                {"efficiency", efficiency});
+                {"WorstEfficiency", worstEfficiency});
 
             // create chunk scanner to read index
             const TActorId actorId = ctx.Register(CreateRecoveryScanActor(ChunkInProgress, true, ChunkInProgressSerNum,

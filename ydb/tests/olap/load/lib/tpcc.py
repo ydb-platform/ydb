@@ -41,7 +41,10 @@ class TpccSuiteBase(LoadSuiteBase):
 
     @classmethod
     def get_tpcc_path(cls) -> str:
-        return get_external_param(f'table-path-{cls.suite()}', 'tpcc/all')
+        env_path = getenv('TPCC_TABLE_PATH')
+        if env_path:
+            return env_path
+        return get_external_param(f'table-path-{cls.suite()}', f'tpcc/w{cls.warehouses}')
 
     @classmethod
     def do_setup_class(cls):
@@ -152,6 +155,11 @@ class TestTpccW12000T0Serializable(TpccSuiteBase):
     tx_mode = TxMode.SerializableRW
 
 
+class TestTpccW16000T0Serializable(TpccSuiteBase):
+    warehouses: int = 16000
+    threads: int = 0
+    tx_mode = TxMode.SerializableRW
+
 class TestTpccW20000T0Serializable(TpccSuiteBase):
     warehouses: int = 20000
     threads: int = 0
@@ -175,6 +183,11 @@ class TestTpccW12000T0Snapshot(TpccSuiteBase):
     threads: int = 0
     tx_mode = TxMode.SnapshotRW
 
+
+class TestTpccW16000T0Snapshot(TpccSuiteBase):
+    warehouses: int = 16000
+    threads: int = 0
+    tx_mode = TxMode.SnapshotRW
 
 class TestTpccW20000T0Snapshot(TpccSuiteBase):
     warehouses: int = 20000

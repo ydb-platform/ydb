@@ -432,12 +432,12 @@ public:
 
     size_t position() const;
 
-    void SetRecordBatchCompression(const TKafkaCompression& compression) {
-        RecordBatchCompression_ = compression;
+    void SetCompression(const TKafkaCompression& compression) {
+        Compression_ = compression;
     }
 
-    const TKafkaCompression& GetRecordBatchCompression() const {
-        return RecordBatchCompression_;
+    const TKafkaCompression& GetCompression() const {
+        return Compression_;
     }
 
 private:
@@ -445,7 +445,7 @@ private:
 
     const TBuffer& Is;
     size_t Position;
-    TKafkaCompression RecordBatchCompression_;
+    TKafkaCompression Compression_;
 };
 
 struct TReadDemand {

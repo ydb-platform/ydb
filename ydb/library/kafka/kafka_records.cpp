@@ -438,7 +438,7 @@ void TKafkaRecordBatch::Decompress(TKafkaVersion version) {
 }
 
 void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    const auto& compression = _readable.GetRecordBatchCompression();
+    const auto& compression = _readable.GetCompression();
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't read version " << _version << " of TKafkaRecordBatch";
     }
@@ -628,7 +628,7 @@ i32 TKafkaRecordBatchV0::Size(TKafkaVersion _version) const {
 TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version, TKafkaCompression compression) {
     TBuffer buffer(data.data(), data.size());
     TKafkaReadable readable(buffer);
-    readable.SetRecordBatchCompression(compression);
+    readable.SetCompression(compression);
 
     TKafkaRecordBatch batch;
     batch.Read(readable, version);

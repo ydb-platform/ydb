@@ -863,7 +863,7 @@ protected:
                         }
 
                         TKafkaReadable readable(*Request->Buffer);
-                        readable.SetRecordBatchCompression({
+                        readable.SetCompression({
                             .AllowCompressed = AppData()->FeatureFlags.GetEnableTopicMessagesBatching(),
                             .SkipDecompression = true,
                         });

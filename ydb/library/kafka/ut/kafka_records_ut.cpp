@@ -122,7 +122,7 @@ void AssertSkipDecompressionRead(ECompressionType compressionType) {
 
     TBuffer buffer(serialized.data(), serialized.size());
     TKafkaReadable readable(buffer);
-    readable.SetRecordBatchCompression({.AllowCompressed = true, .SkipDecompression = true});
+    readable.SetCompression({.AllowCompressed = true, .SkipDecompression = true});
 
     TKafkaRecordBatch parsed;
     parsed.Read(readable, 2);

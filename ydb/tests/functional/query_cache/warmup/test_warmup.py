@@ -165,6 +165,17 @@ class CompileCacheView:
             logger.warning("Failed to get counters from node %d: %s", node.node_id, e)
         return {}
 
+    @staticmethod
+    def get_warmup_window_counters(node):
+        # Observation-window counters: Warmup/HitsInWindow,
+        # Warmup/MissesInWindow, Warmup/SavedCompileMs.
+        counters = CompileCacheView.get_warmup_counters(node)
+        return {
+            "hits": counters.get("Warmup/HitsInWindow", 0),
+            "misses": counters.get("Warmup/MissesInWindow", 0),
+            "saved_ms": counters.get("Warmup/SavedCompileMs", 0),
+        }
+
     @classmethod
     def wait_for_warmup_finished(cls, node, timeout=60):
         """Poll warmup counters until compilation stabilizes."""
@@ -555,3 +566,84 @@ class TestWarmupStress:
         assert any_fetched, "[FullRestart] At least one node should fetch queries from node 1"
 
         logger.info("ALL 3 STRESS SCENARIOS PASSED")
+
+
+class TestWarmupCounters:
+    """Wiring sanity check for Warmup/{Hits,Misses,SavedCompile}InWindow.
+
+    Covers the client-side accounting path: warmup populates an entry, a
+    matching client query attributes the hit, a fresh client query within
+    the same observation window is recorded as a miss.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        cls.config = _make_warmup_config(nodes=2)
+        cls.cluster = kikimr_cluster_factory(cls.config)
+        cls.cluster.start()
+        cls.driver = ydb.Driver(
+            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
+            database="/Root",
+        )
+        cls.driver.wait(timeout=10)
+        cls.cache = CompileCacheView(cls.cluster)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, "driver"):
+            cls.driver.stop()
+        if hasattr(cls, "cluster"):
+            cls.cluster.stop()
+
+    def test_warmup_counters_attribution(self):
+        node2 = self.cluster.nodes[2]
+        all_node_ids = sorted(self.cluster.nodes.keys())
+
+        # Populate cache so node2 has something to fetch from node1 after restart.
+        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
+        time.sleep(2)
+
+        # Restart node2: empty its cache, force warmup to refill from node1.
+        node2.stop()
+        time.sleep(2)
+        node2.start()
+        time.sleep(5)
+
+        finished = CompileCacheView.wait_for_warmup_finished(
+            node2, timeout=NODE_READY_TIMEOUT_SECONDS + WARMUP_DEADLINE_SECONDS,
+        )
+        compiled = finished.get("Warmup/QueriesCompiled", 0)
+        assert compiled > 0, (
+            f"Warmup must populate node2 cache (compiled={compiled}, ctrs={finished})"
+        )
+
+        before = CompileCacheView.get_warmup_window_counters(node2)
+        logger.info("[Counters] window before client traffic: %s", before)
+
+        # Client traffic on a warmed entry: HitsInWindow + SavedCompileMs must move.
+        self.cache.populate_cache_on_nodes([node2.node_id], use_query_api=False)
+        after_hit = CompileCacheView.get_warmup_window_counters(node2)
+        logger.info("[Counters] window after warmed-entry hit: %s", after_hit)
+
+        assert after_hit["hits"] > before["hits"], (
+            "Warmup/HitsInWindow must increment after a client query matches a "
+            f"warmup-populated entry. before={before}, after={after_hit}"
+        )
+        assert after_hit["saved_ms"] >= before["saved_ms"], (
+            "Warmup/SavedCompileMs must be non-decreasing. "
+            f"before={before}, after={after_hit}"
+        )
+
+        # Fresh query inside the same observation window: MissesInWindow must move.
+        fresh_query = "SELECT 7919 + 42 AS unique_warmup_miss_probe"
+        self.cache.populate_cache_on_nodes(
+            [node2.node_id], extra_queries=[fresh_query], use_query_api=False,
+        )
+        after_miss = CompileCacheView.get_warmup_window_counters(node2)
+        logger.info("[Counters] window after fresh-query miss: %s", after_miss)
+
+        assert after_miss["misses"] > after_hit["misses"], (
+            "Warmup/MissesInWindow must increment after a client query that does "
+            "not match any warmup-populated entry, while the window is still open. "
+            f"after_hit={after_hit}, after_miss={after_miss}"
+        )

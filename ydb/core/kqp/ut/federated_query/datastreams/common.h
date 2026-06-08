@@ -119,6 +119,8 @@ public:
 
     void CreateTopic(const std::string& topicName, std::optional<NYdb::NTopic::TCreateTopicSettings> settings = std::nullopt, bool local = false);
 
+    void AlterTopic(const std::string& topicName, NYdb::NTopic::TAlterTopicSettings settings, bool local = false);
+
     void DropTopic(const std::string& topicName, bool local = false);
 
     void WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition = 0, bool local = false);

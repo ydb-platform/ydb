@@ -16,10 +16,12 @@ public:
     enum class EEntityType {
         Cluster,
         Database,
+        Node,
+        Host,
     };
 
     struct TParams {
-        EEntityType EntityType = EEntityType::Cluster;
+        TVector<EEntityType> EntityTypes;
         const TMetaSettings* Settings = nullptr;
         THashMap<TString, TString> ClusterInfo;
         NHttp::TUrlParameters UrlParameters;

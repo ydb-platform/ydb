@@ -10,17 +10,33 @@ namespace NMVP {
 
 namespace {
 
+const TVector<TSupportLinkEntryConfig>& GetLinkConfigs(
+    const TSupportLinksSettings& settings,
+    TSupportLinksResolver::EEntityType entityType)
+{
+    switch (entityType) {
+        case TSupportLinksResolver::EEntityType::Cluster:
+            return settings.ClusterLinks;
+        case TSupportLinksResolver::EEntityType::Database:
+            return settings.DatabaseLinks;
+        case TSupportLinksResolver::EEntityType::Node:
+            return settings.NodeLinks;
+        case TSupportLinksResolver::EEntityType::Host:
+            return settings.HostLinks;
+    }
+    ythrow yexception() << "unsupported support links entity type";
+}
+
 TVector<std::shared_ptr<ILinkSource>> BuildSources(const TSupportLinksResolver::TParams& params) {
     if (!params.Settings) {
         ythrow yexception() << "support links settings are required";
     }
-    const auto& linkConfigs = params.EntityType == TSupportLinksResolver::EEntityType::Database
-        ? params.Settings->SupportLinks.DatabaseLinks
-        : params.Settings->SupportLinks.ClusterLinks;
     TVector<std::shared_ptr<ILinkSource>> linkSources;
-    linkSources.reserve(linkConfigs.size());
-    for (const auto& linkConfig : linkConfigs) {
-        linkSources.push_back(params.LinkSourceFactory(linkConfig, *params.Settings));
+    for (const auto entityType : params.EntityTypes) {
+        const auto& linkConfigs = GetLinkConfigs(params.Settings->SupportLinks, entityType);
+        for (const auto& linkConfig : linkConfigs) {
+            linkSources.push_back(params.LinkSourceFactory(linkConfig, *params.Settings));
+        }
     }
     return linkSources;
 }

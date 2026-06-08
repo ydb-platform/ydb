@@ -161,11 +161,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         );
     }
 
-    Y_UNIT_TEST(ResolveUsesDatabaseRequestParameter) {
+    Y_UNIT_TEST(ResolveUsesDatabaseNodeIdAndHostRequestParameters) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["k8s_namespace"] = "ydb-common";
         context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("custom_label=new-value&database=%2Fnew%2Fdb");
+        context.UrlParameters = MakeUrlParameters("custom_label=new-value&database=%2Fnew%2Fdb&node_id=static-node-1&host=host-1.example.net");
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -173,16 +173,16 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{database=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{database=\"/new/db\", node_id=\"static-node-1\", host=\"host-1.example.net\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
             "ds-42"
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsRequestParametersOtherThanDatabase) {
+    Y_UNIT_TEST(ResolveSkipsRequestParametersOtherThanDatabaseNodeIdAndHost) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["k8s_namespace"] = "ydb-common";
         context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("cluster=ignored-cluster&custom_label=ignored&database=%2Fnew%2Fdb");
+        context.UrlParameters = MakeUrlParameters("cluster=ignored-cluster&custom_label=ignored&database=%2Fnew%2Fdb&node_id=static-node-1&host=host-1.example.net");
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{database=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{database=\"/new/db\", node_id=\"static-node-1\", host=\"host-1.example.net\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
             "ds-42"
         );
     }

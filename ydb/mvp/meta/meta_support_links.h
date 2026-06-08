@@ -25,6 +25,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <memory>
+#include <optional>
 
 namespace NMVP {
 
@@ -37,11 +38,18 @@ public:
     using EEntityType = TSupportLinksResolver::EEntityType;
 
 protected:
+    struct TEntityIdentity {
+        TString Cluster;
+        std::optional<TString> Database;
+        std::optional<TString> NodeId;
+        std::optional<TString> Host;
+    };
+
     NActors::TActorId HttpProxyId;
     const TYdbLocation& Location;
     const TMetaSettings Settings;
     TRequest Request;
-    EEntityType EntityType = EEntityType::Cluster;
+    TVector<EEntityType> EntityTypes;
     THashMap<TString, TString> ClusterInfo;
 
 private:
@@ -65,7 +73,7 @@ public:
     void Bootstrap() {
         Become(&TMetaSupportLinksGetHandlerActor::StateWork, GetTimeout(Request, SUPPORT_LINKS_REQUEST_TIMEOUT), new NActors::TEvents::TEvWakeup());
 
-        if (!ValidateAndInitEntityType()) {
+        if (!ValidateAndInitEntityTypes()) {
             ReplyBadRequestAndDie();
             return;
         }
@@ -73,15 +81,51 @@ public:
         RequestClusterInfo();
     }
 
-    bool ValidateAndInitEntityType() {
-        const TString cluster = Request.Parameters["cluster"];
-        const TString database = Request.Parameters["database"];
+    std::optional<TString> ReadOptionalParameter(TStringBuf name) const {
+        if (!Request.Parameters.UrlParameters.Has(name)) {
+            return std::nullopt;
+        }
+        return Request.Parameters.UrlParameters[name];
+    }
 
-        if (cluster.empty()) {
-            AddCommonError("Invalid identity parameters. Supported entities: cluster requires 'cluster'; database requires 'cluster' and 'database'.");
+    TEntityIdentity ReadEntityIdentity() const {
+        return TEntityIdentity{
+            .Cluster = Request.Parameters["cluster"],
+            .Database = ReadOptionalParameter("database"),
+            .NodeId = ReadOptionalParameter("node_id"),
+            .Host = ReadOptionalParameter("host"),
+        };
+    }
+
+    bool ValidateAndInitEntityTypes() {
+        const TEntityIdentity identity = ReadEntityIdentity();
+
+        if (identity.Cluster.empty()) {
+            AddCommonError("Invalid identity parameters. Supported entities: cluster requires 'cluster'; database requires 'cluster' and 'database'; node requires 'cluster' and 'node_id'; host requires 'cluster' and 'host'.");
             return false;
         }
-        EntityType = database.empty() ? EEntityType::Cluster : EEntityType::Database;
+        if ((identity.NodeId || identity.Host) && identity.Database) {
+            AddCommonError("Invalid identity parameters. Parameter 'database' must not be specified together with 'node_id' or 'host'.");
+            return false;
+        }
+        EntityTypes.clear();
+        if (identity.NodeId) {
+            if (identity.NodeId->empty()) {
+                AddCommonError("Invalid identity parameters. Parameter 'node_id' must not be empty.");
+                return false;
+            }
+            EntityTypes.push_back(EEntityType::Node);
+        }
+        if (identity.Host) {
+            if (identity.Host->empty()) {
+                AddCommonError("Invalid identity parameters. Parameter 'host' must not be empty.");
+                return false;
+            }
+            EntityTypes.push_back(EEntityType::Host);
+        }
+        if (EntityTypes.empty()) {
+            EntityTypes.push_back(identity.Database && !identity.Database->empty() ? EEntityType::Database : EEntityType::Cluster);
+        }
         return true;
     }
 
@@ -165,7 +209,7 @@ public:
 
     TSupportLinksResolver::TParams BuildSupportLinksResolverParams() const {
         return TSupportLinksResolver::TParams{
-            .EntityType = EntityType,
+            .EntityTypes = EntityTypes,
             .Settings = &Settings,
             .ClusterInfo = ClusterInfo,
             .UrlParameters = Request.Parameters.UrlParameters,

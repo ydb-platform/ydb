@@ -24,6 +24,14 @@ inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(const NH
     if (!database.empty()) {
         bindings.emplace_back("database", database);
     }
+    const TString nodeId = requestQueryParameters["node_id"];
+    if (!nodeId.empty()) {
+        bindings.emplace_back("node_id", nodeId);
+    }
+    const TString host = requestQueryParameters["host"];
+    if (!host.empty()) {
+        bindings.emplace_back("host", host);
+    }
 
     return bindings;
 }

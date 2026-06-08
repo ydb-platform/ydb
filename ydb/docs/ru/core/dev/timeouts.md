@@ -106,8 +106,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 {% endlist %}
 
 ### QueryService {#usage-queryservice}
@@ -191,5 +189,4 @@ QueryService использует исключительно клиентски�
   
   ```
 
->>>>>>> 41f2960dc68 (docs: add timeout examples for QueryService (#40391))
 {% endlist %}

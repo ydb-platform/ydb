@@ -11,11 +11,13 @@
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
+#include <util/stream/file.h>
 
 #include <utility>
 
@@ -26,6 +28,7 @@ public:
     TTestActorRuntime()
         : TMvpTestRuntime(1, false)
     {
+        NMVP::NSupportLinks::TGrafanaDashboardModelCache::ResetForTests();
         Initialize();
     }
 };
@@ -80,6 +83,57 @@ NHttp::TUrlParametersBuilder MakeUrlParameters(TStringBuf query) {
         builder.Set(name, param);
     }
     return builder;
+}
+
+TString MakeDashboardModelBody(TStringBuf query, TStringBuf datasource = "${ds}") {
+    NJson::TJsonValue root(NJson::JSON_MAP);
+    NJson::TJsonValue dashboard(NJson::JSON_MAP);
+    NJson::TJsonValue templating(NJson::JSON_MAP);
+    NJson::TJsonValue list(NJson::JSON_ARRAY);
+    NJson::TJsonValue item(NJson::JSON_MAP);
+    NJson::TJsonValue datasourceJson(NJson::JSON_MAP);
+
+    datasourceJson["uid"] = TString(datasource);
+    item["name"] = "probe";
+    item["datasource"] = std::move(datasourceJson);
+    item["query"] = TString(query);
+    list.AppendValue(std::move(item));
+    templating["list"] = std::move(list);
+    dashboard["templating"] = std::move(templating);
+    root["dashboard"] = std::move(dashboard);
+
+    return NJson::WriteJson(root, false);
+}
+
+TString MakeProbeResponseBody(TStringBuf value) {
+    NJson::TJsonValue root(NJson::JSON_MAP);
+    NJson::TJsonValue data(NJson::JSON_MAP);
+    NJson::TJsonValue result(NJson::JSON_ARRAY);
+    NJson::TJsonValue item(NJson::JSON_MAP);
+    NJson::TJsonValue sample(NJson::JSON_ARRAY);
+    NJson::TJsonValue metric(NJson::JSON_MAP);
+
+    sample.AppendValue(1717500000);
+    sample.AppendValue(TString(value));
+    item["metric"] = std::move(metric);
+    item["value"] = std::move(sample);
+    result.AppendValue(std::move(item));
+    data["resultType"] = "vector";
+    data["result"] = std::move(result);
+    root["status"] = "success";
+    root["data"] = std::move(data);
+
+    return NJson::WriteJson(root, false);
+}
+
+NJson::TJsonValue ReadFixtureJson(TStringBuf relativePath) {
+    const TString path = ArcadiaFromCurrentLocation(__SOURCE_FILE__, relativePath);
+    const TString body = TUnbufferedFileInput(path).ReadAll();
+
+    NJson::TJsonValue value;
+    NJson::TJsonReaderConfig jsonReaderConfig;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(body, &jsonReaderConfig, &value), "failed to parse json fixture");
+    return value;
 }
 
 class TResolveRunnerActor : public NActors::TActorBootstrapped<TResolveRunnerActor> {
@@ -169,6 +223,7 @@ public:
         struct TDashboardCandidate {
             TString Title;
             TString Url;
+            TString Uid;
             THashSet<TString> Tags;
             TString FolderUid;
         };
@@ -177,25 +232,29 @@ public:
             {
                 .Title = "YDB Cluster Overview",
                 .Url = "/d/matched/dashboard",
+                .Uid = "matched",
                 .Tags = {"ydb-common", "ydb-storage"},
                 .FolderUid = "ops-folder",
             },
             {
                 .Title = "YDB Database Overview",
                 .Url = "/d/missing-tag/dashboard",
+                .Uid = "missing-tag",
                 .Tags = {"ydb-common"},
                 .FolderUid = "ops-folder",
             },
             {
                 .Title = "YDB Storage Overview",
                 .Url = "/d/wrong-folder/dashboard",
+                .Uid = "wrong-folder",
                 .Tags = {"ydb-common", "ydb-storage"},
                 .FolderUid = "other-folder",
             },
         };
 
-        NJson::TJsonValue responseJson(NJson::JSON_ARRAY);
         if (targetsSearchApi) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Timeout, NMVP::NSupportLinks::GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT);
+            NJson::TJsonValue responseJson(NJson::JSON_ARRAY);
             for (const auto& dashboard : dashboards) {
                 bool matchesTags = true;
                 for (const TString& tag : requestTags) {
@@ -214,15 +273,40 @@ public:
                 item["type"] = "dash-db";
                 item["title"] = dashboard.Title;
                 item["url"] = dashboard.Url;
+                item["uid"] = dashboard.Uid;
                 responseJson.AppendValue(std::move(item));
             }
+
+            ReplyJson(event, "HTTP/1.1 200 OK", NJson::WriteJson(responseJson, false));
+            return;
         }
 
-        TString body = NJson::WriteJson(responseJson, false);
-        const TString statusLine = targetsSearchApi
-            ? "HTTP/1.1 200 OK"
-            : "HTTP/1.1 400 Bad Request";
+        if (url.Contains("/api/dashboards/uid/matched")) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Timeout, NMVP::NSupportLinks::GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT);
+            ReplyJson(
+                event,
+                "HTTP/1.1 200 OK",
+                MakeDashboardModelBody("label_values(ElapsedMicrosec{__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"},database)"));
+            return;
+        }
 
+        if (url.Contains("/api/datasources/proxy/uid/")) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Timeout, NMVP::NSupportLinks::GRAFANA_SUPPORT_LINKS_REQUEST_TIMEOUT);
+            UNIT_ASSERT(url.Contains("__bucket__%3D%22utils%22"));
+            UNIT_ASSERT(url.Contains("database%3D%22/root/test%22"));
+            ReplyJson(event, "HTTP/1.1 200 OK", MakeProbeResponseBody("1"));
+            return;
+        }
+
+        ReplyJson(event, "HTTP/1.1 400 Bad Request", R"({"message":"bad request"})");
+    }
+
+    void ReplyJson(
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event,
+        TStringBuf statusLine,
+        TStringBuf body)
+    {
+        const auto request = event->Get()->Request;
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
         EatWholeString(
             response,
@@ -243,28 +327,65 @@ public:
     }
 };
 
-class TGrafanaSearchReplyActor : public NActors::TActor<TGrafanaSearchReplyActor> {
+class TGrafanaApiReplyActor : public NActors::TActor<TGrafanaApiReplyActor> {
 public:
-    using TBase = NActors::TActor<TGrafanaSearchReplyActor>;
+    using TBase = NActors::TActor<TGrafanaApiReplyActor>;
 
-    explicit TGrafanaSearchReplyActor(TString body)
-        : TBase(&TGrafanaSearchReplyActor::StateWork)
-        , Body(std::move(body))
+    struct TRule {
+        TString UrlContains;
+        TString StatusLine;
+        TString Body;
+        TString Error;
+    };
+
+    explicit TGrafanaApiReplyActor(TVector<TRule> rules)
+        : TBase(&TGrafanaApiReplyActor::StateWork)
+        , Rules(std::move(rules))
     {}
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
+        const auto request = event->Get()->Request;
+        const TString url(request->URL);
+        for (const auto& rule : Rules) {
+            if (!url.Contains(rule.UrlContains)) {
+                continue;
+            }
+            if (!rule.Error.empty()) {
+                ReplyError(event, rule.Error);
+                return;
+            }
+            Reply(event, rule.StatusLine, rule.Body);
+            return;
+        }
+
+        Reply(event, "HTTP/1.1 404 Not Found", R"({"message":"not found"})");
+    }
+
+    void Reply(
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event,
+        TStringBuf statusLine,
+        TStringBuf body)
+    {
         const auto request = event->Get()->Request;
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
         EatWholeString(
             response,
             TStringBuilder()
-                << "HTTP/1.1 200 OK\r\n"
+                << statusLine << "\r\n"
                 << "Connection: close\r\n"
                 << "Content-Type: application/json; charset=utf-8\r\n"
-                << "Content-Length: " << Body.size() << "\r\n"
+                << "Content-Length: " << body.size() << "\r\n"
                 << "\r\n"
-                << Body);
+                << body);
         Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+    }
+
+    void ReplyError(
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event,
+        TStringBuf error)
+    {
+        const auto request = event->Get()->Request;
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, nullptr, TString(error)));
     }
 
     STFUNC(StateWork) {
@@ -274,7 +395,7 @@ public:
     }
 
 private:
-    TString Body;
+    TVector<TRule> Rules;
 };
 
 class TForbiddenReplyActor : public NActors::TActor<TForbiddenReplyActor> {
@@ -306,6 +427,68 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
         }
     }
+};
+
+class TDashboardModelCacheCheckActor : public NActors::TActor<TDashboardModelCacheCheckActor> {
+public:
+    using TBase = NActors::TActor<TDashboardModelCacheCheckActor>;
+
+    explicit TDashboardModelCacheCheckActor(size_t* dashboardModelRequests)
+        : TBase(&TDashboardModelCacheCheckActor::StateWork)
+        , DashboardModelRequests(dashboardModelRequests)
+    {}
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
+        const TString url(event->Get()->Request->URL);
+        if (url.Contains("/api/search")) {
+            Reply(event, "HTTP/1.1 200 OK", R"json([
+                {"type":"dash-db","title":"CPU","url":"/d/ydb_cpu/cpu","uid":"ydb_cpu"}
+            ])json");
+            return;
+        }
+        if (url.Contains("/api/dashboards/uid/ydb_cpu")) {
+            ++(*DashboardModelRequests);
+            Reply(
+                event,
+                "HTTP/1.1 200 OK",
+                MakeDashboardModelBody("label_values(ElapsedMicrosec{__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"},database)"));
+            return;
+        }
+        if (url.Contains("/api/datasources/proxy/uid/")) {
+            Reply(event, "HTTP/1.1 200 OK", MakeProbeResponseBody("1"));
+            return;
+        }
+
+        Reply(event, "HTTP/1.1 404 Not Found", R"({"message":"not found"})");
+    }
+
+    void Reply(
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event,
+        TStringBuf statusLine,
+        TStringBuf body)
+    {
+        const auto request = event->Get()->Request;
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
+        EatWholeString(
+            response,
+            TStringBuilder()
+                << statusLine << "\r\n"
+                << "Connection: close\r\n"
+                << "Content-Type: application/json; charset=utf-8\r\n"
+                << "Content-Length: " << body.size() << "\r\n"
+                << "\r\n"
+                << body);
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(request, response));
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
+        }
+    }
+
+private:
+    size_t* DashboardModelRequests;
 };
 
 NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse* ResolveSource(
@@ -374,12 +557,18 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             MakeMetaSettings());
         auto httpProxyId = runtime.Register(new TSearchApiRequestCheckActor());
 
+        THashMap<TString, TString> clusterInfo;
+        clusterInfo["k8s_namespace"] = "ydb-workspace";
+        clusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+
         TAutoPtr<NActors::IEventHandle> handle;
-        auto* response = ResolveSource(runtime, source, {}, MakeUrlParameters(""), httpProxyId, handle);
+        auto* response = ResolveSource(runtime, source, clusterInfo, MakeUrlParameters("database=%2Froot%2Ftest"), httpProxyId, handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Title, "YDB Cluster Overview");
-        UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Url, "https://grafana.example.net/d/matched/dashboard");
+        AssertUrlQuery(
+            response->Links[0].Url,
+            "https://grafana.example.net/d/matched/dashboard?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-database=/root/test");
     }
 
     Y_UNIT_TEST(ResolveBuildsDashboardLinksFromSearchResponse) {
@@ -387,12 +576,18 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         TTestActorRuntime runtime;
 
         const TString body = R"json([
-            {"type":"dash-db","title":"CPU","url":"/d/ydb_cpu/cpu"},
+            {"type":"dash-db","title":"CPU","url":"/d/ydb_cpu/cpu","uid":"ydb_cpu"},
             {"type":"dashboard","title":"DB overview","uri":"db/db-overview"},
             {"type":"dash-folder","title":"Folder","url":"/dashboards/f/team-folder"},
             {"title":"Skip me"}
         ])json";
-        auto httpProxyId = runtime.Register(new TGrafanaSearchReplyActor(body));
+        TVector<TGrafanaApiReplyActor::TRule> rules = {
+            {.UrlContains = "/api/search", .StatusLine = "HTTP/1.1 200 OK", .Body = body},
+            {.UrlContains = "/api/dashboards/uid/ydb_cpu", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeDashboardModelBody("label_values(ElapsedMicrosec{__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"},database)")},
+            {.UrlContains = "/api/dashboards/db/db-overview", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeDashboardModelBody("label_values(requestBytes{__workspace__=\"$workspace\",__bucket__=\"dsproxynode\",database=\"$database\"},storagePool)")},
+            {.UrlContains = "/api/datasources/proxy/uid/3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63/api/v1/query", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeProbeResponseBody("1")},
+        };
+        auto httpProxyId = runtime.Register(new TGrafanaApiReplyActor(std::move(rules)));
         auto source = NMVP::MakeGrafanaDashboardSearchSource(
             MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
             MakeMetaSettings());
@@ -420,6 +615,175 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         AssertUrlQuery(
             response->Links[1].Url,
             "https://grafana.example.net/db/db-overview?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global&var-database=/root/test");
+    }
+
+    Y_UNIT_TEST(ResolveFiltersDashboardsWithoutSignal) {
+        TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
+        TTestActorRuntime runtime;
+
+        const TString body = R"json([
+            {"type":"dash-db","title":"CPU","url":"/d/ydb_cpu/cpu","uid":"ydb_cpu"},
+            {"type":"dash-db","title":"Storage","url":"/d/storage/storage","uid":"storage"}
+        ])json";
+        TVector<TGrafanaApiReplyActor::TRule> rules = {
+            {.UrlContains = "/api/search", .StatusLine = "HTTP/1.1 200 OK", .Body = body},
+            {.UrlContains = "/api/dashboards/uid/ydb_cpu", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeDashboardModelBody("label_values(ElapsedMicrosec{__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"},database)")},
+            {.UrlContains = "/api/dashboards/uid/storage", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeDashboardModelBody("label_values(requestBytes{__workspace__=\"$workspace\",__bucket__=\"dsproxynode\",database=\"$database\"},storagePool)")},
+            {.UrlContains = "__bucket__%3D%22utils%22", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeProbeResponseBody("1")},
+            {.UrlContains = "__bucket__%3D%22dsproxynode%22", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeProbeResponseBody("0")},
+        };
+        auto httpProxyId = runtime.Register(new TGrafanaApiReplyActor(std::move(rules)));
+        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+            MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
+            MakeMetaSettings());
+
+        THashMap<TString, TString> clusterInfo;
+        clusterInfo["k8s_namespace"] = "ydb-workspace";
+        clusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        auto* response = ResolveSource(
+            runtime,
+            source,
+            clusterInfo,
+            MakeUrlParameters("database=%2Froot%2Ftest"),
+            httpProxyId,
+            handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Title, "CPU");
+    }
+
+    Y_UNIT_TEST(ResolveReturnsDashboardWhenProbeTimesOut) {
+        TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
+        TTestActorRuntime runtime;
+
+        const TString body = R"json([
+            {"type":"dash-db","title":"CPU","url":"/d/ydb_cpu/cpu","uid":"ydb_cpu"}
+        ])json";
+        TVector<TGrafanaApiReplyActor::TRule> rules = {
+            {.UrlContains = "/api/search", .StatusLine = "HTTP/1.1 200 OK", .Body = body},
+            {.UrlContains = "/api/dashboards/uid/ydb_cpu", .StatusLine = "HTTP/1.1 200 OK", .Body = MakeDashboardModelBody("label_values(ElapsedMicrosec{__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"},database)")},
+            {.UrlContains = "/api/datasources/proxy/uid/3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63/api/v1/query", .Error = "Connection timed out"},
+        };
+        auto httpProxyId = runtime.Register(new TGrafanaApiReplyActor(std::move(rules)));
+        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+            MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
+            MakeMetaSettings());
+
+        THashMap<TString, TString> clusterInfo;
+        clusterInfo["k8s_namespace"] = "ydb-workspace";
+        clusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        auto* response = ResolveSource(
+            runtime,
+            source,
+            clusterInfo,
+            MakeUrlParameters("database=%2Froot%2Ftest"),
+            httpProxyId,
+            handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Title, "CPU");
+    }
+
+    Y_UNIT_TEST(BuildsProbeQueryFromFixture) {
+        const NJson::TJsonValue fixture = ReadFixtureJson("ut/grafana_dashboard_probe_fixture.json");
+        UNIT_ASSERT(fixture.Has("dashboard"));
+
+        TCgiParameters queryParameters;
+        queryParameters.InsertUnescaped("var-ds", "fc872d93-d988-491c-83cd-19249cb962b0");
+        queryParameters.InsertUnescaped("var-workspace", "ydb-disks-ext");
+        queryParameters.InsertUnescaped("var-database", "/testing-disks-ext/NBS");
+        queryParameters.InsertUnescaped("var-storagePool", "pool-1");
+
+        const auto probeGroups = NMVP::NSupportLinks::BuildGrafanaDashboardProbeGroups(
+            fixture["dashboard"],
+            queryParameters);
+
+        UNIT_ASSERT_VALUES_EQUAL(probeGroups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(probeGroups[0].DatasourceUid, "fc872d93-d988-491c-83cd-19249cb962b0");
+        UNIT_ASSERT_VALUES_EQUAL(probeGroups[0].Buckets.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(probeGroups[0].Buckets[0], "dsproxynode");
+        UNIT_ASSERT_VALUES_EQUAL(probeGroups[0].Buckets[1], "pdisks");
+        UNIT_ASSERT_VALUES_EQUAL(probeGroups[0].Buckets[2], "utils");
+
+        const TString expectedQuery =
+            "(count(count_over_time(requestBytes{__workspace__=\"ydb-disks-ext\",__bucket__=\"dsproxynode\",database=\"/testing-disks-ext/NBS\",storagePool=\"pool-1\"}[1m])) or on() vector(0)) + "
+            "(count(count_over_time(CompletionThreadCPU{__workspace__=\"ydb-disks-ext\",__bucket__=\"pdisks\"}[1m])) or on() vector(0)) + "
+            "(count(count_over_time(ElapsedMicrosec{container=\"ydb-dynamic\",__workspace__=\"ydb-disks-ext\",__bucket__=\"utils\",database=\"/testing-disks-ext/NBS\"}[1m])) or on() vector(0))";
+        UNIT_ASSERT_VALUES_EQUAL(probeGroups[0].Query, expectedQuery);
+    }
+
+    Y_UNIT_TEST(IgnoresUnusedHeaderVariablesWhenBuildingProbeQuery) {
+        const NJson::TJsonValue fixture = ReadFixtureJson("ut/grafana_dashboard_probe_fixture.json");
+        UNIT_ASSERT(fixture.Has("dashboard"));
+
+        TCgiParameters baseQueryParameters;
+        baseQueryParameters.InsertUnescaped("var-ds", "fc872d93-d988-491c-83cd-19249cb962b0");
+        baseQueryParameters.InsertUnescaped("var-workspace", "ydb-disks-ext");
+        baseQueryParameters.InsertUnescaped("var-database", "/testing-disks-ext/NBS");
+        baseQueryParameters.InsertUnescaped("var-storagePool", "pool-1");
+
+        TCgiParameters extendedQueryParameters = baseQueryParameters;
+        extendedQueryParameters.InsertUnescaped("var-handleclass", "GetFast");
+        extendedQueryParameters.InsertUnescaped("var-aggregation", "not_selected");
+        extendedQueryParameters.InsertUnescaped("var-query1", "");
+        extendedQueryParameters.InsertUnescaped("var-env", "[PROD] MAN");
+        extendedQueryParameters.InsertUnescaped("var-unused", "42");
+
+        const auto baseProbeGroups = NMVP::NSupportLinks::BuildGrafanaDashboardProbeGroups(
+            fixture["dashboard"],
+            baseQueryParameters);
+        const auto extendedProbeGroups = NMVP::NSupportLinks::BuildGrafanaDashboardProbeGroups(
+            fixture["dashboard"],
+            extendedQueryParameters);
+
+        UNIT_ASSERT_VALUES_EQUAL(baseProbeGroups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(extendedProbeGroups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(extendedProbeGroups[0].DatasourceUid, baseProbeGroups[0].DatasourceUid);
+        UNIT_ASSERT_VALUES_EQUAL(extendedProbeGroups[0].Buckets, baseProbeGroups[0].Buckets);
+        UNIT_ASSERT_VALUES_EQUAL(extendedProbeGroups[0].Query, baseProbeGroups[0].Query);
+    }
+
+    Y_UNIT_TEST(UsesDashboardModelCacheForRepeatedResolve) {
+        TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
+        TTestActorRuntime runtime;
+
+        size_t dashboardModelRequests = 0;
+        auto httpProxyId = runtime.Register(new TDashboardModelCacheCheckActor(&dashboardModelRequests));
+        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+            MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
+            MakeMetaSettings());
+
+        THashMap<TString, TString> clusterInfo;
+        clusterInfo["k8s_namespace"] = "ydb-workspace";
+        clusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        auto* firstResponse = ResolveSource(
+            runtime,
+            source,
+            clusterInfo,
+            MakeUrlParameters("database=%2Froot%2Ftest"),
+            httpProxyId,
+            handle);
+        UNIT_ASSERT_VALUES_EQUAL(firstResponse->Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(firstResponse->Links.size(), 1);
+
+        auto* secondResponse = ResolveSource(
+            runtime,
+            source,
+            clusterInfo,
+            MakeUrlParameters("database=%2Froot%2Ftest"),
+            httpProxyId,
+            handle);
+        UNIT_ASSERT_VALUES_EQUAL(secondResponse->Errors.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(secondResponse->Links.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dashboardModelRequests, 1);
     }
 
     Y_UNIT_TEST(ResolveReturnsHttpError) {

@@ -1,0 +1,83 @@
+{
+    "dashboard": {
+        "uid": "probe-fixture",
+        "title": "Support Links Probe Fixture",
+        "templating": {
+            "list": [
+                {
+                    "name": "ds",
+                    "type": "datasource",
+                    "query": "victoriametrics-datasource"
+                },
+                {
+                    "name": "workspace",
+                    "type": "custom",
+                    "current": {
+                        "value": "ydb-disks-ext"
+                    }
+                },
+                {
+                    "name": "database",
+                    "type": "query",
+                    "datasource": {
+                        "uid": "${ds}"
+                    },
+                    "query": {
+                        "query": "label_values(version{__workspace__=\"$workspace\",__bucket__=\"utils\"},database)"
+                    }
+                },
+                {
+                    "name": "storagePool",
+                    "type": "query",
+                    "datasource": {
+                        "uid": "${ds}"
+                    },
+                    "query": {
+                        "query": "label_values(requestBytes{__workspace__=\"$workspace\",__bucket__=\"dsproxynode\",database=\"$database\"},storagePool)"
+                    }
+                }
+            ]
+        },
+        "panels": [
+            {
+                "id": 1,
+                "title": "Database CPU",
+                "datasource": {
+                    "uid": "${ds}"
+                },
+                "targets": [
+                    {
+                        "refId": "A",
+                        "expr": "topk(20, rate(ElapsedMicrosec{container=\"ydb-dynamic\",__workspace__=\"$workspace\",__bucket__=\"utils\",database=\"$database\"}[5m]))"
+                    }
+                ]
+            },
+            {
+                "id": 2,
+                "title": "DSProxy Load",
+                "datasource": {
+                    "uid": "${ds}"
+                },
+                "targets": [
+                    {
+                        "refId": "A",
+                        "expr": "sum(rate(requestBytes{__workspace__=\"$workspace\",__bucket__=\"dsproxynode\",database=\"$database\",storagePool=\"$storagePool\"}[5m]))"
+                    }
+                ]
+            },
+            {
+                "id": 3,
+                "title": "PDisk CPU",
+                "datasource": {
+                    "uid": "${ds}"
+                },
+                "targets": [
+                    {
+                        "refId": "A",
+                        "expr": "sum(rate(CompletionThreadCPU{__workspace__=\"$workspace\",__bucket__=\"pdisks\"}[5m]))"
+                    }
+                ]
+            }
+        ]
+    }
+}

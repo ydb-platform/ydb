@@ -35,7 +35,7 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
         TTabletTypes::GraphShard,
     };
 
-    return std::contains(tabletTypes.begin(), tabletTypes.end(), type)
+    return std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end()
         && appData->FeatureFlags.GetEnableTabletDevUiSecurePath();
 }
 

@@ -52,6 +52,7 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
 
     ui32 ReceivedGetResults = 0;
     TString ErrorDescription;
+    TString UserErrorDescription;
 
     TStackVec<TReadItemInfo, 1> ReadItems;
     TKeyValueState *State;
@@ -203,6 +204,20 @@ public:
         }
     }
 
+    void AddUserErrorDescription(const TString& errorDescription) {
+        if (!errorDescription) {
+            return;
+        }
+        if (UserErrorDescription) {
+            UserErrorDescription += ';';
+        }
+        UserErrorDescription += errorDescription;
+    }
+
+    TString GetResponseErrorDescription() const {
+        return UserErrorDescription ? UserErrorDescription : ErrorDescription;
+    }
+
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         TEvBlobStorage::TEvGetResult *result = ev->Get();
         STLOG(NLog::PRI_INFO, NKikimrServices::KEYVALUE, KV20, "Received GetResult",
@@ -225,6 +240,7 @@ public:
                     (Now, TActivationContext::Now().MilliSeconds()),
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
+            AddUserErrorDescription(result->ErrorReason);
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }
@@ -243,6 +259,7 @@ public:
                     (SentAt, batch.SentTime),
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
+            AddUserErrorDescription(result->ErrorReason);
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }
@@ -258,6 +275,7 @@ public:
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
             // kill the key value tablet due to it's obsolete generation
+            AddUserErrorDescription(result->ErrorReason);
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_BLOCKED);
             Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
             return;
@@ -273,6 +291,7 @@ public:
                     (SentAt, batch.SentTime),
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
+            AddUserErrorDescription(result->ErrorReason);
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }
@@ -328,6 +347,13 @@ public:
                         (SentAt, batch.SentTime),
                         (GotAt, IntermediateResult->Stat.IntermediateCreatedAt),
                         (ErrorReason, result->ErrorReason));
+                if (result->ErrorReason) {
+                    if (read.Message) {
+                        read.Message += ';';
+                    }
+                    read.Message += result->ErrorReason;
+                    AddUserErrorDescription(result->ErrorReason);
+                }
                 hasErrorResponses = true;
             }
 
@@ -388,7 +414,7 @@ public:
 
     std::unique_ptr<IEventBase> MakeErrorResponse(NKikimrKeyValue::Statuses::ReplyStatus status) {
         if (IsRead()) {
-            auto response = CreateReadResponse(status, ErrorDescription);
+            auto response = CreateReadResponse(status, GetResponseErrorDescription());
             auto &cmd = GetCommand();
             Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TRead>(cmd));
             auto& intermediateRead = std::get<TIntermediate::TRead>(cmd);
@@ -397,7 +423,7 @@ public:
             response->Record.set_requested_size(intermediateRead.RequestedSize);
             return response;
         } else {
-            return CreateReadRangeResponse(status, ErrorDescription);
+            return CreateReadRangeResponse(status, GetResponseErrorDescription());
         }
     }
 

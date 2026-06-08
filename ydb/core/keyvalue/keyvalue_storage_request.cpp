@@ -137,9 +137,10 @@ public:
 
             NLog::EPriority logPriority = ErrorStateMuteChecker.Register(now, MuteDuration);
 
-            ReplyErrorAndDie(ctx, str.Str(),
+            const TString errorDescription = str.Str();
+            ReplyErrorAndDie(ctx, errorDescription,
                 status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR,
-                logPriority);
+                logPriority, ev->Get()->ErrorReason);
             return;
         }
         ui64 cookie = ev->Cookie;
@@ -191,9 +192,10 @@ public:
 
             NLog::EPriority logPriority = ErrorStateMuteChecker.Register(now, MuteDuration);
 
-            ReplyErrorAndDie(ctx, str.Str(),
+            const TString errorDescription = str.Str();
+            ReplyErrorAndDie(ctx, errorDescription,
                 status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR,
-                logPriority);
+                logPriority, ev->Get()->ErrorReason);
             return;
         }
 
@@ -245,8 +247,10 @@ public:
             str << " EnqueuedAs# " << IntermediateResults->Stat.EnqueuedAs;
             str << " ErrorReason# " << ev->Get()->ErrorReason;
             str << " Marker# KV28";
-            ReplyErrorAndDie(ctx, str.Str(),
-                status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR);
+            const TString errorDescription = str.Str();
+            ReplyErrorAndDie(ctx, errorDescription,
+                status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR,
+                NLog::PRI_ERROR, ev->Get()->ErrorReason);
             return;
         }
         ui64 idx = cookie;
@@ -315,8 +319,10 @@ public:
             str << " ErrorReason# " << ev->Get()->ErrorReason;
             str << " Marker# KV26";
             resetReadItems(status);
-            ReplyErrorAndDie(ctx, str.Str(),
-                status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR);
+            const TString errorDescription = str.Str();
+            ReplyErrorAndDie(ctx, errorDescription,
+                status == NKikimrProto::TIMEOUT ? NMsgBusProxy::MSTATUS_TIMEOUT : NMsgBusProxy::MSTATUS_INTERNALERROR,
+                NLog::PRI_ERROR, ev->Get()->ErrorReason);
             return;
         }
         if (ev->Get()->ResponseSz != request.ReadQueue.size()) {
@@ -376,7 +382,14 @@ public:
                     << " Status# " << NKikimrProto::EReplyStatus_Name(response.Status)
                     << " Response# " << ev->Get()->ToString()
                     << " Marker# KV22";
-                read.Message = err.Str();
+                if (ev->Get()->ErrorReason) {
+                    if (read.Message) {
+                        read.Message += '\n';
+                    }
+                    read.Message += ev->Get()->ErrorReason;
+                } else {
+                    read.Message = err.Str();
+                }
             }
 
             Y_ABORT_UNLESS(response.Status != NKikimrProto::UNKNOWN);
@@ -549,10 +562,14 @@ public:
 
     void ReplyErrorAndDie(const TActorContext &ctx, TString errorDescription,
             NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_INTERNALERROR,
-            NLog::EPriority logPriority = NLog::PRI_ERROR) {
+            NLog::EPriority logPriority = NLog::PRI_ERROR,
+            TString userErrorDescription = {}) {
         LOG_LOG_S(ctx, logPriority, NKikimrServices::KEYVALUE, errorDescription);
 
-        std::unique_ptr<IEventBase> response = MakeErrorResponse(IntermediateResults.Get(), status, errorDescription);
+        if (!userErrorDescription) {
+            userErrorDescription = errorDescription;
+        }
+        std::unique_ptr<IEventBase> response = MakeErrorResponse(IntermediateResults.Get(), status, userErrorDescription);
         ctx.Send(IntermediateResults->RespondTo, std::move(response));
         IntermediateResults->IsReplied = true;
 

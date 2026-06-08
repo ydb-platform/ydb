@@ -277,12 +277,14 @@ void TICStorageTransportActor::HandleWritePersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvWritePersistentBuffer undelivery with requestId# %lu",
+        "Received NDDisk::TEvWritePersistentBuffer undelivery with requestId# "
+        "%lu",
         requestId);
 
     if (auto* r = WriteToPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
-        auto result = NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult();
+        auto result =
+            NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult();
         result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
         request.Promise.SetValue(std::move(result));
         WriteToPBufferRequests.erase(requestId);
@@ -379,7 +381,8 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvWritePersistentBuffers undelivery with requestId# %lu",
+        "Received NDDisk::TEvWritePersistentBuffers undelivery with requestId# "
+        "%lu",
         requestId);
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
@@ -590,12 +593,14 @@ void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvBatchErasePersistentBuffer undelivery with requestId# %lu",
+        "Received NDDisk::TEvBatchErasePersistentBuffer undelivery with "
+        "requestId# %lu",
         requestId);
 
     if (auto* r = EraseFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
-        auto result = NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult();
+        auto result =
+            NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult();
         result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
         request.Promise.SetValue(std::move(result));
         EraseFromPBufferRequests.erase(requestId);
@@ -676,12 +681,14 @@ void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvReadPersistentBuffer undelivery with requestId# %lu",
+        "Received NDDisk::TEvReadPersistentBuffer undelivery with requestId# "
+        "%lu",
         requestId);
 
     if (auto* r = ReadFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
-        auto result = NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult();
+        auto result =
+            NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult();
         result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
         request.Promise.SetValue(std::move(result));
         ReadFromPBufferRequests.erase(requestId);
@@ -886,12 +893,14 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvSyncWithPersistentBuffer undelivery with requestId# %lu",
+        "Received NDDisk::TEvSyncWithPersistentBuffer undelivery with "
+        "requestId# %lu",
         requestId);
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
-        auto result = NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult();
+        auto result =
+            NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult();
         result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
         request.Promise.SetValue(std::move(result));
         FlushFromPBufferRequests.erase(requestId);
@@ -960,12 +969,14 @@ void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
     LOG_WARN(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received NDDisk::TEvListPersistentBuffer undelivery with requestId# %lu",
+        "Received NDDisk::TEvListPersistentBuffer undelivery with requestId# "
+        "%lu",
         requestId);
 
     if (auto* r = ListPBufferEntriesRequests.FindPtr(requestId)) {
         auto& request = **r;
-        auto result = NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult();
+        auto result =
+            NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult();
         result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
         request.Promise.SetValue(std::move(result));
         ListPBufferEntriesRequests.erase(requestId);

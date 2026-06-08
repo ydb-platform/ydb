@@ -71,9 +71,6 @@ void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev)
         {"TabletID", TabletID()},
         {"type", ev->GetTypeRewrite()},
         {"event", ev->ToString().data()});
-        {"TabletID", TabletID()},
-        {"type", ev->GetTypeRewrite()},
-        {"event", ev->ToString().data()});
     InitQueue.push_back(ev);
 }
 
@@ -148,9 +145,6 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
     while (!InitQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
         YDB_LOG_CTX_DEBUG(ctx, "TConsole::Dequeue event",
-            {"TabletID", TabletID()},
-            {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString().data()});
             {"TabletID", TabletID()},
             {"type", ev->GetTypeRewrite()},
             {"event", ev->ToString().data()});

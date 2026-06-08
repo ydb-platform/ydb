@@ -85,6 +85,7 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             {"Marker", "CIG4"},
             {"fromNodeId", nodeId},
             {"sender", ev->Sender});
+    }
 }
 
 void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {

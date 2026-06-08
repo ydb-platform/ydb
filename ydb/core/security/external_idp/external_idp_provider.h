@@ -18,8 +18,10 @@ struct TEvExternalIdpProvider {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_EXTERNAL_IDP_PROVIDER),
-                  "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_EXTERNAL_IDP_PROVIDER)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_EXTERNAL_IDP_PROVIDER),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_EXTERNAL_IDP_PROVIDER)"
+    );
 
     enum class EStatus {
         SUCCESS,
@@ -64,6 +66,7 @@ struct TEvExternalIdpProvider {
 
 NActors::IActor* CreateExternalIdpProvider(
     const NKikimrProto::TExternalIdpConfig& config,
-    const NActors::TActorId& httpProxyId);
+    const NActors::TActorId& httpProxyId
+);
 
 } // NKikimr

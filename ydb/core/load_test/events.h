@@ -31,6 +31,17 @@ struct TNbsDbgLikeFinishStats {
     ui64 ReadsDDiskIssued = 0;
     ui64 ReadsDDiskOk = 0;
     ui64 ReadsDDiskBytes = 0;
+
+    // Full-run totals (not gated by the measurement window). Used by the
+    // load actor / proxy to render the run summary; the measured fields
+    // above feed the service-actor aggregation.
+    ui64 WritesOkTotal = 0;
+    ui64 WriteBytesTotal = 0;
+    ui64 ReadsIssuedTotal = 0;
+    ui64 ReadsOkTotal = 0;
+    ui64 ReadBytesTotal = 0;
+    ui64 ReadsErr = 0;
+
     ui64 RunningMs = 0;
     ui64 MeasuredMs = 0;
     ui32 MaxInFlight = 0;

@@ -1105,6 +1105,7 @@ class TestViewer(object):
             res = cls.replace_values_by_key(resp, ['CreateTimestamp',
                                                    'WriteTimestamp',
                                                    'ProducerId',
+                                                   'Ip',
                                                    ])
             res = cls.replace_types_by_key(res, ['TimestampDiff'])
             logging.info(res)

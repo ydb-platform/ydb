@@ -54,12 +54,9 @@ namespace TEvPrivate {
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
-<<<<<<< HEAD
-=======
         EvProgressTablePartitionsFormatSweep,
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
->>>>>>> 4d04ea46628 (SchemeShard: Don't make progress on start/timeout forced compaction, just schedule it. (#42672))
         EvEnd
     };
 
@@ -388,31 +385,11 @@ namespace TEvPrivate {
         const TString Error;
     };
 
-<<<<<<< HEAD
-=======
-    struct TEvProgressTablePartitionsFormatSweep
-        : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
-    {};
-
-    // Sent self->self post-commit when a CopyTable sub-op of a tracked full backup finishes.
-    struct TEvFullBackupItemDone : public NActors::TEventLocal<TEvFullBackupItemDone, EvFullBackupItemDone> {
-        TEvFullBackupItemDone(ui64 fullBackupId, TPathId dstPathId, bool success)
-            : FullBackupId(fullBackupId)
-            , DstPathId(dstPathId)
-            , Success(success)
-        {}
-
-        const ui64 FullBackupId;
-        const TPathId DstPathId;
-        const bool Success;
-    };
-
     struct TEvProgressForcedCompaction : TEventLocal<TEvProgressForcedCompaction, EvProgressForcedCompaction> {
         TEvProgressForcedCompaction()
         {}
     };
 
->>>>>>> 4d04ea46628 (SchemeShard: Don't make progress on start/timeout forced compaction, just schedule it. (#42672))
 }; // TEvPrivate
 
 } // NSchemeShard

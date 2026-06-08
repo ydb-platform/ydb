@@ -121,28 +121,12 @@ def get_table_description(table_name, mode, in_memory):
     else:
         raise RuntimeError("Unkown mode: {}".format(mode))
 
-    if in_memory:
-        families_entry = """
-            FAMILY default (
-                CACHE_MODE = "in_memory"
-            ),
-            FAMILY lz4_family (
-                CACHE_MODE = "in_memory",
-                COMPRESSION = "lz4"
-            ),"""
-    else:
-        families_entry = """
-            FAMILY lz4_family (
-                COMPRESSION = "lz4"
-            ),"""
-
     return f"""
         CREATE TABLE `{table_name}` (
             key Uint64 NOT NULL,
             `timestamp` Uint64 NOT NULL,
-            value Utf8 FAMILY lz4_family NOT NULL,
+            value Utf8 NOT NULL,
             PRIMARY KEY (key),
-            {families_entry}
             INDEX by_timestamp GLOBAL ON (`timestamp`)
         )
         WITH (

@@ -13,8 +13,7 @@ namespace NKikimr {
 struct TEvExternalIdpProvider {
     enum EEv {
         EvAuthenticateRequest = EventSpaceBegin(TKikimrEvents::ES_EXTERNAL_IDP_PROVIDER),
-
-        EvAuthenticateResponse = EventSpaceBegin(TKikimrEvents::ES_EXTERNAL_IDP_PROVIDER) + 512,
+        EvAuthenticateResponse,
 
         EvEnd
     };

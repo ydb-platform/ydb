@@ -1205,6 +1205,8 @@ private:
 
     void Handle(TEvExternalIdpProvider::TEvAuthenticateResponse::TPtr& ev) {
         TEvExternalIdpProvider::TEvAuthenticateResponse* response = ev->Get();
+        BLOG_D("Received TEvAuthenticateResponse from ExternalIdp for ticket "
+            << MaskTicket(response->Key) << " with status " << response->Status);
         auto& userTokens = GetDerived()->GetUserTokens();
         auto it = userTokens.find(response->Key);
         if (it == userTokens.end()) {
@@ -1217,11 +1219,14 @@ private:
         --record.ResponsesLeft;
         if (response->Status == TEvExternalIdpProvider::EStatus::SUCCESS) {
             const TString domain {"@" + Config.GetExternalIdpAuthenticationDomain()};
-            TVector<NACLib::TSID> groups(response->Groups.cbegin(), response->Groups.cend());
-            for (auto& group : groups) {
-                group.append(domain);
+            TVector<NACLib::TSID> groups(::NDetail::TReserveTag(response->Groups.size()));
+            for (const auto& group : response->Groups) {
+                groups.emplace_back(group + domain);
             }
             record.ExpireTime = response->ExpiresAt;
+            BLOG_D("Ticket " << record.GetMaskedTicket() << " authenticated by ExternalIdp"
+                << " as " << response->User << domain
+                << " with " << groups.size() << " group(s)");
             SetToken(key, record, new NACLib::TUserToken({
                 .OriginalUserToken = record.Ticket,
                 .UserSID = response->User + domain,
@@ -1229,6 +1234,10 @@ private:
                 .AuthType = record.GetAuthType()
             }));
         } else {
+            BLOG_ERROR("Ticket " << record.GetMaskedTicket() << " failed ExternalIdp authentication"
+                << " with status " << response->Status
+                << " retryable=" << response->Error.Retryable
+                << " message '" << response->Error.Message << "'");
             SetError(key, record, response->Error);
         }
         if (record.ResponsesLeft == 0) {

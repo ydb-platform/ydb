@@ -26,6 +26,7 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
@@ -40,18 +41,19 @@ namespace NKikimr {
 
 namespace {
 
-static constexpr TDuration REFRESH_PERIOD = TDuration::Seconds(1);
-static constexpr TDuration DEFAULT_EXPIRATION_PERIOD = TDuration::Minutes(10);
+constexpr TDuration REFRESH_PERIOD = TDuration::Seconds(1);
+constexpr TDuration DEFAULT_EXPIRATION_PERIOD = TDuration::Minutes(10);
 
-static constexpr TStringBuf JWKS_URI = "jwks_uri";
-static constexpr TStringBuf ISSUER = "issuer";
+constexpr TStringBuf JWKS_URI = "jwks_uri";
+constexpr TStringBuf ISSUER = "issuer";
+constexpr TStringBuf WELL_KNOWN_DISCOVERY_URI = ".well-known/openid-configuration";
 
 // Asymmetric algorithms supported for external IdP JWT verification.
 // HMAC (HS*) algorithms are deliberately excluded: they require a shared secret,
 // not a public key. Including them would enable the "algorithm confusion" attack
 // where an attacker signs a token with HS256 using the (public) RSA key.
 template <typename TVerifier>
-static const std::unordered_map<NSecurity::EJWKAlg, std::function<void(TVerifier&, const TString&)>> SUPPORTED_ALGORITHMS = {
+const std::unordered_map<NSecurity::EJWKAlg, std::function<void(TVerifier&, const TString&)>> SUPPORTED_ALGOS = {
     {NSecurity::EJWKAlg::ES256,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es256(pubkey.c_str())); }},
     {NSecurity::EJWKAlg::ES384,
@@ -73,11 +75,11 @@ static const std::unordered_map<NSecurity::EJWKAlg, std::function<void(TVerifier
 };
 
 TString BuildKey(const TString& kty, const TString& kid) {
-    return kty + "-" + kid;
+    return TStringBuilder() << kty << '-' << kid;
 }
 
 TString BuildDiscoveryUrl(TString issuer) {
-    return TStringBuilder() << issuer << "/.well-known/openid-configuration";
+    return TStringBuilder() << issuer << '/' << WELL_KNOWN_DISCOVERY_URI;
 }
 
 // returns a value in [50%, 100%] of its input
@@ -111,7 +113,8 @@ class TExternalIdpProvider : public NActors::TActorBootstrapped<TExternalIdpProv
         TRecurringPeriod(
             const NKikimrProto::TExternalIdpConfig::TPeriodicSettings& settings,
             TInstant scheduled,
-            NMonitoring::TDynamicCounterPtr counters);
+            NMonitoring::TDynamicCounterPtr counters
+        );
 
         bool CanSendRequest(TInstant now) const;
         bool IsSameRequest(NHttp::THttpOutgoingRequestPtr request) const;
@@ -148,7 +151,8 @@ class TExternalIdpProvider : public NActors::TActorBootstrapped<TExternalIdpProv
         TJWKsCache() = default;
         TJWKsCache(
             const NKikimrProto::TExternalIdpConfig::TJWKsCacheSettings& settings,
-            NMonitoring::TDynamicCounterPtr counters);
+            NMonitoring::TDynamicCounterPtr counters
+        );
 
         bool IsStale(const TInstant& now) const;
 
@@ -170,11 +174,7 @@ class TExternalIdpProvider : public NActors::TActorBootstrapped<TExternalIdpProv
     };
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType();
-
-    TExternalIdpProvider(
-        const NKikimrProto::TExternalIdpConfig& config,
-        const NActors::TActorId& httpProxyId);
+    TExternalIdpProvider(const NKikimrProto::TExternalIdpConfig& config, const NActors::TActorId& httpProxyId);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -208,7 +208,8 @@ private:
     void ReplyError(
         const TActorId& sender, const TString& key,
         TEvExternalIdpProvider::EStatus status,
-        const TString& message, bool retryable = false);
+        const TString& message, bool retryable = false
+    );
 
 private:
     NKikimrProto::TExternalIdpConfig Config;
@@ -384,10 +385,6 @@ TString TExternalIdpProvider::TJWKsCache::GetHtml(const TInstant& now) const {
     return html;
 }
 
-constexpr NKikimrServices::TActivity::EType TExternalIdpProvider::ActorActivityType() {
-    return NKikimrServices::TActivity::EXTERNAL_IDP_PROVIDER_ACTOR;
-}
-
 TExternalIdpProvider::TExternalIdpProvider(
     const NKikimrProto::TExternalIdpConfig& config,
     const NActors::TActorId& httpProxyId)
@@ -404,11 +401,13 @@ void TExternalIdpProvider::Bootstrap(const TActorContext& ctx) {
     RegisterPages(ctx);
     RegisterFields(ctx);
 
-    BLOG_D("Initializing ExternalIdp"
-        << " issuer=" << Config.GetIssuer()
-        << " audience=" << Config.GetAudience()
-        << " subject_claim_name=" << Config.GetSubjectClaimName()
-        << " groups_claim_name=" << Config.GetGroupsClaimName());
+    BLOG_D(
+        "Initializing ExternalIdp"
+            << " issuer=" << Config.GetIssuer()
+            << " audience=" << Config.GetAudience()
+            << " subject_claim_name=" << Config.GetSubjectClaimName()
+            << " groups_claim_name=" << Config.GetGroupsClaimName()
+    );
 
     Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
 
@@ -433,7 +432,8 @@ void TExternalIdpProvider::RegisterPages(const TActorContext& ctx) {
            "external_idp_provider",
            "", // Set title empty, because front should not show this page in /actors list
            false,
-           TActivationContext::ActorSystem(), this->SelfId());
+           TActivationContext::ActorSystem(), this->SelfId()
+        );
     }
 }
 
@@ -442,7 +442,8 @@ void TExternalIdpProvider::RegisterCounters(const TActorContext& ctx) {
 
     const auto authReq = Counters->GetSubgroup("component", "AuthRequest");
     CounterAuthProcessingTime = authReq->GetHistogram(
-        "ProcessingTimeMs", NMonitoring::ExplicitHistogram(AuthProcessingTimeBuckets()));
+        "ProcessingTimeMs", NMonitoring::ExplicitHistogram(AuthProcessingTimeBuckets())
+    );
     CounterAuthSuccess = authReq->GetCounter("Success", true);
     CounterAuthFailed = authReq->GetCounter("Failed", true);
 }
@@ -458,13 +459,19 @@ void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
         AllowedClockSkew = TDuration::Parse(skewStr);
     }
 
-    DiscoveryRefresh = TRecurringPeriod(Config.GetDiscoveryPeriodicSettings(), now,
-        Counters->GetSubgroup("component", "Discovery"));
-    JwksRefresh = TRecurringPeriod(Config.GetJwksPeriodicSettings(), now,
-        Counters->GetSubgroup("component", "Jwks"));
+    DiscoveryRefresh = TRecurringPeriod(
+        Config.GetDiscoveryPeriodicSettings(), now,
+        Counters->GetSubgroup("component", "Discovery")
+    );
+    JwksRefresh = TRecurringPeriod(
+        Config.GetJwksPeriodicSettings(), now,
+        Counters->GetSubgroup("component", "Jwks")
+    );
 
-    JwksCache = TJWKsCache(Config.GetJwksCacheSettings(),
-        Counters->GetSubgroup("component", "Jwks"));
+    JwksCache = TJWKsCache(
+        Config.GetJwksCacheSettings(),
+        Counters->GetSubgroup("component", "Jwks")
+    );
 }
 
 void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest::TPtr& ev, const TActorContext& ctx) {
@@ -481,70 +488,72 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     } catch (const std::invalid_argument&) {
         return ReplyError(
             ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
-            "Token is not in correct format");
+            TEvExternalIdpProvider::EStatus::BAD_REQUEST, "Token is not in correct format"
+        );
     } catch (const std::exception& e) {
+        BLOG_E("Failed to decode token: " << e.what());
         return ReplyError(
             ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::UNAUTHORIZED, e.what());
+            TEvExternalIdpProvider::EStatus::UNAUTHORIZED, "Failed to decode token"
+        );
     }
 
     if (!decoded->has_key_id()) {
         return ReplyError(
-            ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
+            ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "No kid was found for token in"
                 << " issuer=" << Config.GetIssuer()
-                << " token='" << MaskTicket(msg->Token) << "'");
+                << " token='" << MaskTicket(msg->Token) << "'"
+            );
     }
     const TString kid = TString{decoded->get_key_id()};
 
     if (!decoded->has_algorithm()) {
         return ReplyError(
-            ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
+            ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "No algorithm was found for token in"
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
-                << " kid=" << kid);
+                << " kid=" << kid
+        );
     }
 
     NSecurity::EJWKAlg alg;
     if (!TryFromString(decoded->get_algorithm(), alg)) {
         return ReplyError(
-            ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
+            ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "Unsupported JWT algorithm for token in"
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
-                << " algorithm=" << decoded->get_algorithm());
+                << " algorithm=" << decoded->get_algorithm()
+        );
     }
 
     const auto kty = NSecurity::GetKeyType(alg);
     if (!kty.has_value()) {
         return ReplyError(
-            ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
+            ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "Unsupported JWT algorithm for token in"
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
-                << " algorithm=" << alg);
+                << " algorithm=" << alg
+        );
     }
 
     const auto pem = JwksCache.Get(BuildKey(ToString(kty.value()), kid));
     if (!pem.Defined()) {
         return ReplyError(
-            ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::UNAVAILABLE,
+            ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::UNAVAILABLE,
             TStringBuilder() << "No matching key was found for token in"
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
                 << " kty=" << *kty
                 << " algorithm=" << alg,
-            true);
+            true
+        );
     }
 
     auto verifier = jwt::verify();
@@ -553,18 +562,17 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         verifier.leeway(AllowedClockSkew.Seconds());
     }
 
-    if (const auto it = SUPPORTED_ALGORITHMS<decltype(verifier)>.find(alg);
-        it != SUPPORTED_ALGORITHMS<decltype(verifier)>.end()) {
+    if (const auto it = SUPPORTED_ALGOS<decltype(verifier)>.find(alg); it != SUPPORTED_ALGOS<decltype(verifier)>.end()) {
         it->second(verifier, *pem);
     } else {
         return ReplyError(
-            ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::BAD_REQUEST,
+            ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
             TStringBuilder() << "Unsupported JWT algorithm for token in"
                 << " issuer=" << Config.GetIssuer()
                 << " token='" << MaskTicket(msg->Token) << "'"
                 << " kid=" << kid
-                << " algorithm=" << alg);
+                << " algorithm=" << alg
+        );
     }
     verifier.with_issuer(Config.GetIssuer());
 
@@ -581,9 +589,11 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     try {
         verifier.verify(*decoded);
     } catch (const std::exception& e) {
+        BLOG_E("Failed to verify token: " << e.what());
         return ReplyError(
             ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::UNAUTHORIZED, e.what());
+            TEvExternalIdpProvider::EStatus::UNAUTHORIZED, "Failed to verify token"
+        );
     }
 
     auto resp = MakeHolder<TEvExternalIdpProvider::TEvAuthenticateResponse>(msg->Key);
@@ -596,31 +606,36 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
             return sub;
         }
         if (!decoded->has_payload_claim(subClaim)) {
-            BLOG_W("Unknown claim for subject is used for token, fallback to 'sub'"
-                << " issuer=" << Config.GetIssuer()
-                << " subject_claim_name=" << subClaim);
+            BLOG_W(
+                "Unknown claim for subject is used for token, fallback to 'sub'"
+                    << " issuer=" << Config.GetIssuer()
+                    << " subject_claim_name=" << subClaim
+            );
             return sub;
         }
         const auto& claim = decoded->get_payload_claim(subClaim);
         if (claim.get_type() != jwt::claim::type::string) {
-            BLOG_W("Value in subject claim is not a string, fallback to 'sub'"
-                << " issuer=" << Config.GetIssuer()
-                << " subject_claim_name=" << subClaim);
+            BLOG_W(
+                "Value in subject claim is not a string, fallback to 'sub'"
+                    << " issuer=" << Config.GetIssuer()
+                    << " subject_claim_name=" << subClaim
+            );
             return sub;
         }
         return TString{claim.as_string()};
     });
     if (subject.empty()) {
         return ReplyError(
-            ev->Sender, msg->Key,
-            TEvExternalIdpProvider::EStatus::UNAUTHORIZED,
+            ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::UNAUTHORIZED,
             TStringBuilder() << "Token subject is empty (checked claim: '" << Config.GetSubjectClaimName() << "'"
-                << " fallback: 'sub')");
+                << " fallback: 'sub')"
+        );
     }
     resp->User = subject;
 
     if (const auto groupsClaim = Config.GetGroupsClaimName(); !groupsClaim.empty()
-        && decoded->has_payload_claim(groupsClaim)) {
+        && decoded->has_payload_claim(groupsClaim))
+    {
         const auto& claim = decoded->get_payload_claim(groupsClaim);
         if (claim.get_type() == jwt::claim::type::array) {
             for (const auto& v : claim.as_array()) {
@@ -634,15 +649,28 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     if (decoded->has_expires_at()) {
         const auto exp = decoded->get_expires_at();
         resp->ExpiresAt = TInstant::Seconds(
-            std::chrono::duration_cast<std::chrono::seconds>(exp.time_since_epoch()).count());
+            std::chrono::duration_cast<std::chrono::seconds>(exp.time_since_epoch()).count()
+        );
     } else {
-        BLOG_W("`exp` claim is not set, use default expiration period"
-            << " issuer=" << Config.GetIssuer()
-            << " default_expiration_period=" << DEFAULT_EXPIRATION_PERIOD.Seconds());
+        BLOG_W(
+            "`exp` claim is not set, use default expiration period"
+                << " issuer=" << Config.GetIssuer()
+                << " default_expiration_period=" << DEFAULT_EXPIRATION_PERIOD.Seconds()
+        );
         resp->ExpiresAt = now + DEFAULT_EXPIRATION_PERIOD;
     }
 
     CounterAuthSuccess->Inc();
+
+    BLOG_D(
+        "Authentication succeeded in ExternalIdp"
+            << " issuer=" << Config.GetIssuer()
+            << " key=" << MaskTicket(msg->Key)
+            << " status=" << resp->Status
+            << " user=" << resp->User
+            << " groups=[" << JoinSeq(", ", resp->Groups) << "]"
+            << " expires_at=" << resp->ExpiresAt
+    );
 
     Send(ev->Sender, resp.Release());
 }
@@ -686,8 +714,7 @@ void TExternalIdpProvider::Handle(
         return HandleJwksResponse(*msg, now);
     }
 
-    BLOG_E("Got unexpected HTTP response for issuer=" << Config.GetIssuer()
-        << " request=" << msg->Request->AsString());
+    BLOG_E("Got unexpected HTTP response for issuer=" << Config.GetIssuer() << " request=" << msg->Request->AsString());
 }
 
 void TExternalIdpProvider::HandleDiscoveryResponse(
@@ -708,8 +735,10 @@ void TExternalIdpProvider::HandleDiscoveryResponse(
     }
 
     if (resp.Response->Status != "200") {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery fetch network error"
-            << " (" << resp.Response->Status << ") " << resp.Response->Message);
+        BLOG_E(
+            "IdP issuer=" << Config.GetIssuer() << " message=Discovery fetch network error"
+                << " (" << resp.Response->Status << ") " << resp.Response->Message
+        );
         return;
     }
 
@@ -755,8 +784,10 @@ void TExternalIdpProvider::HandleJwksResponse(
     }
 
     if (resp.Response->Status != "200") {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=JWKs fetch network error"
-            << " (" << resp.Response->Status << ")" << " " << resp.Response->Message);
+        BLOG_E(
+            "IdP issuer=" << Config.GetIssuer() << " message=JWKs fetch network error"
+                << " (" << resp.Response->Status << ")" << " " << resp.Response->Message
+        );
         return;
     }
 
@@ -789,9 +820,11 @@ void TExternalIdpProvider::HandleJwksResponse(
     const auto oldKeyCount = JwksCache.Count();
     JwksCache.Update(now, std::move(newKeys));
 
-    BLOG_D("JWKS refreshed IdP issuer=" << Config.GetIssuer()
-        << " old_keys=" << oldKeyCount
-        << " new_keys=" << JwksCache.Count());
+    BLOG_D(
+        "JWKS refreshed IdP issuer=" << Config.GetIssuer()
+            << " old_keys=" << oldKeyCount
+            << " new_keys=" << JwksCache.Count()
+    );
     isSuccess = true;
 }
 
@@ -862,12 +895,14 @@ void TExternalIdpProvider::ReplyError(
 {
     CounterAuthFailed->Inc();
 
-    BLOG_W("Authentication failed in ExternalIdp"
-        << " issuer=" << Config.GetIssuer()
-        << " key=" << MaskTicket(key)
-        << " status=" << status
-        << " retryable=" << retryable
-        << " message=" << message);
+    BLOG_W(
+        "Authentication failed in ExternalIdp"
+            << " issuer=" << Config.GetIssuer()
+            << " key=" << MaskTicket(key)
+            << " status=" << status
+            << " retryable=" << retryable
+            << " message=" << message
+    );
 
     auto resp = MakeHolder<TEvExternalIdpProvider::TEvAuthenticateResponse>(key);
     resp->Status = status;

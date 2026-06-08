@@ -3224,10 +3224,6 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
 
 } // Test suite AuthorizeRequestToAccessService
 
-////////////////////////////////////////////////////////////////////////////////
-/// ExternalIdp integration tests
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
 
 using NExternalIdpTestUtils::GenerateRsaKeyPair;
@@ -3241,14 +3237,19 @@ TString BuildExternalIdpDiscoveryJson(const TString& issuer, const TString& jwks
 }
 
 TString BuildExternalIdpJwksJson(const TString& kid, const TString& x5c) {
-    NJson::TJsonValue j, keys(NJson::JSON_ARRAY), key;
-    key["kid"] = kid; key["kty"] = "RSA"; key["alg"] = "RS256";
+    NJson::TJsonValue keys(NJson::JSON_ARRAY);
+    NJson::TJsonValue key;
+    key["kid"] = kid;
+    key["kty"] = "RSA";
+    key["alg"] = "RS256";
     NJson::TJsonValue x5cArr(NJson::JSON_ARRAY);
     x5cArr.AppendValue(x5c);
     key["x5c"] = x5cArr;
     keys.AppendValue(key);
-    j["keys"] = keys;
-    return NJson::WriteJson(j, false);
+
+    NJson::TJsonValue json;
+    json["keys"] = keys;
+    return NJson::WriteJson(json, false);
 }
 
 TString CreateExternalIdpJwt(
@@ -3256,27 +3257,26 @@ TString CreateExternalIdpJwt(
     const TString& issuer, const TString& subject,
     const std::set<std::string>& aud,
     const std::vector<std::string>& groups = {},
-    std::chrono::seconds exp = std::chrono::seconds(3600)) {
+    std::chrono::seconds exp = std::chrono::seconds(3600))
+{
     auto now = std::chrono::system_clock::now();
-    auto t = jwt::create()
-                 .set_key_id(std::string(kid))
-                 .set_issuer(std::string(issuer))
-                 .set_subject(std::string(subject))
-                 .set_issued_at(now)
-                 .set_expires_at(now + exp)
-                 .set_audience(aud);
+    auto token = jwt::create()
+        .set_key_id(std::string(kid))
+        .set_issuer(std::string(issuer))
+        .set_subject(std::string(subject))
+        .set_issued_at(now)
+        .set_expires_at(now + exp)
+        .set_audience(aud);
     if (!groups.empty()) {
-        std::vector<picojson::value> gv;
+        std::vector<picojson::value> jsonGroups;
         for (const auto& g : groups) {
-            gv.emplace_back(g);
+            jsonGroups.emplace_back(g);
         }
-        t.set_payload_claim("groups", jwt::claim(picojson::value(gv)));
+        token.set_payload_claim("groups", jwt::claim(picojson::value(jsonGroups)));
     }
-    return TString(t.sign(jwt::algorithm::rs256("", std::string(keys.PrivateKeyPem), "", "")));
+    return TString(token.sign(jwt::algorithm::rs256("", std::string(keys.PrivateKeyPem), "", "")));
 }
 
-// Helper: reply to an incoming HTTP request from the mock IdP HTTP server.
-// Inspects the URL and returns the appropriate discovery or JWKS JSON.
 void HandleExternalIdpHttpRequest(
     TTestActorRuntime* runtime,
     const TActorId& serverId,
@@ -3297,19 +3297,17 @@ void HandleExternalIdpHttpRequest(
         body = "{}";
     }
 
-    NHttp::THttpOutgoingResponsePtr httpResponse =
-        request->Request->CreateResponseOK(body, "application/json");
+    NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseOK(body, "application/json");
     runtime->Send(new NActors::IEventHandle(
         handle->Sender, serverId,
-        new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+        new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true
+    );
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
-    // ExternalIdpProvider correctly initializes and authenticates a JWT
-    // via the full TicketParser integration path.
     Y_UNIT_TEST(ExternalIdpAuthenticationOk) {
         using namespace Tests;
 
@@ -3352,38 +3350,40 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         // Start a mock HTTP server inside the actor system (same pattern as BlackBox mock)
         TActorId httpProxyId = runtime->Register(NHttp::CreateHttpProxy());
         TActorId serverId = runtime->AllocateEdgeActor();
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)), 0, true);
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId, new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)),
+            0, true
+        );
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        // Register handlers for discovery and JWKS endpoints
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                "/.well-known/openid-configuration", serverId)), 0, true);
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                "/.well-known/jwks.json", serverId)), 0, true);
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId,
+                new NHttp::TEvHttpProxy::TEvRegisterHandler("/.well-known/openid-configuration", serverId)),
+            0, true
+        );
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId,
+                new NHttp::TEvHttpProxy::TEvRegisterHandler("/.well-known/jwks.json", serverId)),
+            0, true
+        );
 
-        // The ExternalIdpProvider bootstraps and fetches discovery, then JWKS.
-        // Handle the discovery request.
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
-        // Handle the JWKS request.
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
 
-        // Create a JWT token with audience matching the database path
-        auto jwtToken = CreateExternalIdpJwt(keys, KID, ISS, "testuser", {"/Root"},
-                                              {"admins", "devs"});
+        auto jwtToken = CreateExternalIdpJwt(keys, KID, ISS, "testuser", {"/Root"}, {"admins", "devs"});
         TString bearerToken = "Bearer " + jwtToken;
 
         // Send authorize request
         TActorId sender = runtime->AllocateEdgeActor();
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
-            new TEvTicketParser::TEvAuthorizeTicket(
-                TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
-                    .Ticket = bearerToken,
-                    .Database = "/Root",
-                })), 0);
+        runtime->Send(
+            new IEventHandle(MakeTicketParserID(), sender,
+                new TEvTicketParser::TEvAuthorizeTicket(
+                    TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                        .Ticket = bearerToken,
+                        .Database = "/Root",
+                    }))
+        );
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -3395,7 +3395,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         UNIT_ASSERT_C(result->Token->IsExist("devs@" + DOM), result->Token->ShortDebugString());
     }
 
-    // Token refresh in ticket_parser happens correctly for ExternalIdp tokens.
     Y_UNIT_TEST(ExternalIdpTokenRefresh) {
         using namespace Tests;
 
@@ -3418,7 +3417,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetUseLoginProvider(false);
         authConfig.SetUseAccessService(false);
         authConfig.SetUseStaff(false);
-        // Short refresh period so the token gets refreshed quickly
         authConfig.SetRefreshPeriod("1s");
         authConfig.SetRefreshTime("2s");
 
@@ -3438,39 +3436,40 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         runtime->SetLogPriority(NKikimrServices::EXTERNAL_IDP_PROVIDER, NLog::PRI_TRACE);
 
-        // Start a mock HTTP server inside the actor system
         TActorId httpProxyId = runtime->Register(NHttp::CreateHttpProxy());
         TActorId serverId = runtime->AllocateEdgeActor();
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)), 0, true);
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId, new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)),
+            0, true
+        );
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                "/.well-known/openid-configuration", serverId)), 0, true);
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                "/.well-known/jwks.json", serverId)), 0, true);
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId,
+                new NHttp::TEvHttpProxy::TEvRegisterHandler("/.well-known/openid-configuration", serverId)),
+            0, true
+        );
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId,
+                new NHttp::TEvHttpProxy::TEvRegisterHandler("/.well-known/jwks.json", serverId)),
+            0, true
+        );
 
-        // Handle discovery + JWKS bootstrap requests
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
 
-        // Create a JWT token with short expiration (90 seconds)
-        // The ExternalIdpExpireMargin is 30s, so effective expire is 60s from now
-        auto jwtToken = CreateExternalIdpJwt(keys, KID, ISS, "refreshuser", {"/Root"},
-                                              {}, std::chrono::seconds(90));
+        auto jwtToken = CreateExternalIdpJwt(keys, KID, ISS, "refreshuser", {"/Root"}, {}, std::chrono::seconds(90));
         TString bearerToken = "Bearer " + jwtToken;
 
-        // First authorization
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
             new TEvTicketParser::TEvAuthorizeTicket(
                 TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
                     .Ticket = bearerToken,
                     .Database = "/Root",
-                })), 0);
+                }))
+        );
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -3478,11 +3477,8 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         UNIT_ASSERT(result->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "refreshuser@" + DOM);
 
-        // Wait for the refresh cycle to kick in (RefreshPeriod=1s, RefreshTime=2s)
-        // The ticket parser will try to refresh the token within RefreshTime/2..RefreshTime
         Sleep(TDuration::Seconds(3));
 
-        // Send the same token again - it should still be valid (served from cache or re-validated)
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
             new TEvTicketParser::TEvAuthorizeTicket(
                 TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
@@ -3493,13 +3489,8 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT(result->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "refreshuser@" + DOM);
-
-        // The key assertion is that the second request succeeds after the refresh period,
-        // proving the refresh cycle works correctly. The TicketParser re-validates the JWT
-        // by sending a new TEvAuthenticateRequest to ExternalIdpProvider.
     }
 
-    // ExternalIdp authentication failure (expired token) through TicketParser
     Y_UNIT_TEST(ExternalIdpAuthenticationExpiredToken) {
         using namespace Tests;
 
@@ -3528,7 +3519,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         idpSettings->SetIssuer(ISS);
         idpSettings->SetSubjectClaimName("sub");
         idpSettings->SetGroupsClaimName("groups");
-        idpSettings->SetAllowedClockSkew("5s"); // small skew so expired token is rejected
+        idpSettings->SetAllowedClockSkew("5s");
 
         auto settings = TServerSettings(kikimrPort, authConfig);
         settings.SetDomainName("Root");
@@ -3539,26 +3530,29 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         runtime->SetLogPriority(NKikimrServices::EXTERNAL_IDP_PROVIDER, NLog::PRI_TRACE);
 
-        // Start a mock HTTP server inside the actor system
         TActorId httpProxyId = runtime->Register(NHttp::CreateHttpProxy());
         TActorId serverId = runtime->AllocateEdgeActor();
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)), 0, true);
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId, new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)),
+            0, true
+        );
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                "/.well-known/openid-configuration", serverId)), 0, true);
-        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId,
-            new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                "/.well-known/jwks.json", serverId)), 0, true);
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId,
+                new NHttp::TEvHttpProxy::TEvRegisterHandler("/.well-known/openid-configuration", serverId)),
+            0, true
+        );
+        runtime->Send(
+            new NActors::IEventHandle(httpProxyId, serverId,
+                new NHttp::TEvHttpProxy::TEvRegisterHandler("/.well-known/jwks.json", serverId)),
+            0, true
+        );
 
-        // Handle discovery + JWKS bootstrap requests
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
 
-        // Create an expired JWT token (expired 1 hour ago, skew is only 5s)
         auto now = std::chrono::system_clock::now();
         auto t = jwt::create()
             .set_key_id(std::string(KID))
@@ -3570,19 +3564,18 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         TString expiredJwt(t.sign(jwt::algorithm::rs256("", std::string(keys.PrivateKeyPem), "", "")));
         TString bearerToken = "Bearer " + expiredJwt;
 
-        // Send authorize request with expired token
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
             new TEvTicketParser::TEvAuthorizeTicket(
                 TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
                     .Ticket = bearerToken,
                     .Database = "/Root",
-                })), 0);
+                }))
+        );
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        // The expired token should result in an error
         UNIT_ASSERT_C(result->HasError(), "Expected error for expired token but got success");
         UNIT_ASSERT(result->Token == nullptr);
     }

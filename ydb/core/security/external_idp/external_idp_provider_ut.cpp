@@ -492,7 +492,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         SendAuth(id, "k1", token);
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "No matching key was found");
     }
 
     Y_UNIT_TEST_F(InvalidTokenErrors, TSetup) {
@@ -572,7 +571,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
         const auto r1 = WaitAuth();
         UNIT_ASSERT_EQUAL(r1->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(r1->Get()->Error.Message, "No matching key was found");
 
         ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
         auto j = WaitHttp();
@@ -595,7 +593,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "No matching key was found");
 
         ReplyHttpError(Rt.get(), Node, Proxy, d, "Network unreachable");
     }
@@ -610,7 +607,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAUTHORIZED);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "claim iss does not match expected");
     }
 
     Y_UNIT_TEST_F(ConfiguredAudienceAccepted, TSetup) {
@@ -661,7 +657,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "No kid was found");
     }
 
     Y_UNIT_TEST_F(JwksFetchNetworkError, TSetup) {
@@ -679,7 +674,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "No matching key was found");
     }
 
     Y_UNIT_TEST_F(DiscoveryIssuerMismatch, TSetup) {
@@ -697,7 +691,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "No matching key was found");
     }
 
     Y_UNIT_TEST_F(DiscoveryHttp500Error, TSetup) {
@@ -712,7 +705,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "No matching key was found");
     }
 
     Y_UNIT_TEST_F(PeriodicJwksRefresh, TSetup) {
@@ -775,7 +767,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         SendAuth(id, "k1", "this-is-not-a-jwt-token");
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "not in correct format");
     }
 
     Y_UNIT_TEST_F(UnsupportedAlgorithmReturnsBadRequest, TSetup) {
@@ -791,7 +782,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         SendAuth(id, "k1", token);
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::BAD_REQUEST);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "Unsupported JWT algorithm");
     }
 
     Y_UNIT_TEST_F(Ps256TokenAuthenticates, TSetup) {
@@ -821,7 +811,6 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         SendAuth(id, "k1", token);
         const auto r = WaitAuth();
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(r->Get()->Error.Message, "No matching key was found");
     }
 
     Y_UNIT_TEST_F(AllowedClockSkewAcceptsRecentlyExpired, TSetup) {

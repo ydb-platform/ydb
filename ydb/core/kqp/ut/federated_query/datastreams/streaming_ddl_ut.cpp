@@ -1314,7 +1314,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"Key": 1})");
         ReadTopicMessage(outputTopicName, "oltp_slj1-oltp1-olap1");
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1386,7 +1386,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "message-1");
         ReadTopicMessage(outputTopicName, "message-1-value-1");
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1462,6 +1462,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
         }
+
+        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1591,7 +1593,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1997,10 +1999,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "query_name"_a = info.QueryName
         ));
         CheckScriptExecutionsCount(2, 1);
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
 
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
         ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -2125,7 +2128,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         connectorClient->LockReading();
         WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
-        Sleep(TDuration::Seconds(2));
+        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
         const auto readDisposition = TInstant::Now();
 
         ExecQuery(fmt::format(R"(
@@ -2177,7 +2180,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "data-1");
-        Sleep(TDuration::Seconds(2));
+        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "data-1");
 
         ExecQuery(fmt::format(R"(
@@ -2261,7 +2264,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             Sleep(TDuration::Seconds(1));
 
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
-            Sleep(TDuration::Seconds(1));
+            Sleep(TDuration::Seconds(1)); // wait for checkpoit commit
             CheckTable(*this, ydbTable, {{"message1", "value1"}});
 
             ExecQuery(fmt::format(R"(
@@ -3053,6 +3056,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
         });
 
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
             "query_name"_a = queryName
@@ -3146,6 +3151,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
             check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
         });
+
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",

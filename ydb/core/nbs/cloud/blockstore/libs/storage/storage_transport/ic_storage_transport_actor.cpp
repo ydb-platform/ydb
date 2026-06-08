@@ -905,6 +905,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    Y_ABORT_UNLESS(msg->PBufferCredentials.DDiskInstanceGuid.has_value());
+
     const ui64 requestId = ++RequestIdGenerator;
 
     auto [it, inserted] =
@@ -923,7 +925,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
             msg->PBufferId.NodeId,
             msg->PBufferId.PDiskId,
             msg->PBufferId.DDiskSlotId),
-        msg->PBufferCredentials.DDiskInstanceGuid.value_or(0));
+        *msg->PBufferCredentials.DDiskInstanceGuid);
 
     Y_ABORT_UNLESS(msg->Selectors.size() == msg->Lsns.size());
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {

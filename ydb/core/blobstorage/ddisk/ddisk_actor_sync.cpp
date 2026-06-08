@@ -63,17 +63,27 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        auto getSource = [&](const auto& source, bool fromPersistentBuffer, TActorId *actorId, ui64 *ddiskInstanceGuid) {
+        struct TSourceInfo {
+            TActorId DDiskActorId;
+            TActorId PersistentBufferActorId;
+            TQueryCredentials Creds;
+        };
+
+        auto getSource = [&](const auto& source, TSourceInfo *sourceInfo) {
             if (!source.HasDDiskId()) {
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     "source ddisk id must be set");
                 return false;
             }
             const auto& ddiskId = source.GetDDiskId();
-            *actorId = fromPersistentBuffer
-                ? MakeBlobStoragePersistentBufferId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId())
-                : MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
-            *ddiskInstanceGuid = source.GetDDiskInstanceGuid();
+            sourceInfo->DDiskActorId =
+                MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
+            sourceInfo->PersistentBufferActorId =
+                MakeBlobStoragePersistentBufferId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
+            sourceInfo->Creds = TQueryCredentials::ForInternal(
+                creds.TabletId,
+                creds.Generation,
+                std::make_optional(source.GetDDiskInstanceGuid()));
             return true;
         };
 
@@ -105,7 +115,7 @@ namespace NKikimr::NDDisk {
             if (selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     TStringBuilder() << selectorName
-                        << " offset and size must be multiple of block size and size must be nonzero");
+                        << " offset and size must be multiple of sector size and size must be nonzero");
                 return false;
             }
 
@@ -120,6 +130,15 @@ namespace NKikimr::NDDisk {
         };
 
         for (const auto& source : record.GetSources()) {
+            if (!source.SegmentsSize()) {
+                continue;
+            }
+
+            TSourceInfo sourceInfo;
+            if (!getSource(source, &sourceInfo)) {
+                return;
+            }
+
             for (const auto& segment : source.GetSegments()) {
                 const TBlockSelector selector(segment.GetSelector());
                 const bool fromPersistentBuffer =
@@ -129,12 +148,6 @@ namespace NKikimr::NDDisk {
                 {
                     reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                         "segment kind must be set");
-                    return;
-                }
-
-                TActorId sourceActorId;
-                ui64 sourceInstanceGuid = 0;
-                if (!getSource(source, fromPersistentBuffer, &sourceActorId, &sourceInstanceGuid)) {
                     return;
                 }
 
@@ -183,23 +196,22 @@ namespace NKikimr::NDDisk {
                 }
 
                 Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
-                const TQueryCredentials sourceCreds = TQueryCredentials::ForInternal(
-                    creds.TabletId,
-                    creds.Generation,
-                    std::make_optional(sourceInstanceGuid));
+                const TActorId& sourceActorId = fromPersistentBuffer
+                    ? sourceInfo.PersistentBufferActorId
+                    : sourceInfo.DDiskActorId;
                 std::unique_ptr<IEventBase> readQuery;
                 if (fromPersistentBuffer) {
                     const auto& persistentBufferSegment =
                         segment.GetPersistentBufferSegment();
                     readQuery = std::make_unique<TEvReadPersistentBuffer>(
-                        sourceCreds,
+                        sourceInfo.Creds,
                         selector,
                         persistentBufferSegment.GetLsn(),
                         persistentBufferSegment.GetGeneration(),
                         TReadInstruction(true));
                 } else {
                     readQuery = std::make_unique<TEvRead>(
-                        sourceCreds,
+                        sourceInfo.Creds,
                         selector,
                         TReadInstruction(true));
                 }

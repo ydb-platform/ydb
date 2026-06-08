@@ -17,49 +17,49 @@ namespace NKikimr {
 
             void Handle(TEvBlobStorage::TEvPut::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvPut",
-                    {"Marker", "BSPM01"},
+                    {"marker", "BSPM01"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGet::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvGet",
-                    {"Marker", "BSPM02"},
+                    {"marker", "BSPM02"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvBlock::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvBlock",
-                    {"Marker", "BSPM03"},
+                    {"marker", "BSPM03"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvDiscover::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvDiscover",
-                    {"Marker", "BSPM04"},
+                    {"marker", "BSPM04"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvRange::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvRange",
-                    {"Marker", "BSPM05"},
+                    {"marker", "BSPM05"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvCollectGarbage",
-                    {"Marker", "BSPM06"},
+                    {"marker", "BSPM06"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvStatus::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvStatus",
-                    {"Marker", "BSPM07"},
+                    {"marker", "BSPM07"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK,
                     Model->GetStorageStatusFlags())), 0, ev->Cookie);
@@ -67,7 +67,7 @@ namespace NKikimr {
 
             void Handle(TEvBlobStorage::TEvAssimilate::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvAssimilate",
-                    {"Marker", "BSPM09"},
+                    {"marker", "BSPM09"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::ERROR,
                     "not implemented")), 0, ev->Cookie);
@@ -75,21 +75,21 @@ namespace NKikimr {
 
             void Handle(TEvBlobStorage::TEvPatch::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvPatch",
-                    {"Marker", "BSPM10"},
+                    {"marker", "BSPM10"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGetBlock::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvGetBlock",
-                    {"Marker", "BSPM11"},
+                    {"marker", "BSPM11"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCheckIntegrity::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvCheckIntegrity",
-                    {"Marker", "BSPM12"},
+                    {"marker", "BSPM12"},
                     {"Msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
@@ -102,7 +102,7 @@ namespace NKikimr {
 
             void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvPoisonPill",
-                    {"Marker", "BSPM08"});
+                    {"marker", "BSPM08"});
                 Send(ev->Sender, new TEvents::TEvPoisonTaken);
                 PassAway();
             }

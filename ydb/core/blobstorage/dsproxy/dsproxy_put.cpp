@@ -472,7 +472,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
             YDB_LOG_COMP_WARN(BS_PROXY_PUT, "Long TEvPut request detected",
-                {"Marker", "BPP71"},
+                {"marker", "BPP71"},
                 {"LongRequestThreshold", LongRequestThreshold},
                 {"GroupId", Info->GroupID},
                 {"HandleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
@@ -483,7 +483,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
             YDB_LOG_COMP(PutImpl.ResultPriority, BS_PROXY_PUT, "Query history",
-                {"Marker", "BPP72"},
+                {"marker", "BPP72"},
                 {"GroupId", Info->GroupID},
                 {"HandleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
                 {"Tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},

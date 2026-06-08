@@ -148,7 +148,7 @@ public:
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "ReplyAndDie",
-            {"Marker", "BPPA02"},
+            {"marker", "BPPA02"},
             {"Status", status},
             {"ErrorReason", ErrorReason});
 
@@ -183,7 +183,7 @@ public:
         Orbit = std::move(result->Orbit);
 
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Received TEvGetResult",
-            {"Marker", "BPPA30"},
+            {"marker", "BPPA30"},
             {"Status", result->Status},
             {"ErrorReason", result->ErrorReason});
 
@@ -227,7 +227,7 @@ public:
         Orbit = std::move(result->Orbit);
 
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Received TEvPutResult",
-            {"Marker", "BPPA29"},
+            {"marker", "BPPA29"},
             {"Status", result->Status},
             {"ErrorReason", result->ErrorReason});
 
@@ -270,7 +270,7 @@ public:
         TEvBlobStorage::TEvVMovedPatchResult *result = ev->Get();
         NKikimrBlobStorage::TEvVMovedPatchResult &record = result->Record;
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Received TEvVMovedPatchResult",
-            {"Marker", "BPPA28"},
+            {"marker", "BPPA28"},
             {"Status", record.GetStatus()},
             {"ErrorReason", record.GetErrorReason()},
             {"VDiskId", VDiskIDFromVDiskID(record.GetVDiskID())});
@@ -295,7 +295,7 @@ public:
                         << subErrorReason;
             }
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Naive strategy from hadling TEvVMovedPatchResult",
-                {"Marker", "BPPA27"},
+                {"marker", "BPPA27"},
                 {"Status", record.GetStatus()},
                 {"ErrorReason", ErrorReason});
             StartNaivePatch();
@@ -345,7 +345,7 @@ public:
         }
 
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Received VPatchFoundParts",
-            {"Marker", "BPPA26"},
+            {"marker", "BPPA26"},
             {"Status", status},
             {"SubgroupIdx", (ui32)subgroupIdx},
             {"VDiskId", VDisks[subgroupIdx]},
@@ -358,12 +358,12 @@ public:
                 continueVPatch = ContinueVPatch();
             } else {
                 YDB_LOG_PATCH_LOG(PRI_DEBUG, "Failed VerifyPartPlacement",
-                    {"Marker", "BPPA32"});
+                    {"marker", "BPPA32"});
                 Mon->VPatchPartPlacementVerifyFailed->Inc();
             }
             if (!continueVPatch) {
                 YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Fallback strategy from hadling TEvVPatchFoundParts",
-                    {"Marker", "BPPA33"});
+                    {"marker", "BPPA33"});
                 StopVPatch();
                 StartFallback();
             }
@@ -396,7 +396,7 @@ public:
         }
 
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Received VPatchResult",
-            {"Marker", "BPPA23"},
+            {"marker", "BPPA23"},
             {"Status", status},
             {"SubgroupIdx", (ui32)subgroupIdx},
             {"VDiskID", VDisks[subgroupIdx]},
@@ -408,7 +408,7 @@ public:
 
         if (status != NKikimrProto::OK) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Fallback strategy from handling VPatchResult",
-                {"Marker", "BPPA24"},
+                {"marker", "BPPA24"},
                 {"ReceivedResults", TStringBuilder() << ReceivedResults << '/' << Info->Type.TotalPartCount()});
             StartFallback();
             return;
@@ -416,7 +416,7 @@ public:
 
         if (ReceivedResults == Info->Type.TotalPartCount()) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Got all succesful responses, make own success response",
-                {"Marker", "BPPA25"});
+                {"marker", "BPPA25"});
             ReplyAndDie(NKikimrProto::OK);
         }
     }
@@ -432,7 +432,7 @@ public:
 
         if (countByDC[0] && countByDC[1] && countByDC[2]) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "VerifyPartPlacement {mirror-3-dc} found all 3 disks",
-                {"Marker", "BPPA22"});
+                {"marker", "BPPA22"});
             return true;
         }
 
@@ -443,7 +443,7 @@ public:
             }
         }
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "VerifyPartPlacement {mirror-3-dc}",
-            {"Marker", "BPPA00"},
+            {"marker", "BPPA00"},
             {"X2Count", x2Count});
         return x2Count >= 2;
     }
@@ -455,13 +455,13 @@ public:
             TSubgroupPartLayout layout;
             for (auto &placement : FoundParts) {
                 YDB_LOG_PATCH_LOG(PRI_TRACE, "Get part",
-                    {"Marker", "BPPA31"},
+                    {"marker", "BPPA31"},
                     {"SubgroupIdx", (ui32)placement.VDiskIdxInSubgroup},
                     {"PartId", (ui32)placement.PartId});
                 layout.AddItem(placement.VDiskIdxInSubgroup, placement.PartId - 1, Info->Type);
             }
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "VerifyPartPlacement",
-                {"Marker", "BPPA21"},
+                {"marker", "BPPA21"},
                 {"EffectiveReplicas", layout.CountEffectiveReplicas(Info->Type)},
                 {"TotalPartount", Info->Type.TotalPartCount()});
             return layout.CountEffectiveReplicas(Info->Type) == Info->Type.TotalPartCount();
@@ -470,7 +470,7 @@ public:
 
     void SendStopDiffs() {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Send stop diffs",
-                {"Marker", "BPPA18"});
+                {"marker", "BPPA18"});
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events;
         for (ui32 subgroupIdx = 0; subgroupIdx < VDisks.size(); ++subgroupIdx) {
             if (!ErrorResponseFlags[subgroupIdx] && !EmptyResponseFlags[subgroupIdx] && ReceivedResponseFlags[subgroupIdx]) {
@@ -480,7 +480,7 @@ public:
                 ForceStopFlags[subgroupIdx] = true;
                 events.emplace_back(std::move(ev));
                 YDB_LOG_PATCH_LOG(PRI_DEBUG, "Send stop message",
-                    {"Marker", "BPPA19"},
+                    {"marker", "BPPA19"},
                     {"VDiskIdxInSubgroup", subgroupIdx},
                     {"VDiskId", VDisks[subgroupIdx]});
             }
@@ -549,7 +549,7 @@ public:
                 ev->AddDiff(diff.Offset, diff.Buffer);
 
                 YDB_LOG_PATCH_LOG(PRI_TRACE, "Add Diff",
-                    {"Marker", "BPPA35"},
+                    {"marker", "BPPA35"},
                     {"Offset", diff.Offset},
                     {"BufferSize", diff.Buffer.Size()});
             }
@@ -558,7 +558,7 @@ public:
                 ev->AddXorReceiver(VDisks[parity.VDiskIdxInSubgroup], parity.PartId);
             }
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Send TEvVPatchDiff",
-                {"Marker", "BPPA20"},
+                {"marker", "BPPA20"},
                 {"VDiskIdxInSubgroup", idxInSubgroup},
                 {"VDiskId", VDisks[idxInSubgroup]},
                 {"PatchedVDiskIdxInSubgroup", patchedIdxInSubgroup},
@@ -601,7 +601,7 @@ public:
 
     void StartMovedPatch() {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Moved strategy",
-            {"Marker", "BPPA09"},
+            {"marker", "BPPA09"},
             {"SentStarts", SentStarts});
         // ScheduleWakeUp(StartTime, MovedPatchTag);
         Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
@@ -660,7 +660,7 @@ public:
 
     void StartNaivePatch() {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Naive strategy",
-            {"Marker", "BPPA07"});
+            {"marker", "BPPA07"});
         Become(&TBlobStorageGroupPatchRequest::NaiveState);
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, OriginalId.BlobSize(), Deadline,
             NKikimrBlobStorage::AsyncRead);
@@ -676,11 +676,11 @@ public:
         Mon->PatchesWithFallback->Inc();
         if (WithMovingPatchRequestToStaticNode && UseVPatch && !IsSecured && !IsMovedPatch) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Moved strategy from fallback",
-                {"Marker", "BPPA05"});
+                {"marker", "BPPA05"});
             StartMovedPatch();
         } else {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Naive strategy from fallback",
-                {"Marker", "BPPA06"},
+                {"marker", "BPPA06"},
                 {"WithMovingPatchRequestToStaticNode", WithMovingPatchRequestToStaticNode},
                 {"UseVPatch", UseVPatch});
             StartNaivePatch();
@@ -716,7 +716,7 @@ public:
         }
 
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start VPatch strategy",
-            {"Marker", "BPPA08"},
+            {"marker", "BPPA08"},
             {"SentStarts", SentStarts});
 
         for (auto& ev : events) {
@@ -766,7 +766,7 @@ public:
 
     bool ContinueVPatchForMirror3dc() {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Continue VPatch {mirror-3-dc}",
-            {"Marker", "BPPA10"});
+            {"marker", "BPPA10"});
         constexpr ui32 DCCount = 3;
         constexpr ui32 VDiskByDC = 3;
         ui32 countByDC[DCCount] = {0, 0, 0};
@@ -781,7 +781,7 @@ public:
 
         if (countByDC[0] && countByDC[1] && countByDC[2]) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found disks {mirror-3-dc} on each dc",
-                {"Marker", "BPPA11"},
+                {"marker", "BPPA11"},
                 {"DiskFromFirstDC", diskByDC[0][0].ToString()},
                 {"DiskFromSecondDC", diskByDC[0][0].ToString()},
                 {"DiskFromThirdDC", diskByDC[2][0].ToString()});
@@ -789,7 +789,7 @@ public:
             return true;
         }
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Didn't find disks {mirror-3-dc} on each dc",
-            {"Marker", "BPPA12"});
+            {"marker", "BPPA12"});
 
         ui32 x2Count = 0;
         for (ui32 dcIdx = 0; dcIdx < DCCount; ++dcIdx) {
@@ -799,7 +799,7 @@ public:
         }
         if (x2Count < 2) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Didn't find disks {mirror-3-dc}",
-                {"Marker", "BPPA13"});
+                {"marker", "BPPA13"});
             return false;
         }
         TStackVec<TPartPlacement, TypicalPartsInBlob> placements;
@@ -811,7 +811,7 @@ public:
         }
         SendDiffs(placements);
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found disks {mirror-3-dc} x2 mode",
-            {"Marker", "BPPA14"},
+            {"marker", "BPPA14"},
             {"FirstDiskFromFirstDC", placements[0]},
             {"SecondDiskFromFirstDC", placements[1]},
             {"FirstDiskFromSecondDC", placements[2]},
@@ -821,7 +821,7 @@ public:
 
     bool ContinueVPatch() {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Continue VPatch strategy",
-            {"Marker", "BPPA15"},
+            {"marker", "BPPA15"},
             {"FoundParts", ConvertFoundPartsToString()});
         StageStart = TActivationContext::Now();
         IsContinuedVPatch = true;
@@ -867,7 +867,7 @@ public:
         if (handoffParts.size()) {
             bool find = FindHandoffs(handoffForParts, handoffParts, &choosenHandoffForParts);
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Find handoff parts",
-                {"Marker", "BPPA16"},
+                {"marker", "BPPA16"},
                 {"HandoffParts", FormatList(handoffParts)},
                 {"FoundParts", ConvertFoundPartsToString()},
                 {"choosenHandoffForParts", FormatList(choosenHandoffForParts)},
@@ -884,7 +884,7 @@ public:
 
     void StopVPatch() {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Stop VPatch strategy",
-            {"Marker", "BPPA17"});
+            {"marker", "BPPA17"});
         SendStopDiffs();
         ReceivedResponseFlags.assign(VDisks.size(), false);
     }
@@ -921,7 +921,7 @@ public:
 
     void Bootstrap() override {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "Actor bootstrapped",
-            {"Marker", "BPPA01"});
+            {"marker", "BPPA01"});
         Schedule(TDuration::MicroSeconds(60'000'000), new TEvents::TEvWakeup(NeverTag));
 
         TLogoBlobID truePatchedBlobId = PatchedId;
@@ -954,11 +954,11 @@ public:
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (false && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start VPatch strategy from bootstrap",
-                {"Marker", "BPPA03"});
+                {"marker", "BPPA03"});
             StartVPatch();
         } else {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Start Fallback strategy from bootstrap",
-                {"Marker", "BPPA04"},
+                {"marker", "BPPA04"},
                 {"IsGoodPatchedBlobId", IsGoodPatchedBlobId},
                 {"IsAllowedErasure", IsAllowedErasure},
                 {"UseVPatch", UseVPatch},
@@ -998,7 +998,7 @@ public:
     template <ui64 ExpectedTag>
     void HandleWakeUp(TEvents::TEvWakeup::TPtr &ev) {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "HandleWakeUp",
-            {"Marker", "BPPA36"},
+            {"marker", "BPPA36"},
             {"ExpectedTag", ToString(ExpectedTag)},
             {"ReceivedTag", ToString(ev->Get()->Tag)});
         if (ev->Get()->Tag == ExpectedTag) {
@@ -1009,7 +1009,7 @@ public:
             SetSlowDisks();
             StartFallback();
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found NeverTag wake up",
-                {"Marker", "BPPA40"},
+                {"marker", "BPPA40"},
                 {"ExpectedTag", ToString(ExpectedTag)});
         }
     }
@@ -1017,7 +1017,7 @@ public:
     void HandleVPatchWakeUp(TEvents::TEvWakeup::TPtr &ev) {
         ui64 expectedTag = (IsContinuedVPatch ? VPatchDiffTag : VPatchStartTag);
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "HandleWakeUp",
-            {"Marker", "BPPA37"},
+            {"marker", "BPPA37"},
             {"ExpectedTag", ToString(expectedTag)},
             {"ReceivedTag", ToString(ev->Get()->Tag)});
         if (ev->Get()->Tag == expectedTag) {
@@ -1028,19 +1028,19 @@ public:
             SetSlowDisks();
             StartFallback();
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found NeverTag wake up",
-                {"Marker", "BPPA41"},
+                {"marker", "BPPA41"},
                 {"ExpectedTag", ToString(expectedTag)});
         }
     }
 
     void HandleNeverTagWakeUp(TEvents::TEvWakeup::TPtr &ev) {
         YDB_LOG_PATCH_LOG(PRI_DEBUG, "HandleWakeUp",
-            {"Marker", "BPPA42"},
+            {"marker", "BPPA42"},
             {"ExpectedTag", ToString(NeverTag)},
             {"ReceivedTag", ToString(ev->Get()->Tag)});
         if (ev->Get()->Tag == NeverTag) {
             YDB_LOG_PATCH_LOG(PRI_DEBUG, "Found NeverTag wake up in naive state",
-                {"Marker", "BPPA43"});
+                {"marker", "BPPA43"});
             ReplyAndDie(NKikimrProto::DEADLINE);
         }
     }

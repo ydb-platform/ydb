@@ -124,8 +124,7 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
             // decided solely by the resolved-doc validation below.
             const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
             auto collectBlock = [&](const NFyaml::TNodeRef& configNode, const TString& prefix) {
-                TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> collector =
-                    new NYamlConfig::TBasicUnknownFieldsCollector(prefix);
+                auto collector = MakeSimpleShared<NYamlConfig::TBasicUnknownFieldsCollector>(prefix);
                 try {
                     NYamlConfig::YamlToProto(configNode, true, true, collector);
                 } catch (const std::exception&) {

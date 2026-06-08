@@ -22,6 +22,7 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -442,6 +443,19 @@ TConfigsDispatcher::TSubscriber::TPtr TConfigsDispatcher::FindSubscriber(TActorI
     return nullptr;
 }
 
+static NJson::TJsonValue UnknownFieldsToJsonArray(const NKikimrConsole::TYamlConfigUnknownFields& fields) {
+    NProtobufJson::TProto2JsonConfig cfg;
+    cfg.SetFieldNameMode(NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense);
+
+    NJson::TJsonValue array(NJson::JSON_ARRAY);
+    for (const auto& f : fields.GetFields()) {
+        NJson::TJsonValue item;
+        NProtobufJson::Proto2Json(f, item, cfg);
+        array.AppendValue(std::move(item));
+    }
+    return array;
+}
+
 NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 {
     NKikimrConfig::TAppConfig newYamlProtoConfig = {};
@@ -449,8 +463,7 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
     ResolvedConfigUnknownFields.Clear();
 
     try {
-        TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector =
-            new NYamlConfig::TBasicUnknownFieldsCollector;
+        auto unknownFieldsCollector = MakeSimpleShared<NYamlConfig::TBasicUnknownFieldsCollector>();
 
         NYamlConfig::ResolveAndParseYamlConfig(
             MainYamlConfig,
@@ -510,17 +523,7 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     response.InsertValue("yaml_config", MainYamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
 
-    auto& unknownFields = response["unknown_fields"];
-    unknownFields.SetType(NJson::EJsonValueType::JSON_ARRAY);
-    for (const auto& f : ResolvedConfigUnknownFields.GetFields()) {
-        NJson::TJsonValue item;
-        item.SetType(NJson::EJsonValueType::JSON_MAP);
-        item.InsertValue("path", f.GetPath());
-        item.InsertValue("name", f.GetName());
-        item.InsertValue("proto", f.GetProto());
-        item.InsertValue("deprecated", f.GetDeprecated());
-        unknownFields.AppendValue(std::move(item));
-    }
+    response.InsertValue("unknown_fields", UnknownFieldsToJsonArray(ResolvedConfigUnknownFields));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
     
     auto state = GetState();
@@ -600,23 +603,12 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
 
             str << "];" << Endl;
 
-            // Build the unknown-fields array as proper JSON: path/name/proto come from
-            // user-uploaded YAML keys, so emitting them raw into a JS string literal would
-            // allow breaking out of the string (a quote/backslash) or injecting script. JSON
-            // encoding escapes those; we additionally escape "</" so a value can't terminate
-            // the surrounding <script> block prematurely.
+            // path/name/proto come from user-uploaded YAML keys, so emitting them raw into a JS
+            // string literal would allow breaking out of the string or injecting script. JSON
+            // encoding escapes that; we additionally escape "</" so a value cannot terminate the
+            // surrounding <script> block prematurely.
             {
-                NJson::TJsonValue unknownFieldsJson;
-                unknownFieldsJson.SetType(NJson::EJsonValueType::JSON_ARRAY);
-                for (const auto& f : ResolvedConfigUnknownFields.GetFields()) {
-                    NJson::TJsonValue item;
-                    item.SetType(NJson::EJsonValueType::JSON_MAP);
-                    item.InsertValue("path", f.GetPath());
-                    item.InsertValue("name", f.GetName());
-                    item.InsertValue("proto", f.GetProto());
-                    item.InsertValue("deprecated", f.GetDeprecated());
-                    unknownFieldsJson.AppendValue(std::move(item));
-                }
+                NJson::TJsonValue unknownFieldsJson = UnknownFieldsToJsonArray(ResolvedConfigUnknownFields);
                 TStringStream unknownFieldsStream;
                 NJson::WriteJson(&unknownFieldsStream, &unknownFieldsJson, {});
                 TString unknownFieldsStr = unknownFieldsStream.Str();

@@ -674,11 +674,8 @@ public:
             }
             --rowsLeft;
 
-            // Precharging one key (B-tree traversal + page requests) can be
-            // significantly more expensive than reading one user row, so we cannot
-            // afford to wait MinRowsPerCheck iterations before checking elapsed time.
-            // Bumping by MinRowsPerCheck makes ShouldStopByElapsedTime() fire on
-            // every call; the GetTimeFast() overhead is negligible vs. a B-tree walk.
+            // Precharging one key can be significantly more expensive than reading a single user row,
+            // so we cannot wait MinRowsPerCheck iterations before checking elapsed time.
             RowsSinceLastCheck += MinRowsPerCheck;
             if (ShouldStop()) {
                 break;
@@ -2104,10 +2101,7 @@ public:
 
         const auto& schedulableRead = state.SchedulableRead;
         if (schedulableRead && !schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
-            // Read quota for the resource pool is exhausted. Instead of replying
-            // OVERLOADED (which makes the read actor cancel and recreate the
-            // iterator from scratch, re-running the whole pipeline and promoting
-            // MVCC edges to the redo log on every retry), keep the iterator alive
+            // Read quota for the resource pool is exhausted - keep the iterator alive
             // and resume it via the cheaper TTxReadContinue path after a delay.
             // The reschedule itself is done in Complete().
             ThrottleDelay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
@@ -3808,6 +3802,17 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         isHeadRead = false;
     }
 
+    NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory) {
+        schedulableRead = SchedulableReadFactory->Get(record.GetDatabaseId(), record.GetPoolId());
+        if (schedulableRead && !schedulableRead->IsValid()) {
+            replyWithError(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                << "Request " << readId.ReadId << " rejected, resource pool " << record.GetPoolId() << " has zero CPU quota"
+                << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
+            return;
+        }
+    }
+
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {
         Y_DEBUG_ABORT_UNLESS(ev->InterconnectSession);
@@ -3824,11 +3829,6 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         auto& session = itSession->second;
         session.Iterators.insert(readId);
         sessionId = ev->InterconnectSession;
-    }
-
-    NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
-    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory) {
-        schedulableRead = SchedulableReadFactory->Get(record.GetDatabaseId(), record.GetPoolId());
     }
 
     ui64 localReadId = NextTieBreakerIndex++;

@@ -1,10 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/common.h>
-
-#include <ydb/core/testlib/tablet_helpers.h>
 
 namespace NKikimr {
 
@@ -185,16 +182,6 @@ struct TSchedulerTestHelper {
     }
 };
 
-// Aggregate metrics of one ext-blob probe run.
-struct TExtBlobProbeMetrics {
-    ui32 Started = 0;        // iterators launched
-    ui32 Finished = 0;       // iterators that delivered Finished=true
-    ui32 RowsTotal = 0;      // rows delivered across all iterators
-    ui32 DriveIters = 0;     // client-side result/ack cycles
-    ui64 EvGets = 0;         // TEvBlobStorage::TEvGet messages seen
-    ui64 BlobsRequested = 0; // sum of EvGet QuerySize (blobs fetched, incl. re-fetch)
-};
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
@@ -202,7 +189,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     // A plain key read with PoolId set must succeed when quota is available.
     //
     // For the leader (WithFollower=false):
-    //   additionally verifies that a zero-quota pool returns OVERLOADED, proving
+    //   additionally verifies that a zero-quota pool returns PRECONDITION_FAILED, proving
     //   that quota IS actively enforced.
     //
     // For the follower (WithFollower=true):
@@ -239,8 +226,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
                 "Follower must bypass quota even for a zero-quota pool");
         } else {
             // Leader enforces the quota — must reject the read.
-            UNIT_ASSERT_VALUES_EQUAL_C(zeroResult->Record.GetStatus().GetCode(), Ydb::StatusIds::OVERLOADED,
-                "Leader must return OVERLOADED for a zero-quota pool, proving quota is enforced");
+            UNIT_ASSERT_VALUES_EQUAL_C(zeroResult->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED,
+                "Leader must return PRECONDITION_FAILED for a zero-quota pool, proving quota is enforced");
         }
     }
 
@@ -273,40 +260,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
             helper.SendAck(result->Record, 1000, 50_MB);
         }
         UNIT_ASSERT_VALUES_EQUAL(rowsReceived, kRows);
-    }
-
-    // When the pool's ReadLimit is 0 ms (quota permanently exhausted):
-    //   leader  → OVERLOADED
-    //   follower → SUCCESS (quota bypass)
-    //
-    // The WithFollower=false case is the canonical "leader rejects exhausted quota"
-    // test.  The WithFollower=true case additionally verifies that the follower
-    // serves the same data successfully, demonstrating the bypass.
-    Y_UNIT_TEST_TWIN(ShouldReadWhenQuotaExhausted, WithFollower) {
-        TSchedulerTestHelper helper(/*readLimitMs=*/0u,
-                                    /*withFollower=*/WithFollower);
-        helper.Upsert(1, 100);
-
-        // Leader must always return OVERLOADED regardless of follower mode.
-        {
-            auto request = helper.MakeReadRequest(1);
-            AddKeyQuery(*request, {1, 1, 1});
-            auto result = helper.SendReadToLeader(request.release());
-            UNIT_ASSERT(result);
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus().GetCode(), Ydb::StatusIds::OVERLOADED,
-                "Leader must return OVERLOADED when quota is exhausted");
-        }
-
-        if constexpr (WithFollower) {
-            // Follower must succeed — it never checks quota.
-            auto request = helper.MakeReadRequest(2);
-            AddKeyQuery(*request, {1, 1, 1});
-            auto result = helper.SendRead(request.release());  // ForceFollower pipe
-            UNIT_ASSERT(result);
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS,
-                "Follower must succeed even when the leader's quota is exhausted");
-            UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
-        }
     }
 
     // Tight quota (5 ms/s) on the leader: continuations must retry internally

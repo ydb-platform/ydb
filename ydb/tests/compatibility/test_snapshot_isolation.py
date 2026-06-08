@@ -55,8 +55,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 PRIMARY KEY (key),
                 INDEX int_val_index GLOBAL ON (int_val)
             ) WITH (
-                UNIFORM_PARTITIONS = 10,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+                PARTITION_AT_KEYS = (770, 1540, 2310, 3080, 3850, 4620, 5390, 6160, 6930, 7700, 8470, 9240),
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 13
             )
         """)
         self._execute("""

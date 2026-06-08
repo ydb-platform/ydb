@@ -45,6 +45,7 @@ default:
   managed-k8s-name: Managed Service for Kubernetes
   s3-storage-host: s3.mds.yandex.net
   objstorage-name: Object Storage
+  monitoring-full-name: Monium мониторинг
   ydb-cli: ydb
   k8s: Kubernetes
   quickstart-path: ../../../../quickstart.md

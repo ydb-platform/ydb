@@ -36,7 +36,7 @@ void TSchemeShard::ForgetForcedCompactionShard(
     const TShardIdx& shardId,
     const TForcedCompactionInfo::TPtr& forcedCompactionInfo) // info may be null
 {
-    ForcedCompactionsDoneShardsToPersist[shardId] = forcedCompactionInfo;
+    ForcedCompactionsDoneShardsToPersist.emplace(shardId, forcedCompactionInfo);
     if (forcedCompactionInfo && forcedCompactionInfo->State == TForcedCompactionInfo::EState::InProgress) {
         InProgressForcedCompactionsByShard[shardId] = forcedCompactionInfo; // for counting
     }
@@ -144,9 +144,9 @@ void TSchemeShard::CompleteForcedCompactionForShard(const TShardIdx& shardIdx, c
     auto compaction = *compactionPtr;
 
     if (compaction->ShardsInFlight.erase(shardIdx)) {
-        ForcedCompactionsDoneShardsToPersist[shardIdx] = compaction;
+        ForcedCompactionsDoneShardsToPersist.emplace(shardIdx, compaction);
         if (IsForcedCompactionCompleted(*compaction)) {
-            HasUnpersistedCompletedForcedCompactions = true;
+            ForcedCompactionNeedsImmediatePersist = true;
         }
     }
 
@@ -233,7 +233,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr&, const 
     const bool hasAnythingToPersist = !ForcedCompactionsDoneShardsToPersist.empty()
          || !CancellingForcedCompactions.empty();
     if (hasAnythingToPersist) {
-        if (HasUnpersistedCompletedForcedCompactions
+        if (ForcedCompactionNeedsImmediatePersist
             || ForcedCompactionsDoneShardsToPersist.size() >= ForcedCompactionPersistBatchSize
             || now - ForcedCompactionProgressStartTime >= ForcedCompactionPersistBatchMaxTime)
         {
@@ -247,7 +247,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr&, const 
 void TSchemeShard::ScheduleForcedCompactionProgress(const TActorContext& ctx) {
     if (!ForcedCompactionProgressScheduled) {
         ForcedCompactionProgressScheduled = true;
-        ctx.Schedule(TDuration::Zero(), new TEvPrivate::TEvProgressForcedCompaction());
+        ctx.Send(SelfId(), new TEvPrivate::TEvProgressForcedCompaction());
     }
 }
 

@@ -92,15 +92,15 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         forcedCompactionInfo.ShardsInFlight.clear();
 
         Self->CancellingForcedCompactions.emplace_back(*forcedCompactionInfoPtr, Request->Sender, request.GetTxId(), Request->Cookie);
-        Self->HasUnpersistedCompletedForcedCompactions = true;
+        Self->ForcedCompactionNeedsImmediatePersist = true;
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
 
     void DoComplete(const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxCancel DoComplete " << Request->Get()->Record.ShortDebugString());
-        SideEffects.ApplyOnComplete(Self, ctx);
         Self->ScheduleForcedCompactionProgress(ctx);
+        SideEffects.ApplyOnComplete(Self, ctx);
     }
 
 private:
@@ -115,7 +115,6 @@ private:
             auto& issue = *record.MutableIssues()->Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(errorMessage);
-
         }
 
         SideEffects.Send(Request->Sender, std::move(response), 0, Request->Cookie);

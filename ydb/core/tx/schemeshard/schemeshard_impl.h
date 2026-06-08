@@ -2022,7 +2022,7 @@ public:
     ui32 ForcedCompactionPersistBatchSize = 100;
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
-    bool HasUnpersistedCompletedForcedCompactions = false;
+    bool ForcedCompactionNeedsImmediatePersist = false;
 
     struct TCancellingForcedCompaction {
         struct TWaiter {

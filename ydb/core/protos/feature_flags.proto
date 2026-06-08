@@ -318,4 +318,5 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
+    optional bool EnableDataShardDetailedMetrics = 279 [default = false];
 }

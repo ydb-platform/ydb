@@ -8,11 +8,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
-    auto* settings = actorSystem->LoggerSettings();
-    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_TASKS_RUNNER);
-}
-
 TKqpComputeActor::TKqpComputeActor(
     const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,

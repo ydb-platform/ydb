@@ -863,12 +863,10 @@ protected:
                         }
 
                         TKafkaReadable readable(*Request->Buffer);
-                        if (Request->ApiKey == PRODUCE) {
-                            readable.SetRecordBatchCompression({
-                                .AllowCompressed = AppData()->FeatureFlags.GetEnableTopicMessagesBatching(),
-                                .SkipDecompression = true,
-                            });
-                        }
+                        readable.SetRecordBatchCompression({
+                            .AllowCompressed = AppData()->FeatureFlags.GetEnableTopicMessagesBatching(),
+                            .SkipDecompression = true,
+                        });
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);

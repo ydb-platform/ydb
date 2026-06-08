@@ -100,6 +100,7 @@ public:
         }
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
+        forwardRequest->Headers.emplace(NYdb::YDB_DATABASE_HEADER, request.BasePath);
         TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TCreateDatabaseGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;

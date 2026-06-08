@@ -4002,17 +4002,16 @@ TExprNode::TPtr MemberOverFilterSkipNullMembers(const TExprNode::TPtr& node, TEx
     return node;
 }
 
-<<<<<<< HEAD
 bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
     static const char OptName[] = "SqlInWithNothingOrNull";
     YQL_ENSURE(optCtx.Types);
     return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-=======
+}
+
 bool IsRewriteSwitchOverExtractMembersAllowed(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const char OptName[] = "RewriteSwitchOverExtractMembers";
     return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
->>>>>>> ae8a79cc1dd (optimize switch over extract members)
 }
 
 } // namespace

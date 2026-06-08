@@ -75,7 +75,7 @@ runs:
         mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $TEST_ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
     
     - name: Install Node required for Testmo CLI
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: 19
     

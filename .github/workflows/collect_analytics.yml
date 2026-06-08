@@ -15,7 +15,7 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.ref }}
     - name: Setup ydb access
@@ -40,7 +40,7 @@ jobs:
         build_type: [ relwithdebinfo, release-asan, release-msan, release-tsan ]
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.ref }}
     - name: Setup ydb access

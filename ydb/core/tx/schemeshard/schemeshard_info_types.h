@@ -730,7 +730,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         TString DefaultValue;
         bool IsBuildInProgress = false;
         bool SetNotNullInProgress = false;
- 
+
         TColumn(const TString& name, ui32 id, NScheme::TTypeInfo type, const TString& typeMod, bool notNull)
             : NTable::TScheme::TColumn(name, id, type, typeMod, notNull)
             , CreateVersion(0)

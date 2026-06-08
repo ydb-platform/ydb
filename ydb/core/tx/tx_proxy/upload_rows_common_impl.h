@@ -181,6 +181,7 @@ protected:
     TVector<std::pair<TString, NScheme::TTypeInfo>> SrcColumns; // source columns in CSV could have any order
     TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     std::set<std::string> NotNullColumns;
+    std::set<std::string> SetNotNullInProgressColumns;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvertInplace;
@@ -388,6 +389,7 @@ private:
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
+        THashSet<TString> setNotNullInProgressColumnsLeft = entry.SetNotNullInProgressColumns;
         THashSet<TString> defaultColumnsLeft;
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
@@ -516,6 +518,11 @@ private:
                 NotNullColumns.emplace(ci.Name);
             }
 
+            if (ci.SetNotNullInProgress) {
+                setNotNullInProgressColumnsLeft.erase(ci.Name);
+                SetNotNullInProgressColumns.emplace(ci.Name);
+            }
+
             if (defaultColumnsLeft.contains(ci.Name)) {
                 defaultColumnsLeft.erase(ci.Name);
             }
@@ -619,6 +626,14 @@ private:
 
         if (!notNullColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
+        }
+
+        if (!setNotNullInProgressColumnsLeft.empty() && UpsertIfExists) {
+            setNotNullInProgressColumnsLeft.clear();
+        }
+
+        if (!setNotNullInProgressColumnsLeft.empty()) {
+            return TConclusionStatus::Fail(Sprintf("Missing columns under `SET NOT NULL` operation: %s. It is forbidden to insert NULL values.", JoinSeq(", ", setNotNullInProgressColumnsLeft).c_str()));
         }
 
         if (!defaultColumnsLeft.empty() && UpsertIfExists) {

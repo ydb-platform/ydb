@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 using namespace NKikimr;
@@ -881,7 +882,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         });
     }
 
-    Y_UNIT_TEST(BulkUpsert) {
+    Y_UNIT_TEST_TWIN(BulkUpsert, ExplicitNullValue) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
@@ -948,14 +949,20 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             auto* reqKeyType = reqRowType->add_members();
             reqKeyType->set_name("key");
             reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT32);
-            auto* reqValueType = reqRowType->add_members();
-            reqValueType->set_name("value");
-            reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+
+            if (ExplicitNullValue) {
+                auto* reqValueType = reqRowType->add_members();
+                reqValueType->set_name("value");
+                reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+            }
 
             auto* reqRows = r->mutable_value();
             auto* row1 = reqRows->add_items();
-            row1->add_items()->set_uint32_value(1);  // key=1
-            row1->add_items()->set_null_flag_value(google::protobuf::NULL_VALUE); // value=NULL
+            row1->add_items()->set_uint32_value(1);
+
+            if (ExplicitNullValue) {
+                row1->add_items()->set_null_flag_value(google::protobuf::NULL_VALUE);
+            }
 
             auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
                 std::move(request), root, /* token */ "", runtime.GetActorSystem(0));
@@ -964,12 +971,20 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
                 runtime.DispatchEvents({}, TDuration::MilliSeconds(10));
             }
 
-            auto response = future.GetValue();
+            auto expectedStatus = Ydb::StatusIds::BAD_REQUEST;
+            if (!ExplicitNullValue) {
+                // A scheme_error is correct in this context, as the failure relates to an invalid schema
+                // provided during bulk_upsert initialization,
+                // rather than a direct attempt to insert NULL into a NOT NULL column.
+                expectedStatus = Ydb::StatusIds::SCHEME_ERROR;
+            }
+
+            auto bulkUpsertResponse = future.GetValue();
             UNIT_ASSERT_VALUES_EQUAL_C(
-                response.operation().status(),
-                Ydb::StatusIds::BAD_REQUEST,
+                bulkUpsertResponse.operation().status(),
+                expectedStatus,
                 "BulkUpsert should be rejected, got: "
-                    << Ydb::StatusIds::StatusCode_Name(response.operation().status()));
+                    << Ydb::StatusIds::StatusCode_Name(bulkUpsertResponse.operation().status()));
         };
 
         tryToUpsert();

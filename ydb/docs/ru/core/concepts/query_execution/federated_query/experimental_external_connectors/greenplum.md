@@ -1,10 +1,6 @@
 # Работа с базами данных Greenplum
 
-{% note warning %}
-
-Данный источник данных является экспериментальным и требует развёртывания сервиса-коннектора [fq-connector-go](../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go). Функциональность может измениться и не рекомендуется к использованию в производственной среде без явного включения в конфигурации кластера.
-
-{% endnote %}
+{% include [!](../_includes/experimental_connectors_warning.md) %}
 
 В этом разделе описана основная информация про работу с внешней базой данных [Greenplum](https://greenplum.org). Поскольку Greenplum основан на [PostgreSQL](postgresql.md), интеграции с ними работают похожим образом, а некоторые ссылки ниже могут вести на документацию PostgreSQL.
 

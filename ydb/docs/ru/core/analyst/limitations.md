@@ -240,6 +240,8 @@ WHERE e.user_id = p.user_id
 
 Список ограничений:
 
+{% include [!](../concepts/query_execution/federated_query/_includes/experimental_connectors_warning.md) %}
+
 - [ClickHouse](../concepts/query_execution/federated_query/experimental_external_connectors/clickhouse.md#limitations)
 - [Greenplum](../concepts/query_execution/federated_query/experimental_external_connectors/greenplum.md#limitations)
 - [Microsoft SQL Server](../concepts/query_execution/federated_query/experimental_external_connectors/ms_sql_server.md#limitations)

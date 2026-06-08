@@ -2,9 +2,9 @@
 
 {% include [!](../_includes/experimental_connectors_warning.md) %}
 
-{{ ydb-full-name }} может выполнять запросы к данным во внешних базах данных через архитектуру [коннекторов](../architecture.md#connectors). Для каждого из перечисленных источников данных необходимо развернуть [fq-connector-go](../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) рядом с {{ ydb-short-name }}.
+Внешние коннекторы представляют собой отдельные сервисы, через которые {{ ydb-full-name }} обращается к сторонним СУБД при обработке федеративных запросов. Подробнее об архитектуре коннекторов см. в разделе [Коннекторы](../architecture.md#connectors).
 
-Поддерживаемые внешние источники данных, доступные через коннекторы:
+В этом разделе описаны источники данных, доступ к которым реализуется через коннектор [fq-connector-go](../../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go):
 
 - [ClickHouse](clickhouse.md)
 - [Greenplum](greenplum.md)

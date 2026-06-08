@@ -39,7 +39,9 @@ class TJsonQuery : public TViewerPipeClient {
     TInstant QueryStartTime;
     TInstant QueryRequestStartTime;
     TInstant Deadline;
+    TInstant WakeupScheduledAt;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
+    static constexpr TDuration MaxForgetAfter = TDuration::Seconds(60);
 
     enum ESchemaType {
         Classic,
@@ -99,6 +101,15 @@ private:
             return Min(WakeupPeriod, ForgetAfter - Min(now - QueryRequestStartTime, ForgetAfter));
         }
         return WakeupPeriod;
+    }
+
+    void ScheduleWakeup(TDuration period, TInstant now = TInstant()) {
+        now = now ? now : TActivationContext::Now();
+        TInstant wakeupAt = now + period;
+        if (!WakeupScheduledAt || wakeupAt < WakeupScheduledAt) {
+            WakeupScheduledAt = wakeupAt;
+            Schedule(period, new TEvents::TEvWakeup());
+        }
     }
 
     void CreateStandardErrorResponse(NJson::TJsonValue& jsonResponse, const TString& message) {
@@ -357,7 +368,7 @@ public:
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
         if (params.Has("forget-after")) {
-            ForgetAfter = TDuration::MilliSeconds(Max<ui64>(FromStringWithDefault<ui64>(params.Get("forget-after"), ForgetAfter.MilliSeconds()), 1));
+            ForgetAfter = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("forget-after"), ForgetAfter.MilliSeconds()), 1, MaxForgetAfter.MilliSeconds()));
         }
         if (Streaming == EStreamingType::None || params.Has("timeout")) {
             Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
@@ -414,7 +425,7 @@ public:
         SendKpqProxyRequest();
         Become(&TThis::StateWork);
         if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
-            Schedule(GetWakeupPeriod(), new TEvents::TEvWakeup());
+            ScheduleWakeup(GetWakeupPeriod());
         }
         QueryStartTime = TActivationContext::Now();
         LastSendTime = TActivationContext::Now();
@@ -686,7 +697,7 @@ public:
         }
         QueryResponse = MakeQueryRequest<NKqp::TEvKqp::TEvQueryRequest, NKqp::TEvKqp::TEvQueryResponse>();
         if (Forget) {
-            Schedule(GetWakeupPeriod(), new TEvents::TEvWakeup());
+            ScheduleWakeup(GetWakeupPeriod());
         }
     }
 
@@ -1266,6 +1277,7 @@ private:
 
     void HandleWakeup() {
         auto now = TActivationContext::Now();
+        WakeupScheduledAt = TInstant();
         if (Forget && QueryRequestStartTime && (now - QueryRequestStartTime >= ForgetAfter)) {
             return ReplyAndForgetQuery();
         }
@@ -1278,7 +1290,7 @@ private:
         if (OperationId && (!GetOperationResponse.has_value() || GetOperationResponse->IsDone())) {
             CheckOperationStatus();
         }
-        Schedule(GetWakeupPeriod(now), new TEvents::TEvWakeup());
+        ScheduleWakeup(GetWakeupPeriod(now), now);
     }
 
 private:
@@ -1474,7 +1486,7 @@ public:
                 description: >
                     execute method:
                       * `execute-query` - execute query (QueryService)
-                      * `execute-query-and-forget` - execute query (QueryService), wait up to forget-after for an immediate response, then leave it running in background
+                      * `execute-query-and-forget` - execute query (QueryService), wait up to forget-after for an immediate response, then leave it running in background; after the query is forgotten, it cannot be cancelled using query_id
                       * `execute-data` - execute data query (DataQuery)
                       * `execute-scan` - execute scan query (ScanQuery)
                       * `execute-script` - execute script query (ScriptingService)
@@ -1584,10 +1596,11 @@ public:
                 required: false
               - name: forget-after
                 in: query
-                description: wait timeout in ms for execute-query-and-forget before returning success and leaving query running in background
+                description: wait timeout in ms for execute-query-and-forget before returning success and leaving query running in background, clamped to 1..60000 ms
                 type: integer
                 required: false
                 default: 1000
+                maximum: 60000
               - name: ui64
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding

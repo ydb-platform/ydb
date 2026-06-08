@@ -1376,6 +1376,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
                     "Offset": 11,
                     "OriginalSize": 20,
@@ -1383,12 +1384,12 @@
                     "SeqNo": 12,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
                     "Offset": 12,
                     "OriginalSize": 20,
@@ -1396,12 +1397,12 @@
                     "SeqNo": 13,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
                     "Offset": 13,
                     "OriginalSize": 20,
@@ -1409,12 +1410,12 @@
                     "SeqNo": 14,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
                     "Offset": 14,
                     "OriginalSize": 20,
@@ -1422,12 +1423,12 @@
                     "SeqNo": 15,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
                     "Offset": 15,
                     "OriginalSize": 20,
@@ -1435,8 +1436,7 @@
                     "SeqNo": 16,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -1448,6 +1448,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0w",
                     "Offset": 0,
                     "OriginalSize": 9,
@@ -1455,12 +1456,12 @@
                     "SeqNo": 1,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0x",
                     "Offset": 1,
                     "OriginalSize": 9,
@@ -1468,12 +1469,12 @@
                     "SeqNo": 2,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0y",
                     "Offset": 2,
                     "OriginalSize": 9,
@@ -1481,8 +1482,7 @@
                     "SeqNo": 3,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -1494,6 +1494,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZV93aXRoX21ldGE=",
                     "MessageMetadata": [
                         {
@@ -1511,8 +1512,7 @@
                     "SeqNo": 11,
                     "StorageSize": 37,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -1524,6 +1524,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
                     "Offset": 20,
                     "OriginalSize": 20,
@@ -1531,8 +1532,7 @@
                     "SeqNo": 21,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -1544,6 +1544,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0w",
                     "Offset": 0,
                     "OriginalSize": 9,
@@ -1551,12 +1552,12 @@
                     "SeqNo": 1,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0x",
                     "Offset": 1,
                     "OriginalSize": 9,
@@ -1564,12 +1565,12 @@
                     "SeqNo": 2,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0y",
                     "Offset": 2,
                     "OriginalSize": 9,
@@ -1577,12 +1578,12 @@
                     "SeqNo": 3,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS0z",
                     "Offset": 3,
                     "OriginalSize": 9,
@@ -1590,12 +1591,12 @@
                     "SeqNo": 4,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "bWVzc2FnZS00",
                     "Offset": 4,
                     "OriginalSize": 9,
@@ -1603,8 +1604,7 @@
                     "SeqNo": 5,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -1616,6 +1616,7 @@
                 {
                     "Codec": 1,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
                     "Message": "Y29tcHI=",
                     "Offset": 20,
                     "OriginalSize": 20,
@@ -1623,8 +1624,7 @@
                     "SeqNo": 21,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": "text"
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -1639,6 +1639,7 @@
                 {
                     "Codec": 0,
                     "CreateTimestamp": "not-zero-number",
+                    "Ip": "",
                     "Message": "eyJ1cGRhdGUiOnsibmFtZSI6ImVsbGV2ZW4ifSwia2V5IjpbMTFdfQ==",
                     "Offset": 0,
                     "OriginalSize": 40,
@@ -1646,8 +1647,7 @@
                     "SeqNo": 1,
                     "StorageSize": 40,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number",
-                    "Ip": ""
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -4556,18 +4556,6 @@
             "Status": "StatusSuccess"
         }
     },
-    "test.TestViewer.test_viewer_domain_peers": {
-        "FieldsAvailable": "0000011110111010000000000110101000011",
-        "FieldsRequired": "0000000000010000000000000000001000001",
-        "FoundNodes": "1",
-        "Nodes": [
-            {
-                "ConnectStatus": "Grey",
-                "NodeId": 1
-            }
-        ],
-        "TotalNodes": "1"
-    },
     "test.TestViewer.test_viewer_describe_column_table_local_index": {
         "root_child_names": [
             ".metadata",
@@ -4583,6 +4571,18 @@
             }
         ],
         "table_children_exist": true
+    },
+    "test.TestViewer.test_viewer_domain_peers": {
+        "FieldsAvailable": "0000011110111010000000000110101000011",
+        "FieldsRequired": "0000000000010000000000000000001000001",
+        "FoundNodes": "1",
+        "Nodes": [
+            {
+                "ConnectStatus": "Grey",
+                "NodeId": 1
+            }
+        ],
+        "TotalNodes": "1"
     },
     "test.TestViewer.test_viewer_external_http_access_controls": {
         "administration_bscontrollerinfo_database": {
@@ -5540,14 +5540,14 @@
                 "EnableAlterDatabaseCreateHiveFirst": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true,
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
-                "EnableTopicTransfer": true,
-                "EnableLocalBloomFilterIndex": true,
-                "EnableLocalIndexAsSchemeObject": true
+                "EnableTopicTransfer": true
             },
             "FederatedQueryConfig": {
                 "Audit": {
@@ -6589,14 +6589,14 @@
                 "EnableAlterDatabaseCreateHiveFirst": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true,
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
-                "EnableTopicTransfer": true,
-                "EnableLocalBloomFilterIndex": true,
-                "EnableLocalIndexAsSchemeObject": true
+                "EnableTopicTransfer": true
             },
             "FederatedQueryConfig": {
                 "Audit": {
@@ -7638,14 +7638,14 @@
                 "EnableAlterDatabaseCreateHiveFirst": true,
                 "EnableDrainOnShutdown": false,
                 "EnableExtraSidsControlForHttpViewer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true,
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
-                "EnableTopicTransfer": true,
-                "EnableLocalBloomFilterIndex": true,
-                "EnableLocalIndexAsSchemeObject": true
+                "EnableTopicTransfer": true
             },
             "FederatedQueryConfig": {
                 "Audit": {
@@ -11374,6 +11374,28 @@
             }
         ],
         "status_code": 200
+    },
+    "test.TestViewer.test_viewer_query_forget_delayed": {
+        "message": "Query is running in background",
+        "status": "SUCCESS"
+    },
+    "test.TestViewer.test_viewer_query_forget_immediate": {
+        "result": [
+            {
+                "columns": [
+                    {
+                        "name": "column0",
+                        "type": "Int32"
+                    }
+                ],
+                "rows": [
+                    [
+                        42
+                    ]
+                ]
+            }
+        ],
+        "status": "SUCCESS"
     },
     "test.TestViewer.test_viewer_query_from_table": {
         "/Root/dedicated_db": {

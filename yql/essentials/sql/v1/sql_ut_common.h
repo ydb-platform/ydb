@@ -6346,7 +6346,6 @@ Y_UNIT_TEST(WarnForAggregationBySelectAlias) {
 
 Y_UNIT_TEST(WarnForAggregationBySelectAliasAsErrorStrict) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.Flags.emplace("StrictWarningAsError");
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
             PRAGMA Warning("error", "*");

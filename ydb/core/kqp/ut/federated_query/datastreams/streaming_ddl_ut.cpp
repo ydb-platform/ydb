@@ -561,6 +561,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
@@ -614,6 +615,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "key1value1");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS

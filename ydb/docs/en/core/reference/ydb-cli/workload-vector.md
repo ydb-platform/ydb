@@ -82,7 +82,7 @@ Example:
 | `--index-type <type>` | Index type to build after import. Possible values: `None`, `KmeansTree`. Set to `None` to skip index building. | `KmeansTree` |
 | `--vector-type <type>` | Type of vectors. One of `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <value>` | Vector dimension (size of embedding vectors). | `1024` |
-| `--distance <value>` | Distance or similarity function. One of `inner_product`, `cosine_similarity`, `cosine_distance`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
+| `--distance <value>` | Distance or similarity function. One of `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
 | `--kmeans-tree-levels <value>` | Number of levels in the kmeans tree. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | `1` |
 | `--kmeans-tree-clusters <value>` | Number of clusters in kmeans. See [kmeans-tree type](../../dev/vector-indexes.md#kmeans-tree-type). | `10` |
 | `--kmeans-tree-covering <value>` | Build a covering index (`1` — enabled, `0` — disabled). | `0` |
@@ -135,7 +135,7 @@ For more details on `--kmeans-tree-*` index building parameters, see [kmeans-tre
 If the table was loaded with `--index-type None`, or if you want to build an additional index with different parameters, you can build a vector index on an existing table using the `build-index` command.
 
 ```bash
-{{ ydb-cli }} workload vector build-index --distance cosine_similarity
+{{ ydb-cli }} workload vector build-index --distance cosine
 ```
 
 ### Available options {#build-index-options}
@@ -267,7 +267,7 @@ The `run select` mode performs the following stages:
 2. Generate and load synthetic vectors:
 
     ```bash
-    {{ ydb-cli }} workload vector import generator --rows 100000 --distance cosine_similarity
+    {{ ydb-cli }} workload vector import generator --rows 100000 --distance cosine
     ```
 
 3. Run the search workload:

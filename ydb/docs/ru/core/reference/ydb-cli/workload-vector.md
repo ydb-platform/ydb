@@ -82,7 +82,7 @@ vector                YDB vector workload.
 | `--index-type <тип>` | Тип индекса, строимого после импорта. Возможные значения: `None`, `KmeansTree`. Указание `None` отключает построение индекса. | `KmeansTree` |
 | `--vector-type <тип>` | Тип векторов. Один из `float`, `int8`, `uint8`, `bit`. | `float` |
 | `--vector-dimension <значение>` | Размерность векторов. | `1024` |
-| `--distance <значение>` | Функция расстояния или сходства. Один из `inner_product`, `cosine_similarity`, `cosine_distance`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
+| `--distance <значение>` | Функция расстояния или сходства. Один из `inner_product`, `cosine`, `euclidean`, `manhattan`. | `inner_product` |
 | `--kmeans-tree-levels <значение>` | Количество уровней в дереве k-means. См. [тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type). | `1` |
 | `--kmeans-tree-clusters <значение>` | Количество кластеров k-means. См. [тип kmeans-tree](../../dev/vector-indexes.md#kmeans-tree-type). | `10` |
 | `--kmeans-tree-covering <значение>` | Создавать покрывающий индекс (`1` — да, `0` — нет). | `0` |
@@ -135,7 +135,7 @@ vector                YDB vector workload.
 Если данные загружались с параметром `--index-type None`, или если нужно построить дополнительный индекс с другими параметрами, векторный индекс можно построить на существующей таблице командой `build-index`.
 
 ```bash
-{{ ydb-cli }} workload vector build-index --distance cosine_similarity
+{{ ydb-cli }} workload vector build-index --distance cosine
 ```
 
 ### Доступные параметры {#build-index-options}
@@ -267,7 +267,7 @@ vector                YDB vector workload.
 2. Сгенерируйте и загрузите синтетические векторы:
 
     ```bash
-    {{ ydb-cli }} workload vector import generator --rows 100000 --distance cosine_similarity
+    {{ ydb-cli }} workload vector import generator --rows 100000 --distance cosine
     ```
 
 3. Запустите нагрузку на поиск:

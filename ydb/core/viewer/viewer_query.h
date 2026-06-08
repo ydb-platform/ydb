@@ -436,7 +436,7 @@ public:
             auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
-            if (QueryResponse && !QueryResponse.IsDone()) {
+            if (!QueryResponse.IsDone()) {
                 QueryResponse.Error("QueryCancelled");
             }
         }
@@ -444,7 +444,7 @@ public:
 
     void CloseSession() {
         if (SessionId && !QueryForgotten) {
-            if (QueryResponse && !QueryResponse.IsDone()) {
+            if (!QueryResponse.IsDone()) {
                 CancelQuery();
             }
             auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -1264,9 +1264,6 @@ private:
 
     void ForgetQuery() {
         QueryForgotten = true;
-        if (!QueryResponse.IsDone()) {
-            QueryResponse.Error("Cancelled");
-        }
     }
 
     void CheckOperationStatus() {

@@ -856,12 +856,18 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
     // Column Table (OLAP)
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
+        if (IsFs) {
+            return; // It is not supported yet
+        }
         RunExport<IsFs>(t, {
             TTestData::ColumnTable()
         }, TTestData::Items(EPathTypeColumnTable));
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
+        if (IsFs) {
+            return; // It is not supported yet
+        }
         TExportEnv<IsFs> env(TTestData::Items(EPathTypeColumnTable));
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

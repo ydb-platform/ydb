@@ -18,7 +18,7 @@ namespace NKikimr::NDDisk {
             IssuePersistentBufferChunkAllocationInflight = true;
             auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
             Send(ddiskActorId, new TEvPrivate::TEvIssuePersistentBufferChunkAllocation());
-            YDB_LOG_COMP_DEBUG(NKikimrServices::TActivity::BS_PERSISTENT_BUFFER, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk",
+            YDB_LOG_COMP_DEBUG(BS_PERSISTENT_BUFFER, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk",
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()},
                 {"FreeSpace", PersistentBufferSpaceAllocator.GetFreeSpace()},
@@ -297,7 +297,7 @@ namespace NKikimr::NDDisk {
                     || (header->NodeId != BaseInfo.PDiskActorID.NodeId()) || header->PDiskId != BaseInfo.PDiskId
                     || header->SlotId != BaseInfo.VDiskSlotId) {
 
-                        YDB_LOG_COMP_ERROR(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::StartRestorePersistentBuffer header checksum failed",
+                    YDB_LOG_COMP_ERROR(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::StartRestorePersistentBuffer header checksum failed",
                         {"marker", "BSPB"},
                         {"PBufferId", SelfId()},
                         {"header->PersistentBufferUniqueId", header->PersistentBufferUniqueId},

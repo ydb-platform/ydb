@@ -10,8 +10,9 @@
 #if defined(__linux__)
 #include <unistd.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 #endif
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 

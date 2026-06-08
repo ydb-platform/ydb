@@ -484,10 +484,6 @@ public:
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaRecords& value) {
-        DoRead(readable, version, value, TKafkaCompression{});
-    }
-
-    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaRecords& value, const TKafkaCompression& compression) {
         int length = ReadArraySize<Meta>(readable, version);
         if (length > 0) {
             char magic = readable.take(16);
@@ -527,7 +523,7 @@ public:
                     record.Value = v0.Record.Value;
                 }
             } else {
-                (*value).Read(readable, magic, compression);
+                (*value).Read(readable, magic);
             }
         } else {
             value = std::nullopt;
@@ -646,25 +642,6 @@ inline void Read(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::T
             try {
                 TypeStrategy<Meta, typename Meta::Type>::DoRead(readable, version, value);
                 TypeStrategy<Meta, typename Meta::Type>::DoLog(value);
-            } catch (const yexception& e) {
-                ythrow yexception() << "error on read field " << Meta::Name << ": " << e.what();
-            }
-        } else if constexpr (Meta::TypeDesc::Default) {
-            value = Meta::Default;
-        }
-    }
-}
-
-template<typename Meta>
-inline void Read(TKafkaReadable& readable, TKafkaInt16 version, TKafkaRecords& value, const TKafkaCompression& compression) {
-    if (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()
-        && VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
-        return;
-    } else {
-        if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
-            try {
-                TypeStrategy<Meta, TKafkaRecords, TKafkaRecordsDesc>::DoRead(readable, version, value, compression);
-                TypeStrategy<Meta, TKafkaRecords, TKafkaRecordsDesc>::DoLog(value);
             } catch (const yexception& e) {
                 ythrow yexception() << "error on read field " << Meta::Name << ": " << e.what();
             }

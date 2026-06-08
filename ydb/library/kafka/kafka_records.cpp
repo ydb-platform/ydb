@@ -438,10 +438,7 @@ void TKafkaRecordBatch::Decompress(TKafkaVersion version) {
 }
 
 void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    Read(_readable, _version, TKafkaCompression{});
-}
-
-void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version, const TKafkaCompression& compression) {
+    const auto& compression = _readable.GetRecordBatchCompression();
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't read version " << _version << " of TKafkaRecordBatch";
     }
@@ -631,9 +628,10 @@ i32 TKafkaRecordBatchV0::Size(TKafkaVersion _version) const {
 TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version, TKafkaCompression compression) {
     TBuffer buffer(data.data(), data.size());
     TKafkaReadable readable(buffer);
+    readable.SetRecordBatchCompression(compression);
 
     TKafkaRecordBatch batch;
-    batch.Read(readable, version, compression);
+    batch.Read(readable, version);
     if (readable.left() != 0) {
         ythrow yexception() << "unexpected extra bytes after Kafka record batch: " << readable.left();
     }

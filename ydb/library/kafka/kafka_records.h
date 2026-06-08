@@ -420,7 +420,6 @@ public:
 
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version, const TKafkaCompression& compression);
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
     bool operator==(const TKafkaRecordBatch& other) const = default;

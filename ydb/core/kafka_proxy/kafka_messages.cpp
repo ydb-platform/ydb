@@ -595,25 +595,13 @@ TProduceRequestData::TProduceRequestData()
 {}
 
 void TProduceRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    Read(_readable, _version, TKafkaCompression{});
-}
-
-void TProduceRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version, const TKafkaCompression& compression) {
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't read version " << _version << " of TProduceRequestData";
     }
     NPrivate::Read<TransactionalIdMeta>(_readable, _version, TransactionalId);
     NPrivate::Read<AcksMeta>(_readable, _version, Acks);
     NPrivate::Read<TimeoutMsMeta>(_readable, _version, TimeoutMs);
-
-    const TKafkaInt32 topicDataLength = NPrivate::ReadArraySize<TopicDataMeta>(_readable, _version);
-    if (topicDataLength < 0) {
-        ythrow yexception() << "non-nullable field " << TopicDataMeta::Name << " was serialized as null";
-    }
-    TopicData.resize(topicDataLength);
-    for (TKafkaInt32 i = 0; i < topicDataLength; ++i) {
-        TopicData[i].Read(_readable, _version, compression);
-    }
+    NPrivate::Read<TopicDataMeta>(_readable, _version, TopicData);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
@@ -669,23 +657,11 @@ TProduceRequestData::TTopicProduceData::TTopicProduceData()
 {}
 
 void TProduceRequestData::TTopicProduceData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    Read(_readable, _version, TKafkaCompression{});
-}
-
-void TProduceRequestData::TTopicProduceData::Read(TKafkaReadable& _readable, TKafkaVersion _version, const TKafkaCompression& compression) {
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't read version " << _version << " of TProduceRequestData::TTopicProduceData";
     }
     NPrivate::Read<NameMeta>(_readable, _version, Name);
-
-    const TKafkaInt32 partitionDataLength = NPrivate::ReadArraySize<PartitionDataMeta>(_readable, _version);
-    if (partitionDataLength < 0) {
-        ythrow yexception() << "non-nullable field " << PartitionDataMeta::Name << " was serialized as null";
-    }
-    PartitionData.resize(partitionDataLength);
-    for (TKafkaInt32 i = 0; i < partitionDataLength; ++i) {
-        PartitionData[i].Read(_readable, _version, compression);
-    }
+    NPrivate::Read<PartitionDataMeta>(_readable, _version, PartitionData);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
@@ -737,16 +713,11 @@ TProduceRequestData::TTopicProduceData::TPartitionProduceData::TPartitionProduce
 {}
 
 void TProduceRequestData::TTopicProduceData::TPartitionProduceData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    Read(_readable, _version, TKafkaCompression{});
-}
-
-void TProduceRequestData::TTopicProduceData::TPartitionProduceData::Read(
-    TKafkaReadable& _readable, TKafkaVersion _version, const TKafkaCompression& compression) {
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't read version " << _version << " of TProduceRequestData::TTopicProduceData::TPartitionProduceData";
     }
     NPrivate::Read<IndexMeta>(_readable, _version, Index);
-    NPrivate::Read<RecordsMeta>(_readable, _version, Records, compression);
+    NPrivate::Read<RecordsMeta>(_readable, _version, Records);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();

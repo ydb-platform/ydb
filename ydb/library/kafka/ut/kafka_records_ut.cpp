@@ -122,9 +122,10 @@ void AssertSkipDecompressionRead(ECompressionType compressionType) {
 
     TBuffer buffer(serialized.data(), serialized.size());
     TKafkaReadable readable(buffer);
+    readable.SetRecordBatchCompression({.AllowCompressed = true, .SkipDecompression = true});
 
     TKafkaRecordBatch parsed;
-    parsed.Read(readable, 2, {.AllowCompressed = true, .SkipDecompression = true});
+    parsed.Read(readable, 2);
 
     UNIT_ASSERT(parsed.Records.empty());
     UNIT_ASSERT(!parsed.PackedRecords.empty());
@@ -143,7 +144,7 @@ TString Bytes(std::initializer_list<ui8> bytes) {
     return result;
 }
 
-// Generated from Apache Kafka commit 47fbf15f7b:
+// Generated with Apache Kafka Java code:
 //
 // for (CompressionType type : new CompressionType[]{CompressionType.NONE, CompressionType.GZIP, CompressionType.ZSTD}) {
 //     MemoryRecordsBuilder builder = MemoryRecords.builder(

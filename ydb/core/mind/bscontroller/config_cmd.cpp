@@ -127,14 +127,14 @@ namespace NKikimr::NBsController {
                     driveStatuses += status.DriveStatusSize();
                     storagePools += status.StoragePoolSize();
                     groupIds += status.GroupIdSize();
-                    assignedStoragePoolIds += status.HasAssignedStoragePoolId();
+                    assignedStoragePoolIds += status.GetAssignedStoragePoolId() != 0;
                     moveCommands += status.MoveCommandSize();
                     pdiskStats += status.PDiskStatSize();
                     reassignedItems += status.ReassignedItemSize();
                     wipeVDisks += status.WipeVDiskSize();
                     intents += status.HasIntent();
                     statusSettings += status.HasSettings();
-                    interfaceVersions += status.HasInterfaceVersion();
+                    interfaceVersions += status.GetInterfaceVersion() != 0;
 
                     if (status.HasBaseConfig()) {
                         const auto& baseConfig = status.GetBaseConfig();

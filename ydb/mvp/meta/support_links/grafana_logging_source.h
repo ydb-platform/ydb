@@ -17,12 +17,36 @@ namespace NMVP::NSupportLinks {
 
 inline constexpr TStringBuf GRAFANA_LOGGING_DEFAULT_URL = "/explore";
 
-inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(const NHttp::TUrlParameters& requestQueryParameters) {
+inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(
+    ESupportLinksEntityType entityType,
+    const NHttp::TUrlParameters& requestQueryParameters)
+{
     TVector<std::pair<TString, TString>> bindings;
 
-    const TString database = requestQueryParameters["database"];
-    if (!database.empty()) {
-        bindings.emplace_back("database", database);
+    switch (entityType) {
+        case ESupportLinksEntityType::Cluster:
+            break;
+        case ESupportLinksEntityType::Database: {
+            const TString database = requestQueryParameters["database"];
+            if (!database.empty()) {
+                bindings.emplace_back("database", database);
+            }
+            break;
+        }
+        case ESupportLinksEntityType::Node: {
+            const TString nodeId = requestQueryParameters["node_id"];
+            if (!nodeId.empty()) {
+                bindings.emplace_back("node_id", nodeId);
+            }
+            break;
+        }
+        case ESupportLinksEntityType::Host: {
+            const TString host = requestQueryParameters["host"];
+            if (!host.empty()) {
+                bindings.emplace_back("host", host);
+            }
+            break;
+        }
     }
 
     return bindings;
@@ -67,6 +91,7 @@ inline bool TryBuildGrafanaLoggingUrl(
     TStringBuf grafanaEndpoint,
     TStringBuf url,
     TStringBuf bucket,
+    ESupportLinksEntityType entityType,
     const THashMap<TString, TString>& clusterInfo,
     const NHttp::TUrlParameters& requestQueryParameters,
     TString& resolvedUrl,
@@ -92,7 +117,7 @@ inline bool TryBuildGrafanaLoggingUrl(
         return false;
     }
 
-    TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(requestQueryParameters);
+    TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(entityType, requestQueryParameters);
     bindings.emplace_back("__workspace__", workspaceIt->second);
     bindings.emplace_back("__bucket__", bucket);
 
@@ -121,7 +146,7 @@ public:
         , GrafanaEndpoint(std::move(grafanaEndpoint))
     {}
 
-    TResolveOutput Resolve(const TLinkResolveInput& input, const TResolveContext&) const override {
+    TResolveOutput Resolve(const TLinkResolveInput& input, const TResolveContext& context) const override {
         TResolveOutput result{
             .Name = SourceName,
         };
@@ -132,6 +157,7 @@ public:
                 GrafanaEndpoint,
                 Url,
                 Bucket,
+                context.EntityType,
                 input.ClusterInfo,
                 input.UrlParameters,
                 resolvedUrl,

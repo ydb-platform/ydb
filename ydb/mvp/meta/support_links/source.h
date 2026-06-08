@@ -11,6 +11,13 @@
 
 namespace NMVP {
 
+enum class ESupportLinksEntityType {
+    Cluster,
+    Database,
+    Node,
+    Host,
+};
+
 class ILinkSource {
 public:
     struct TLinkResolveInput {
@@ -20,6 +27,7 @@ public:
 
     struct TResolveContext {
         size_t Place = 0;
+        ESupportLinksEntityType EntityType = ESupportLinksEntityType::Cluster;
         const NActors::TActorId& Owner;
         const NActors::TActorId& HttpProxyId;
     };

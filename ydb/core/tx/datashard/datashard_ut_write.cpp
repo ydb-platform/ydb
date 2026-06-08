@@ -4017,11 +4017,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxStats().GetLocksBrokenAsBreaker(), 1u);
 
         // Now try to commit the victim transaction - it should fail with LOCKS_BROKEN
-        TMaybe<NKikimrDataEvents::TEvWriteResult> victimRecord;
-        auto observer = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-            if (ev->Get()->Record.GetOrigin() == shard &&
-                ev->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
-                victimRecord = ev->Get()->Record;
+        TMaybe<NKikimrTxDataShard::TEvProposeTransactionResult> victimRecord;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvProposeTransactionResult>([&](TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+            auto* result = ev->Get();
+            if (result && result->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA &&
+                result->GetOrigin() == shard &&
+                result->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN) {
+                victimRecord = result->Record;
             }
         });
 

@@ -694,7 +694,6 @@ void NPrivate::ReadLegacyRecordBatch(
     batch.Magic = 2;
     batch.BaseOffset = 0;
     batch.BaseTimestamp = 0;
-    batch.MaxTimestamp = 0;
 
     while (recordsReadable.left() > 0) {
         const TKafkaVersion entryMagic = recordsReadable.take(16);

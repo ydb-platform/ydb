@@ -433,7 +433,7 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0_manyMessages) {
     UNIT_ASSERT_EQUAL(r0.Magic, 2);
     UNIT_ASSERT_EQUAL(r0.Crc, 0);
     UNIT_ASSERT_EQUAL(r0.Attributes, 0);
-    UNIT_ASSERT_EQUAL(r0.LastOffsetDelta, 0);
+    UNIT_ASSERT_EQUAL(r0.LastOffsetDelta, 3);
     UNIT_ASSERT_EQUAL(r0.BaseTimestamp, 0);
     UNIT_ASSERT_EQUAL(r0.MaxTimestamp, -1);
     UNIT_ASSERT_EQUAL(r0.ProducerId, -1);

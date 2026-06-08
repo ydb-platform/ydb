@@ -2554,7 +2554,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         .QueryColumns(BuildKeyColumnsList(pos, ctx, TVector<TString>{ftColumn}))
         .Settings(ftSettings.BuildNode(ctx, pos))
         .Done().Ptr();
-    const auto ftList = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(ftRead)).Done().Ptr();
+    // Raw ordered branch. RRF streams it through KqpStreamEnumerate (pushed into the branch's
+    // single-partition stage by the PushStreamEnumerateToStage physical rule), so no TDqPrecompute is
+    // needed; linear re-materializes it below because its ListMin/ListMax are whole-list aggregates.
+    const auto ftList = ftRead;
 
     // ---- Vector branch: top-N {pk, score} ordered best-first (distance ASC, similarity DESC) ----
     // Emitted as a synthetic TopSort over the vector index read; RewriteTopSortOverIndexRead
@@ -2600,7 +2603,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             .Seal()
         .Seal()
         .Build();
-    const auto vecList = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(vecBranch)).Done().Ptr();
+    const auto vecList = vecBranch;
 
     // ---- Fuse: each branch emits a per-row weighted contribution; we then SUM the contributions
     //      grouped by primary key. A document absent from a branch simply has no contribution row
@@ -2694,8 +2697,11 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}), TExprNode::TPtr(body)))
                 .Seal().Build();
         };
-        ftContribs = buildContribs(ftList, relevanceCol, wFtConst, ftSimConst);
-        vecContribs = buildContribs(vecList, distCol, wVecConst, vecSimConst);
+        // Linear normalization needs per-branch min/max (whole-list aggregates), so materialize each branch.
+        const auto ftMat = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(ftList)).Done().Ptr();
+        const auto vecMat = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(vecList)).Done().Ptr();
+        ftContribs = buildContribs(ftMat, relevanceCol, wFtConst, ftSimConst);
+        vecContribs = buildContribs(vecMat, distCol, wVecConst, vecSimConst);
     } else {
         // RRF: rank = 1-based position in the (already-sorted) branch; contribution = w / (k + rank).
         const auto uint64ListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
@@ -2735,12 +2741,12 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     .List(0).Atom(0, pkCol).Add(1, pkMember).Seal()
                     .List(1).Atom(0, contribCol).Add(1, contrib).Seal()
                 .Seal().Build();
+            // KqpStreamEnumerate assigns the 1-based rank over the ordered branch *stream*; the
+            // PushStreamEnumerateToStage physical rule later pushes it into the branch's single-partition
+            // stage, so the branch need not be materialized via TDqPrecompute first.
             return ctx.Builder(pos)
                 .Callable("Map")
-                    .Callable(0, "Enumerate").Add(0, list)
-                        .Callable(1, "Uint64").Atom(0, "1", TNodeFlags::Default).Seal()
-                        .Callable(2, "Uint64").Atom(0, "1", TNodeFlags::Default).Seal()
-                    .Seal()
+                    .Callable(0, "KqpStreamEnumerate").Add(0, list).Seal()
                     .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {pArg}), TExprNode::TPtr(body)))
                 .Seal().Build();
         };
@@ -2752,8 +2758,16 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     // { pk, __ydb_hybrid_rrf } per distinct candidate. Sum is typed Optional<Double>; coalesce it to a
     // plain Double. The fused set is referenced twice by the tail (lookup keys + score join), so
     // materialize it once with TDqPrecompute.
-    const auto fusedInput = ctx.Builder(pos)
+    // Materialize the (small) {pk, contrib} union before the aggregate. The branches themselves still
+    // stream through KqpStreamEnumerate; only the per-candidate contribution pairs are collected here.
+    // This barrier is required because the two branches stream in at different times: without it the
+    // distributed combiner can release a pk's partial sum before the second branch's contribution for
+    // that pk arrives, leaving two unmerged {pk, *} rows that ToDict('One) downstream collapses to one --
+    // silently dropping half of an in-both document's score. (Cheaper than the old per-branch precomputes:
+    // these are {pk, Double} pairs, not full branch rows.)
+    const auto fusedExtend = ctx.Builder(pos)
         .Callable("Extend").Add(0, ftContribs).Add(1, vecContribs).Seal().Build();
+    const auto fusedInput = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(fusedExtend)).Done().Ptr();
     const auto aggregated = ctx.Builder(pos)
         .Callable("Aggregate")
             .Add(0, fusedInput)
@@ -2790,16 +2804,25 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             .Seal()
         .Seal()
         .Build();
-    const auto rrfRows = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(fusedScored)).Done().Ptr();
-
-    // ---- Look up the main table by the fused candidate keys ----
-    const auto lookupKeys = ctx.Builder(pos)
+    // ---- Look up the main table by the fused candidate keys, carrying the RRF score through ----
+    // A LookupJoinRows stream lookup joins the {pk, rrf} stream against the main table by pk and emits a
+    // tuple (leftRow, Optional<mainRow>, _) per candidate. This carries the synthetic rrf score (a left
+    // column) through the lookup, so the score does not have to be re-joined afterwards via a dict. It also
+    // lets fusedScored feed the lookup directly -- it is consumed exactly once here, so no TDqPrecompute is
+    // needed for it. (The upstream fusedInput barrier before the SUM aggregate is a separate concern and
+    // stays; the left input here is the aggregate's already-merged one-row-per-pk output.)
+    const auto lookupInput = ctx.Builder(pos)
         .Callable("Map")
-            .Add(0, rrfRows)
+            .Add(0, fusedScored)
             .Lambda(1)
                 .Param("r")
-                .Callable("AsStruct")
-                    .List(0).Atom(0, pkCol).Callable(1, "Member").Arg(0, "r").Atom(1, pkCol).Seal().Seal()
+                .List()
+                    .Arg(0, "r")                                 // element 0: the {pk, rrf} left row
+                    .Callable(1, "Just")                         // element 1: Just({pk}) -- the join key
+                        .Callable(0, "AsStruct")
+                            .List(0).Atom(0, pkCol).Callable(1, "Member").Arg(0, "r").Atom(1, pkCol).Seal().Seal()
+                        .Seal()
+                    .Seal()
                 .Seal()
             .Seal()
         .Seal()
@@ -2808,35 +2831,27 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     const auto mainColumns = MergeColumns(read.Columns(), TVector<TString>{pkCol}, ctx);
 
     TKqpStreamLookupSettings lookupSettings;
-    lookupSettings.Strategy = EStreamLookupStrategyType::LookupRows;
-    const auto mainRows = Build<TKqlStreamLookupTable>(ctx, pos)
+    lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+    const auto joined = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(mainTableMeta)
-        .LookupKeys(TExprBase(lookupKeys))
+        .LookupKeys(TExprBase(lookupInput))
         .Columns(mainColumns)
         .Settings(lookupSettings.BuildNode(ctx, pos))
         .Done().Ptr();
 
-    // ---- Re-apply WHERE, attach RRF, re-rank by RRF DESC, take LIMIT, project ----
-    const auto rrfDict = ctx.Builder(pos)
-        .Callable("ToDict")
-            .Add(0, rrfRows)
-            .Lambda(1).Param("r").Callable("Member").Arg(0, "r").Atom(1, pkCol).Seal().Seal()
-            .Lambda(2).Param("r").Callable("Member").Arg(0, "r").Atom(1, rrfCol).Seal().Seal()
-            .List(3).Atom(0, "One", TNodeFlags::Default).Atom(1, "Hashed", TNodeFlags::Default).Seal()
-        .Seal()
-        .Build();
-
+    // ---- Re-apply WHERE, attach the carried RRF, re-rank by RRF DESC, take LIMIT, project ----
+    // joined emits (leftRow {pk, rrf}, Optional<mainRow>, _). Unwrap the main row, re-apply the original
+    // WHERE on it, and graft the rrf score (read straight off the left row -- always present, no dict
+    // lookup and no coalesce-to-0 needed).
+    const auto joinArg = ctx.NewArgument(pos, "j");
     const auto mrowArg = ctx.NewArgument(pos, "mrow");
     const auto predOverMrow = origPred
         ? ctx.ReplaceNode(TExprNode::TPtr(origPred), *origArg, mrowArg)
         : ctx.Builder(pos).Callable("Bool").Atom(0, "true", TNodeFlags::Default).Seal().Build();
     const auto rrfForMrow = ctx.Builder(pos)
-        .Callable("Coalesce")
-            .Callable(0, "Lookup")
-                .Add(0, rrfDict)
-                .Callable(1, "Member").Add(0, mrowArg).Atom(1, pkCol).Seal()
-            .Seal()
-            .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
+        .Callable("Member")
+            .Callable(0, "Nth").Add(0, joinArg).Atom(1, 0U).Seal()    // leftRow {pk, rrf}
+            .Atom(1, rrfCol)
         .Seal()
         .Build();
     const auto augBody = ctx.Builder(pos)
@@ -2849,10 +2864,18 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             .Seal()
         .Seal()
         .Build();
+    // For each join tuple, unwrap Optional<mainRow> (element 1) and apply the augment lambda to the present
+    // main row.
+    const auto perJoinBody = ctx.Builder(pos)
+        .Callable("FlatMap")
+            .Callable(0, "Nth").Add(0, joinArg).Atom(1, 1U).Seal()
+            .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {mrowArg}), TExprNode::TPtr(augBody)))
+        .Seal()
+        .Build();
     const auto augmented = ctx.Builder(pos)
         .Callable("FlatMap")
-            .Add(0, mainRows)
-            .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {mrowArg}), TExprNode::TPtr(augBody)))
+            .Add(0, joined)
+            .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {joinArg}), TExprNode::TPtr(perJoinBody)))
         .Seal()
         .Build();
 

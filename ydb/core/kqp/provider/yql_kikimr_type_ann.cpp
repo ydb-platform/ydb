@@ -783,7 +783,7 @@ private:
             }
 
             if (info.IsDefaultKindDefined()) {
-                if (op == TYdbOperation::Upsert && !info.IsBuildInProgress && !info.SetNotNullInProgress) {
+                if (op == TYdbOperation::Upsert && !info.IsBuildInProgress) {
                     generateColumnsIfInsertColumnsSet.emplace(name);
                 }
 

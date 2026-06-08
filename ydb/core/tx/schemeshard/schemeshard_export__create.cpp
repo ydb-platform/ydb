@@ -1223,12 +1223,14 @@ private:
                             }
                         }
 
-                        if (!exportInfo->DependencyTxIds.empty() || sourcePathMissing) {
+                        if (!exportInfo->DependencyTxIds.empty()) {
                             return;
                         }
 
-                        AllocateTxId(*exportInfo);
-                        return;
+                        if (!sourcePathMissing) {
+                            AllocateTxId(*exportInfo);
+                            return;
+                        }
                     }
 
                     exportInfo->Issue = record.GetReason();

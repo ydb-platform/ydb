@@ -86,12 +86,11 @@ NDataShard::IExport::TTableColumns MakeYdbColumns() {
     return columns;
 }
 
-// 3-column version: key (id=1), col_a (id=2), col_b (id=3)
 NDataShard::IExport::TTableColumns MakeYdbColumns3Cols() {
     NDataShard::IExport::TTableColumns columns;
-    columns[1] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "key", true);
-    columns[2] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "col_a", false);
-    columns[3] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "col_b", false);
+    columns[0] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "key", true);
+    columns[1] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "col_a", false);
+    columns[2] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "col_b", false);
     return columns;
 }
 

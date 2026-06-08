@@ -120,6 +120,21 @@ namespace {
         }
     }
 
+    void FillEvWriteImmediate(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
+        ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    {
+        const auto locks = txManager->GetLocks(shardId);
+        if (!locks.empty()) {
+            auto* protoLocks = evWrite->Record.MutableLocks();
+            protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            protoLocks->AddSendingShards(shardId);
+            protoLocks->AddReceivingShards(shardId);
+            for (const auto& lock : locks) {
+                *protoLocks->AddLocks() = lock;
+            }
+        }
+    }
+
     void FillEvWriteRollback(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
         auto* protoLocks = evWrite->Record.MutableLocks();
         protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
@@ -1243,16 +1258,7 @@ public:
         }
 
         if (isImmediateCommit) {
-            const auto locks = TxManager->GetLocks(shardId);
-            if (!locks.empty()) {
-                auto* protoLocks = evWrite->Record.MutableLocks();
-                protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                protoLocks->AddSendingShards(shardId);
-                protoLocks->AddReceivingShards(shardId);
-                for (const auto& lock : locks) {
-                    *protoLocks->AddLocks() = lock;
-                }
-            }
+            FillEvWriteImmediate(evWrite.get(), shardId, TxManager);
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
@@ -3062,7 +3068,7 @@ public:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
-                hFunc(TEvDataShard::TEvOverloadReady, HandlePrepare);
+                hFunc(TEvDataShard::TEvOverloadReady, Handle);
                 hFunc(TEvColumnShard::TEvOverloadReady, HandlePrepare);
 
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
@@ -3087,6 +3093,7 @@ public:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleCommit);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleCommit);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleCommit);
+                hFunc(TEvDataShard::TEvOverloadReady, Handle);
 
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandleCommit);
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
@@ -3844,7 +3851,7 @@ public:
                 NYql::NDqProto::StatusIds::ABORTED,
                 std::move(issues));
             return;
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->GetTopicOperations().GetSize() <= 1 /* tmp fix */) {
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->GetTopicOperations().GetSize() <= 1) {
             TxManager->StartExecute();
             ImmediateCommit(std::move(traceId));
         } else {
@@ -3886,7 +3893,7 @@ public:
         if (!Process()) {
             return false;
         }
-        SendToExternalShards();
+        SendToExternalShards(false);
         SendToTopics(false);
         return true;
     }
@@ -3910,6 +3917,7 @@ public:
         if (!Process()) {
             return false;
         }
+        SendToExternalShards(true);
         SendToTopics(true);
         return true;
     }
@@ -3946,7 +3954,7 @@ public:
             }
 
             for (const ui64 shardId : shardsToRollback) {
-                SendToExternalShard(shardId, /* isRollback */ true);
+                SendToExternalShard(shardId, true, /* isRollback */ true);
             }
         } catch (...) {
             CA_LOG_E("Failed to rollback transaction. Error: " << CurrentExceptionMessage() << ".");
@@ -3992,8 +4000,9 @@ public:
         return count;
     }
 
-    void SendToExternalShards() {
+    void SendToExternalShards(const bool isImmediateCommit) {
         auto shards = TxManager->GetShards();
+        AFL_ENSURE(!isImmediateCommit || shards.size() == 1);
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
@@ -4006,12 +4015,13 @@ public:
             if (TxManager->GetLocks(shardId).empty()) {
                 continue;
             }
-            SendToExternalShard(shardId, /* isRollback */ false);
+            SendToExternalShard(shardId, isImmediateCommit, /* isRollback */ false);
         }
     }
 
-    void SendToExternalShard(const ui64 shardId, const bool isRollback) {
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(isRollback
+    void SendToExternalShard(const ui64 shardId, const bool isImmediate, const bool isRollback) {
+        AFL_ENSURE(!isRollback || isImmediate);
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(isImmediate
             ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
             : (TxManager->IsVolatile()
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
@@ -4022,6 +4032,9 @@ public:
 
         if (isRollback) {
             FillEvWriteRollback(evWrite.get(), shardId, TxManager);
+        } else if (isImmediate) {
+            FillEvWriteImmediate(evWrite.get(), shardId, TxManager);
+            evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
         } else {
             YQL_ENSURE(TxId);
             // BreakerQuerySpanId comes from TxManager (set by per-table write actors), not this actor
@@ -4033,7 +4046,7 @@ public:
 
         const auto rollbackCookie = isRollback ? RollbackMessageCookie : 0;
         SendTime[shardId] = TInstant::Now();
-        CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isRollback=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
+        CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isImmediate << ", isRollback=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
             << ", Locks= " << [&]() {
                 TStringBuilder builder;
@@ -4654,6 +4667,13 @@ public:
             ProcessWriteCompletedShard(ev);
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
+            if (ev->Get()->Record.HasOverloadSubscribed()) {
+                CA_LOG_D("Shard " << ev->Get()->Record.GetOrigin() << " is overloaded. Waiting.");
+                return;
+            }
+        }
         default:
             if (HandleDeferredLocksBrokenOnCommit(ev->Get()->Record)) return;
             HandleError(ev);
@@ -4684,11 +4704,11 @@ public:
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
         if (seqNo == ExternalShardIdToOverloadSeqNo.at(shardId)) {
             CA_LOG_D("Retry Overloaded ShardID=" << shardId);
-            SendToExternalShard(shardId, false);
+            SendToExternalShard(shardId, IsImmediateCommit, false);
         }
     }
 
-    void HandlePrepare(TEvDataShard::TEvOverloadReady::TPtr& ev) {
+    void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev) {
         auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletID();
         const ui64 seqNo = record.GetSeqNo();

@@ -534,6 +534,9 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
+    TVector<TInfoUnit> GetLHSKeys() const;
+    TVector<TInfoUnit> GetRHSKeys() const;
+
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TVector<TExpression> JoinFilters;

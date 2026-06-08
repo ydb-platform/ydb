@@ -224,7 +224,7 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event event: ",
+                YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event",
                     {"type", ev->GetTypeRewrite()},
                     {"event", ev->ToString().data()});
             }

@@ -172,7 +172,7 @@ protected:
     }
 
     void Reply(const TString &json, const TActorContext &ctx) {
-        YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::CMS, "TJsonProxyProto reply with json ' '",
+        YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::CMS, "TJsonProxyProto reply with json",
             {"json", json});
 
         ctx.Send(RequestEvent->Sender, new NMon::TEvHttpInfoRes(TString(NMonitoring::HTTPOKJSON) + json, 0,

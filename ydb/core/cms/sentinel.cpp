@@ -552,7 +552,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     }
 
     void RequestBSConfig() {
-        YDB_LOG_DEBUG("[Sentinel] [ Request blobstorage config",
+        YDB_LOG_DEBUG("[Sentinel] Request blobstorage config",
             {"Name", Name()},
             {"attempt", SentinelState->ConfigUpdaterState.BSCAttempt});
 
@@ -591,7 +591,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                 }
             }
 
-            YDB_LOG_ERROR("[Sentinel] [ Unsuccesful response from CMS",
+            YDB_LOG_ERROR("[Sentinel] Unsuccessful response from CMS",
                 {"Name", Name()},
                 {"error", error});
             return RetryCMS();

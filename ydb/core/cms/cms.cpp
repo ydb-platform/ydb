@@ -426,7 +426,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
             ClusterInfo->AddTempLocks(action, request.GetPriority(), requestId, &ctx);
         } else {
-            YDB_LOG_CTX_DEBUG(ctx, "Result: (reason: )",
+            YDB_LOG_CTX_DEBUG(ctx, "Result",
                 {"error", ToString(error.Code).data()},
                 {"reason", error.Reason.GetMessage().data()});
 
@@ -1827,7 +1827,7 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
         auto row = db.Table<Schema::NodeTenant>().Key(nodeId);
         row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant));
 
-        YDB_LOG_CTX_TRACE(ctx, "Persist node tenant ''",
+        YDB_LOG_CTX_TRACE(ctx, "Persist node tenant",
             {"nodeId", nodeId},
             {"tenant", tenant.data()});
     }

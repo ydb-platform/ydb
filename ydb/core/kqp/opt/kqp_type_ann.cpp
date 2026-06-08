@@ -2137,6 +2137,44 @@ TStatus AnnotateKqpLockAndCheck(
 }
 
 
+TStatus AnnotateKqpStreamEnumerate(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* inputType = node->Child(0)->GetTypeAnn();
+    if (!inputType) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(0)->Pos()), "KqpStreamEnumerate: input has no type"));
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* itemType = nullptr;
+    const auto kind = inputType->GetKind();
+    switch (kind) {
+        case ETypeAnnotationKind::List:   itemType = inputType->Cast<TListExprType>()->GetItemType(); break;
+        case ETypeAnnotationKind::Flow:   itemType = inputType->Cast<TFlowExprType>()->GetItemType(); break;
+        case ETypeAnnotationKind::Stream: itemType = inputType->Cast<TStreamExprType>()->GetItemType(); break;
+        default:
+            ctx.AddError(TIssue(ctx.GetPosition(node->Child(0)->Pos()), TStringBuilder()
+                << "KqpStreamEnumerate: expected List, Flow or Stream, but got: " << *inputType));
+            return TStatus::Error;
+    }
+
+    const auto* rankType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+    const auto* pairType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{rankType, itemType});
+
+    const TTypeAnnotationNode* resultType = nullptr;
+    switch (kind) {
+        case ETypeAnnotationKind::List:   resultType = ctx.MakeType<TListExprType>(pairType); break;
+        case ETypeAnnotationKind::Flow:   resultType = ctx.MakeType<TFlowExprType>(pairType); break;
+        case ETypeAnnotationKind::Stream: resultType = ctx.MakeType<TStreamExprType>(pairType); break;
+        default: Y_ABORT("unreachable");
+    }
+
+    node->SetTypeAnn(resultType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
@@ -3182,6 +3220,7 @@ public:
         AddHandler({TKqpEnsure::CallableName()}, Hndl(&AnnotateKqpEnsure));
         AddHandler({TKqpLockAndCheck::CallableName()}, HndlInt(&AnnotateKqpLockAndCheck));
         AddHandler({TFulltextAnalyze::CallableName()}, Hndl(&AnnotateFulltextAnalyze));
+        AddHandler({TKqpStreamEnumerate::CallableName()}, Hndl(&AnnotateKqpStreamEnumerate));
         AddHandler({TKqpReadTableFullTextIndexSourceSettings::CallableName()}, HndlInt(&AnnotateReadTableFullTextIndexSourceSettings));
         AddHandler({TKqpReadRangesSourceSettings::CallableName()}, HndlInt(&AnnotateKqpSourceSettings));
         AddHandler({TKqpReadSysViewSourceSettings::CallableName()}, HndlInt(&AnnotateSysViewSourceSettings));

@@ -102,13 +102,19 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(
     if (settings.CompressionSettings) {
         switch (settings.CompressionSettings->Algorithm) {
         case TS3ExportBufferSettings::TCompressionSettings::EAlgorithm::Zstd:
+            std::cerr << "[diseaz] Zstd compression" << std::endl;
             builder->compression(arrow::Compression::ZSTD);
             break;
+        default:
+            std::cerr << "[diseaz] No compression algorithm" << std::endl;
         }
         if (settings.CompressionSettings->CompressionLevel != -1) {
+            std::cerr << "[diseaz] Compression level: " << settings.CompressionSettings->CompressionLevel << std::endl;
             builder->compression_level(
                 settings.CompressionSettings->CompressionLevel);
         }
+    } else {
+        std::cerr << "[diseaz] No compression settings" << std::endl;
     }
     WriteProperties = builder->build();
 }

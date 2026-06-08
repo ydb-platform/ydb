@@ -10,6 +10,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
@@ -784,13 +785,15 @@ public:
         return GetHttpResolverConfig(*s3Config);
     }
 
-    EDataFormat DataFormatFromS3Settings(const NKikimrSchemeOp::TS3Settings_EDataFormat dataFormat) {
-        switch (dataFormat) {
-            case NKikimrSchemeOp::TS3Settings_EDataFormat_CSV:
-                return EDataFormat::Csv;
-            case NKikimrSchemeOp::TS3Settings_EDataFormat_PARQUET:
+    EDataFormat DataFormatFromS3Settings(const NKikimrSchemeOp::TS3Settings& s3Settings) {
+        switch (s3Settings.format_case()) {
+            case NKikimrSchemeOp::TS3Settings::kYdbDump:
+                return EDataFormat::Invalid; // YdbDump format doesn't use the DataFormat field
+            case NKikimrSchemeOp::TS3Settings::kParquet:
                 return EDataFormat::Parquet;
+            case NKikimrSchemeOp::TS3Settings::FORMAT_NOT_SET:
             default:
+                // Default to YdbDump format (which doesn't use the DataFormat field)
                 return EDataFormat::Invalid;
         }
     }
@@ -804,7 +807,7 @@ public:
             TString&& metadata)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
-        , DataFormat(DataFormatFromS3Settings(task.GetS3Settings().GetDataFormat()))
+        , DataFormat(DataFormatFromS3Settings(task.GetS3Settings()))
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
         , HttpResolverConfig(GetHttpResolverConfigSafe(ExternalStorageConfig))

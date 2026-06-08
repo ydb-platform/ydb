@@ -85,7 +85,7 @@ protected:
                 return false;
             }
 
-            if (backup.HasS3Settings() && backup.GetS3Settings().GetDataFormat() == NKikimrSchemeOp::TS3Settings::PARQUET) {
+            if (backup.HasS3Settings() && backup.GetS3Settings().has_parquet()) {
                 if (!appData->FeatureFlags.GetEnableParquetForS3Export()) {
                     Abort(op, ctx, "Parquet export to S3 is disabled by feature flag EnableParquetForS3Export");
                     return false;

@@ -63,7 +63,7 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
             if (!TryCodecFromTask(backupTask, codec)) {
                 return TConclusionStatus::Fail(TStringBuilder() << "Unsupported compression codec: " << backupTask.GetCompression().GetCodec());
             }
-            if (backupTask.HasS3Settings() && backupTask.GetS3Settings().GetDataFormat() == NKikimrSchemeOp::TS3Settings::PARQUET) {
+            if (backupTask.HasS3Settings() && backupTask.GetS3Settings().has_parquet()) {
                 if (!AppData()->FeatureFlags.GetEnableParquetForS3Export()) {
                     return TConclusionStatus::Fail("Parquet export to S3 is disabled by feature flag EnableParquetForS3Export");
                 }

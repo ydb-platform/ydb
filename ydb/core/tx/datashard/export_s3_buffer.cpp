@@ -509,13 +509,23 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     }
 
     if (Task.HasS3Settings()) {
-        bufferSettings.WithParquetRowGroupSize(Task.GetS3Settings().GetLimits().GetParquetRowGroupSize());
+        // Get Parquet row group size from the new format field if Parquet is selected
+        if (Task.GetS3Settings().has_parquet()) {
+            bufferSettings.WithParquetRowGroupSize(Task.GetS3Settings().parquet().row_group_size());
+        }
         
-        switch (Task.GetS3Settings().GetDataFormat()) {
-        case NKikimrSchemeOp::TS3Settings::CSV:
+        // Check the new format field
+        switch (Task.GetS3Settings().format_case()) {
+        case NKikimrSchemeOp::TS3Settings::kYdbDump:
+            std::cerr << "[diseaz] YdbDump format" << std::endl;
             return CreateS3ExportBuffer(std::move(bufferSettings));
-        case NKikimrSchemeOp::TS3Settings::PARQUET:
+        case NKikimrSchemeOp::TS3Settings::kParquet:
+            std::cerr << "[diseaz] Parquet format" << std::endl;
             return CreateS3ParquetExportBuffer(std::move(bufferSettings));
+        case NKikimrSchemeOp::TS3Settings::FORMAT_NOT_SET:
+            // Default to YdbDump format
+            std::cerr << "[diseaz] YdbDump format" << std::endl;
+            return CreateS3ExportBuffer(std::move(bufferSettings));
         }
     }
     return CreateS3ExportBuffer(std::move(bufferSettings));

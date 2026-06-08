@@ -26,11 +26,6 @@ message TS3Settings {
         HTTPS = 1;
     }
 
-    enum EDataFormat {
-        CSV = 0;
-        PARQUET = 1;
-    }
-
     optional string Endpoint = 1;
     optional EScheme Scheme = 2 [default = HTTPS];
     optional string Bucket = 3;
@@ -46,13 +41,11 @@ message TS3Settings {
     optional TSecretableVariable SecretableAccessKey = 13;
     optional TSecretableVariable SecretableSecretKey = 14;
     optional bool UseVirtualAddressing = 15 [default = true];
-    optional EDataFormat DataFormat = 16 [default = CSV];
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
         optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
         reserved 3; // ReadBufferSizeLimit
-        optional uint32 ParquetRowGroupSize = 4 [default = 1000]; // RowGroup size for Parquet
     };
 
     optional TLimits Limits = 100;
@@ -62,4 +55,10 @@ message TS3Settings {
 
     optional uint32 ExecutorThreadsCount = 104 [default = 32];
     optional uint32 MaxConnectionsCount = 105 [default = 32];
+
+    // New format field following ExportToS3Settings pattern
+    oneof format {
+        Ydb.Export.YdbDumpFormat ydb_dump = 17;
+        Ydb.Export.ParquetFormat parquet = 18;
+    }
 }

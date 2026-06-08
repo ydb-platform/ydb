@@ -226,11 +226,22 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     request.mutable_settings()->set_access_key(TStringType{settings.AccessKey_});
     request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
 
-    if (settings.DataFormat_ == TExportToS3Settings::EDataFormat::PARQUET) {
-        auto& parquet = *request.mutable_settings()->mutable_parquet();
-        if (settings.ParquetRowGroupSize_) {
-            parquet.set_row_group_size(settings.ParquetRowGroupSize_.value());
-        }
+    // Set format based on the new format field
+    switch (settings.Format_) {
+        case TExportToS3Settings::EFormat::PARQUET:
+            {
+                auto& parquet = *request.mutable_settings()->mutable_parquet();
+                if (settings.ParquetRowGroupSize_) {
+                    parquet.set_row_group_size(settings.ParquetRowGroupSize_.value());
+                }
+            }
+            break;
+        case TExportToS3Settings::EFormat::YDB_DUMP:
+        case TExportToS3Settings::EFormat::UNSPECIFIED:
+        default:
+            // YdbDump format - empty message
+            request.mutable_settings()->mutable_ydb_dump();
+            break;
     }
 
     for (const auto& item : settings.Item_) {

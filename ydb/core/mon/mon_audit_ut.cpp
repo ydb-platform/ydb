@@ -16,14 +16,17 @@ using namespace NKikimr::Tests;
 
 namespace {
 
-const TString EXPECTED_SANITIZED_TOKEN = NKikimr::SanitizeTicket(VALID_TOKEN);
+const TString& ExpectedSanitizedToken() {
+    static const TString token = NKikimr::SanitizeTicket(VALID_TOKEN);
+    return token;
+}
 
 void AssertMonitoringAuditHasUser(const std::string& line) {
     UNIT_ASSERT_STRING_CONTAINS(line, "component=monitoring");
     UNIT_ASSERT_STRING_CONTAINS(line, "subject=username");
     UNIT_ASSERT_STRING_CONTAINS(
         line,
-        TStringBuilder() << "sanitized_token=" << EXPECTED_SANITIZED_TOKEN);
+        TStringBuilder() << "sanitized_token=" << ExpectedSanitizedToken());
     UNIT_ASSERT(line.find(VALID_TOKEN) == std::string::npos);
 }
 

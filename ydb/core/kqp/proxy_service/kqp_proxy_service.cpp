@@ -292,8 +292,6 @@ public:
                 NYql::NDq::TFileSpillingServiceConfig{
                     .Root = spillingRoot,
                     .MaxTotalSize = cfg.GetMaxTotalSize(),
-                    .MaxFileSize = cfg.GetMaxFileSize(),
-                    .MaxFilePartSize = cfg.GetMaxFilePartSize(),
                     .IoThreadPoolWorkersCount = cfg.GetIoThreadPool().GetWorkersCount(),
                     .IoThreadPoolQueueSize = cfg.GetIoThreadPool().GetQueueSize(),
                     .CleanupOnShutdown = false

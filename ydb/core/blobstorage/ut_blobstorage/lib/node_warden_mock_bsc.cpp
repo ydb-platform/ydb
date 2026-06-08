@@ -82,7 +82,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
     const auto& services = record.GetServiceSet();
 
     YDB_LOG_INFO("TEvControllerNodeServiceSetUpdate",
-        {"Marker", "NWM10"},
+        {"marker", "NWM10"},
         {"Record", record});
 
     for (const auto& group : services.GetGroups()) {
@@ -102,7 +102,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         pdiskIds.erase(pdiskId);
 
         YDB_LOG_DEBUG("PDisk",
-            {"Marker", "NWM04"},
+            {"marker", "NWM04"},
             {"Comprehensive", record.GetComprehensive()},
             {"PDiskId", pdiskId},
             {"EntityStatus", pdisk.GetEntityStatus()},
@@ -145,7 +145,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
 
         YDB_LOG_DEBUG("VDisk",
-            {"Marker", "NWM05"},
+            {"marker", "NWM05"},
             {"Comprehensive", record.GetComprehensive()},
             {"VSlotId", vslotId},
             {"EntityStatus", vdisk.GetEntityStatus()},

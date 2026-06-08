@@ -248,6 +248,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
             if (kindv.GroupAccumWeights.empty()) {
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_PICK_CHANNELS_FAILURES] += 1;
                 return false; // no allocation possible
             }
         }

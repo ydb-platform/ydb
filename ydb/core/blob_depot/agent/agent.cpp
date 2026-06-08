@@ -61,6 +61,8 @@ namespace NKikimr::NBlobDepot {
 
         PendingEventQueueItems = pendingEventQueue->GetCounter("Items", false);
         PendingEventQueueBytes = pendingEventQueue->GetCounter("Bytes", false);
+        PendingEventQueueOverflows = pendingEventQueue->GetCounter("Overflows", true);
+        PendingEventQueueTimeouts = pendingEventQueue->GetCounter("Timeouts", true);
 
         auto requests = AgentCounters->GetSubgroup("subsystem", "requests");
 
@@ -95,6 +97,13 @@ namespace NKikimr::NBlobDepot {
         S3PutsOk = s3->GetCounter("PutsOk", true);
         S3PutsError = s3->GetCounter("PutsError", true);
         S3PutsSlowDown = s3->GetCounter("PutsSlowDown", true);
+
+        S3GetsInFlightCounter = s3->GetCounter("GetsInFlight", false);
+        S3GetsMaxInFlightCounter = s3->GetCounter("GetsMaxInFlight", false);
+        S3GetsPendingQueueSizeCounter = s3->GetCounter("GetsPendingQueueSize", false);
+
+        auto allocate = AgentCounters->GetSubgroup("subsystem", "allocate");
+        AllocateIdFailures = allocate->GetCounter("IdFailures", true);
     }
 
     void TBlobDepotAgent::SwitchMode(EMode mode) {

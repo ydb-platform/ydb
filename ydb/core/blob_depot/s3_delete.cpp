@@ -259,6 +259,7 @@ namespace NKikimr::NBlobDepot {
                         .WithBucket(Bucket).WithDelete(std::move(del))), IEventHandle::FlagTrackDelivery));
             }
         }
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_QUEUE_SIZE] = DeleteQueue.size();
     }
 
     void TS3Manager::HandleDeleter(TAutoPtr<IEventHandle> ev) {
@@ -284,6 +285,8 @@ namespace NKikimr::NBlobDepot {
                     // S3 asked us to slow down: requeue, shrink concurrency, and arm exponential backoff.
                     DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsThrottled.begin(), msg.LocatorsThrottled.end());
                     CurrentMaxDeletesInFlight = 1;
+                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
+                    Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS] += 1;
                     ConsecutiveSuccessfulDeleteBatches = 0;
                     const TDuration delay = DeleteBackoff.Next();
                     DeleteThrottleUntil = TActivationContext::Monotonic() + delay;
@@ -302,6 +305,7 @@ namespace NKikimr::NBlobDepot {
                                 CurrentMaxDeletesInFlight = MaxDeletesInFlight;
                                 DeleteBackoff.Reset();
                             }
+                            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
                         }
                     }
                 }

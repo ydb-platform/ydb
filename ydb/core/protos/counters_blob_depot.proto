@@ -19,6 +19,14 @@ enum ESimpleCounters {
     COUNTER_DECOMMIT_MODE_PREPARING = 11 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Preparing"}];
     COUNTER_DECOMMIT_MODE_IN_PROGRESS = 12 [(NKikimr.CounterOpts) = {Name: "DecommitMode/InProgress"}];
     COUNTER_DECOMMIT_MODE_DONE = 13 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Done"}];
+    COUNTER_SPACE_COLOR = 14 [(NKikimr.CounterOpts) = {Name: "SpaceColor"}];
+    COUNTER_APPROXIMATE_FREE_SPACE_SHARE = 15 [(NKikimr.CounterOpts) = {Name: "ApproximateFreeSpaceShare"}];
+    COUNTER_S3_PUT_WRITES_IN_FLIGHT = 16 [(NKikimr.CounterOpts) = {Name: "S3/Put/WritesInFlight"}];
+    COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT = 17 [(NKikimr.CounterOpts) = {Name: "S3/Put/MaxWritesInFlight"}];
+    COUNTER_S3_PUT_PENDING_QUEUE_SIZE = 18 [(NKikimr.CounterOpts) = {Name: "S3/Put/PendingQueueSize"}];
+    COUNTER_S3_DELETE_QUEUE_SIZE = 19 [(NKikimr.CounterOpts) = {Name: "S3/Delete/QueueSize"}];
+    COUNTER_S3_DELETE_MAX_IN_FLIGHT = 20 [(NKikimr.CounterOpts) = {Name: "S3/Delete/MaxInFlight"}];
+    COUNTER_AGENTS_CONNECTED = 21 [(NKikimr.CounterOpts) = {Name: "AgentsConnected"}];
 }
 
 enum ECumulativeCounters {
@@ -35,6 +43,9 @@ enum ECumulativeCounters {
     COUNTER_S3_DELETES_BYTES = 10 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/OkBytes"}];
     COUNTER_S3_DELETES_SLOW_DOWN = 11 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/SlowDown"}];
     COUNTER_S3_PUTS_SLOW_DOWN = 12 [(NKikimr.CounterOpts) = {Name: "S3/Puts/SlowDown"}];
+    COUNTER_PICK_CHANNELS_FAILURES = 13 [(NKikimr.CounterOpts) = {Name: "PickChannels/Failures"}];
+    COUNTER_S3_PUT_THROTTLE_ACTIVATIONS = 14 [(NKikimr.CounterOpts) = {Name: "S3/Put/ThrottleActivations"}];
+    COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS = 15 [(NKikimr.CounterOpts) = {Name: "S3/Delete/ThrottleActivations"}];
 }
 
 enum EPercentileCounters {

@@ -232,6 +232,14 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
 
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
+
+        NMonitoring::TDynamicCounters::TCounterPtr AllocateIdFailures;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueOverflows;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueTimeouts;
+
         enum class EMode {
             None,
             ConnectPending,

@@ -73,6 +73,9 @@ namespace NKikimr::NBlobDepot {
         for (const auto& [channel, group] : kind.ChannelGroups) {
             Groups[group].Channels.push_back(channel);
         }
+
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_SPACE_COLOR] = static_cast<ui64>(SpaceColor);
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_APPROXIMATE_FREE_SPACE_SHARE] = static_cast<ui64>(ApproximateFreeSpaceShare * 10000);
     }
 
     ui64 TSpaceMonitor::GetGroupAllocationWeight(ui32 groupId, bool stopOnLightYellow) const {
@@ -106,6 +109,9 @@ namespace NKikimr::NBlobDepot {
         if (SpaceColor != spaceColor || ApproximateFreeSpaceShare != approximateFreeSpaceShare) {
             SpaceColor = spaceColor;
             ApproximateFreeSpaceShare = approximateFreeSpaceShare;
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_SPACE_COLOR] = static_cast<ui64>(SpaceColor);
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_APPROXIMATE_FREE_SPACE_SHARE] =
+                static_cast<ui64>(ApproximateFreeSpaceShare * 10000);
             Self->OnSpaceColorChange(SpaceColor, ApproximateFreeSpaceShare);
         }
     }

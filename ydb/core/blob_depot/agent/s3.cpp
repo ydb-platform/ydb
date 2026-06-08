@@ -48,6 +48,7 @@ namespace NKikimr::NBlobDepot {
                 (S3GetsInFlight, S3GetsInFlight), (CurrentMaxS3GetsInFlight, CurrentMaxS3GetsInFlight),
                 (QueueSize, PendingS3Reads.size()));
             PendingS3Reads.push_back(std::move(read));
+            *S3GetsPendingQueueSizeCounter = PendingS3Reads.size();
             if (timeThrottled && !S3GetWakeupScheduled) {
                 TActivationContext::Schedule(S3GetThrottleUntil, new IEventHandle(TEvPrivate::EvS3GetThrottleWakeup,
                     0, SelfId(), {}, nullptr, 0));
@@ -138,6 +139,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         ++S3GetsInFlight;
+        *S3GetsInFlightCounter = S3GetsInFlight;
 
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA66, "starting S3 read", (AgentId, LogId), (ReadId, read.ReadId),
             (Key, read.Key), (Offset, read.Offset), (Len, read.Len), (SlowDownRetries, read.SlowDownRetries),
@@ -160,6 +162,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::NotifyS3GetSlowDown() {
         CurrentMaxS3GetsInFlight = 1;
+        *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
         ConsecutiveSuccessfulGetBatches = 0;
         const TDuration delay = S3GetBackoff.Next();
         S3GetThrottleUntil = TActivationContext::Monotonic() + delay;
@@ -181,6 +184,7 @@ namespace NKikimr::NBlobDepot {
         Y_UNUSED(bytes);
         Y_ABORT_UNLESS(S3GetsInFlight);
         --S3GetsInFlight;
+        *S3GetsInFlightCounter = S3GetsInFlight;
 
         if (success && CurrentMaxS3GetsInFlight < MaxS3GetsInFlight) {
             if (++ConsecutiveSuccessfulGetBatches >= SuccessesPerGetConcurrencyStepUp) {
@@ -190,6 +194,7 @@ namespace NKikimr::NBlobDepot {
                     CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
                     S3GetBackoff.Reset();
                 }
+                *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
             }
         }
 
@@ -212,6 +217,7 @@ namespace NKikimr::NBlobDepot {
             PendingS3Reads.pop_front();
             DispatchS3Read(std::move(read));
         }
+        *S3GetsPendingQueueSizeCounter = PendingS3Reads.size();
     }
 
     void TBlobDepotAgent::HandleS3GetThrottleWakeup() {

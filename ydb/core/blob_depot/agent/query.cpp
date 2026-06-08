@@ -63,6 +63,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             if (size + PendingEventBytes > MaxPendingEventBytes) {
+                ++*PendingEventQueueOverflows;
                 CreateQuery<0>(std::move(p), received)->EndWithError(NKikimrProto::ERROR, "pending event queue overflow");
                 return;
             }
@@ -140,6 +141,7 @@ namespace NKikimr::NBlobDepot {
             size_t numItems = 0;
             ui64 numBytes = 0;
             for (it = PendingEventQ.begin(); it != PendingEventQ.end() && it->ExpirationTimestamp <= now; ++it) {
+                ++*PendingEventQueueTimeouts;
                 CreateQuery<0>(std::move(it->Event), it->Received)
                     ->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
                 PendingEventBytes -= it->Size;

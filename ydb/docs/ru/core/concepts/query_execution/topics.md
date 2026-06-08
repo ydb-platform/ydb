@@ -1,59 +1,59 @@
-# SQL-синтаксис над топиками {#sql-syntax}
+# YQL запросы к топикам {#sql-syntax}
 
-Для чтения и записи сообщений в [топики](../datamodel/topic.md) используются привычные SQL-конструкции: [SELECT](../../yql/reference/syntax/select/index.md) для чтения сообщений из топика, [INSERT](../../yql/reference/syntax/insert_into.md) для записи сообщений.
+Для чтения и записи сообщений в [топики](../datamodel/topic.md) используются привычные YQL конструкции: [SELECT](../../yql/reference/syntax/select/index.md) для чтения и [INSERT](../../yql/reference/syntax/insert_into.md) для записи.
 
-## Чтение из топика
+## Локальные и внешние топики {#local-external-topics}
+
+YQL-запросы к топикам работают одинаково независимо от того, находится топик в текущей базе или в другой базе. Подробнее — [{#T}](local-and-external-topics.md).
+
+В примерах ниже используются обозначения:
+
+- `ext_source` — заранее созданный [`external data source`](../datamodel/external_data_source.md);
+- `input_topic` — топик, откуда читаются данные;
+- `output_topic` — топик, куда записываются результаты.
+
+## Чтение из топика {#topic-read}
+
+Чтение из топика можно выполнять в [табличном](#table-read) и [потоковом](#streaming-read) режимах (не путать с [потоковыми запросами](../streaming-query.md)).
+
+### Табличное чтение {#table-read}
+
+В табличном режиме чтение выполняется от первого до последнего смещения, хранящегося в топике на момент запуска запроса. Если в топик продолжают писать, запрос остановится после достижения последнего смещения, известного на момент запуска.
 
 ```sql
 SELECT
     Data    -- тело сообщения
 FROM
-    topic_name
+    input_topic  -- локальный топик; для внешнего: ext_source.input_topic
 LIMIT 10;
 ```
 
-По умолчанию чтение топика происходит с первого и до последнего смещений, хранящихся в топике.
-Если происходит постоянная запись в топик, то запрос будет остановлен при достижении последнего смещения, полученного на момент запуска запроса.
+### Потоковое чтение {#streaming-read}
 
-Доступно чтение "новых" сообщений через опцию `WITH (STREAMING = "TRUE")` (см. [Потоковое чтение данных из топика](../../yql/reference/syntax/select/streaming.md)), при этом чтение происходит с текущего времени и до бесконечности (для остановки используйте `LIMIT`).
+Для чтения новых сообщений используйте опцию `WITH (STREAMING = "TRUE")` — подробнее в разделе [Потоковое чтение данных из топика](../../yql/reference/syntax/select/streaming.md). Чтение начинается с текущего момента и продолжается до тех пор, пока не будет прочитано заданное в выражении `LIMIT` количество сообщений. Параметр `LIMIT` обязателен — без него запрос не завершится, так как будет ожидать новые сообщения бесконечно.
+
 
 ```sql
 SELECT
     Data
 FROM
-    topic_name
+    ext_source.input_topic  -- внешний топик; для локального: input_topic
 WITH (STREAMING = "TRUE")
 LIMIT 10;
 ```
 
-По умолчанию чтение происходит без использования читателя (для использования читателя см. [Использование читателя](../../yql/reference/syntax/create-streaming-query.md#consumer-usage)).
-Для обработки постоянно поступающих данных можно использовать [потоковые запросы](../glossary.md#streaming-query).
+Для непрерывной обработки поступающих данных используйте [потоковые запросы](../glossary.md#streaming-query).
 
-Данные из топика можно переложить в таблицу через [UPSERT INTO](../../yql/reference/syntax/upsert_into).
+### Формат и схема сообщений {#format-schema}
 
-{% cut "Пример запроса" %}
+Чтение структурированных сообщений выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` задаёт формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы.
 
 ```yql
-UPSERT INTO
-    table_name
-SELECT
-    Data            -- можно использовать любые преобразования
-FROM
-    topic_name;
-```
-
-{% endcut %}
-
-При чтении можно указать формат сообщения (см. также примеры в [Форматы данных](../../dev/streaming-query/streaming-query-formats.md)):
-
-{% cut "Пример запроса" %}
-
-```sql
 SELECT
     Id,
     Name
 FROM
-    topic_name
+    input_topic  -- локальный топик; для внешнего: ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -63,22 +63,75 @@ WITH (
 );
 ```
 
-{% endcut %}
+Подробнее о форматах: [{#T}](../../dev/streaming-query/streaming-query-formats.md).
 
-## Запись в топик
+### Использование читателя {#consumer-usage}
+
+{% include [consumer-usage](../../_includes/consumer-usage.md) %}
+
+### Запись прочитанных данных в таблицу {#upsert-from-topic}
+
+Данные из топика можно переложить в таблицу через [UPSERT INTO](../../yql/reference/syntax/upsert_into):
+
+```yql
+UPSERT INTO
+    table_name
+SELECT
+    Data            -- можно использовать любые преобразования
+FROM
+    ext_source.input_topic;  -- внешний топик; для локального: input_topic
+```
+
+### Служебные поля {#system-metadata}
+
+При чтении можно запрашивать служебные поля:
+
+```sql
+SELECT
+    Data,                                                   -- тело сообщения
+    SystemMetadata('create_time') AS CreateTime,            -- время создания сообщения
+    SystemMetadata('write_time') AS WriteTime,              -- время записи сообщения
+    SystemMetadata('offset') AS Offset,                     -- смещение сообщения в топике
+    SystemMetadata('partition_id') AS Partition,            -- номер партиции
+    SystemMetadata('message_group_id') AS MessageGroupId,   -- идентификатор группы сообщений
+    SystemMetadata('seq_no') AS SeqNo                       -- порядковый номер внутри партиции
+FROM
+    input_topic  -- локальный топик; для внешнего: ext_source.input_topic
+LIMIT 10;
+```
+
+Фильтры по служебным полям вычисляются до чтения данных из топика и существенно сокращают объём считываемых сообщений. Поддерживаются операторы сравнения (`=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`), логические условия (`AND`, `OR`) и поля `partition_id`, `write_time`, `offset`. Предикаты по остальным служебным полям не ограничивают объём чтения.
+
+```sql
+SELECT
+    Data
+FROM
+    ext_source.input_topic  -- внешний топик; для локального: input_topic
+WHERE
+    SystemMetadata('partition_id') = 42
+        AND SystemMetadata('offset') >= 1000
+        AND SystemMetadata('offset') <= 1100
+        AND SystemMetadata('write_time') > CurrentUtcTimestamp() - Interval("PT2H");
+```
+
+## Запись в топик {#topic-write}
+
+### Простая запись {#simple-write}
 
 ```yql
 INSERT INTO
-    topic_name
+    output_topic  -- локальный топик; для внешнего: ext_source.output_topic
 SELECT
     "my_message";       -- тело сообщения
 ```
 
-Для записи в топик данных из таблицы с несколькими колонками, нужно сформировать JSON-объект из отдельных полей. Функция `TableRow` создаёт структуру из всех колонок таблицы, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик:
+### Запись данных из таблицы {#write-from-table}
+
+Чтобы записать в топик строку таблицы с несколькими колонками, сформируйте JSON-объект. Функция `TableRow` создаёт структуру из всех колонок, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует результат в тип `String`, который требуется для записи в топик:
 
 ```yql
 INSERT INTO
-    topic_name
+    ext_source.output_topic  -- внешний топик; для локального: output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -87,84 +140,22 @@ FROM
 
 {% note warning %}
 
-При записи в топик через YQL/`INSERT INTO` транзакционная запись не поддерживается, поэтому в топике можно видеть частичные результаты запроса.
+При записи в топик через YQL/`INSERT INTO` транзакционная запись не поддерживается — в топике могут появиться частичные результаты запроса.
 
 {% endnote %}
-
-## Чтение и запись в топики другой базы данных
-
-Для работы с топиками, находящимися в другой базе данных, нужно использовать [внешние источники данных](../datamodel/external_data_source.md), см. * [Локальные и внешние топики в потоковых запросах](../../dev/streaming-query/local-and-external-topics.md).
-
-{% cut "Пример запроса" %}
-
-```yql
-CREATE EXTERNAL DATA SOURCE ydb_source WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION = "localhost:2136",
-    DATABASE_NAME = "/local",
-    AUTH_METHOD = "NONE"
-);
-
--- Пример чтения из топика
-SELECT
-    Data
-FROM
-    ydb_source.topic_name
-LIMIT 10;
-
--- Пример записи в топик
-INSERT INTO
-    ydb_source.topic_name
-SELECT
-    "my_message";
-```
-
-{% endcut %}
-
-### Служебные поля
-
-При чтении можно указывать служебные поля:
-
-```sql
-SELECT
-    Data,                                                   -- тело сообщения
-    SystemMetadata('create_time') AS CreateTime,            -- время создания сообщения
-    SystemMetadata('write_time') AS WriteTime,              -- время записи сообщения
-    SystemMetadata('offset') AS Offset,                     -- смещение сообщения в топике
-    SystemMetadata('partition_id') AS Partition,            -- номер партиции, в которой находится сообщение
-    SystemMetadata('message_group_id') AS MessageGroupId,   -- идентификатор группы сообщений
-    SystemMetadata('seq_no') AS SeqNo                       -- порядковый номер сообщения внутри партиции
-FROM
-    topic_name
-LIMIT 10;
-```
-
-Можно указывать фильтры по служебным полям, при этом предикаты будут вычислены до чтения данных из топика, что существенно ограничит объем данных, которые будут считываться.
-При вычисления предикатов поддерживаются условия сравнения `=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, логические условия `AND`, `OR`, поддерживаются служебные поля `partition_id`, `write_time` и `offset` (предикаты по другим служебные полям не будут ограничивать объем считываемых данных).
-
-```sql
-SELECT
-    Data
-FROM
-    topic_name
-WHERE
-    SystemMetadata('partition_id') = 42
-        AND SystemMetadata('offset') >= 1000
-        AND SystemMetadata('offset') <= 1100
-        AND SystemMetadata('write_time') > CurrentUtcTimestamp() - Interval("PT2H");
-```
 
 ## Ограничения {#limitations}
 
 {% note warning %}
 
-- Запись [пользовательских атрибутов](#message) не поддерживается.
+- Чтение и запись [пользовательских атрибутов](../datamodel/topic.md#message) не поддерживается.
 - Транзакционная запись через SQL/YQL `INSERT INTO` не поддерживается.
 
 {% endnote %}
 
-# См. также
+## См. также
 
+* [Локальные и внешние топики](local-and-external-topics.md)
 * [CREATE TOPIC](../../yql/reference/syntax/create-topic.md)
 * [ALTER TOPIC](../../yql/reference/syntax/alter-topic.md)
 * [DROP TOPIC](../../yql/reference/syntax/drop-topic.md)

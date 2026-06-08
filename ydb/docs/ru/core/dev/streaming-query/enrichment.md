@@ -10,7 +10,7 @@
 
 {% endnote %}
 
-Возможно обогащение данных из [локальных и внешних топиков](./local-and-external-topics.md).
+Возможно обогащение данных из [локальных и внешних топиков](../../concepts/query_execution/local-and-external-topics.md).
 
 В примерах ниже:
 

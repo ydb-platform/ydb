@@ -651,17 +651,17 @@ struct TPersistentBufferFormat {
 
     DECLARE_DDISK_EVENT(Sync) {
         using TResult = TEvSyncResult;
+        using TDDiskId = std::tuple<ui32, ui32, ui32>;
+        using TSource = NKikimrBlobStorage::NDDisk::TEvSync::TSource;
+        using TSegment = NKikimrBlobStorage::NDDisk::TEvSync::TSegment;
 
         TEvSync() = default;
 
-        TEvSync(const TQueryCredentials& creds, const std::tuple<ui32, ui32, ui32>& ddiskId,
-                ui64 ddiskInstanceGuid) {
+        explicit TEvSync(const TQueryCredentials& creds) {
             creds.Serialize(Record.MutableCredentials());
-            AddSource(ddiskId, ddiskInstanceGuid);
         }
 
-        static void SetSource(NKikimrBlobStorage::NDDisk::TEvSync::TSource *source,
-                const std::tuple<ui32, ui32, ui32>& ddiskId, ui64 ddiskInstanceGuid) {
+        static void SetSource(TSource *source, const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
             const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
             auto *m = source->MutableDDiskId();
             m->SetNodeId(nodeId);
@@ -670,33 +670,24 @@ struct TPersistentBufferFormat {
             source->SetDDiskInstanceGuid(ddiskInstanceGuid);
         }
 
-        ui32 AddSource(
-                const std::tuple<ui32, ui32, ui32>& ddiskId,
-                ui64 ddiskInstanceGuid) {
-            const ui32 sourceIndex = Record.SourcesSize();
-            auto *source = Record.AddSources();
-            SetSource(source, ddiskId, ddiskInstanceGuid);
-            return sourceIndex;
-        }
-
-        NKikimrBlobStorage::NDDisk::TEvSync::TSegment* AddSegmentFromDDisk(
-                ui32 sourceIndex,
+        TSegment* AddSegmentFromDDisk(
+                const TDDiskId& ddiskId,
+                ui64 ddiskInstanceGuid,
                 const TBlockSelector& selector) {
-            Y_ABORT_UNLESS(sourceIndex < static_cast<ui32>(Record.SourcesSize()));
-            auto *source = Record.MutableSources(sourceIndex);
+            auto *source = GetOrAddSource(ddiskId, ddiskInstanceGuid);
             auto *segment = source->AddSegments();
             selector.Serialize(segment->MutableSelector());
             segment->MutableDDiskSegment();
             return segment;
         }
 
-        NKikimrBlobStorage::NDDisk::TEvSync::TSegment* AddSegmentFromPB(
-                ui32 sourceIndex,
+        TSegment* AddSegmentFromPB(
+                const TDDiskId& ddiskId,
+                ui64 ddiskInstanceGuid,
                 const TBlockSelector& selector,
                 ui64 lsn,
                 ui32 generation) {
-            Y_ABORT_UNLESS(sourceIndex < static_cast<ui32>(Record.SourcesSize()));
-            auto *source = Record.MutableSources(sourceIndex);
+            auto *source = GetOrAddSource(ddiskId, ddiskInstanceGuid);
             auto *segment = source->AddSegments();
             selector.Serialize(segment->MutableSelector());
             auto *persistentBufferSegment =
@@ -704,6 +695,32 @@ struct TPersistentBufferFormat {
             persistentBufferSegment->SetLsn(lsn);
             persistentBufferSegment->SetGeneration(generation);
             return segment;
+        }
+
+    private:
+        static bool IsSameSource(const TSource& source, const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            if (!source.HasDDiskId() || source.GetDDiskInstanceGuid() != ddiskInstanceGuid) {
+                return false;
+            }
+
+            const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
+            const auto& sourceDDiskId = source.GetDDiskId();
+            return sourceDDiskId.GetNodeId() == nodeId
+                && sourceDDiskId.GetPDiskId() == pdiskId
+                && sourceDDiskId.GetDDiskSlotId() == ddiskSlotId;
+        }
+
+        TSource* GetOrAddSource(const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            if (Record.SourcesSize()) {
+                auto *source = Record.MutableSources(Record.SourcesSize() - 1);
+                if (IsSameSource(*source, ddiskId, ddiskInstanceGuid)) {
+                    return source;
+                }
+            }
+
+            auto *source = Record.AddSources();
+            SetSource(source, ddiskId, ddiskInstanceGuid);
+            return source;
         }
     };
 

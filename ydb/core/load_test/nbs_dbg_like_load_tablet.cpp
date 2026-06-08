@@ -2636,15 +2636,14 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
             dbg.PBIdsPb[k].GetNodeId(),
             dbg.PBIdsPb[k].GetPDiskId(),
             dbg.PBIdsPb[k].GetDDiskSlotId()};
-        auto ev = std::make_unique<NDDisk::TEvSync>(
-            creds, srcId, dbg.PBGuid[k]);
+        auto ev = std::make_unique<NDDisk::TEvSync>(creds);
         TFlushBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
         batchInfo.Sink = static_cast<ui8>(k);
         batchInfo.Lsns.reserve(pending[k].size());
         batchInfo.SentAt = MonotonicNow();
         for (auto& [lsn, sel] : pending[k]) {
-            ev->AddSegmentFromPB(0, sel, lsn, generation);
+            ev->AddSegmentFromPB(srcId, dbg.PBGuid[k], sel, lsn, generation);
             batchInfo.Lsns.push_back(lsn);
         }
         const ui64 cookie = NextBatchCookie++;

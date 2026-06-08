@@ -1062,8 +1062,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
             const ui32 totalBlocks = blocksPerVChunk;
             const ui32 blocksPerSegment = (totalBlocks + segmentsPerSync - 1) / segmentsPerSync;
 
-            auto syncEv = std::make_unique<NDDisk::TEvSync>(
-                tablets[t].Dst, srcDDiskId, srcGuid);
+            auto syncEv = std::make_unique<NDDisk::TEvSync>(tablets[t].Dst);
 
             for (ui32 s = 0; s < segmentsPerSync; ++s) {
                 ui32 startBlock = s * blocksPerSegment;
@@ -1071,7 +1070,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                 if (startBlock >= endBlock) {
                     break;
                 }
-                syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(v,
+                syncEv->AddSegmentFromDDisk(srcDDiskId, srcGuid, NDDisk::TBlockSelector(v,
                     startBlock * MinBlockSize, (endBlock - startBlock) * MinBlockSize));
             }
             ctx.SendTo(1, syncEv.release());

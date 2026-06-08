@@ -224,6 +224,10 @@ TRope MakeMisalignedRope(const TString& data) {
     return TRope(TRcBuf(TRcBuf::Piece, buf.data() + 1, data.size(), buf));
 }
 
+NDDisk::TEvSync::TDDiskId MakeSyncSourceId(ui32 pdiskId, ui32 slotId) {
+    return std::make_tuple(NodeId, pdiskId, slotId);
+}
+
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
     NDDisk::TQueryCredentials creds;
     creds.TabletId = tabletId;
@@ -1118,12 +1122,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         TActorId fakeSourceServiceId = MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId);
         ctx.Runtime.RegisterService(fakeSourceServiceId, fakeSourceEdge);
+        const auto sourceId = MakeSyncSourceId(srcPDiskId, srcSlotId);
 
-        auto syncEv = std::make_unique<NDDisk::TEvSync>(
-            creds,
-            std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-            42);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 0, BlockSize));
+        auto syncEv = std::make_unique<NDDisk::TEvSync>(creds);
+        syncEv->AddSegmentFromDDisk(sourceId, 42, NDDisk::TBlockSelector(0, 0, BlockSize));
 
         SendToDDisk(ctx, disk.ServiceId, syncEv.release());
 
@@ -1152,13 +1154,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         TActorId fakeSourceServiceId = MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId);
         ctx.Runtime.RegisterService(fakeSourceServiceId, fakeSourceEdge);
+        const auto sourceId = MakeSyncSourceId(srcPDiskId, srcSlotId);
 
         auto sendSync = [&] {
-            auto syncEv = std::make_unique<NDDisk::TEvSync>(
-                creds,
-                std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-                42);
-            syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(7, 0, BlockSize));
+            auto syncEv = std::make_unique<NDDisk::TEvSync>(creds);
+            syncEv->AddSegmentFromDDisk(sourceId, 42, NDDisk::TBlockSelector(7, 0, BlockSize));
             SendToDDisk(ctx, disk.ServiceId, syncEv.release());
         };
 
@@ -1234,13 +1234,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         TActorId fakeSourceServiceId = MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId);
         ctx.Runtime.RegisterService(fakeSourceServiceId, fakeSourceEdge);
+        const auto sourceId = MakeSyncSourceId(srcPDiskId, srcSlotId);
 
         const TString payload = MakeData('S', BlockSize);
-        auto syncEv = std::make_unique<NDDisk::TEvSync>(
-            creds,
-            std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-            42);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(7, 0, BlockSize));
+        auto syncEv = std::make_unique<NDDisk::TEvSync>(creds);
+        syncEv->AddSegmentFromDDisk(sourceId, 42, NDDisk::TBlockSelector(7, 0, BlockSize));
 
         SendToDDisk(ctx, disk.ServiceId, syncEv.release());
 
@@ -1298,26 +1296,23 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TActorId fakeSourceEdge1 = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         TActorId fakeSourceServiceId1 = MakeBlobStorageDDiskId(NodeId, srcPDiskId1, srcSlotId1);
         ctx.Runtime.RegisterService(fakeSourceServiceId1, fakeSourceEdge1);
+        const auto sourceId1 = MakeSyncSourceId(srcPDiskId1, srcSlotId1);
 
         const ui32 srcPDiskId2 = 96;
         const ui32 srcSlotId2 = 1;
         TActorId fakeSourceEdge2 = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         TActorId fakeSourceServiceId2 = MakeBlobStorageDDiskId(NodeId, srcPDiskId2, srcSlotId2);
         ctx.Runtime.RegisterService(fakeSourceServiceId2, fakeSourceEdge2);
+        const auto sourceId2 = MakeSyncSourceId(srcPDiskId2, srcSlotId2);
 
         const TString payload1 = MakeData('A', BlockSize);
         const TString payload2 = MakeData('B', BlockSize);
 
-        auto syncEv = std::make_unique<NDDisk::TEvSync>(
-            creds,
-            std::make_tuple(NodeId, srcPDiskId1, srcSlotId1),
-            42);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(7, 0, BlockSize));
-        const ui32 source2 = syncEv->AddSource(
-            std::make_tuple(NodeId, srcPDiskId2, srcSlotId2),
-            43);
+        auto syncEv = std::make_unique<NDDisk::TEvSync>(creds);
+        syncEv->AddSegmentFromDDisk(sourceId1, 42, NDDisk::TBlockSelector(7, 0, BlockSize));
         syncEv->AddSegmentFromDDisk(
-            source2,
+            sourceId2,
+            43,
             NDDisk::TBlockSelector(7, BlockSize, BlockSize)
         );
 
@@ -1398,6 +1393,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             srcPBufferPDiskId,
             srcPBufferSlotId);
         ctx.Runtime.RegisterService(fakePBufferSourceServiceId, fakePBufferSourceEdge);
+        const auto pbufferSourceId = MakeSyncSourceId(srcPBufferPDiskId, srcPBufferSlotId);
 
         const ui32 srcDDiskPDiskId = 94;
         const ui32 srcDDiskSlotId = 1;
@@ -1407,24 +1403,21 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             srcDDiskPDiskId,
             srcDDiskSlotId);
         ctx.Runtime.RegisterService(fakeDDiskSourceServiceId, fakeDDiskSourceEdge);
+        const auto ddiskSourceId = MakeSyncSourceId(srcDDiskPDiskId, srcDDiskSlotId);
 
         const TString pbufferPayload = MakeData('P', BlockSize);
         const TString ddiskPayload = MakeData('D', BlockSize);
 
-        auto syncEv = std::make_unique<NDDisk::TEvSync>(
-            creds,
-            std::make_tuple(NodeId, srcPBufferPDiskId, srcPBufferSlotId),
-            42);
+        auto syncEv = std::make_unique<NDDisk::TEvSync>(creds);
         syncEv->AddSegmentFromPB(
-            0,
+            pbufferSourceId,
+            42,
             NDDisk::TBlockSelector(7, 0, BlockSize),
             10,
             1);
-        const ui32 ddiskSource = syncEv->AddSource(
-            std::make_tuple(NodeId, srcDDiskPDiskId, srcDDiskSlotId),
-            43);
         syncEv->AddSegmentFromDDisk(
-            ddiskSource,
+            ddiskSourceId,
+            43,
             NDDisk::TBlockSelector(7, BlockSize, BlockSize));
 
         SendToDDisk(ctx, disk.ServiceId, syncEv.release());
@@ -1514,6 +1507,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             srcPDiskId,
             srcSlotId);
         ctx.Runtime.RegisterService(fakePBufferSourceServiceId, fakePBufferSourceEdge);
+        const auto sourceId = MakeSyncSourceId(srcPDiskId, srcSlotId);
 
         TActorId fakeDDiskSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         TActorId fakeDDiskSourceServiceId = MakeBlobStorageDDiskId(
@@ -1525,17 +1519,16 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TString pbufferPayload = MakeData('P', BlockSize);
         const TString ddiskPayload = MakeData('D', BlockSize);
 
-        auto syncEv = std::make_unique<NDDisk::TEvSync>(
-            creds,
-            std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-            42);
+        auto syncEv = std::make_unique<NDDisk::TEvSync>(creds);
         syncEv->AddSegmentFromPB(
-            0,
+            sourceId,
+            42,
             NDDisk::TBlockSelector(7, 0, BlockSize),
             10,
             1);
         syncEv->AddSegmentFromDDisk(
-            0,
+            sourceId,
+            42,
             NDDisk::TBlockSelector(7, BlockSize, BlockSize));
 
         SendToDDisk(ctx, disk.ServiceId, syncEv.release());
@@ -1621,14 +1614,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         TActorId fakeSourceServiceId = MakeBlobStoragePersistentBufferId(NodeId, srcPDiskId, srcSlotId);
         ctx.Runtime.RegisterService(fakeSourceServiceId, fakeSourceEdge);
+        const auto sourceId = MakeSyncSourceId(srcPDiskId, srcSlotId);
 
         const TString payload = MakeData('P', BlockSize);
-        auto syncEv = std::make_unique<NDDisk::TEvSync>(
-            creds,
-            std::make_tuple(NodeId, srcPDiskId, srcSlotId),
-            42);
+        auto syncEv = std::make_unique<NDDisk::TEvSync>(creds);
         syncEv->AddSegmentFromPB(
-            0,
+            sourceId,
+            42,
             NDDisk::TBlockSelector(5, 0, BlockSize),
             10,
             1);

@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             std::tuple<ui32, ui32, ui32> sourceDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
             ui64 sourceDDiskInstanceGuid = *PBCreds[0].DDiskInstanceGuid;
-            auto sync = std::make_unique<NDDisk::TEvSync>(Creds, sourceDDiskId, sourceDDiskInstanceGuid);
+            auto sync = std::make_unique<NDDisk::TEvSync>(Creds);
 
             for (ui64 lsn : selectedLsns) {
                 const auto& record = PersistentBuffers.at(lsn);
@@ -467,7 +467,12 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const ui32 size = std::get<1>(record);
                 Cerr << "sync persistent buffer offset# " << offsetInBytes << " size# " << size
                     << " lsn# " << lsn << "\n";
-                sync->AddSegmentFromPB(0, {VChunkIndex, offsetInBytes, size}, lsn, PBCreds[0].Generation);
+                sync->AddSegmentFromPB(
+                    sourceDDiskId,
+                    sourceDDiskInstanceGuid,
+                    {VChunkIndex, offsetInBytes, size},
+                    lsn,
+                    PBCreds[0].Generation);
             }
 
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, sync.release()), Edge.NodeId());

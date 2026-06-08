@@ -4,13 +4,24 @@ namespace NKikimr {
 
 namespace {
 
+constexpr ui64 DefaultSourceGuid = 42;
+
+NDDisk::TEvSync::TDDiskId DefaultSourceId() {
+    return std::make_tuple(ui32(1), ui32(999), ui32(1));
+}
+
 std::unique_ptr<NDDisk::TEvSync> MakeSync(
     const NDDisk::TQueryCredentials& creds)
 {
-    return std::make_unique<NDDisk::TEvSync>(
-        creds,
-        std::make_tuple(ui32(1), ui32(999), ui32(1)),
-        42);
+    return std::make_unique<NDDisk::TEvSync>(creds);
+}
+
+void AddDefaultSource(NDDisk::TEvSync& ev) {
+    NDDisk::TEvSync::SetSource(ev.Record.AddSources(), DefaultSourceId(), DefaultSourceGuid);
+}
+
+void AddDefaultSegmentFromDDisk(NDDisk::TEvSync& ev, const NDDisk::TBlockSelector& selector) {
+    ev.AddSegmentFromDDisk(DefaultSourceId(), DefaultSourceGuid, selector);
 }
 
 }   // namespace
@@ -34,6 +45,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
+        AddDefaultSource(*syncEv);
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -47,10 +59,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
 
         auto syncEv = std::make_unique<NDDisk::TEvSync>();
         creds.Serialize(syncEv->Record.MutableCredentials());
-        syncEv->Record.AddSources();
-        syncEv->AddSegmentFromDDisk(
-            0,
-            NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        auto *segment = syncEv->Record.AddSources()->AddSegments();
+        NDDisk::TBlockSelector(0, 0, MinBlockSize).Serialize(
+            segment->MutableSelector());
+        segment->MutableDDiskSegment();
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -63,11 +75,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 0, MinBlockSize));
-        syncEv->Record.AddSources();
-        syncEv->AddSegmentFromDDisk(
-            1,
-            NDDisk::TBlockSelector(0, MinBlockSize, MinBlockSize));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        auto *segment = syncEv->Record.AddSources()->AddSegments();
+        NDDisk::TBlockSelector(0, MinBlockSize, MinBlockSize).Serialize(
+            segment->MutableSelector());
+        segment->MutableDDiskSegment();
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -80,6 +92,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
+        AddDefaultSource(*syncEv);
         auto* segment = syncEv->Record.MutableSources(0)->AddSegments();
         NDDisk::TBlockSelector(0, 0, MinBlockSize).Serialize(
             segment->MutableSelector());
@@ -95,8 +108,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 0, MinBlockSize));
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(1, 0, MinBlockSize));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(1, 0, MinBlockSize));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -109,7 +122,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 1, MinBlockSize));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 1, MinBlockSize));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -122,7 +135,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 0, MinBlockSize + 1));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 0, MinBlockSize + 1));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -135,7 +148,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 0, 0));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 0, 0));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -151,7 +164,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         creds.Generation = 1;
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 0, MinBlockSize));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -164,9 +177,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(
-            0,
-            NDDisk::TBlockSelector(0, ChunkSize, ChunkSize / 2));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, ChunkSize, ChunkSize / 2));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -179,7 +190,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = MakeSync(creds);
-        syncEv->AddSegmentFromDDisk(0, NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 0, MinBlockSize));
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(result, TReplyStatus::ERROR);
@@ -194,6 +205,37 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
                 "undelivered"),
             "Expected error reason to contain 'undelivered', got: "
                 << record.GetSegmentResults(0).GetErrorReason());
+    }
+
+    Y_UNIT_TEST(BuilderSplitsRepeatedSourcesToPreserveSegmentOrder) {
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 30;
+        creds.Generation = 1;
+
+        auto syncEv = MakeSync(creds);
+        const auto sourceA = std::make_tuple(ui32(1), ui32(999), ui32(1));
+        const auto sourceB = std::make_tuple(ui32(1), ui32(998), ui32(1));
+
+        syncEv->AddSegmentFromDDisk(sourceA, 42, NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        syncEv->AddSegmentFromDDisk(sourceB, 43, NDDisk::TBlockSelector(0, MinBlockSize, MinBlockSize));
+        syncEv->AddSegmentFromDDisk(sourceA, 42, NDDisk::TBlockSelector(0, 2 * MinBlockSize, MinBlockSize));
+
+        UNIT_ASSERT_VALUES_EQUAL(syncEv->Record.SourcesSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(syncEv->Record.GetSources(0).SegmentsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(syncEv->Record.GetSources(1).SegmentsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(syncEv->Record.GetSources(2).SegmentsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(syncEv->Record.GetSources(0).GetDDiskId().GetPDiskId(), 999);
+        UNIT_ASSERT_VALUES_EQUAL(syncEv->Record.GetSources(1).GetDDiskId().GetPDiskId(), 998);
+        UNIT_ASSERT_VALUES_EQUAL(syncEv->Record.GetSources(2).GetDDiskId().GetPDiskId(), 999);
+        UNIT_ASSERT_VALUES_EQUAL(
+            syncEv->Record.GetSources(0).GetSegments(0).GetSelector().GetOffsetInBytes(),
+            0u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            syncEv->Record.GetSources(1).GetSegments(0).GetSelector().GetOffsetInBytes(),
+            MinBlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(
+            syncEv->Record.GetSources(2).GetSegments(0).GetSelector().GetOffsetInBytes(),
+            2 * MinBlockSize);
     }
 
     Y_UNIT_TEST(Smoke_1Tablet_2VChunks_1Segment) {

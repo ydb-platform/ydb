@@ -305,7 +305,7 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
 
         // Output bad serial number in base64 encoding.
         YDB_LOG_COMP_WARN(BS_NODE, "Bad serial number",
-            {"Marker", "NW03"},
+            {"marker", "NW03"},
             {"Path", path},
             {"SerialBase64", encoded.Quote()},
             {"Details", details.Str()});
@@ -335,12 +335,12 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
             }
         } else {
             YDB_LOG_COMP_WARN(BS_NODE, "Error parsing mock devices protobuf from file",
-                {"Marker", "NW01"},
+                {"marker", "NW01"},
                 {"Path", MockDevicesPath});
         }
     } catch (...) {
         YDB_LOG_COMP_INFO(BS_NODE, "Unable to find mock devices file",
-            {"Marker", "NW90"},
+            {"marker", "NW90"},
             {"Path", MockDevicesPath});
     }
 
@@ -356,7 +356,7 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
 void TNodeWarden::StartInvalidGroupProxy() {
     const ui32 groupId = Max<ui32>();
     YDB_LOG_COMP_DEBUG(BS_NODE, "StartInvalidGroupProxy",
-        {"Marker", "NW11"},
+        {"marker", "NW11"},
         {"GroupId", groupId});
     TActivationContext::ActorSystem()->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
         CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
@@ -365,20 +365,20 @@ void TNodeWarden::StartInvalidGroupProxy() {
 void TNodeWarden::StopInvalidGroupProxy() {
     ui32 groupId = Max<ui32>();
     YDB_LOG_COMP_DEBUG(BS_NODE, "StopInvalidGroupProxy",
-        {"Marker", "NW15"},
+        {"marker", "NW15"},
         {"GroupId", groupId});
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
 }
 
 void TNodeWarden::StartRequestReportingThrottler() {
     YDB_LOG_COMP_DEBUG(BS_NODE, "StartRequestReportingThrottler",
-        {"Marker", "NW62"});
+        {"marker", "NW62"});
     Register(CreateRequestReportingThrottler(ReportingControllerBucketSize, ReportingControllerLeakDurationMs, ReportingControllerLeakRate));
 }
 
 void TNodeWarden::PassAway() {
     YDB_LOG_COMP_DEBUG(BS_NODE, "PassAway",
-        {"Marker", "NW25"});
+        {"marker", "NW25"});
 
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
@@ -392,7 +392,7 @@ void TNodeWarden::PassAway() {
 
 void TNodeWarden::Bootstrap() {
     YDB_LOG_COMP_DEBUG(BS_NODE, "Bootstrap",
-        {"Marker", "NW26"});
+        {"marker", "NW26"});
 
     LocalNodeId = SelfId().NodeId();
     WhiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(LocalNodeId);
@@ -630,7 +630,7 @@ void TNodeWarden::HandleReadCache() {
                 }
 
                 YDB_LOG_COMP_INFO(BS_NODE, "Bootstrap",
-                    {"Marker", "NW07"},
+                    {"marker", "NW07"},
                     {"Cache", proto});
 
                 if (!proto.HasInstanceId() && !proto.HasAvailDomain() && !proto.HasServiceSet()) {
@@ -646,7 +646,7 @@ void TNodeWarden::HandleReadCache() {
                 ApplyServiceSet(proto.GetServiceSet(), false, false, false, "cache");
             } catch (...) {
                 YDB_LOG_COMP_INFO(BS_NODE, "Bootstrap failed to fetch cache",
-                    {"Marker", "NW16"},
+                    {"marker", "NW16"},
                     {"Error", CurrentExceptionMessage()});
                 // ignore exception
             }
@@ -681,7 +681,7 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     const auto it = SlayInFlight.find(vslotId);
     Y_DEBUG_ABORT_UNLESS(it != SlayInFlight.end());
     YDB_LOG_COMP_INFO(BS_NODE, "Handle(NPDisk::TEvSlayResult)",
-        {"Marker", "NW28"},
+        {"marker", "NW28"},
         {"Msg", msg.ToString()},
         {"ExpectedRound", it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt});
     if (it == SlayInFlight.end() || it->second != msg.SlayOwnerRound) {
@@ -712,7 +712,7 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
         case NKikimrProto::ERROR:
             SlayInFlight.erase(it);
             YDB_LOG_COMP_ERROR(BS_NODE, "Handle(NPDisk::TEvSlayResult) error",
-                {"Marker", "NW29"},
+                {"marker", "NW29"},
                 {"Msg", msg.ToString()});
             SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
             break;
@@ -736,13 +736,13 @@ void TNodeWarden::Handle(NPDisk::TEvShredPDiskResult::TPtr ev) {
 void TNodeWarden::Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev) {
     const NPDisk::TEvChangeExpectedSlotCountResult &msg = *ev->Get();
     YDB_LOG_COMP_DEBUG(BS_NODE, "Handle(NPDisk::TEvChangeExpectedSlotCountResult)",
-        {"Marker", "NW108"},
+        {"marker", "NW108"},
         {"Msg", msg.ToString()});
 
     // For now, just log the result. In the future, we might want to track this or take action based on the result.
     if (msg.Status != NKikimrProto::OK) {
         YDB_LOG_COMP_ERROR(BS_NODE, "ChangeExpectedSlotCount failed",
-            {"Marker", "NW109"},
+            {"marker", "NW109"},
             {"Status", msg.Status},
             {"ErrorReason", msg.ErrorReason});
     }
@@ -770,7 +770,7 @@ void TNodeWarden::ProcessShredStatus(ui64 cookie, ui64 generation, std::optional
     }
 
     YDB_LOG_COMP_DEBUG(BS_SHRED, "processing shred result from PDisk",
-        {"Marker", "BSSN00"},
+        {"marker", "BSSN00"},
         {"Cookie", cookie},
         {"PDiskId", key},
         {"ShredGeneration", generation},
@@ -801,7 +801,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
     auto escape = [&](auto& value) { return value ? std::make_optional('"' + EscapeC(*value) + '"') : std::nullopt; };
 
     YDB_LOG_COMP_DEBUG(BS_NODE, "persisting new configurations",
-        {"Marker", "NW63"},
+        {"marker", "NW63"},
         {"MainYaml", escape(mainYaml)},
         {"MainYamlVersion", mainYamlVersion},
         {"StorageYaml", escape(storageYaml)},
@@ -847,7 +847,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
             MakePathIfNotExist(saveCtx->ConfigDirPath.c_str());
         } catch (const yexception& e) {
             YDB_LOG_COMP_ERROR(BS_NODE, "Failed to create config store path",
-                {"Marker", "NW91"},
+                {"marker", "NW91"},
                 {"Error", e.what()});
             success = false;
         }
@@ -863,7 +863,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
                     tempFile.Flush();
                     if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
                         YDB_LOG_COMP_ERROR(BS_NODE, "Failed to set permissions for temporary file",
-                            {"Marker", "NW92"},
+                            {"marker", "NW92"},
                             {"Error", LastSystemErrorText()});
                         success = false;
                         return false;
@@ -872,7 +872,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
 
                 if (!NFs::Rename(tempPath, configPath)) {
                     YDB_LOG_COMP_ERROR(BS_NODE, "Failed to rename temporary file",
-                        {"Marker", "NW53"},
+                        {"marker", "NW53"},
                         {"Error", LastSystemErrorText()});
                     success = false;
                     return false;
@@ -880,7 +880,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
                 return true;
             } catch (const std::exception& e) {
                 YDB_LOG_COMP_ERROR(BS_NODE, "Failed to save config file",
-                    {"Marker", "NW93"},
+                    {"marker", "NW93"},
                     {"Error", e.what()});
                 success = false;
                 return false;
@@ -891,7 +891,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
             success = saveConfig(*saveCtx->MainYaml, YamlConfigFileName);
             if (success) {
                 YDB_LOG_COMP_INFO(BS_NODE, "Yaml config saved",
-                    {"Marker", "NW94"});
+                    {"marker", "NW94"});
             }
         }
 
@@ -901,7 +901,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
             success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);
             if (success) {
                 YDB_LOG_COMP_INFO(BS_NODE, "Storage config saved",
-                    {"Marker", "NW95"});
+                    {"marker", "NW95"});
             }
         }
 
@@ -939,13 +939,13 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     auto& record = ev->Get()->Record;
 
     YDB_LOG_COMP_DEBUG(BS_NODE, "TEvControllerNodeServiceSetUpdate",
-        {"Marker", "NW52"},
+        {"marker", "NW52"},
         {"Record", record});
 
     if (record.HasAvailDomain() && record.GetAvailDomain() != AvailDomainId) {
         // AvailDomain may arrive unset
         YDB_LOG_DEBUG_FAIL("unexpected AvailDomain from BS_CONTROLLER",
-            {"Marker", "NW02"},
+            {"marker", "NW02"},
             {"Msg", record},
             {"AvailDomainId", AvailDomainId});
         return;
@@ -953,7 +953,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     if (record.HasInstanceId()) {
         if (record.GetInstanceId() != InstanceId.value_or(record.GetInstanceId())) {
             YDB_LOG_DEBUG_FAIL("unexpected/unset InstanceId from BS_CONTROLLER",
-                {"Marker", "NW14"},
+                {"marker", "NW14"},
                 {"Msg", record},
                 {"InstanceId", InstanceId});
             return;
@@ -965,7 +965,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         const bool comprehensive = record.GetComprehensive();
         IgnoreCache |= comprehensive;
         YDB_LOG_COMP_DEBUG(BS_NODE, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)",
-            {"Marker", "NW17"},
+            {"marker", "NW17"},
             {"Msg", record});
         ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true, "controller");
     }
@@ -998,7 +998,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
                     pdisk.ShredGenerationIssued.emplace(generation);
 
                     YDB_LOG_COMP_DEBUG(BS_SHRED, "sending shred query to PDisk",
-                        {"Marker", "BSSN01"},
+                        {"marker", "BSSN01"},
                         {"Cookie", cookie},
                         {"PDiskId", key},
                         {"ShredGeneration", generation});
@@ -1059,7 +1059,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {
     YDB_LOG_COMP_NOTICE(BS_NODE, "SendDropDonorQuery",
-        {"Marker", "NW87"},
+        {"marker", "NW87"},
         {"NodeId", nodeId},
         {"PDiskId", pdiskId},
         {"VSlotId", vslotId},
@@ -1111,7 +1111,7 @@ void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, co
 void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
         NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase, TDuration backoff) {
     YDB_LOG_COMP_DEBUG(BS_NODE, "SendVDiskReport",
-        {"Marker", "NW32"},
+        {"marker", "NW32"},
         {"VSlotId", vslotId},
         {"VDiskId", vDiskId},
         {"Phase", phase});
@@ -1219,7 +1219,7 @@ void TNodeWarden::SendUnfinishedRequests() {
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev) {
     YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus)",
-        {"Marker", "NW38"});
+        {"marker", "NW38"});
 
     auto differs = [](const auto& updated, const auto& current) {
         TString xUpdated, xCurrent;
@@ -1288,7 +1288,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr
 
 void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
     YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvPrivate::TEvSendDiskMetrics)",
-        {"Marker", "NW39"});
+        {"marker", "NW39"});
     SendDiskMetrics(true);
     ReportLatencies();
     NotifySyncersProgress();
@@ -1297,7 +1297,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
     YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvPrivate::UpdateNodeDrives)",
-        {"Marker", "NW88"});
+        {"marker", "NW88"});
     EnqueueSyncOp([this] (const TActorContext&) {
         auto drives = ListLocalDrives();
 
@@ -1313,7 +1313,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
 
 void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
     YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvRetrySaveConfig)",
-        {"Marker", "NW97"});
+        {"marker", "NW97"});
     if (ev->Cookie == ExpectedSaveConfigCookie) {
         auto *msg = ev->Get();
         PersistConfig(std::move(msg->MainYaml), msg->MainYamlVersion, std::move(msg->StorageYaml), msg->StorageYamlVersion);
@@ -1328,7 +1328,7 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     YDB_LOG_COMP_TRACE(BS_NODE, "SendDiskMetrics",
-        {"Marker", "NW45"},
+        {"marker", "NW45"},
         {"ReportMetrics", reportMetrics});
 
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
@@ -1354,7 +1354,7 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
 
 void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
     YDB_LOG_COMP_DEBUG(BS_NODE, "Handle(TEvStatusUpdate)",
-        {"Marker", "NW47"});
+        {"marker", "NW47"});
     auto *msg = ev->Get();
     const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
     if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end() && (it->second.Status != msg->Status ||
@@ -1409,7 +1409,7 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
                 if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
                         newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
                     YDB_LOG_COMP_DEBUG(BS_NODE, "SendChangeExpectedSlotCount from config notification",
-                        {"Marker", "NW112"},
+                        {"marker", "NW112"},
                         {"PDiskId", key.PDiskId},
                         {"ExpectedSlotCount", newExpectedSlotCount},
                         {"SlotSizeInUnits", newSlotSizeInUnits});
@@ -1514,7 +1514,7 @@ bool NKikimr::ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfi
         return ObtainKey(key, record);
     } else {
         YDB_LOG_COMP_INFO(BS_NODE, "No Keys in KeyConfig! Encrypted group DsProxies will not start",
-            {"Marker", "NW66"});
+            {"marker", "NW66"});
         return false;
     }
 }
@@ -1526,7 +1526,7 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
     ui32 keysSize = keyConfig.KeysSize();
     if (!keysSize) {
         YDB_LOG_COMP_INFO(BS_NODE, "No Keys in PDiskKeyConfig! Encrypted pdisks will not start",
-            {"Marker", "NW69"});
+            {"marker", "NW69"});
         mainKey->ErrorReason = "Empty PDiskKeyConfig";
         mainKey->Keys = { NPDisk::YdbDefaultPDiskSequence };
         mainKey->IsInitialized = true;

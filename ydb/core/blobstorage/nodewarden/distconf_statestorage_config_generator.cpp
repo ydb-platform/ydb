@@ -253,7 +253,7 @@ namespace NKikimr::NStorage {
             }
         }
         YDB_LOG_DEBUG("TStateStoragePerPileGenerator::PickNodesByState without limits",
-            {"Marker", "NW103"});
+            {"marker", "NW103"});
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }
 }

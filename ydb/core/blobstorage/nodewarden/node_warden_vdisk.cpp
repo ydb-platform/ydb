@@ -13,7 +13,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
         YDB_LOG_INFO("DestroyLocalVDisk",
-            {"Marker", "NW35"},
+            {"marker", "NW35"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()});
         Y_ABORT_UNLESS(!vdisk.RuntimeData);
@@ -29,7 +29,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
         YDB_LOG_INFO("PoisonLocalVDisk",
-            {"Marker", "NW00"},
+            {"marker", "NW00"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
             {"RuntimeData", vdisk.RuntimeData.has_value()});
@@ -73,7 +73,7 @@ namespace NKikimr::NStorage {
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
         YDB_LOG_DEBUG("StartLocalVDiskActor",
-            {"Marker", "NW23"},
+            {"marker", "NW23"},
             {"SlayInFlight", SlayInFlight.contains(vslotId)},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
@@ -120,7 +120,7 @@ namespace NKikimr::NStorage {
             const auto it = Groups.find(vdisk.GetGroupId());
             if (it == Groups.end()) {
                 YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "group not found while starting VDisk actor",
-                    {"Marker", "NW09"},
+                    {"marker", "NW09"},
                     {"GroupId", vdisk.GetGroupId()},
                     {"VDiskId", vdiskId},
                     {"Config", vdisk.Config});
@@ -131,7 +131,7 @@ namespace NKikimr::NStorage {
             // ensure the group has correctly filled protobuf (in case when there is no relevant info pointer)
             if (!group.Group) {
                 YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "group configuration does not contain protobuf to start VDisk",
-                    {"Marker", "NW13"},
+                    {"marker", "NW13"},
                     {"GroupId", it->first},
                     {"VDiskId", vdiskId},
                     {"Config", vdisk.Config});
@@ -368,7 +368,7 @@ namespace NKikimr::NStorage {
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
         YDB_LOG_DEBUG("StartLocalVDiskActor done",
-            {"Marker", "NW24"},
+            {"marker", "NW24"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
             {"PDiskGuid", pdiskGuid},
@@ -437,7 +437,7 @@ namespace NKikimr::NStorage {
 
         if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
             YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "weird VDisk configuration",
-                {"Marker", "NW30"},
+                {"marker", "NW30"},
                 {"Record", vdisk});
             return;
         }
@@ -446,7 +446,7 @@ namespace NKikimr::NStorage {
         if (loc.GetNodeID() != LocalNodeId) {
             if (TGroupID(vdisk.GetVDiskID().GetGroupID()).ConfigurationType() != EGroupConfigurationType::Static) {
                 YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "incorrect NodeId in VDisk configuration",
-                    {"Marker", "NW31"},
+                    {"marker", "NW31"},
                     {"Record", vdisk},
                     {"NodeId", LocalNodeId});
             }
@@ -496,7 +496,7 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Slay(TVDiskRecord& vdisk) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
         YDB_LOG_INFO("Slay",
-            {"Marker", "NW33"},
+            {"marker", "NW33"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
             {"SlayInFlight", SlayInFlight.contains(vslotId)});
@@ -529,7 +529,7 @@ namespace NKikimr::NStorage {
         auto *msg = ev->Get();
         const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
         YDB_LOG_INFO("TEvDropDonor",
-            {"Marker", "NW34"},
+            {"marker", "NW34"},
             {"VSlotId", vslotId},
             {"VDiskId", msg->VDiskId});
         SendDropDonorQuery(msg->NodeId, msg->PDiskId, msg->VSlotId, msg->VDiskId);

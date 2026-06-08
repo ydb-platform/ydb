@@ -50,7 +50,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     }
 
     YDB_LOG_DEBUG("ApplyServiceSet",
-        {"Marker", "NW18"},
+        {"marker", "NW18"},
         {"IsStatic", isStatic},
         {"Comprehensive", comprehensive},
         {"Origin", origin},
@@ -77,7 +77,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
         if (vdisk.UnderlyingPDiskDestroyed) {
             auto& tempVSlotId = vslotId;
             YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "UnderlyingPDiskDestroyed escaped",
-                {"Marker", "NW37"},
+                {"marker", "NW37"},
                 {"VSlotId", tempVSlotId});
             vdisk.UnderlyingPDiskDestroyed = false;
         }
@@ -129,7 +129,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         auto error = DecomposeConfig(StorageConfig->GetConfigComposite(), &mainConfigYaml, &mainConfigYamlVersion, nullptr);
         if (error) {
             YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "failed to decompose yaml configuration",
-                {"Marker", "NW49"},
+                {"marker", "NW49"},
                 {"Error", error});
         } else if (mainConfigYaml) {
             std::optional<TString> storageConfigYaml = GetStorageYaml(*StorageConfig);
@@ -179,7 +179,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
     FETCH_CONFIG(schemeBoard, SchemeBoard)
 
     YDB_LOG_DEBUG("ApplyStateStorageConfig",
-        {"Marker", "NW55"},
+        {"marker", "NW55"},
         {"StateStorageConfig", StorageConfig->GetStateStorageConfig()},
         {"NewStateStorageInfo", *stateStorageInfo},
         {"CurrentStateStorageInfo", StateStorageInfo.Get()},
@@ -233,7 +233,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
                     for (const auto& replicaId : ring.Replicas) {
                         if (replicaId.NodeId() == LocalNodeId) {
                             YDB_LOG_INFO("Local replica found",
-                                {"Marker", "NW54"},
+                                {"marker", "NW54"},
                                 {"Component", comp},
                                 {"ReplicaId", replicaId});
                             localActorIds.insert(replicaId);
@@ -252,7 +252,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
                     if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
                         if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {
                             YDB_LOG_INFO("starting state storage new replica",
-                                {"Marker", "NW08"},
+                                {"marker", "NW08"},
                                 {"Component", comp},
                                 {"ReplicaId", replicaId},
                                 {"Index", index},
@@ -286,7 +286,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
 
     // reconfigure proxy
     YDB_LOG_INFO("updating state storage proxy configuration",
-        {"Marker", "NW50"});
+        {"marker", "NW50"});
     if (StateStorageProxyConfigured) {
         Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(StateStorageInfo, BoardInfo,
             SchemeBoardInfo));
@@ -302,7 +302,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
     for (const auto& replicaId : localActorIds) {
         if (!newActorIds.contains(replicaId)) {
             YDB_LOG_INFO("terminating useless state storage replica",
-                {"Marker", "NW43"},
+                {"marker", "NW43"},
                 {"ReplicaId", replicaId});
             const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
@@ -352,7 +352,7 @@ void TNodeWarden::Handle(TEvNodeWardenNotifyConfigMismatch::TPtr ev) {
     //TODO: config mismatch with node
     auto *msg = ev->Get();
     YDB_LOG_INFO("TEvNodeWardenNotifyConfigMismatch:",
-        {"Marker", "NW51"},
+        {"marker", "NW51"},
         {"NodeId", msg->NodeId},
         {"ClusterStateGeneration", msg->ClusterStateGeneration},
         {"ClusterStateGuid", msg->ClusterStateGuid});

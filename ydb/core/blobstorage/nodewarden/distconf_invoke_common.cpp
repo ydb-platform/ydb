@@ -51,7 +51,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::HandleExecuteQuery() {
         YDB_LOG_DEBUG("HandleExecuteQuery",
-            {"Marker", "NWDC42"},
+            {"marker", "NWDC42"},
             {"SelfId", SelfId()},
             {"Binding", Self->Binding},
             {"RootState", Self->RootState},
@@ -132,7 +132,7 @@ namespace NKikimr::NStorage {
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
                 YDB_LOG_DEBUG("ExecuteQuery",
-                    {"Marker", "NWDC43"},
+                    {"marker", "NWDC43"},
                     {"SelfId", SelfId()},
                     {"Command", op.Command});
                 switch (op.Command.GetRequestCase()) {
@@ -209,7 +209,7 @@ namespace NKikimr::NStorage {
             },
             [&](TCollectConfigsAndPropose&) {
                 YDB_LOG_DEBUG("Starting config collection",
-                    {"Marker", "NWDC19"});
+                    {"marker", "NWDC19"});
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
@@ -248,7 +248,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigGather::TPtr ev) {
         auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle(TEvNodeConfigGather)",
-            {"Marker", "NWDC44"},
+            {"marker", "NWDC44"},
             {"SelfId", SelfId()},
             {"Record", record});
         if (record.GetAborted()) {
@@ -363,7 +363,7 @@ namespace NKikimr::NStorage {
             SelfId(), mindPrev);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
-                {"Marker", "NWDC78"},
+                {"marker", "NWDC78"},
                 {"SelfId", SelfId()},
                 {"Error", *error},
                 {"ProposedConfig", *config});
@@ -375,7 +375,7 @@ namespace NKikimr::NStorage {
         auto& msg = *ev->Get();
 
         YDB_LOG_DEBUG("OnConfigProposed",
-            {"Marker", "NWDC64"},
+            {"marker", "NWDC64"},
             {"SelfId", SelfId()},
             {"ErrorReason", msg.ErrorReason},
             {"RootState", Self->RootState});
@@ -423,7 +423,7 @@ namespace NKikimr::NStorage {
         }
 
         YDB_LOG_DEBUG("Finish",
-            {"Marker", "NWDC61"},
+            {"marker", "NWDC61"},
             {"SelfId", SelfId()},
             {"Record", record});
 

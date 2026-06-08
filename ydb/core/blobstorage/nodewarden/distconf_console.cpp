@@ -19,7 +19,7 @@ namespace NKikimr::NStorage {
         }
 
         YDB_LOG_DEBUG("ConnectToConsole: creating pipe to the Console",
-            {"Marker", "NWDC66"});
+            {"marker", "NWDC66"});
         ConsolePipeId = Register(NTabletPipe::CreateClient(SelfId(), MakeConsoleID(),
             NTabletPipe::TClientRetryPolicy::WithRetries()));
     }
@@ -51,7 +51,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(MainConfigYamlVersion);
 
         YDB_LOG_DEBUG("SendConfigProposeRequest: sending propose request to the Console",
-            {"Marker", "NWDC67"},
+            {"marker", "NWDC67"},
             {"MainConfigFetchYamlHash", MainConfigFetchYamlHash},
             {"MainConfigYamlVersion", MainConfigYamlVersion},
             {"ProposedConfigHashVersion", ProposedConfigHashVersion},
@@ -66,7 +66,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
         YDB_LOG_DEBUG("received TEvControllerValidateConfigResponse",
-            {"Marker", "NWDC10"},
+            {"marker", "NWDC10"},
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie},
             {"Record", ev->Get()->Record},
@@ -86,7 +86,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr ev) {
         YDB_LOG_DEBUG("received TEvControllerProposeConfigResponse",
-            {"Marker", "NWDC68"},
+            {"marker", "NWDC68"},
             {"ConsoleConnected", ConsoleConnected},
             {"ProposeRequestInFlight", ProposeRequestInFlight},
             {"Cookie", ev->Cookie},
@@ -112,7 +112,7 @@ namespace NKikimr::NStorage {
                         std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) {
                     const char *err = "proposed config, but something has gone awfully wrong";
                     YDB_LOG_CRIT(err,
-                        {"Marker", "NWDC69"},
+                        {"marker", "NWDC69"},
                         {"StorageConfig", StorageConfig.get()},
                         {"ProposedConfigHashVersion", ProposedConfigHashVersion},
                         {"MainConfigFetchYamlHash", MainConfigFetchYamlHash},
@@ -140,7 +140,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr ev) {
         YDB_LOG_DEBUG("received TEvControllerConsoleCommitResponse",
-            {"Marker", "NWDC70"},
+            {"marker", "NWDC70"},
             {"ConsoleConnected", ConsoleConnected},
             {"Cookie", ev->Cookie},
             {"CommitRequestCookie", CommitRequestCookie},
@@ -159,7 +159,7 @@ namespace NKikimr::NStorage {
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
                 YDB_LOG_ERROR("failed to commit config to Console",
-                    {"Marker", "NWDC46"},
+                    {"marker", "NWDC46"},
                     {"Record", ev->Get()->Record});
                 break;
 
@@ -172,7 +172,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         YDB_LOG_DEBUG("received TEvClientConnected",
-            {"Marker", "NWDC71"},
+            {"marker", "NWDC71"},
             {"ConsolePipeId", ConsolePipeId},
             {"TabletId", ev->Get()->TabletId},
             {"Status", ev->Get()->Status},
@@ -197,7 +197,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         YDB_LOG_DEBUG("received TEvClientDestroyed",
-            {"Marker", "NWDC72"},
+            {"marker", "NWDC72"},
             {"ConsolePipeId", ConsolePipeId},
             {"TabletId", ev->Get()->TabletId},
             {"ClientId", ev->Get()->ClientId},

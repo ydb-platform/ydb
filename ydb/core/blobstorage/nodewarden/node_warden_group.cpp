@@ -87,7 +87,7 @@ namespace NKikimr::NStorage {
 
         // Send the request
         YDB_LOG_DEBUG("ConfigureLocalProxy propose",
-            {"Marker", "NW68"},
+            {"marker", "NW68"},
             {"GroupId", groupId},
             {"MainKey", mainKey});
         SendToController(std::make_unique<TEvBlobStorage::TEvControllerProposeGroupKey>(LocalNodeId, groupId,
@@ -113,7 +113,7 @@ namespace NKikimr::NStorage {
         // log if from resolver
         if (fromResolver) {
             YDB_LOG_NOTICE("ApplyGroupInfo from resolver",
-                {"Marker", "NW73"},
+                {"marker", "NW73"},
                 {"GroupId", groupId},
                 {"GroupGeneration", generation});
         }
@@ -227,7 +227,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(group.EncryptionParams.HasEncryptionMode());
             if (const TString& s = err.Str()) {
                 YDB_LOG_ERROR("error while parsing group",
-                    {"Marker", "NW19"},
+                    {"marker", "NW19"},
                     {"GroupId", groupId},
                     {"Err", s});
             }
@@ -294,7 +294,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
         YDB_LOG_DEBUG("RequestGroupConfig",
-            {"Marker", "NW98"},
+            {"marker", "NW98"},
             {"GroupId", groupId});
         if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
             // do nothing, configs arrive through distributed configuration
@@ -316,7 +316,7 @@ namespace NKikimr::NStorage {
                 if (EjectedGroups.insert(groupId).second) {
                     TGroupRecord& group = Groups[groupId];
                     YDB_LOG_DEBUG("destroying group",
-                        {"Marker", "NW99"},
+                        {"marker", "NW99"},
                         {"GroupId", groupId},
                         {"ProxyId", group.ProxyId});
                     if (group.ProxyId) {
@@ -378,7 +378,7 @@ namespace NKikimr::NStorage {
         for (const TWorkingSyncer& syncer : toStop) {
             if (syncer.ActorId) {
                 YDB_LOG_DEBUG("ApplyWorkingSyncers: stopping",
-                    {"Marker", "NW65"},
+                    {"marker", "NW65"},
                     {"BridgeProxyGroupId", syncer.BridgeProxyGroupId},
                     {"BridgeProxyGroupGeneration", syncer.BridgeProxyGroupGeneration},
                     {"SourceGroupId", syncer.SourceGroupId},
@@ -428,7 +428,7 @@ namespace NKikimr::NStorage {
         }
         if (stopCurrent || startNew) {
             YDB_LOG_DEBUG("StartSyncerIfNeeded",
-                {"Marker", "NW64"},
+                {"marker", "NW64"},
                 {"BridgeProxyGroupId", syncer.BridgeProxyGroupId},
                 {"PrevBridgeProxyGroupGeneration", prevBridgeProxyGroupGeneration},
                 {"BridgeProxyGroupGeneration", syncer.BridgeProxyGroupGeneration},

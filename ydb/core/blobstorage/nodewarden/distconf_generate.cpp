@@ -45,7 +45,7 @@ namespace NKikimr::NStorage {
                     const auto& groups = config->GetBlobStorageConfig().GetServiceSet().GetGroups();
                     const auto& allocatedGroup = groups.at(groups.size() - 1);
                     YDB_LOG_DEBUG("Allocated static group",
-                        {"Marker", "NWDC33"},
+                        {"marker", "NWDC33"},
                         {"Group", allocatedGroup});
                 };
 

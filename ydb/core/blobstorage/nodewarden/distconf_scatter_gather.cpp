@@ -14,7 +14,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(std::get<TActorId>(origin));
         }
         YDB_LOG_DEBUG("IssueScatterTask",
-            {"Marker", "NWDC21"},
+            {"marker", "NWDC21"},
             {"Request", request},
             {"Cookie", cookie},
             {"Origin", origin},
@@ -83,7 +83,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::CompleteScatterTask(TScatterTask& task) {
         YDB_LOG_DEBUG("CompleteScatterTask",
-            {"Marker", "NWDC22"},
+            {"marker", "NWDC22"},
             {"Request", task.Request});
 
         if (std::holds_alternative<TBinding>(task.Origin)) {
@@ -120,7 +120,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::AbortScatterTask(ui64 cookie, ui32 nodeId) {
         YDB_LOG_DEBUG("AbortScatterTask",
-            {"Marker", "NWDC23"},
+            {"marker", "NWDC23"},
             {"Cookie", cookie},
             {"NodeId", nodeId});
 
@@ -135,7 +135,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::AbortAllScatterTasks(const std::optional<TBinding>& binding) {
         YDB_LOG_DEBUG("AbortAllScatterTasks",
-            {"Marker", "NWDC24"},
+            {"marker", "NWDC24"},
             {"Binding", binding});
 
         for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
@@ -180,7 +180,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigScatter::TPtr ev) {
         YDB_LOG_DEBUG("TEvNodeConfigScatter",
-            {"Marker", "NWDC25"},
+            {"marker", "NWDC25"},
             {"Binding", Binding},
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie},
@@ -196,7 +196,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigGather::TPtr ev) {
         YDB_LOG_DEBUG("TEvNodeConfigGather",
-            {"Marker", "NWDC26"},
+            {"marker", "NWDC26"},
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie},
             {"SessionId", ev->InterconnectSession},

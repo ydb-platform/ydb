@@ -51,7 +51,7 @@ namespace NKikimr::NStorage {
             const ui32 flags = IEventHandle::FlagTrackDelivery |
                 (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
             YDB_LOG_DEBUG("sending TEvVStatus",
-                {"Marker", "NWDC73"},
+                {"marker", "NWDC73"},
                 {"SelfId", SelfId()},
                 {"VDiskId", vdiskId},
                 {"ActorId", actorId});
@@ -69,7 +69,7 @@ namespace NKikimr::NStorage {
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         YDB_LOG_DEBUG("TEvVStatusResult",
-            {"Marker", "NWDC74"},
+            {"marker", "NWDC74"},
             {"SelfId", SelfId()},
             {"Record", record},
             {"VDiskId", vdiskId});
@@ -118,7 +118,7 @@ namespace NKikimr::NStorage {
         const auto& cmd = record.GetReassignGroupDisk();
 
         YDB_LOG_DEBUG("ReassignGroupDiskExecute",
-            {"Marker", "NWDC75"},
+            {"marker", "NWDC75"},
             {"SelfId", SelfId()});
 
         const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
@@ -216,7 +216,7 @@ namespace NKikimr::NStorage {
                         cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
                 } catch (const TExConfigError& ex) {
                     YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
-                        {"Marker", "NWDC76"},
+                        {"marker", "NWDC76"},
                         {"SelfId", SelfId()},
                         {"Config", config},
                         {"BaseConfig", *BaseConfig},

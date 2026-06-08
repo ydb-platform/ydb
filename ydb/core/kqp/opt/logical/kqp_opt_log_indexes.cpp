@@ -2110,20 +2110,178 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         .Done();
 }
 
+// Parse-once accessor over a HybridRank node's arguments.
+//
+// HybridRank takes N >= 2 positional scoring expressions (each a FullTextScore or a Knn
+// distance/similarity) followed by optional named tuple arguments. With named args present the node
+// becomes (HybridRank (List pos...) (AsStruct '(name value) ...)); otherwise the children are the
+// scoring expressions directly. THybridRankSettings::Parse reads both shapes once and exposes typed
+// getters. Validation failures are reported via Error (the caller turns it into a BAD_REQUEST issue);
+// the per-tuple overrides (Weights, Limits, Indexes) are positionally parallel to the scoring args.
+struct THybridRankSettings {
+    static THybridRankSettings Parse(const TExprNode::TPtr& hybridRank, TExprContext& ctx);
+
+    const TVector<TExprNode::TPtr>& ScoringArgs() const { return ScoringArgs_; }
+    const TString& Mode() const { return Mode_; }
+    double K(const TKqpOptimizeContext& kqpCtx) const {
+        return K_.GetOrElse(kqpCtx.Config->HybridSearchK.Get().GetOrElse(60.0));
+    }
+    bool Normalize() const { return Normalize_.GetOrElse(true); }
+    double Weight(size_t i) const { return i < Weights_.size() ? Weights_[i] : 1.0; }
+    TMaybe<ui64> Limit(size_t i) const { return i < Limits_.size() ? Limits_[i] : Nothing(); }
+    TMaybe<TString> IndexOverride(size_t i) const {
+        return i < IndexOverrides_.size() ? IndexOverrides_[i] : Nothing();
+    }
+
+    TMaybe<TString> Error;
+
+private:
+    static TMaybe<TString> GetStringElem(const TExprNode::TPtr& n) {
+        if (n->IsCallable("String") && n->ChildrenSize() >= 1 && n->Head().IsAtom()) {
+            return TString(n->Head().Content());
+        }
+        return {};
+    }
+    static TMaybe<ui64> GetIntElem(const TExprNode::TPtr& n) {
+        ui64 v = 0;
+        if (n->ChildrenSize() >= 1 && n->Head().IsAtom() && TryFromString<ui64>(n->Head().Content(), v)) {
+            return v;
+        }
+        return {};
+    }
+    static TMaybe<double> GetDoubleElem(const TExprNode::TPtr& n) {
+        double v = 0;
+        if (n->ChildrenSize() >= 1 && n->Head().IsAtom() && TryFromString<double>(n->Head().Content(), v)) {
+            return v;  // accepts both integer (2) and double (0.2) numeric literals
+        }
+        return {};
+    }
+
+    TVector<TExprNode::TPtr> ScoringArgs_;
+    TString Mode_ = "rrf";              // 'rrf' (Reciprocal Rank Fusion) or 'linear' (min-max normalized scores)
+    TMaybe<double> K_;                  // RRF constant override
+    TMaybe<bool> Normalize_;            // linear-only; default true (min-max normalize before fusing)
+    TVector<double> Weights_;           // parallel to ScoringArgs_, or empty => all 1.0
+    TVector<TMaybe<ui64>> Limits_;      // parallel to ScoringArgs_, or empty => factor * LIMIT
+    TVector<TMaybe<TString>> IndexOverrides_;  // parallel to ScoringArgs_, or empty => auto-detect
+};
+
+THybridRankSettings THybridRankSettings::Parse(const TExprNode::TPtr& hybridRank, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    THybridRankSettings s;
+    auto fail = [&](const TString& msg) {
+        s.Error = msg;
+        return s;
+    };
+
+    // Named-arg form: head is a tuple (List of positional args), child 1 is the AsStruct of options.
+    const bool hasNamedArgs = hybridRank->Head().GetTypeAnn()
+        && hybridRank->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple;
+    if (!hasNamedArgs) {
+        s.ScoringArgs_.assign(hybridRank->Children().begin(), hybridRank->Children().end());
+        return s;
+    }
+
+    const auto& positional = hybridRank->Head();
+    s.ScoringArgs_.assign(positional.Children().begin(), positional.Children().end());
+    const auto n = s.ScoringArgs_.size();
+
+    // Validate one (Weights/Limits/Indexes) tuple: its arity must equal the scoring-arg count, and each
+    // element must parse via `parseElem`. Returns the parsed vector or records a precise error.
+    auto parseTuple = [&](const TStringBuf name, const TExprNode::TPtr& value, auto parseElem,
+                          const TStringBuf elemKind) -> bool {
+        if (value->ChildrenSize() != n) {
+            s.Error = TStringBuilder() << name << " has " << value->ChildrenSize()
+                << " entries but there are " << n << " scoring arguments";
+            return false;
+        }
+        for (const auto& elem : value->Children()) {
+            if (!parseElem(elem)) {
+                s.Error = TStringBuilder() << name << " must be a tuple of " << elemKind
+                    << ", one per scoring argument";
+                return false;
+            }
+        }
+        return true;
+    };
+
+    for (const auto& member : hybridRank->Child(1)->Children()) {
+        if (member->ChildrenSize() != 2 || !member->Head().IsAtom()) {
+            continue;
+        }
+        const auto name = member->Head().Content();
+        const auto value = member->ChildPtr(1);
+        if (name == "Indexes") {
+            s.IndexOverrides_.clear();
+            if (!parseTuple("Indexes", value, [&](const TExprNode::TPtr& e) {
+                    auto v = GetStringElem(e);
+                    if (v) { s.IndexOverrides_.push_back(v); }
+                    return v.Defined();
+                }, "string literals")) {
+                return s;
+            }
+        } else if (name == "Limits") {
+            s.Limits_.clear();
+            if (!parseTuple("Limits", value, [&](const TExprNode::TPtr& e) {
+                    auto v = GetIntElem(e);
+                    if (v) { s.Limits_.push_back(v); }
+                    return v.Defined();
+                }, "positive integer literals")) {
+                return s;
+            }
+        } else if (name == "Weights") {
+            s.Weights_.clear();
+            if (!parseTuple("Weights", value, [&](const TExprNode::TPtr& e) {
+                    auto v = GetDoubleElem(e);
+                    if (v) { s.Weights_.push_back(*v); }
+                    return v.Defined();
+                }, "numeric literals")) {
+                return s;
+            }
+        } else if (name == "K" || name == "k") {
+            double kv = 0;
+            if (value->ChildrenSize() < 1 || !value->Head().IsAtom() || !TryFromString<double>(value->Head().Content(), kv)) {
+                return fail("K must be a numeric literal (the RRF constant), e.g. 60.0 AS K");
+            }
+            s.K_ = kv;
+        } else if (name == "Mode") {
+            if (!value->IsCallable("String") || value->ChildrenSize() < 1 || !value->Head().IsAtom()) {
+                return fail("Mode must be a string literal: \"rrf\" or \"linear\"");
+            }
+            TString modeStr{value->Head().Content()};
+            modeStr.to_lower();  // accept "RRF"/"Linear" too
+            s.Mode_ = modeStr;
+            if (s.Mode_ != "rrf" && s.Mode_ != "linear") {
+                return fail(TStringBuilder() << "unknown Mode '" << value->Head().Content() << "'; expected \"rrf\" or \"linear\"");
+            }
+        } else if (name == "Normalize") {
+            if (!value->IsCallable("Bool") || value->ChildrenSize() < 1 || !value->Head().IsAtom()) {
+                return fail("Normalize must be a boolean literal: true or false");
+            }
+            s.Normalize_ = (value->Head().Content() == "true");
+        } else {
+            return fail(TStringBuilder() << "unknown named argument '" << name << "'; expected Indexes, Limits, K, Mode, Weights or Normalize");
+        }
+    }
+    return s;
+}
+
 // Rewrites a hybrid search query:
 //
 //   SELECT ... FROM t
-//   ORDER BY HybridRank(FullTextScore(c1, $q), Knn::CosineDistance(c2, $v)) [DESC]
+//   ORDER BY HybridRank(FullTextScore(c1, $q), Knn::CosineDistance(c2, $v), ...) [DESC]
 //   LIMIT k
 //
-// into two independent index sub-queries (a fulltext relevance scan and a vector kmeans-tree scan),
+// into N independent index sub-queries (fulltext relevance scans and vector kmeans-tree scans),
 // each bounded to an internal limit, whose results are fused with Reciprocal Rank Fusion (RRF).
 //
-// Unlike the standalone fulltext/vector rewrites this query names no index via VIEW (it needs two),
-// so the rule resolves the indexes from the table metadata by matching the scored columns: the
-// FullTextScore column selects the GlobalFulltextRelevance index, the Knn column selects the
-// GlobalSyncVectorKMeansTree index. (An explicit ("ft_idx","vec_idx") AS Indexes override is a
-// follow-up.) On any misuse it raises a precise error; queries it cannot rewrite fall through to the
+// The scoring expressions may appear in any order and any mix: each is classified by inspecting the
+// expression (a FullTextScore is a fulltext branch; a Knn distance/similarity is a vector branch).
+// Unlike the standalone fulltext/vector rewrites this query names no index via VIEW (it needs several),
+// so the rule resolves each branch's index from the table metadata by matching the scored column: a
+// FullTextScore column selects a GlobalFulltextRelevance index, a Knn column selects a
+// GlobalSyncVectorKMeansTree index. An explicit (...) AS Indexes override (one name per scoring arg)
+// disambiguates. On any misuse it raises a precise error; queries it cannot rewrite fall through to the
 // peephole HybridRank stub, which fails with a clear message rather than returning wrong results.
 TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
@@ -2159,10 +2317,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return addError("must be the entire ORDER BY key; it cannot be negated or combined with other expressions");
     }
 
-    if (hybridRank->ChildrenSize() < 2) {
-        return addError("expects at least 2 arguments: a fulltext score and a vector distance");
-    }
-
     auto findFulltextScore = [](const TExprNode::TPtr& root) -> TExprNode::TPtr {
         TExprNode::TPtr found;
         VisitExpr(root, [&](const TExprNode::TPtr& n) {
@@ -2179,8 +2333,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     };
     // Match the Knn distance/similarity functions, not helpers like Knn::ToBinaryString* which may also
     // appear in the vector argument (e.g. when the search target is packed inline). Distances rank
-    // smaller-is-better, similarities larger-is-better; the branch is sorted in the matching direction and
-    // linear fusion normalizes accordingly (see vecIsSimilarity below).
+    // smaller-is-better, similarities larger-is-better; each branch is sorted in the matching direction and
+    // linear fusion normalizes accordingly (see TBranch::IsSimilarity below).
     static const THashSet<TStringBuf> knnDistanceMethods = {
         "Knn.CosineDistance", "Knn.ManhattanDistance", "Knn.EuclideanDistance",
     };
@@ -2206,154 +2360,15 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return found;
     };
 
-    // Positional args are HybridRank(ftScore, vecDistance). Optional named tuple arguments override
-    // index selection and per-branch candidate limits: ("ft_idx","vec_idx") AS Indexes, (n,m) AS Limits.
-    // With named args present the node becomes (HybridRank (List ft vec) (AsStruct '(name value) ...)).
-    TExprNode::TPtr ftExpr;
-    TExprNode::TPtr vecExpr;
-    TMaybe<TString> ftIndexOverride;
-    TMaybe<TString> vecIndexOverride;
-    TMaybe<ui64> ftLimitOverride;
-    TMaybe<ui64> vecLimitOverride;
-    TMaybe<double> kOverride;
-    TString fusionMode = "rrf";  // 'rrf' (Reciprocal Rank Fusion) or 'linear' (min-max normalized scores)
-    double ftWeight = 1.0;       // per-direction weights, (w_ft, w_vec) AS Weights; default equal
-    double vecWeight = 1.0;
-    TMaybe<bool> normalizeOverride;  // linear-only; default true (min-max normalize before fusing)
-    const bool hasNamedArgs = hybridRank->Head().GetTypeAnn()
-        && hybridRank->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple;
-    if (hasNamedArgs) {
-        const auto positional = hybridRank->ChildPtr(0);
-        if (positional->ChildrenSize() != 2) {
-            return addError("expects exactly 2 positional arguments (a fulltext score and a vector distance)");
-        }
-        ftExpr = positional->ChildPtr(0);
-        vecExpr = positional->ChildPtr(1);
-
-        const auto getStringElem = [](const TExprNode::TPtr& n) -> TMaybe<TString> {
-            if (n->IsCallable("String") && n->ChildrenSize() >= 1 && n->Head().IsAtom()) {
-                return TString(n->Head().Content());
-            }
-            return {};
-        };
-        const auto getIntElem = [](const TExprNode::TPtr& n) -> TMaybe<ui64> {
-            ui64 v = 0;
-            if (n->ChildrenSize() >= 1 && n->Head().IsAtom() && TryFromString<ui64>(n->Head().Content(), v)) {
-                return v;
-            }
-            return {};
-        };
-        const auto getDoubleElem = [](const TExprNode::TPtr& n) -> TMaybe<double> {
-            double v = 0;
-            if (n->ChildrenSize() >= 1 && n->Head().IsAtom() && TryFromString<double>(n->Head().Content(), v)) {
-                return v;  // accepts both integer (2) and double (0.2) numeric literals
-            }
-            return {};
-        };
-
-        for (const auto& member : hybridRank->Child(1)->Children()) {
-            if (member->ChildrenSize() != 2 || !member->Head().IsAtom()) {
-                continue;
-            }
-            const auto name = member->Head().Content();
-            const auto value = member->ChildPtr(1);
-            if (name == "Indexes") {
-                if (value->ChildrenSize() != 2) {
-                    return addError("Indexes must be a tuple of two index names: (\"ft_idx\", \"vec_idx\")");
-                }
-                ftIndexOverride = getStringElem(value->ChildPtr(0));
-                vecIndexOverride = getStringElem(value->ChildPtr(1));
-                if (!ftIndexOverride || !vecIndexOverride) {
-                    return addError("Indexes must be a tuple of two string literals: (\"ft_idx\", \"vec_idx\")");
-                }
-            } else if (name == "Limits") {
-                if (value->ChildrenSize() != 2) {
-                    return addError("Limits must be a tuple of two integers: (ft_limit, vec_limit)");
-                }
-                ftLimitOverride = getIntElem(value->ChildPtr(0));
-                vecLimitOverride = getIntElem(value->ChildPtr(1));
-                if (!ftLimitOverride || !vecLimitOverride) {
-                    return addError("Limits must be a tuple of two positive integer literals: (ft_limit, vec_limit)");
-                }
-            } else if (name == "K" || name == "k") {
-                double kv = 0;
-                if (value->ChildrenSize() < 1 || !value->Head().IsAtom() || !TryFromString<double>(value->Head().Content(), kv)) {
-                    return addError("K must be a numeric literal (the RRF constant), e.g. 60.0 AS K");
-                }
-                kOverride = kv;
-            } else if (name == "Mode") {
-                if (!value->IsCallable("String") || value->ChildrenSize() < 1 || !value->Head().IsAtom()) {
-                    return addError("Mode must be a string literal: \"rrf\" or \"linear\"");
-                }
-                TString modeStr{value->Head().Content()};
-                modeStr.to_lower();  // accept "RRF"/"Linear" too
-                fusionMode = modeStr;
-                if (fusionMode != "rrf" && fusionMode != "linear") {
-                    return addError(TStringBuilder() << "unknown Mode '" << value->Head().Content() << "'; expected \"rrf\" or \"linear\"");
-                }
-            } else if (name == "Weights") {
-                if (value->ChildrenSize() != 2) {
-                    return addError("Weights must be a tuple of two numbers: (ft_weight, vec_weight)");
-                }
-                const auto w0 = getDoubleElem(value->ChildPtr(0));
-                const auto w1 = getDoubleElem(value->ChildPtr(1));
-                if (!w0 || !w1) {
-                    return addError("Weights must be a tuple of two numeric literals: (ft_weight, vec_weight)");
-                }
-                ftWeight = *w0;
-                vecWeight = *w1;
-            } else if (name == "Normalize") {
-                if (!value->IsCallable("Bool") || value->ChildrenSize() < 1 || !value->Head().IsAtom()) {
-                    return addError("Normalize must be a boolean literal: true or false");
-                }
-                normalizeOverride = (value->Head().Content() == "true");
-            } else {
-                return addError(TStringBuilder() << "unknown named argument '" << name << "'; expected Indexes, Limits, K, Mode, Weights or Normalize");
-            }
-        }
-    } else {
-        ftExpr = hybridRank->ChildPtr(0);
-        vecExpr = hybridRank->ChildPtr(1);
+    // Parse the positional scoring args plus the optional named tuple arguments (Mode, Weights, Limits,
+    // Indexes, K, Normalize). The per-tuple overrides are positionally parallel to the scoring args.
+    auto settings = THybridRankSettings::Parse(hybridRank, ctx);
+    if (settings.Error) {
+        return addError(*settings.Error);
     }
-
-    auto ftScore = findFulltextScore(ftExpr);
-    auto knnApply = findKnnApply(vecExpr);
-    if (!ftScore || !knnApply.IsValid()) {
-        if (findFulltextScore(vecExpr) && findKnnApply(ftExpr).IsValid()) {
-            return addError("arguments appear reversed; expected HybridRank(FullTextScore(...), Knn::Distance(...))");
-        }
-        return addError("expected the first argument to be FullTextScore(column, query) and the second to be a "
-                        "Knn distance over a column, e.g. Knn::CosineDistance(embedding, $target)");
-    }
-
-    bool vecIsSimilarity = false;
-    if (auto knnUdf = knnApply.Cast().Callable().Maybe<TCoUdf>()) {
-        vecIsSimilarity = knnSimilarityMethods.contains(knnUdf.Cast().MethodName().Value());
-    }
-
-    // Extract the fulltext column from FullTextScore(<column>, <query>, ...).
-    auto ftColumnMember = TExprBase(ftScore->ChildPtr(0)).Maybe<TCoMember>();
-    if (!ftColumnMember) {
-        return addError("the first argument of FullTextScore must reference a table column");
-    }
-    const TString ftColumn = ftColumnMember.Cast().Name().StringValue();
-
-    // Extract the vector column: the table-column Member referenced anywhere in the vector expression.
-    // A nullable column wraps the Knn call in an automap FlatMap, so the Member lives in the wider
-    // vector expression (as the FlatMap input), not inside the Knn apply itself.
-    TString vecColumn;
-    VisitExpr(vecExpr, [&](const TExprNode::TPtr& n) {
-        if (!vecColumn.empty()) {
-            return false;
-        }
-        if (auto member = TExprBase(n).Maybe<TCoMember>()) {
-            vecColumn = member.Cast().Name().StringValue();
-            return false;
-        }
-        return true;
-    });
-    if (vecColumn.empty()) {
-        return addError("the Knn distance argument must reference a table column, e.g. Knn::CosineDistance(embedding, $target)");
+    const auto& scoringArgs = settings.ScoringArgs();
+    if (scoringArgs.size() < 2) {
+        return addError("expects at least 2 arguments: scoring expressions to fuse (a fulltext score and/or a vector distance)");
     }
 
     // The input under the TopSort must be a plain main-table read (optionally wrapped in a projection/filter FlatMap).
@@ -2370,6 +2385,12 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
     YQL_ENSURE(tableDesc.Metadata);
 
+    const auto& pkColumns = tableDesc.Metadata->KeyColumnNames;
+    if (pkColumns.size() != 1) {
+        return addError("hybrid search currently supports only a single-column primary key");
+    }
+    const TString pkCol = pkColumns[0];
+
     auto columnInList = [](const TVector<TString>& cols, const TString& name) {
         for (const auto& c : cols) {
             if (c == name) {
@@ -2379,97 +2400,180 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return false;
     };
 
-    // Resolve the fulltext (relevance) and vector indexes: an explicit ("ft_idx","vec_idx") AS Indexes
-    // override if given, otherwise auto-detect by matching the scored columns.
-    TString ftIndexName;
-    TString vecIndexName;
-    if (ftIndexOverride) {
-        const TIndexDescription* ftIdx = nullptr;
-        const TIndexDescription* vecIdx = nullptr;
-        for (const auto& idx : tableDesc.Metadata->Indexes) {
-            if (idx.Name == *ftIndexOverride) {
-                ftIdx = &idx;
+    // ---------------------------------------------------------------------------------------------
+    // Classify each scoring argument into a branch and resolve its index, then fuse the branches.
+    // ---------------------------------------------------------------------------------------------
+    enum class EBranchKind { Fulltext, VectorDistance, VectorSimilarity };
+    struct TBranch {
+        EBranchKind Kind;
+        TExprNode::TPtr ScoreExpr;     // the raw scoring expression node
+        TString ScoredColumn;          // the FullTextScore / Knn column it references
+        TString IndexName;             // resolved (override or auto-detected)
+        double Weight;
+        TMaybe<ui64> LimitOverride;
+        size_t Index;                  // position; used for unique synthetic column names
+        bool IsSimilarity;             // fulltext relevance and Knn similarities rank larger-is-better
+        // Filled during build:
+        TExprNode::TPtr List;          // ordered {pk, ScoreCol} candidate list
+        TString ScoreCol;              // relevance column (fulltext) or per-branch distance column (vector)
+    };
+
+    TVector<TBranch> branches;
+    branches.reserve(scoringArgs.size());
+    for (size_t i = 0; i < scoringArgs.size(); ++i) {
+        const auto& arg = scoringArgs[i];
+        const auto ftScore = findFulltextScore(arg);
+        const auto knnApply = findKnnApply(arg);
+
+        TBranch b;
+        b.Index = i;
+        b.ScoreExpr = arg;
+        b.Weight = settings.Weight(i);
+        b.LimitOverride = settings.Limit(i);
+
+        const TStringBuilder branchId = TStringBuilder() << "argument " << (i + 1);
+        const auto indexOverride = settings.IndexOverride(i);
+
+        if (ftScore && !knnApply.IsValid()) {
+            // ---- Fulltext relevance branch ----
+            b.Kind = EBranchKind::Fulltext;
+            b.IsSimilarity = true;
+            auto ftColumnMember = TExprBase(ftScore->ChildPtr(0)).Maybe<TCoMember>();
+            if (!ftColumnMember) {
+                return addError(TStringBuilder() << "the first argument of FullTextScore (" << branchId << ") must reference a table column");
             }
-            if (idx.Name == *vecIndexOverride) {
-                vecIdx = &idx;
+            b.ScoredColumn = ftColumnMember.Cast().Name().StringValue();
+
+            if (indexOverride) {
+                const TIndexDescription* idx = nullptr;
+                for (const auto& cand : tableDesc.Metadata->Indexes) {
+                    if (cand.Name == *indexOverride) {
+                        idx = &cand;
+                        break;
+                    }
+                }
+                if (!idx) {
+                    return addError(TStringBuilder() << "fulltext index '" << *indexOverride << "' was not found");
+                }
+                if (idx->State != TIndexDescription::EIndexState::Ready) {
+                    return addError(TStringBuilder() << "fulltext index '" << *indexOverride << "' is not ready");
+                }
+                if (idx->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+                    return addError(TStringBuilder() << "index '" << *indexOverride << "' is not a fulltext relevance index");
+                }
+                if (!columnInList(idx->KeyColumns, b.ScoredColumn)) {
+                    return addError(TStringBuilder() << "fulltext index '" << *indexOverride
+                        << "' is not built on the FullTextScore column '" << b.ScoredColumn << "'");
+                }
+                b.IndexName = *indexOverride;
+            } else {
+                ui32 matches = 0;
+                for (const auto& idx : tableDesc.Metadata->Indexes) {
+                    if (idx.State == TIndexDescription::EIndexState::Ready
+                        && idx.Type == TIndexDescription::EType::GlobalFulltextRelevance
+                        && columnInList(idx.KeyColumns, b.ScoredColumn)) {
+                        b.IndexName = idx.Name;
+                        ++matches;
+                    }
+                }
+                if (matches == 0) {
+                    return addError(TStringBuilder() << "no ready fulltext relevance index found on column '" << b.ScoredColumn << "'");
+                }
+                if (matches > 1) {
+                    return addError(TStringBuilder() << "multiple fulltext relevance indexes match column '" << b.ScoredColumn
+                        << "'; name it explicitly via an Indexes override");
+                }
             }
-        }
-        if (!ftIdx) {
-            return addError(TStringBuilder() << "fulltext index '" << *ftIndexOverride << "' was not found");
-        }
-        if (ftIdx->State != TIndexDescription::EIndexState::Ready) {
-            return addError(TStringBuilder() << "fulltext index '" << *ftIndexOverride << "' is not ready");
-        }
-        if (ftIdx->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
-            return addError(TStringBuilder() << "index '" << *ftIndexOverride << "' is not a fulltext relevance index");
-        }
-        if (!columnInList(ftIdx->KeyColumns, ftColumn)) {
-            return addError(TStringBuilder() << "fulltext index '" << *ftIndexOverride
-                << "' is not built on the FullTextScore column '" << ftColumn << "'");
-        }
-        if (!vecIdx) {
-            return addError(TStringBuilder() << "vector index '" << *vecIndexOverride << "' was not found");
-        }
-        if (vecIdx->State != TIndexDescription::EIndexState::Ready) {
-            return addError(TStringBuilder() << "vector index '" << *vecIndexOverride << "' is not ready");
-        }
-        if (vecIdx->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            return addError(TStringBuilder() << "index '" << *vecIndexOverride << "' is not a vector kmeans-tree index");
-        }
-        if (vecIdx->KeyColumns.empty() || vecIdx->KeyColumns.back() != vecColumn) {
-            return addError(TStringBuilder() << "vector index '" << *vecIndexOverride
-                << "' is not built on the Knn distance column '" << vecColumn << "'");
-        }
-        if (vecIdx->KeyColumns.size() != 1) {
-            return addError(TStringBuilder() << "vector index '" << *vecIndexOverride
-                << "' is a prefixed vector index, which HybridRank does not support yet");
-        }
-        ftIndexName = *ftIndexOverride;
-        vecIndexName = *vecIndexOverride;
-    } else {
-        ui32 ftMatches = 0;
-        ui32 vecMatches = 0;
-        for (const auto& idx : tableDesc.Metadata->Indexes) {
-            if (idx.State != TIndexDescription::EIndexState::Ready) {
-                continue;
+        } else if (knnApply.IsValid() && !ftScore) {
+            // ---- Vector (kmeans-tree) branch ----
+            bool isSimilarity = false;
+            if (auto knnUdf = knnApply.Cast().Callable().Maybe<TCoUdf>()) {
+                isSimilarity = knnSimilarityMethods.contains(knnUdf.Cast().MethodName().Value());
             }
-            if (idx.Type == TIndexDescription::EType::GlobalFulltextRelevance && columnInList(idx.KeyColumns, ftColumn)) {
-                ftIndexName = idx.Name;
-                ++ftMatches;
+            b.Kind = isSimilarity ? EBranchKind::VectorSimilarity : EBranchKind::VectorDistance;
+            b.IsSimilarity = isSimilarity;
+
+            // The table column the Knn call ranks against: the Member referenced anywhere in the
+            // expression. A nullable column wraps the Knn call in an automap FlatMap, so the Member can
+            // live in the wider expression (as the FlatMap input), not inside the Knn apply itself.
+            VisitExpr(arg, [&](const TExprNode::TPtr& n) {
+                if (!b.ScoredColumn.empty()) {
+                    return false;
+                }
+                if (auto member = TExprBase(n).Maybe<TCoMember>()) {
+                    b.ScoredColumn = member.Cast().Name().StringValue();
+                    return false;
+                }
+                return true;
+            });
+            if (b.ScoredColumn.empty()) {
+                return addError(TStringBuilder() << "the Knn argument (" << branchId
+                    << ") must reference a table column, e.g. Knn::CosineDistance(embedding, $target)");
             }
-            if (idx.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
-                && idx.KeyColumns.size() == 1 && idx.KeyColumns.back() == vecColumn) {
-                vecIndexName = idx.Name;
-                ++vecMatches;
+
+            auto checkVectorIndex = [&](const TIndexDescription& idx) -> TMaybe<TString> {
+                if (idx.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                    return TStringBuilder() << "index '" << idx.Name << "' is not a vector kmeans-tree index";
+                }
+                if (idx.KeyColumns.size() != 1) {
+                    return TStringBuilder() << "vector index '" << idx.Name
+                        << "' is a prefixed vector index, which HybridRank does not support yet";
+                }
+                return Nothing();
+            };
+
+            if (indexOverride) {
+                const TIndexDescription* idx = nullptr;
+                for (const auto& cand : tableDesc.Metadata->Indexes) {
+                    if (cand.Name == *indexOverride) {
+                        idx = &cand;
+                        break;
+                    }
+                }
+                if (!idx) {
+                    return addError(TStringBuilder() << "vector index '" << *indexOverride << "' was not found");
+                }
+                if (idx->State != TIndexDescription::EIndexState::Ready) {
+                    return addError(TStringBuilder() << "vector index '" << *indexOverride << "' is not ready");
+                }
+                if (auto err = checkVectorIndex(*idx)) {
+                    return addError(*err);
+                }
+                if (idx->KeyColumns.back() != b.ScoredColumn) {
+                    return addError(TStringBuilder() << "vector index '" << *indexOverride
+                        << "' is not built on the Knn distance column '" << b.ScoredColumn << "'");
+                }
+                b.IndexName = *indexOverride;
+            } else {
+                ui32 matches = 0;
+                for (const auto& idx : tableDesc.Metadata->Indexes) {
+                    if (idx.State == TIndexDescription::EIndexState::Ready
+                        && idx.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                        && idx.KeyColumns.size() == 1 && idx.KeyColumns.back() == b.ScoredColumn) {
+                        b.IndexName = idx.Name;
+                        ++matches;
+                    }
+                }
+                if (matches == 0) {
+                    return addError(TStringBuilder() << "no ready vector (kmeans-tree) index found on column '" << b.ScoredColumn << "'");
+                }
+                if (matches > 1) {
+                    return addError(TStringBuilder() << "multiple vector indexes match column '" << b.ScoredColumn
+                        << "'; name it explicitly via an Indexes override");
+                }
             }
+        } else {
+            return addError(TStringBuilder() << branchId << " is neither a FullTextScore nor a Knn distance/similarity over a column, "
+                "e.g. FullTextScore(text, query) or Knn::CosineDistance(embedding, $target)");
         }
 
-        if (ftMatches == 0) {
-            return addError(TStringBuilder() << "no ready fulltext relevance index found on column '" << ftColumn << "'");
-        }
-        if (ftMatches > 1) {
-            return addError(TStringBuilder() << "multiple fulltext relevance indexes match column '" << ftColumn
-                << "'; name it explicitly via ((\"ft_idx\", \"vec_idx\") AS Indexes)");
-        }
-        if (vecMatches == 0) {
-            return addError(TStringBuilder() << "no ready vector (kmeans-tree) index found on column '" << vecColumn << "'");
-        }
-        if (vecMatches > 1) {
-            return addError(TStringBuilder() << "multiple vector indexes match column '" << vecColumn
-                << "'; name it explicitly via ((\"ft_idx\", \"vec_idx\") AS Indexes)");
-        }
+        branches.push_back(std::move(b));
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Build the two index branches and fuse them with Reciprocal Rank Fusion (RRF).
+    // Build the N index branches and fuse their per-document contributions.
     // ---------------------------------------------------------------------------------------------
     const auto pos = node.Pos();
-
-    const auto& pkColumns = tableDesc.Metadata->KeyColumnNames;
-    if (pkColumns.size() != 1) {
-        return addError("hybrid search currently supports only a single-column primary key");
-    }
-    const TString pkCol = pkColumns[0];
 
     // Reconstruct the WHERE predicate and projection to apply on top of the fused, looked-up rows.
     // A projecting FlatMap (from a WHERE clause or an explicit projection) provides them; without one
@@ -2498,112 +2602,121 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     // each branch's own row when reusing those sub-expressions (which preserves the exact Knn shape,
     // automap wrapper and all, that the vector rewrite expects).
     const auto rowArg = top.KeySelectorLambda().Args().Arg(0).Ptr();
-    const auto ftQuery = ftScore->ChildPtr(1);
 
     const TString relevanceCol{NTableIndex::NFulltext::FullTextRelevanceColumn};
-    const TString distCol = "__ydb_hybrid_distance";
     const TString rrfCol = "__ydb_hybrid_rrf";
 
     auto uint64Node = [&](ui64 v) {
         return ctx.Builder(pos).Callable("Uint64").Atom(0, ToString(v), TNodeFlags::Default).Seal().Build();
     };
-    // Per-branch internal candidate limit: an explicit (n, m) AS Limits override, otherwise
-    // LIMIT * HybridSearchFactor (pragma, default 10), built as a runtime expression so it tracks a
-    // parameterised LIMIT.
-    TExprNode::TPtr ftN;
-    TExprNode::TPtr vecN;
-    if (ftLimitOverride) {
-        ftN = uint64Node(*ftLimitOverride);
-        vecN = uint64Node(*vecLimitOverride);
-    } else {
-        // The fulltext ItemsLimit and the vector TopLimit must be literals, so the per-branch candidate
-        // count is LIMIT * HybridSearchFactor computed at optimize time. A non-literal (e.g. parameterised)
-        // LIMIT cannot be sized safely -- a fixed fallback smaller than the runtime LIMIT would silently
-        // drop rows from the final TopSort -- so reject it and ask for an explicit Limits override.
-        const ui64 factor = kqpCtx.Config->HybridSearchFactor.Get().GetOrElse(10);
-        ui64 limitVal = 0;
-        bool literalLimit = false;
-        const auto& countNode = top.Count().Ref();
-        if (countNode.IsCallable() && countNode.ChildrenSize() == 1 && countNode.Head().IsAtom()) {
-            literalLimit = TryFromString<ui64>(countNode.Head().Content(), limitVal);
+    // Per-branch internal candidate limit: an explicit AS Limits override, otherwise LIMIT *
+    // HybridSearchFactor (pragma, default 10) computed at optimize time. The fulltext ItemsLimit and the
+    // vector TopLimit must be literals, so a non-literal (e.g. parameterised) LIMIT cannot be sized safely
+    // -- a fixed fallback smaller than the runtime LIMIT would silently drop rows from the final TopSort --
+    // unless every branch carries an explicit Limits override. Compute the shared fallback once and only
+    // require a literal LIMIT if some branch needs it.
+    const ui64 factor = kqpCtx.Config->HybridSearchFactor.Get().GetOrElse(10);
+    TMaybe<ui64> sharedFallback;  // limitVal * factor; computed lazily
+    auto branchLimit = [&](const TBranch& b) -> TMaybeNode<TExprBase> {
+        if (b.LimitOverride) {
+            return TExprBase(uint64Node(*b.LimitOverride));
         }
-        if (!literalLimit) {
-            return addError("requires a literal LIMIT; for a parameterised LIMIT pass explicit per-branch "
-                            "candidate counts via ((n, m) AS Limits)");
+        if (!sharedFallback) {
+            ui64 limitVal = 0;
+            bool literalLimit = false;
+            const auto& countNode = top.Count().Ref();
+            if (countNode.IsCallable() && countNode.ChildrenSize() == 1 && countNode.Head().IsAtom()) {
+                literalLimit = TryFromString<ui64>(countNode.Head().Content(), limitVal);
+            }
+            if (!literalLimit) {
+                return {};  // signal: literal LIMIT required
+            }
+            sharedFallback = limitVal * factor;
         }
-        ftN = vecN = uint64Node(limitVal * factor);
-    }
-    const double kValue = kOverride.GetOrElse(kqpCtx.Config->HybridSearchK.Get().GetOrElse(60.0));
-    const auto kConst = ctx.Builder(pos).Callable("Double").Atom(0, ToString(kValue), TNodeFlags::Default).Seal().Build();
+        return TExprBase(uint64Node(*sharedFallback));
+    };
+
+    const auto kConst = ctx.Builder(pos).Callable("Double").Atom(0, ToString(settings.K(kqpCtx)), TNodeFlags::Default).Seal().Build();
 
     const auto mainTableMeta = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
-    // ---- Fulltext relevance branch: top-N {pk, relevance} ordered by relevance DESC ----
-    // Emitted as the canonical FlatMap-over-index-read shape; the existing fulltext rules
-    // (RewriteFlatMapOverFullTextMatch + PushLimitOverFullText) lower it.
-    // Build the fulltext relevance read directly (as KqpSelectJsonIndex does for JSON) rather than emit a
-    // synthetic FlatMap and rely on RewriteFlatMapOverFullTextMatch to fire on it. The read returns
-    // {pk, __ydb_full_text_relevance} ranked by relevance, capped at N_internal via ItemsLimit.
-    TKqpReadTableFullTextIndexSettings ftSettings;
-    ftSettings.SetItemsLimit(ftN);
-    const auto ftRead = Build<TKqlReadTableFullTextIndex>(ctx, pos)
-        .Table(mainTableMeta)
-        .Index().Build(ftIndexName)
-        .Columns(BuildKeyColumnsList(pos, ctx, TVector<TString>{pkCol, relevanceCol}))
-        .Query<TExprList>().Add(TExprBase(ftQuery)).Build()
-        .QueryColumns(BuildKeyColumnsList(pos, ctx, TVector<TString>{ftColumn}))
-        .Settings(ftSettings.BuildNode(ctx, pos))
-        .Done().Ptr();
-    // Raw ordered branch. RRF streams it through KqpStreamEnumerate (pushed into the branch's
-    // single-partition stage by the PushStreamEnumerateToStage physical rule), so no TDqPrecompute is
-    // needed; linear re-materializes it below because its ListMin/ListMax are whole-list aggregates.
-    const auto ftList = ftRead;
+    // ---- Build each branch's ordered candidate list { pk, scoreCol } ----
+    for (auto& b : branches) {
+        auto limitNode = branchLimit(b);
+        if (!limitNode) {
+            return addError("requires a literal LIMIT; for a parameterised LIMIT pass explicit per-branch "
+                            "candidate counts via (... AS Limits)");
+        }
+        const auto branchN = limitNode.Cast().Ptr();
 
-    // ---- Vector branch: top-N {pk, score} ordered best-first (distance ASC, similarity DESC) ----
-    // Emitted as a synthetic TopSort over the vector index read; RewriteTopSortOverIndexRead
-    // (DoRewriteTopSortOverKMeansTree) lowers it into the kmeans-tree lookup chain. CanUseVectorIndex
-    // matches the function + this sort direction against the index metric (e.g. cosine accepts
-    // CosineDistance ASC or CosineSimilarity DESC).
-    const auto vecRead = Build<TKqlReadTableIndexRanges>(ctx, pos)
-        .Table(mainTableMeta)
-        .Ranges<TCoVoid>().Build()
-        .ExplainPrompt().Build()
-        .Columns(BuildKeyColumnsList(pos, ctx, TVector<TString>{pkCol, vecColumn}))
-        .Settings().Build()
-        .Index().Build(vecIndexName)
-        .Done().Ptr();
+        if (b.Kind == EBranchKind::Fulltext) {
+            // Fulltext relevance branch: top-N {pk, relevance} ordered by relevance DESC. Built directly
+            // (as KqpSelectJsonIndex does for JSON) as a TKqlReadTableFullTextIndex returning
+            // {pk, __ydb_full_text_relevance} ranked by relevance, capped at branchN via ItemsLimit.
+            b.ScoreCol = relevanceCol;
+            const auto ftQuery = findFulltextScore(b.ScoreExpr)->ChildPtr(1);
+            TKqpReadTableFullTextIndexSettings ftSettings;
+            ftSettings.SetItemsLimit(branchN);
+            b.List = Build<TKqlReadTableFullTextIndex>(ctx, pos)
+                .Table(mainTableMeta)
+                .Index().Build(b.IndexName)
+                .Columns(BuildKeyColumnsList(pos, ctx, TVector<TString>{pkCol, relevanceCol}))
+                .Query<TExprList>().Add(TExprBase(ftQuery)).Build()
+                .QueryColumns(BuildKeyColumnsList(pos, ctx, TVector<TString>{b.ScoredColumn}))
+                .Settings(ftSettings.BuildNode(ctx, pos))
+                .Done().Ptr();
+            // Raw ordered branch. RRF streams it through KqpStreamEnumerate (pushed into the branch's
+            // single-partition stage by the PushStreamEnumerateToStage physical rule), so no TDqPrecompute
+            // is needed; linear re-materializes it below (its ListMin/ListMax are whole-list aggregates).
+        } else {
+            // Vector branch: top-N {pk, score} ordered best-first (distance ASC, similarity DESC). Emitted
+            // as a synthetic TopSort over the vector index read; RewriteTopSortOverIndexRead
+            // (DoRewriteTopSortOverKMeansTree) lowers it into the kmeans-tree lookup chain. CanUseVectorIndex
+            // matches the function + this sort direction against the index metric (e.g. cosine accepts
+            // CosineDistance ASC or CosineSimilarity DESC). Each vector branch carries a unique synthetic
+            // distance column so the branches never share schema (kept internal to this TopSort regardless).
+            b.ScoreCol = TStringBuilder() << "__ydb_hybrid_distance_" << b.Index;
+            const auto vecRead = Build<TKqlReadTableIndexRanges>(ctx, pos)
+                .Table(mainTableMeta)
+                .Ranges<TCoVoid>().Build()
+                .ExplainPrompt().Build()
+                .Columns(BuildKeyColumnsList(pos, ctx, TVector<TString>{pkCol, b.ScoredColumn}))
+                .Settings().Build()
+                .Index().Build(b.IndexName)
+                .Done().Ptr();
 
-    const auto vecRowArg = ctx.NewArgument(pos, "vecRow");
-    const auto distShared = ctx.ReplaceNode(TExprNode::TPtr(vecExpr), *rowArg, vecRowArg);
-    const auto vecFlatMapBody = ctx.Builder(pos)
-        .Callable("Just")
-            .Callable(0, "AsStruct")
-                .List(0)
-                    .Atom(0, pkCol)
-                    .Callable(1, "Member").Add(0, vecRowArg).Atom(1, pkCol).Seal()
+            const auto vecRowArg = ctx.NewArgument(pos, "vecRow");
+            const auto distShared = ctx.ReplaceNode(TExprNode::TPtr(b.ScoreExpr), *rowArg, vecRowArg);
+            const auto vecFlatMapBody = ctx.Builder(pos)
+                .Callable("Just")
+                    .Callable(0, "AsStruct")
+                        .List(0)
+                            .Atom(0, pkCol)
+                            .Callable(1, "Member").Add(0, vecRowArg).Atom(1, pkCol).Seal()
+                        .Seal()
+                        .List(1)
+                            .Atom(0, b.ScoreCol)
+                            .Add(1, distShared)
+                        .Seal()
+                    .Seal()
                 .Seal()
-                .List(1)
-                    .Atom(0, distCol)
-                    .Add(1, distShared)
+                .Build();
+            b.List = ctx.Builder(pos)
+                .Callable("TopSort")
+                    .Callable(0, "FlatMap")
+                        .Add(0, vecRead)
+                        .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {vecRowArg}), TExprNode::TPtr(vecFlatMapBody)))
+                    .Seal()
+                    .Add(1, branchN)
+                    .Callable(2, "Bool").Atom(0, b.IsSimilarity ? "false" : "true", TNodeFlags::Default).Seal()
+                    .Lambda(3)
+                        .Param("r")
+                        .Callable("Member").Arg(0, "r").Atom(1, b.ScoreCol).Seal()
+                    .Seal()
                 .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-    const auto vecBranch = ctx.Builder(pos)
-        .Callable("TopSort")
-            .Callable(0, "FlatMap")
-                .Add(0, vecRead)
-                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {vecRowArg}), TExprNode::TPtr(vecFlatMapBody)))
-            .Seal()
-            .Add(1, vecN)
-            .Callable(2, "Bool").Atom(0, vecIsSimilarity ? "false" : "true", TNodeFlags::Default).Seal()
-            .Lambda(3)
-                .Param("r")
-                .Callable("Member").Arg(0, "r").Atom(1, distCol).Seal()
-            .Seal()
-        .Seal()
-        .Build();
-    const auto vecList = vecBranch;
+                .Build();
+        }
+    }
 
     // ---- Fuse: each branch emits a per-row weighted contribution; we then SUM the contributions
     //      grouped by primary key. A document absent from a branch simply has no contribution row
@@ -2615,22 +2728,24 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     const auto emptyStruct = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
     const auto emptyTuple = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{});
 
-    // Per-direction weights and (linear-only) normalization flag, passed to the contribution UDF as constants.
-    const bool normalize = normalizeOverride.GetOrElse(true);
-    const auto wFtConst = ctx.Builder(pos).Callable("Double").Atom(0, ToString(ftWeight), TNodeFlags::Default).Seal().Build();
-    const auto wVecConst = ctx.Builder(pos).Callable("Double").Atom(0, ToString(vecWeight), TNodeFlags::Default).Seal().Build();
-    const auto normConst = ctx.Builder(pos).Callable("Bool").Atom(0, normalize ? "true" : "false", TNodeFlags::Default).Seal().Build();
-    const auto vecSimConst = ctx.Builder(pos).Callable("Bool").Atom(0, vecIsSimilarity ? "true" : "false", TNodeFlags::Default).Seal().Build();
+    // Linear-only normalization flag, passed to the contribution UDF as a constant.
+    const auto normConst = ctx.Builder(pos).Callable("Bool").Atom(0, settings.Normalize() ? "true" : "false", TNodeFlags::Default).Seal().Build();
+    auto doubleConst = [&](double v) {
+        return ctx.Builder(pos).Callable("Double").Atom(0, ToString(v), TNodeFlags::Default).Seal().Build();
+    };
+    auto boolConst = [&](bool v) {
+        return ctx.Builder(pos).Callable("Bool").Atom(0, v ? "true" : "false", TNodeFlags::Default).Seal().Build();
+    };
 
     const TString contribCol = "__ydb_hybrid_contrib";
 
-    // Per-branch contribution list { pk, __ydb_hybrid_contrib }.
-    TExprNode::TPtr ftContribs;
-    TExprNode::TPtr vecContribs;
+    // One per-branch contribution list { pk, __ydb_hybrid_contrib }, in branch order.
+    TVector<TExprNode::TPtr> branchContribs;
+    branchContribs.reserve(branches.size());
     auto asList1 = [&](const TExprNode::TPtr& v) {
         return ctx.Builder(pos).Callable("AsList").Add(0, v).Seal().Build();
     };
-    if (fusionMode == "linear") {
+    if (settings.Mode() == "linear") {
         // A score field of a row, cast to a (non-optional) Double.
         auto castDouble = [&](const TExprNode::TPtr& itArg, const TString& col) {
             return ctx.Builder(pos)
@@ -2654,8 +2769,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
                 .Seal().Build();
         };
-        // Fulltext relevance is already "higher = better", so it is a similarity branch.
-        const auto ftSimConst = ctx.Builder(pos).Callable("Bool").Atom(0, "true", TNodeFlags::Default).Seal().Build();
         // LinearFuse contribution UDF type: [List<Double> x4, List<Bool>, Bool] -> Double.
         const auto doubleListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
         const auto boolListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
@@ -2677,11 +2790,11 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                                  const TExprNode::TPtr& weight, const TExprNode::TPtr& simConst) {
             const auto branchMin = minMaxOf(list, scoreCol, "ListMin");
             const auto branchMax = minMaxOf(list, scoreCol, "ListMax");
-            const auto rowArg = ctx.NewArgument(pos, "r");
+            const auto contribRowArg = ctx.NewArgument(pos, "r");
             const auto contrib = ctx.Builder(pos)
                 .Callable("Apply")
                     .Add(0, linUdf)
-                    .Add(1, asList1(castDouble(rowArg, scoreCol)))
+                    .Add(1, asList1(castDouble(contribRowArg, scoreCol)))
                     .Add(2, asList1(branchMin))
                     .Add(3, asList1(branchMax))
                     .Add(4, asList1(weight))
@@ -2690,18 +2803,18 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 .Seal().Build();
             const auto body = ctx.Builder(pos)
                 .Callable("AsStruct")
-                    .List(0).Atom(0, pkCol).Callable(1, "Member").Add(0, rowArg).Atom(1, pkCol).Seal().Seal()
+                    .List(0).Atom(0, pkCol).Callable(1, "Member").Add(0, contribRowArg).Atom(1, pkCol).Seal().Seal()
                     .List(1).Atom(0, contribCol).Add(1, contrib).Seal()
                 .Seal().Build();
             return ctx.Builder(pos).Callable("Map").Add(0, list)
-                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}), TExprNode::TPtr(body)))
+                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {contribRowArg}), TExprNode::TPtr(body)))
                 .Seal().Build();
         };
-        // Linear normalization needs per-branch min/max (whole-list aggregates), so materialize each branch.
-        const auto ftMat = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(ftList)).Done().Ptr();
-        const auto vecMat = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(vecList)).Done().Ptr();
-        ftContribs = buildContribs(ftMat, relevanceCol, wFtConst, ftSimConst);
-        vecContribs = buildContribs(vecMat, distCol, wVecConst, vecSimConst);
+        for (const auto& b : branches) {
+            // Linear normalization needs per-branch min/max (whole-list aggregates), so materialize each branch.
+            const auto mat = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(b.List)).Done().Ptr();
+            branchContribs.push_back(buildContribs(mat, b.ScoreCol, doubleConst(b.Weight), boolConst(b.IsSimilarity)));
+        }
     } else {
         // RRF: rank = 1-based position in the (already-sorted) branch; contribution = w / (k + rank).
         const auto uint64ListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
@@ -2750,24 +2863,22 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {pArg}), TExprNode::TPtr(body)))
                 .Seal().Build();
         };
-        ftContribs = buildContribs(ftList, wFtConst);
-        vecContribs = buildContribs(vecList, wVecConst);
+        for (const auto& b : branches) {
+            branchContribs.push_back(buildContribs(b.List, doubleConst(b.Weight)));
+        }
     }
 
     // Cross-branch fusion: SUM the per-branch contributions grouped by primary key, giving
     // { pk, __ydb_hybrid_rrf } per distinct candidate. Sum is typed Optional<Double>; coalesce it to a
-    // plain Double. The fused set is referenced twice by the tail (lookup keys + score join), so
-    // materialize it once with TDqPrecompute.
-    // Materialize the (small) {pk, contrib} union before the aggregate. The branches themselves still
-    // stream through KqpStreamEnumerate; only the per-candidate contribution pairs are collected here.
-    // This barrier is required because the two branches stream in at different times: without it the
-    // distributed combiner can release a pk's partial sum before the second branch's contribution for
-    // that pk arrives, leaving two unmerged {pk, *} rows that ToDict('One) downstream collapses to one --
-    // silently dropping half of an in-both document's score. (Cheaper than the old per-branch precomputes:
-    // these are {pk, Double} pairs, not full branch rows.)
-    const auto fusedExtend = ctx.Builder(pos)
-        .Callable("Extend").Add(0, ftContribs).Add(1, vecContribs).Seal().Build();
-    const auto fusedInput = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(fusedExtend)).Done().Ptr();
+    // plain Double.
+    // The per-branch {pk, contrib} streams are simply Extend-ed together and fed straight into the
+    // Aggregate. The grouped SUM lowers to a distributed hash-combine pipeline
+    // (DqPhyHashCombine -> DqCnHashShuffle by pk -> final DqPhyHashCombine): the shuffle routes every row
+    // for a given pk to the same partition, so all of a candidate's contributions are summed together
+    // regardless of which branch (or when) they arrive.
+    const auto fusedInput = branchContribs.size() == 1
+        ? branchContribs[0]
+        : ctx.NewCallable(pos, "Extend", TExprNode::TListType(branchContribs.begin(), branchContribs.end()));
     const auto aggregated = ctx.Builder(pos)
         .Callable("Aggregate")
             .Add(0, fusedInput)
@@ -2809,8 +2920,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     // tuple (leftRow, Optional<mainRow>, _) per candidate. This carries the synthetic rrf score (a left
     // column) through the lookup, so the score does not have to be re-joined afterwards via a dict. It also
     // lets fusedScored feed the lookup directly -- it is consumed exactly once here, so no TDqPrecompute is
-    // needed for it. (The upstream fusedInput barrier before the SUM aggregate is a separate concern and
-    // stays; the left input here is the aggregate's already-merged one-row-per-pk output.)
+    // needed for it. (The left input here is the aggregate's already-merged one-row-per-pk output.)
     const auto lookupInput = ctx.Builder(pos)
         .Callable("Map")
             .Add(0, fusedScored)
@@ -2897,7 +3007,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         projOverFr = ctx.NewCallable(pos, "AsStruct", std::move(members));
     }
     const auto result = ctx.Builder(pos)
-        .Callable("Map")
+        .Callable("OrderedMap")
             .Callable(0, "TopSort")
                 .Add(0, augmented)
                 .Add(1, top.Count().Ptr())

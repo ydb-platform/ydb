@@ -23,7 +23,7 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
     return pathInfo.StartsWith(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX + "/");
 }
 
-bool UsesTabletDevUiSecurePath(TTabletTypes::EType type) {
+bool UsesTabletDevUiSecurePath(TTabletTypes::EType type, bool enableSecurePathFlag) {
     // Tablets that use the `/app/secure` DevUI path.
     constexpr std::array tabletTypes = {
         TTabletTypes::DataShard,
@@ -31,7 +31,7 @@ bool UsesTabletDevUiSecurePath(TTabletTypes::EType type) {
         TTabletTypes::GraphShard,
     };
 
-    return std::contains(tabletTypes.begin(), tabletTypes.end(), type);
+    return std::contains(tabletTypes.begin(), tabletTypes.end(), type) && enableSecurePathFlag;
 }
 
 bool IsTabletDevUiAccessAllowed(

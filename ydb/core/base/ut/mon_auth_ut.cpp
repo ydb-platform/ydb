@@ -20,11 +20,21 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
     }
 
     Y_UNIT_TEST(UsesTabletDevUiSecurePath) {
-        UNIT_ASSERT(UsesTabletDevUiSecurePath(TTabletTypes::DataShard));
-        UNIT_ASSERT(UsesTabletDevUiSecurePath(TTabletTypes::Hive));
-        UNIT_ASSERT(UsesTabletDevUiSecurePath(TTabletTypes::GraphShard));
+        for (const auto type : {
+            TTabletTypes::DataShard,
+            TTabletTypes::Hive,
+            TTabletTypes::GraphShard,
+        }) {
+            UNIT_ASSERT(!UsesTabletDevUiSecurePath(type, false));
+            UNIT_ASSERT(UsesTabletDevUiSecurePath(type, true));
+        }
 
-        UNIT_ASSERT(!UsesTabletDevUiSecurePath(TTabletTypes::BSController));
-        UNIT_ASSERT(!UsesTabletDevUiSecurePath(TTabletTypes::Coordinator));
+        for (const auto type : {
+            TTabletTypes::BSController,
+            TTabletTypes::Coordinator,
+        }) {
+            UNIT_ASSERT(!UsesTabletDevUiSecurePath(type, false));
+            UNIT_ASSERT(!UsesTabletDevUiSecurePath(type, true));
+        }
     }
 }

@@ -362,7 +362,7 @@ public:
 
     static void PrintInteractiveTransactionsNotAvailable() {
         Cerr << Colors.Red()
-             << "\nInteractive transactions (BEGIN/COMMIT/ROLLBACK) are available only in ydb_int."
+             << "\nInteractive transactions (BEGIN/COMMIT/ROLLBACK) are available only in the experimental ydb build."
              << Colors.OldColor() << Endl;
     }
 

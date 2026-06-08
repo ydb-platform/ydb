@@ -230,7 +230,7 @@ TString TPBufferCounters::DebugPrint() const
     TStringBuilder result;
 
     result << "{CurrentRecordsCount:" << CurrentRecordsCount << ", "
-           << "CurrentBytesCount" << CurrentBytesCount << ", "
+           << "CurrentBytesCount:" << CurrentBytesCount << ", "
            << "TotalRecordsCount:" << TotalRecordsCount << ", "
            << "TotalBytesCount:" << TotalBytesCount << ", "
            << "CurrentLockedRecordsCount:" << CurrentLockedRecordsCount << ", "

@@ -71,6 +71,13 @@ message ExportToYtResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message YdbDumpFormat {
+}
+
+message ParquetFormat {
+    uint32 row_group_size = 1;
+}
+
 /// S3
 message ExportToS3Settings {
     enum Scheme {
@@ -155,6 +162,11 @@ message ExportToS3Settings {
     // - Patterns are matched against the object path relative to the export's source_path.
     // - Object is excluded from export operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
+
+    oneof format {
+        YdbDumpFormat ydb_dump = 18;
+        ParquetFormat parquet = 19;
+    }
 }
 
 message ExportToS3Result {

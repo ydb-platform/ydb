@@ -11,7 +11,8 @@
 
 namespace NKikimr::NDDisk {
 
-    constexpr size_t DataAlignment = 4096;
+    constexpr size_t MinSectorSize = 4096;
+    constexpr size_t DataAlignment = MinSectorSize;
 
     struct TEv {
         enum {
@@ -255,7 +256,7 @@ struct TPersistentBufferFormat {
     ui32 MaxChunkRestoreInflight = 8;
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
     ui64 PerTabletStorageLimit = 4096_MB;
-    ui32 MaxBarriersLimit = 64;
+    ui32 MaxBarriersLimit = 128;
     ui32 MaxPendingEventsQueueSize = 1024;
     bool EnableFastErases = true;
 };
@@ -345,7 +346,7 @@ struct TPersistentBufferFormat {
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
     };
@@ -403,8 +404,12 @@ struct TPersistentBufferFormat {
             instruction.Serialize(Record.MutableInstruction());
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
+        }
+
+        static constexpr size_t GetPayloadHeaderSize() {
+            return MinSectorSize;
         }
     };
 
@@ -483,7 +488,7 @@ struct TPersistentBufferFormat {
             }
         }
 
-        size_t GetPayloadAlignment() const {
+        static constexpr size_t GetPayloadAlignment() {
             return DataAlignment;
         }
     };

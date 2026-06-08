@@ -9635,4 +9635,190 @@ namespace {
         input->SetTypeAnn(source->GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
     }
+
+    IGraphTransformer::TStatus SqlCombineInputWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& inputNode = input->Head();
+        auto& presortKeyLambda = input->ChildRef(1U);
+        auto& presortDirectionNode = input->ChildRef(2U);
+        auto& keyExtractLambda = input->ChildRef(3U);
+        auto& argMapLambda = input->ChildRef(4U);
+
+        bool isPresortUniversal;
+        bool isKeyUniversal;
+        bool isArgMapUniversal;
+
+        const auto inputType = inputNode.GetTypeAnn();
+        if (inputType && inputType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(inputType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!EnsureListType(inputNode, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto itemType = inputType->Cast<TListExprType>()->GetItemType();
+
+        // XXX: presortKeyLambda and presortDirectionNode type annotation is
+        // completed within ValidateSortTraits. However, if any of sort traits
+        // is Universal, SqlCombineInput type has to be Universal either with no
+        // error produced by type annotation routine. Hence, the check below
+        // just handles the case of inconsistent mutation (one component of the
+        // sort traits is Void and another is Universal); otherwise, fuzzer
+        // receives unexpected false-positive error.
+        const auto presortKeyLambdaType = presortKeyLambda->GetTypeAnn();
+        const auto presortDirectionNodeType = presortDirectionNode->GetTypeAnn();
+        if (presortKeyLambdaType && presortKeyLambdaType->GetKind() == ETypeAnnotationKind::Universal ||
+            presortDirectionNodeType && presortDirectionNodeType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (presortKeyLambda->IsCallable("Void") != presortDirectionNode->IsCallable("Void")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(presortDirectionNode->Pos()), TStringBuilder() <<
+                              "Direction and sort key extractor should be specified at the same time"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!presortKeyLambda->IsCallable("Void")) {
+            // XXX: Even if sort traits are not Universal per se, they can
+            // become Universal as a result of ValidateSortTraits (i.e. type
+            // annotation). Hence, isPresortUniversal is checked below either.
+            const auto status = ValidateSortTraits(itemType, presortDirectionNode, presortKeyLambda, ctx.Expr, isPresortUniversal);
+            if (status.Level != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+        }
+
+        const auto status = ConvertToLambda(keyExtractLambda, ctx.Expr, isKeyUniversal, 1)
+            .Combine(ConvertToLambda(argMapLambda, ctx.Expr, isArgMapUniversal, 1));
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (isPresortUniversal || isKeyUniversal || isArgMapUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(keyExtractLambda, {itemType}, ctx.Expr) ||
+            !UpdateLambdaAllArgumentsTypes(argMapLambda, {itemType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto keyExtractLambdaType = keyExtractLambda->GetTypeAnn();
+        const auto argMapLambdaType = argMapLambda->GetTypeAnn();
+        if (!keyExtractLambdaType || !argMapLambdaType) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (keyExtractLambdaType->GetKind() == ETypeAnnotationKind::Universal ||
+            argMapLambdaType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus SqlCombineWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& leftInput = input->Child(0U);
+        const auto& rightInput = input->Child(1U);
+        auto& usingLambda = input->ChildRef(2U);
+
+        const auto leftInputType = leftInput->GetTypeAnn();
+        const auto rightInputType = rightInput->GetTypeAnn();
+
+        if (leftInputType && leftInputType->GetKind() == ETypeAnnotationKind::Universal ||
+            rightInputType && rightInputType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!leftInput->IsCallable("SqlCombineInput")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(leftInput->Pos()), TStringBuilder() <<
+                              "COMBINE left input has to be SqlCombineInput node"));
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!rightInput->IsCallable("SqlCombineInput")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(rightInput->Pos()), TStringBuilder() <<
+                              "COMBINE right input has to be SqlCombineInput node"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        YQL_ENSURE(leftInputType->GetKind() == ETypeAnnotationKind::Unit);
+        YQL_ENSURE(rightInputType->GetKind() == ETypeAnnotationKind::Unit);
+
+        bool isUsingUniversal;
+        const auto status = ConvertToLambda(usingLambda, ctx.Expr, isUsingUniversal, 3);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (isUsingUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        const auto leftKeyType = leftInput->Child(3U)->GetTypeAnn();
+        const auto rightKeyType = rightInput->Child(3U)->GetTypeAnn();
+        const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, true);
+        if (!commonKeyType) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto leftListType = ctx.Expr.MakeType<TListExprType>(leftInput->Tail().GetTypeAnn());
+        const auto rightListType = ctx.Expr.MakeType<TListExprType>(rightInput->Tail().GetTypeAnn());
+
+        if (!UpdateLambdaAllArgumentsTypes(usingLambda, {commonKeyType, leftListType, rightListType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto usingLambdaType = usingLambda->GetTypeAnn();
+        if (!usingLambdaType) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* structType = nullptr;
+        switch (usingLambdaType->GetKind()) {
+            case ETypeAnnotationKind::List:
+                structType = usingLambdaType->Cast<TListExprType>()->GetItemType();
+                break;
+            case ETypeAnnotationKind::Stream:
+                structType = usingLambdaType->Cast<TStreamExprType>()->GetItemType();
+                break;
+            case ETypeAnnotationKind::Optional:
+                structType = usingLambdaType->Cast<TOptionalExprType>()->GetItemType();
+                break;
+            case ETypeAnnotationKind::Struct:
+                structType = usingLambdaType;
+                break;
+            case ETypeAnnotationKind::Universal:
+                input->SetTypeAnn(usingLambdaType);
+                return IGraphTransformer::TStatus::Ok;
+            default:
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(usingLambda->Pos()), TStringBuilder() <<
+                                  "USING lambda should return one of the following: Struct, Optional<Struct>, List<Struct> or Stream<Struct>"));
+                return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStructType(usingLambda->Pos(), *structType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(structType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
 } // namespace NYql::NTypeAnnImpl

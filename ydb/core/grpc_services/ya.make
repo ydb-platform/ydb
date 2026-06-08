@@ -138,6 +138,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/kqp/opt
+    ydb/core/local_indexes/bloom
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view
@@ -171,7 +172,13 @@ PEERDIR(
     ydb/services/ext_index/common
 )
 
-IF (OS_LINUX)
+
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
     SRCS(
         rpc_nbs.cpp
         rpc_nbs_io.cpp

@@ -133,9 +133,11 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     }
 
     SetYqlSelectMode(settings.YqlSelect);
-
     if (settings.Flags.contains("AutoYqlSelect")) {
         SetYqlSelectMode(EYqlSelect::Auto);
+    }
+    if (settings.Flags.contains("ForceYqlSelect")) {
+        SetYqlSelectMode(EYqlSelect::Force);
     }
 
     for (auto lib : settings.Libraries) {

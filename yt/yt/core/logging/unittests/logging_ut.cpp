@@ -1086,8 +1086,17 @@ TEST_P(TBuiltinRotationTest, All)
             if (files.empty()) {
                 return true;
             }
-            auto lines = ReadPlainTextEvents(files[0]);
-            return lines.empty();
+            // The active file may be renamed by the background rotation at any moment
+            // between enumeration and open.
+            try {
+                auto lines = ReadPlainTextEvents(files[0]);
+                return lines.empty();
+            } catch (const TSystemError& ex) {
+                if (ex.Status() == ENOENT) {
+                    return false;
+                }
+                throw;
+            }
         });
         {
             auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);

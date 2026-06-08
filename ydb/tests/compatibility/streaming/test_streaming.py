@@ -196,7 +196,7 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
         yield from self.setup_cluster()
 
     @link_test_case("#27924")
-    def test_rolling_upgrage(self):
+    def test_rolling_upgrade(self):
         self.create_topics()
         self.create_external_data_source()
         self.create_simple_streaming_query()

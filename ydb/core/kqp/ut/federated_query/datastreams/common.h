@@ -121,6 +121,8 @@ public:
 
     void AlterTopic(const std::string& topicName, NYdb::NTopic::TAlterTopicSettings settings, bool local = false);
 
+    void DropTopic(const std::string& topicName, bool local = false);
+
     void WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition = 0, bool local = false);
 
     void WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition = 0);

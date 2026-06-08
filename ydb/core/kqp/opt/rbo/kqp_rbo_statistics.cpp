@@ -120,7 +120,7 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
         builder << ", ColumnsCount: " << ColumnsCount << ", Storage: " << storageType << ", KeyCols: [";
 
         for (size_t i = 0; i < KeyColumns.size(); i++) {
-            builder << KeyColumns[i].GetAlias() << "." << KeyColumns[i].GetColumnName();
+            builder << KeyColumns[i].GetFullName();
             if (i != KeyColumns.size() - 1) {
                 builder << ", ";
             }

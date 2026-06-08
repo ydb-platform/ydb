@@ -270,9 +270,13 @@ TDqConnection BuildConnection(
     return buildShuffle();
 }
 
-TExprNode::TPtr BuildPartitionsThenSortDirections(TPositionHandle pos, const TExprNode::TPtr& sortDirectionsNode, TExprContext& ctx) {
+TExprNode::TPtr BuildPartitionsThenSortDirections(TPositionHandle pos, const TExprNode::TPtr& sortDirectionsNode,
+    ui32 partitionKeyCount, TExprContext& ctx)
+{
     TExprNode::TListType dirs;
-    dirs.push_back(ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true", TNodeFlags::Default)}));
+    for (ui32 i = 0; i < partitionKeyCount; ++i) {
+        dirs.push_back(ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true", TNodeFlags::Default)}));
+    }
     if (sortDirectionsNode->IsList()) {
         for (ui32 i = 0; i < sortDirectionsNode->ChildrenSize(); ++i) {
             dirs.push_back(sortDirectionsNode->ChildPtr(i));
@@ -291,7 +295,16 @@ TExprNode::TPtr BuildPartitionsThenSortKeySelectorLambda(
 {
     auto itemArg = ctx.NewArgument(pos, "item");
     TExprNode::TListType keys;
-    keys.push_back(ctx.ReplaceNode(partitionKeyLambda->TailPtr(), partitionKeyLambda->Head().Head(), itemArg));
+    auto partitionKeyBody = ctx.ReplaceNode(partitionKeyLambda->TailPtr(), partitionKeyLambda->Head().Head(), itemArg);
+
+    // flatten partition keys
+    if (partitionKeyBody->IsList()) {
+        for (ui32 i = 0; i < partitionKeyBody->ChildrenSize(); ++i) {
+            keys.push_back(partitionKeyBody->ChildPtr(i));
+        }
+    } else {
+        keys.push_back(partitionKeyBody);
+    }
     auto orderWithItem = ctx.ReplaceNode(orderKeyLambda->TailPtr(), orderKeyLambda->Head().Head(), itemArg);
     if (orderKeyLambda->Tail().IsList()) {
         for (ui32 i = 0; i < orderWithItem->ChildrenSize(); ++i) {
@@ -345,7 +358,9 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
     TExprNode::TPtr sortDirections;
     TExprNode::TPtr sortKeySelector;
     if (haveSort) {
-        sortDirections = BuildPartitionsThenSortDirections(pos, partition.SortDirections().Ptr(), ctx);
+        const auto& keyBody = keyExtractor.Body().Ref();
+        ui32 partitionKeyCount = keyBody.IsList() ? keyBody.ChildrenSize() : 1;
+        sortDirections = BuildPartitionsThenSortDirections(pos, partition.SortDirections().Ptr(), partitionKeyCount, ctx);
         sortKeySelector = BuildPartitionsThenSortKeySelectorLambda(pos,
             partition.KeySelectorLambda().Ptr(), partition.SortKeySelectorLambda().Ptr(), ctx);
     } else {
@@ -777,7 +792,7 @@ TMaybeNode<TDqStage> DqPushLambdasToStage(const TDqStage& stage, const std::map<
     return newStage;
 }
 
-} // namespace
+} // anonymous namespace
 
 TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& outputIndex, const TCoLambda& lambda,
     const TVector<TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx)
@@ -1245,8 +1260,6 @@ TExprBase DqBuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizati
 {
     return DqBuildLMapOverMuxStageStub<TCoLMap>(node, ctx, optCtx, parentsMap);
 }
-
-
 
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage, bool createStageForAggregation)
@@ -1897,7 +1910,7 @@ TExprBase GetSortDirection(const TExprBase& sortDirections, size_t index) {
     }
     return TExprBase(sortDirection);
 }
-} // End of anonymous namespace
+} // anonymous namespace
 
 TExprBase DqBuildTopStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
@@ -3032,6 +3045,11 @@ bool DqValidateJoinInputs(const TExprBase& left, const TExprBase& right, const T
         if (!IsSingleConsumerConnection(right.Cast<TDqCnUnionAll>(), parentsMap, allowStageMultiUsage)) {
             return false;
         }
+
+        if (right.Ref().GetConstraint<TStreamingConstraintNode>() && !left.Ref().GetConstraint<TStreamingConstraintNode>()) {
+            // For streaming join we should place streaming input on the left side
+            return false;
+        }
     } else if (IsDqCompletePureExpr(right, /* isPrecomputePure */ true)) {
         // pass
     } else {
@@ -3085,7 +3103,6 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
         .Done();
 }
 
-
 TExprBase DqBuildJoin(
     const TExprBase& node,
     TExprContext& ctx,
@@ -3110,6 +3127,11 @@ TExprBase DqBuildJoin(
     const auto joinType = join.JoinType().Value();
     const bool leftIsUnionAll = join.LeftInput().Maybe<TDqCnUnionAll>().IsValid();
     const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
+    const auto* const streaming = node.Ref().GetConstraint<TStreamingConstraintNode>();
+
+    if (streaming) {
+        useGraceCoreForMap = false;
+    }
 
     auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
     if (joinAlgo == EJoinAlgoType::Undefined) {
@@ -3126,7 +3148,8 @@ TExprBase DqBuildJoin(
     bool useHashJoin = EHashJoinMode::Off != hashJoin
         && joinType != "Cross"sv
         && leftIsUnionAll
-        && rightIsUnionAll;
+        && rightIsUnionAll
+        && !streaming;
 
     if (DqValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
         // pass
@@ -3512,7 +3535,6 @@ TExprBase DqPushUnorderedOverDqConnection(TDqConnection dqConection, TExprContex
 
     return result.Cast();
 }
-
 
 TMaybeNode<TExprBase> DqUnorderedOverStageInput(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TTypeAnnotationContext& typeAnnCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage) {

@@ -430,23 +430,23 @@ TKafkaRecordBatch::TKafkaRecordBatch()
     , RecordsCount(0) {
     }
 
-ECompressionType TKafkaRecordBatch::CompressionType() const {
+ECompressionType TKafkaRecordBatch::CompressionType() {
     return GetCompressionType(Attributes);
 }
 
-ETimestampType TKafkaRecordBatch::TimestampType() const {
+ETimestampType TKafkaRecordBatch::TimestampType() {
     return (Attributes & 0x08) ? ETimestampType::LOG_APPEND_TIME : ETimestampType::CREATE_TIME;
 }
 
-bool TKafkaRecordBatch::Transactional() const {
+bool TKafkaRecordBatch::Transactional() {
     return Attributes & 0x10;
 }
 
-bool TKafkaRecordBatch::ControlBatch() const {
+bool TKafkaRecordBatch::ControlBatch() {
     return Attributes & 0x20;
 }
 
-bool TKafkaRecordBatch::HasDeleteHorizonMs() const {
+bool TKafkaRecordBatch::HasDeleteHorizonMs() {
     return Attributes & 0x40;
 }
 
@@ -461,13 +461,13 @@ void TKafkaRecordBatch::Compress(TKafkaVersion version) {
 }
 
 void TKafkaRecordBatch::EnsurePackedRecords(TKafkaVersion version) const {
-    if (CompressionType() == ECompressionType::NONE || !PackedRecords.empty()) {
+    if (GetCompressionType(Attributes) == ECompressionType::NONE || !PackedRecords.empty()) {
         return;
     }
 
     RecordsCount = static_cast<TKafkaInt32>(Records.size());
     PackedRecords = CompressRecordBatchPayload(
-        SerializeRecordBatchRecords(Records, version, false), CompressionType());
+        SerializeRecordBatchRecords(Records, version, false), GetCompressionType(Attributes));
 }
 
 void TKafkaRecordBatch::Decompress(TKafkaVersion version) {
@@ -546,7 +546,7 @@ void TKafkaRecordBatch::Write(TKafkaWritable& _writable, TKafkaVersion _version)
     if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
         ythrow yexception() << "Can't write version " << _version << " of TKafkaRecordBatch";
     }
-    EnsureSupportedCompressionType(CompressionType());
+    EnsureSupportedCompressionType(GetCompressionType(Attributes));
     NPrivate::TWriteCollector _collector;
     NPrivate::Write<BaseOffsetMeta>(_collector, _writable, _version, BaseOffset);
     NPrivate::Write<BatchLengthMeta>(_collector, _writable, _version, BatchLength);
@@ -560,7 +560,7 @@ void TKafkaRecordBatch::Write(TKafkaWritable& _writable, TKafkaVersion _version)
     NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, ProducerId);
     NPrivate::Write<ProducerEpochMeta>(_collector, _writable, _version, ProducerEpoch);
     NPrivate::Write<BaseSequenceMeta>(_collector, _writable, _version, BaseSequence);
-    if (CompressionType() == ECompressionType::NONE) {
+    if (GetCompressionType(Attributes) == ECompressionType::NONE) {
         NPrivate::Write<RecordsMeta>(_collector, _writable, _version, Records);
     } else {
         EnsurePackedRecords(_version);
@@ -570,7 +570,7 @@ void TKafkaRecordBatch::Write(TKafkaWritable& _writable, TKafkaVersion _version)
 }
 
 i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
-    EnsureSupportedCompressionType(CompressionType());
+    EnsureSupportedCompressionType(GetCompressionType(Attributes));
     NPrivate::TSizeCollector _collector;
     NPrivate::Size<BaseOffsetMeta>(_collector, _version, BaseOffset);
     NPrivate::Size<BatchLengthMeta>(_collector, _version, BatchLength);
@@ -584,7 +584,7 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
     NPrivate::Size<ProducerIdMeta>(_collector, _version, ProducerId);
     NPrivate::Size<ProducerEpochMeta>(_collector, _version, ProducerEpoch);
     NPrivate::Size<BaseSequenceMeta>(_collector, _version, BaseSequence);
-    if (CompressionType() == ECompressionType::NONE) {
+    if (GetCompressionType(Attributes) == ECompressionType::NONE) {
         NPrivate::Size<RecordsMeta>(_collector, _version, Records);
     } else {
         EnsurePackedRecords(_version);

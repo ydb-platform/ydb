@@ -89,7 +89,7 @@ void AssertRecordBatchRoundTrip(ECompressionType compressionType) {
     const TKafkaRecordBatch batch = MakeRecordBatch(compressionType);
 
     const TString serialized = WriteKafkaRecordBatch(batch);
-    const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(serialized);
+    TKafkaRecordBatch parsed = ReadKafkaRecordBatch(serialized);
 
     UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, batch.BaseOffset);
     UNIT_ASSERT_VALUES_EQUAL(parsed.Magic, batch.Magic);
@@ -313,7 +313,7 @@ void AssertKafkaLegacyRecord(
 }
 
 void AssertKafkaProducerBatchDeserialized(ECompressionType compressionType) {
-    const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(KafkaProducerBatchBytes(compressionType));
+    TKafkaRecordBatch parsed = ReadKafkaRecordBatch(KafkaProducerBatchBytes(compressionType));
 
     UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, 42);
     UNIT_ASSERT_VALUES_EQUAL(parsed.PartitionLeaderEpoch, -1);
@@ -389,7 +389,7 @@ void AssertKafkaLegacyProducerBatchDeserialized(
     i64 expectedFirstTimestamp,
     i64 expectedSecondTimestamp)
 {
-    const TKafkaRecordBatch parsed = ReadKafkaLegacyProducerBatch(
+    TKafkaRecordBatch parsed = ReadKafkaLegacyProducerBatch(
         KafkaLegacyProducerBatchBytes(magic, compressionType),
         magic);
 

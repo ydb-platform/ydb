@@ -424,11 +424,11 @@ public:
 
     bool operator==(const TKafkaRecordBatch& other) const = default;
 
-    ECompressionType CompressionType() const;
-    ETimestampType TimestampType() const;
-    bool Transactional() const;
-    bool ControlBatch() const;
-    bool HasDeleteHorizonMs() const;
+    ECompressionType CompressionType();
+    ETimestampType TimestampType();
+    bool Transactional();
+    bool ControlBatch();
+    bool HasDeleteHorizonMs();
 
     void Compress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
     void Decompress(TKafkaVersion version = MessageMeta::PresentVersions.Max);

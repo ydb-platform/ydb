@@ -1,4 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -359,7 +362,30 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
 }
 
 
-Y_UNIT_TEST(UiExcludedSuccessSilentButFailureLogged) {
+// Drives KqpProxy with an explicit UserToken — SDK clients can't set the
+// SID, but metadata-service local RPCs do exactly this internally.
+void SendKqpQueryAsUser(TTestActorRuntime& runtime,
+                       const TActorId& edge,
+                       const TString& userSid,
+                       const TString& query) {
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+    ev->Record.SetUserToken(NACLib::TUserToken(userSid, {}).SerializeAsString());
+    ActorIdToProto(edge, ev->Record.MutableRequestActorId());
+    auto& req = *ev->Record.MutableRequest();
+    req.SetDatabase("/Root");
+    req.SetQuery(query);
+    req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    auto* txControl = req.MutableTxControl();
+    txControl->mutable_begin_tx()->mutable_serializable_read_write();
+    txControl->set_commit_tx(true);
+
+    runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId(0)), edge, ev.release()));
+    auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(edge);
+    UNIT_ASSERT_C(reply, "no TEvQueryResponse for metadata-user query");
+}
+
+Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {
     TStringStream logStream;
     size_t logStart = 0;
     {
@@ -367,60 +393,66 @@ Y_UNIT_TEST(UiExcludedSuccessSilentButFailureLogged) {
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
         logStart = logStream.Size();
 
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+
+        SendKqpQueryAsUser(runtime, edge, BUILTIN_ACL_METADATA,
+            "/*meta-ok*/ SELECT 1 AS x_meta_ok");
+        SendKqpQueryAsUser(runtime, edge, BUILTIN_ACL_METADATA,
+            "/*meta-fail*/ SELECT FROM broken_syntax_meta");
+
+        // Non-metadata SUCCESS must log at DEBUG — otherwise the
+        // metadata-silence assertion below passes via the priority gate.
         auto db = kikimr.GetQueryClient();
-        {
-            auto ok = db.ExecuteQuery(
-                "/*UI-QUERY-EXCLUDE*/\nSELECT 1 AS x",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(ok.IsSuccess(), ok.GetIssues().ToString());
-        }
-        {
-            auto bad = db.ExecuteQuery(
-                "/*UI-QUERY-EXCLUDE*/\nSELECT FROM broken_syntax",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!bad.IsSuccess(), "excluded syntax-broken query must fail");
-        }
-        {
-            auto control = db.ExecuteQuery(
-                "SELECT 2 AS y",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(control.IsSuccess(), control.GetIssues().ToString());
-        }
+        auto control = db.ExecuteQuery(
+            "SELECT 2 AS y_meta_ctrl",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(control.IsSuccess(), control.GetIssues().ToString());
     }
     const auto fullLog = logStream.Str();
     const auto entries = CollectReqJson(LogSince(logStream, logStart));
-    DumpEntries("UiExcludedSuccessSilentButFailureLogged", entries, fullLog);
+    DumpEntries("MetadataSystemUserSuccessSilentButFailureLogged", entries, fullLog);
 
-    bool excludedSuccessSeen = false;
-    bool excludedFailureSeen = false;
+    bool metaSuccessSeen = false;
+    bool metaFailureSeen = false;
     bool controlSuccessSeen = false;
     for (const auto& e : entries) {
         if (e.Event != "completed" || e.Part != 1) {
             continue;
         }
-        const auto data = e.Json["request"]["data"].GetStringSafe("");
-        const auto status = e.Json["request"]["status"].GetStringSafe("");
-        const bool isExcluded = data.Contains("/*UI-QUERY-EXCLUDE*/");
-        const bool isControl = !isExcluded && data.Contains("SELECT 2 AS y");
-        if (isExcluded) {
-            if (status == "SUCCESS") {
-                excludedSuccessSeen = true;
-            } else {
-                excludedFailureSeen = true;
-                UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "WARN", e.RawLine);
-            }
-        } else if (isControl && status == "SUCCESS") {
+        const auto& req = e.Json["request"];
+        const auto user = e.Json["user"].GetStringSafe("");
+        const auto data = req["data"].GetStringSafe("");
+        const auto status = req["status"].GetStringSafe("");
+        const bool isMetaUser = user == BUILTIN_ACL_METADATA;
+        if (isMetaUser && data.Contains("/*meta-ok*/")) {
+            metaSuccessSeen = true;
+        } else if (isMetaUser && data.Contains("/*meta-fail*/")) {
+            metaFailureSeen = true;
+            UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "WARN", e.RawLine);
+            UNIT_ASSERT_C(status != "SUCCESS",
+                TStringBuilder() << "meta-fail must not be SUCCESS: " << e.RawLine);
+        } else if (!isMetaUser && data.Contains("y_meta_ctrl") && status == "SUCCESS") {
             controlSuccessSeen = true;
             UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "DEBUG", e.RawLine);
         }
     }
     UNIT_ASSERT_C(controlSuccessSeen,
-        "non-excluded success must log at DEBUG — otherwise the excluded-success "
-        "assertion below would pass trivially via the priority gate");
-    UNIT_ASSERT_C(!excludedSuccessSeen, "UI-excluded successful query must not log completed");
-    UNIT_ASSERT_C(excludedFailureSeen, "UI-excluded failure must log completed at WARN");
+        "non-metadata success must log at DEBUG (priority gate sanity)");
+    UNIT_ASSERT_C(!metaSuccessSeen,
+        "metadata@system successful query must not log a completed envelope");
+    UNIT_ASSERT_C(metaFailureSeen,
+        "metadata@system failed query must log a completed envelope at WARN");
 }
 
+// A streaming query over real tables must report:
+//   * results_size > 0 — bytes pushed to the client over the stream are
+//     accounted, not just the (empty) ExecuteQuery payload;
+//   * schemeshard_id > 0 — the SchemeShard tablet id owning the touched
+//     tables. For a dedicated database this is the database's own
+//     SchemeShard, so it distinguishes a dropped+recreated database from
+//     the old one even when the path is identical (table-less queries
+//     like SELECT 1 omit this field).
 Y_UNIT_TEST(StreamingBigResultReportsResultsSize) {
     TStringStream logStream;
     size_t logStart = 0;
@@ -458,11 +490,17 @@ Y_UNIT_TEST(StreamingBigResultReportsResultsSize) {
         const auto status = req["status"].GetStringSafe("");
         const auto durationUs = req["duration_us"].GetUIntegerSafe(0);
         const auto resultsSize = req["results_size"].GetUIntegerSafe(0);
+        const auto schemeShardId = req["schemeshard_id"].GetUIntegerSafe(0);
         Cerr << "EightShard^3 cross-join: status=" << status
              << " duration_us=" << durationUs
-             << " results_size=" << resultsSize << Endl;
+             << " results_size=" << resultsSize
+             << " schemeshard_id=" << schemeShardId << Endl;
         UNIT_ASSERT_C(resultsSize > 0,
             TStringBuilder() << "results_size must be > 0, got " << resultsSize);
+        UNIT_ASSERT_C(req.Has("schemeshard_id"),
+            TStringBuilder() << "schemeshard_id field expected for a table query: " << e.RawLine);
+        UNIT_ASSERT_C(schemeShardId > 0,
+            TStringBuilder() << "schemeshard_id must be a positive tablet id, got " << schemeShardId);
         found = true;
     }
     UNIT_ASSERT_C(found, "completed envelope for big cross-join must be present");

@@ -143,8 +143,7 @@ TString Bytes(std::initializer_list<ui8> bytes) {
     return result;
 }
 
-// Generated from Apache Kafka commit 47fbf15f7b with this Java test placed in
-// clients/src/test/java/org/apache/kafka/clients/producer/internals/DumpRecordBatchBytesTest.java:
+// Generated from Apache Kafka commit 47fbf15f7b:
 //
 // for (CompressionType type : new CompressionType[]{CompressionType.NONE, CompressionType.GZIP, CompressionType.ZSTD}) {
 //     MemoryRecordsBuilder builder = MemoryRecords.builder(

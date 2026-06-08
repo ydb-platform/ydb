@@ -194,12 +194,14 @@ TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, con
 
 void TImportActor::OnSessionProgressSaved() {
     Counters.OnSaveProgressFinished(TInstant::Now() - SaveProgressStartTime);
-    // Stage is still WaitData (progress save doesn't change stage)
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        SwitchStage(EStage::WaitData, EStage::Finished);
+        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
+        Stage = EStage::Finished;
+        StageStartTime = TInstant::Now();
         SaveSessionState();
     } else {
-        StageStartTime = TInstant::Now();   // reset timeout for next data wait
+        AFL_VERIFY(Stage == EStage::WaitData)("real", (ui32)Stage);
+        StageStartTime = TInstant::Now();
         AFL_VERIFY(ImportActorId);
         Counters.OnReadStarted();
         ReadStartTime = TInstant::Now();

@@ -174,4 +174,48 @@ meta:
         );
     }
 
+    Y_UNIT_TEST(NodeConfigRejectsNonLoggingSource) {
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    node:
+      - source: "grafana/dashboard"
+        title: "Overview"
+        url: "/d/ydb_node/overview"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        auto mvp = MakeTestMvp();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "only source=grafana/logging is supported in support_links.node"
+        );
+    }
+
+    Y_UNIT_TEST(HostConfigRejectsNonLoggingSource) {
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    host:
+      - source: "grafana/dashboard"
+        title: "Overview"
+        url: "/d/ydb_host/overview"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        auto mvp = MakeTestMvp();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "only source=grafana/logging is supported in support_links.host"
+        );
+    }
+
 }

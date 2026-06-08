@@ -5954,6 +5954,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       Important: true
       Type: CONSUMER_TYPE_STREAMING
     }
+    ContentBasedDeduplication: false
   }
   ErrorCode: OK
 }

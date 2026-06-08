@@ -415,8 +415,8 @@ public:
         static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
     };
     RecordsMeta::Type Records;
-    TKafkaInt32 RecordsCount;
-    TString PackedRecords;
+    mutable TKafkaInt32 RecordsCount;
+    mutable TString PackedRecords;
 
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;

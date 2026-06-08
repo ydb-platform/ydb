@@ -94,9 +94,8 @@ TString SerializeRecordBatchRecords(
         RecordsMeta::ItemType,
         RecordsMeta::ItemTypeDesc>;
 
-    NPrivate::TSizeCollector collector;
     i64 payloadSize = NPrivate::TypeStrategy<
-        RecordsMeta, RecordsMeta::Type, NPrivate::TKafkaArrayDesc>::DoSize(collector, version, records);
+        RecordsMeta, RecordsMeta::Type, NPrivate::TKafkaArrayDesc>::DoSize(version, records);
     if (!includeArraySize) {
         payloadSize -= NPrivate::ArraySize<RecordsMeta>(version, static_cast<TKafkaInt32>(records.size()));
     }
@@ -458,20 +457,17 @@ void TKafkaRecordBatch::Compress(TKafkaVersion version) {
         TString().swap(PackedRecords);
         return;
     }
-    if (!PackedRecords.empty()) {
-        return;
-    }
-
-    RecordsCount = static_cast<TKafkaInt32>(Records.size());
-    PackedRecords = CompressRecordBatchPayload(
-        SerializeRecordBatchRecords(Records, version, false), compressionType);
+    EnsurePackedRecords(version);
 }
 
 void TKafkaRecordBatch::EnsurePackedRecords(TKafkaVersion version) const {
     if (CompressionType() == ECompressionType::NONE || !PackedRecords.empty()) {
         return;
     }
-    const_cast<TKafkaRecordBatch*>(this)->Compress(version);
+
+    RecordsCount = static_cast<TKafkaInt32>(Records.size());
+    PackedRecords = CompressRecordBatchPayload(
+        SerializeRecordBatchRecords(Records, version, false), CompressionType());
 }
 
 void TKafkaRecordBatch::Decompress(TKafkaVersion version) {

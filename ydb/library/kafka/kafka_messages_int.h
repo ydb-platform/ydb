@@ -181,8 +181,7 @@ public:
         readable >> value;
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion /*version*/, const TValueType& /*value*/) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion /*version*/, const TValueType& /*value*/) {
         static_assert(TTypeDesc::FixedLength, "Unsupported type: serialization length must be constant");
         return sizeof(TValueType);
     }
@@ -230,8 +229,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValueType& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
         if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
             return SizeOfVarint(value);
         } else {
@@ -278,8 +276,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValueType& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
         if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
             return SizeOfUnsignedVarint(value);
         } else {
@@ -314,8 +311,7 @@ public:
         value.Read(readable, version);
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValueType& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
         return value.Size(version);
     }
 
@@ -373,8 +369,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TKafkaString& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaString& value) {
         if (value) {
             const auto& v = *value;
             if (v.length() > Max<i16>()) {
@@ -441,8 +436,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TKafkaBytes& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaBytes& value) {
         if (value) {
             const auto& v = *value;
             return v.size() + ArraySize<Meta>(version, v.size());
@@ -499,8 +493,7 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TKafkaRecords& value) {
-        Y_UNUSED(collector);
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaRecords& value) {
         if (value) {
             const auto& v = *value;
             const auto size = v.Size(CURRENT_RECORD_VERSION);
@@ -563,14 +556,13 @@ public:
         }
     }
 
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const std::vector<TValueType>& value) {
+    inline static i64 DoSize(TKafkaVersion version, const std::vector<TValueType>& value) {
         TKafkaInt32 size = 0;
         if constexpr (Meta::TypeDesc::FixedLength) {
-            Y_UNUSED(collector);
             size = value.size() * sizeof(TValueType);
         } else {
             for(const auto& v : value) {
-                size += ItemStrategy::DoSize(collector, version, v);
+                size += ItemStrategy::DoSize(version, v);
             }
         }
         return size + ArraySize<Meta>(version, value.size());
@@ -628,14 +620,14 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
                 if (!IsDefaultValue<Meta>(value)) {
                     ++collector.NumTaggedFields;
 
-                    i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+                    i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
                     collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size);
                     if constexpr (DEBUG_ENABLED) {
                         Cerr << "Size of field '" << Meta::Name << "' " << size << " + " << SizeOfUnsignedVarint(Meta::Tag) << " + " << SizeOfUnsignedVarint(size) << Endl;
                     }
                 }
             } else {
-                i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+                i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
                 collector.Size += size;
                 if constexpr (DEBUG_ENABLED) {
                     Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;
@@ -644,7 +636,7 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
         }
     } else {
         if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
-            i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value);
+            i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
             collector.Size += size;
             if constexpr (DEBUG_ENABLED) {
                 Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;
@@ -660,8 +652,7 @@ inline void WriteTag(TKafkaWritable& writable, TKafkaInt16 version, const typena
             VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
             if (!IsDefaultValue<Meta>(value)) {
                 writable.writeUnsignedVarint(Meta::Tag);
-                TSizeCollector collector;
-                writable.writeUnsignedVarint(TypeStrategy<Meta, typename Meta::Type>::DoSize(collector, version, value));
+                writable.writeUnsignedVarint(TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value));
                 TypeStrategy<Meta, typename Meta::Type>::DoWriteTag(writable, version, value);
             }
         }

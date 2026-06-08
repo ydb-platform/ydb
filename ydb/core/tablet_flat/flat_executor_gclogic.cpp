@@ -1,5 +1,6 @@
 #include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <unordered_set>
 
@@ -195,6 +196,9 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
 }
 
 void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
+    if (!AppData()->FeatureFlags.GetEnableCutHistory()) {
+        return;
+    }
     for (auto channelId : ChannelsToCutHistory) {
         auto& channel = ChannelInfo[channelId];
         auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);

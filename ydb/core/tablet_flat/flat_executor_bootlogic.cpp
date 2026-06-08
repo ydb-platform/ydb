@@ -332,6 +332,11 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
             for (const auto& glob : **(part->Blobs)) {
                 SeenBlob(glob.Logo);
             }
+            if (const auto* partStore = part.As<const NTable::TPartStore>()) {
+                for (const auto& pageCollection : partStore->PageCollections) {
+                    SeenBlob(pageCollection->PageCollection->Label());
+                }
+            }
         }
         if (Result_->GcLogic && !Result_->Database->GetTableColdParts(tableId).empty()) {
             for (const auto& [_, room] : table.Rooms) {

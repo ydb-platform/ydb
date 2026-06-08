@@ -7824,6 +7824,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         };
 
         TMyEnvBase env;
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableCutHistory(true);
         TRowsModel data;
         bool wasCutHistory = false;
         env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -7873,6 +7875,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         };
 
         TMyEnvBase env;
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableCutHistory(true);
         TRowsModel data;
         bool wasCutHistory = false;
         bool wasHardBarrier = false;
@@ -7939,6 +7943,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         TMyEnvBase env;
         TRowsModel data;
         bool wasCutHistory = false;
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableCutHistory(true);
         env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTablet::EvCutTabletHistory: {
@@ -7989,6 +7995,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         };
 
         TMyEnvBase env;
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableCutHistory(true);
         TRowsModel data;
         bool wasCutHistory = false;
         std::set<ui32> barriers;

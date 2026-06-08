@@ -58,7 +58,7 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CloneArray));// TODO: Generate code instead of call CloneArray.
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>());// TODO: Generate code instead of call CloneArray.
 
         const auto list = GetNodeValue(List, ctx, block);
 
@@ -90,8 +90,8 @@ public:
 
         result->addIncoming(array, block);
 
-        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THeapWrapper::Do));
-        const auto self = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(this));
+        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THeapWrapper::Do>());
+        const auto self = ConstantInt::get(Type::getInt64Ty(context), (uintptr_t)(this));
 
         const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
         const auto zero = ConstantInt::get(idxType, 0);
@@ -226,7 +226,7 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CloneArray));// TODO: Generate code instead of call CloneArray.
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>());// TODO: Generate code instead of call CloneArray.
 
         const auto list = GetNodeValue(List, ctx, block);
         const auto midv = GetNodeValue(Middle, ctx, block);
@@ -266,8 +266,8 @@ public:
 
         result->addIncoming(array, block);
 
-        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TNthWrapper::Do));
-        const auto self = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(this));
+        const auto algo = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TNthWrapper::Do>());
+        const auto self = ConstantInt::get(Type::getInt64Ty(context), (uintptr_t)(this));
 
         const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
         const auto zero = ConstantInt::get(idxType, 0);

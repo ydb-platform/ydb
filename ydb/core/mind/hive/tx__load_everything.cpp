@@ -453,6 +453,9 @@ public:
                         it = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first;
                     }
                     it->second.LockedTablets.insert(&tablet);
+                    if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                        tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+                    }
                 }
 
                 tablet.SeizedByChild = tabletRowset.GetValueOrDefault<Schema::Tablet::SeizedByChild>();

@@ -3,8 +3,10 @@
 #include "partition_compactification.h"
 #include "partition_log.h"
 #include "partition_util.h"
+#include "blob_key_filter.h"
 
 #include <memory>
+#include <util/string/join.h>
 
 namespace NKikimr::NPQ {
 
@@ -561,8 +563,8 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
     }
 }
 
-static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
-                                             const TPartitionId& partitionId)
+THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
+                                      const TPartitionId& partitionId)
 {
     TVector<TString> keys;
 
@@ -572,7 +574,18 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
         keys.push_back(pair.GetKey());
     }
 
-    std::sort(keys.begin(), keys.end());
+    auto compare = [](const TString& lhs, const TString& rhs) {
+        auto getKeySuffix = [](const TString& v) {
+            return (v.back() == '?') ? '?' : '|';
+        };
+
+        if (getKeySuffix(lhs) == getKeySuffix(rhs)) {
+            return lhs < rhs;
+        }
+
+        return getKeySuffix(lhs) == '|';
+    };
+    std::sort(keys.begin(), keys.end(), compare);
 
     TDeque<TString> filtered;
     TKey lastKey;

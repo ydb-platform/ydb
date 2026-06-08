@@ -131,7 +131,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TYtDqWideWriteWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TYtDqWideWriteWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -163,7 +163,7 @@ public:
             const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
             const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, structPtrType, "state_arg", block);
 
-            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWriterState::AddRow));
+            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWriterState::AddRow>());
             const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), values->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "write", block);
             CallInst::Create(addType, addPtr, {stateArg, values}, "", block);
@@ -183,7 +183,7 @@ public:
             const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
             const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, structPtrType, "state_arg", block);
 
-            const auto finishFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWriterState::Finish));
+            const auto finishFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWriterState::Finish>());
             const auto finishType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto finishPtr = CastInst::Create(Instruction::IntToPtr, finishFunc, PointerType::getUnqual(finishType), "finish", block);
             CallInst::Create(finishType, finishPtr, {stateArg}, "", block);

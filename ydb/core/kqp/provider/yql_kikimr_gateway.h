@@ -45,6 +45,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
+    class TIamCredentials;
     class TConsistencySettings_TGlobalConsistency;
 }
 
@@ -828,6 +829,14 @@ struct TReplicationSettingsBase {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TIamCredentials {
+        TString ServiceAccountId;
+        TOAuthToken InitialToken;
+        TString ResourceId;
+
+        void Serialize(NKikimrReplication::TIamCredentials& proto) const;
+    };
+
     struct TStateDone {
         enum class EFailoverMode: ui32 {
             Consistent = 1,
@@ -842,6 +851,7 @@ struct TReplicationSettingsBase {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TIamCredentials> IamCredentials;
     TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
     bool StatePaused = false;
@@ -872,6 +882,14 @@ struct TReplicationSettingsBase {
         }
 
         return *StaticCredentials;
+    }
+
+    TIamCredentials& EnsureIamCredentials() {
+        if (!IamCredentials) {
+            IamCredentials = TIamCredentials();
+        }
+
+        return *IamCredentials;
     }
 };
 

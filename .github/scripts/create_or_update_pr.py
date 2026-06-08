@@ -12,20 +12,19 @@ def read_body_from_file(file_path):
 def create_gist_for_large_content(content, github_token, title="PR Body Content"):
     """Creates a GitHub gist for large content and returns the gist URL."""
     from github import Github
-    
+    from github.InputFileContent import InputFileContent
+
     g = Github(github_token)
-    
+
     # Create gist with the full content
     gist = g.get_user().create_gist(
         public=False,
         files={
-            f"{title}.md": {
-                "content": content
-            }
+            f"{title}.md": InputFileContent(content)
         },
         description=f"Large content for {title}"
     )
-    
+
     print(f"Created gist: {gist.html_url}")
     return gist.html_url
 
@@ -38,17 +37,17 @@ def get_body_content(body_input, github_token=None):
     else:
         print(f"Body content will be taken directly: '{body_input}.'")
         content = body_input
-    
+
     # GitHub has a 65,536 character limit for PR body, so we use half of it to leave some space for the summary and closed issues
-    MAX_BODY_LENGTH = 65536 // 2    
-    
+    MAX_BODY_LENGTH = 65536 // 2
+
     if len(content) > MAX_BODY_LENGTH:
         print(f"Warning: PR body content is {len(content)} characters, exceeding GitHub's limit of {MAX_BODY_LENGTH}")
-        
+
         if github_token:
             print("Creating GitHub gist for large content...")
             gist_url = create_gist_for_large_content(content, github_token, "Muted Tests Update Details")
-            
+
             # Create a summary body with link to gist
             summary_content = f"""# Muted tests update
 
@@ -61,7 +60,7 @@ This PR contains a large number of test changes. Full details are available in t
 
 ---
 *This summary was automatically generated due to content size limitations.*"""
-            
+
             print(f"Created summary body with gist link: {len(summary_content)} characters")
             return summary_content
         else:
@@ -71,7 +70,7 @@ This PR contains a large number of test changes. Full details are available in t
             available_length = MAX_BODY_LENGTH - len(truncation_notice)
             content = content[:available_length] + truncation_notice
             print(f"Truncated content to {len(content)} characters")
-    
+
     return content
 
 

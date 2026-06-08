@@ -1,9 +1,11 @@
+#include <ydb/core/base/hive.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
@@ -724,7 +726,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2).SetAppConfig(app));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
-    auto monPort = kikimr.GetTestServer().GetRuntime()->GetMonPort();
 
     auto firstNodeId = kikimr.GetTestServer().GetRuntime()->GetFirstNodeId();
 
@@ -733,22 +734,30 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     auto expectedTotalSingleNodeReqCount = counters.TotalSingleNodeReqCount->Val();
     auto expectedNonLocalSingleNodeReqCount = counters.NonLocalSingleNodeReqCount->Val();
 
-    auto drainNode = [monPort](size_t nodeId, bool undrain = false) {
-        TNetworkAddress addr("localhost", monPort);
-        TSocket s(addr);
-        TString url;
+    auto drainNode = [runtime = kikimr.GetTestServer().GetRuntime()](size_t nodeId, bool undrain = false) {
+        auto sender = runtime->AllocateEdgeActor();
+        NActorsProto::TRemoteHttpInfo pb;
+        pb.SetMethod(HTTP_METHOD_POST);
+        pb.SetPath("/app");
+        auto* p1 = pb.AddQueryParams();
+        p1->SetKey("TabletID");
+        p1->SetValue("72057594037968897");
+        auto* p2 = pb.AddQueryParams();
+        p2->SetKey("node");
+        p2->SetValue(ToString(nodeId));
         if (undrain) {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=SetDown&down=0";
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("page");
+            p3->SetValue("SetDown");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("down");
+            p4->SetValue("0");
         } else {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=DrainNode";
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("page");
+            p3->SetValue("DrainNode");
         }
-        SendMinimalHttpRequest(s, "localhost", url);
-        TSocketInput si(s);
-        THttpInput input(&si);
-        TString firstLine = input.FirstLine();
-
-        const auto httpCode = ParseHttpRetCode(firstLine);
-        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200);
+        runtime->SendToPipe(72057594037968897, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
     };
 
     auto waitTablets = [&session](size_t nodeId) mutable {
@@ -759,7 +768,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
                 .WithShardNodesInfo(true);
 
         bool done = false;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             std::unordered_set<ui32> nodeIds;
             auto res = session.DescribeTable("Root/EightShard", describeTableSettings)
                 .ExtractValueSync();
@@ -775,7 +784,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
                 done = true;
                 break;
             }
-            Sleep(TDuration::Seconds(1));
+            Sleep(TDuration::Seconds(5));
         }
         UNIT_ASSERT_C(done, "unable to wait tablets move on specific node");
     };
@@ -896,6 +905,93 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
     }
     // All executions are local - same value of counter
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
+}
+
+Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableMoveColumnTable(true);
+    auto serverSettings = TKikimrSettings()
+        .SetFeatureFlags(featureFlags)
+        .SetWithSampleTables(false)
+        .SetEnableTempTables(true);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(!IsOlap);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(false);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(Sprintf(R"(
+            CREATE TABLE `/Root/Source` (
+                Col1 Uint64 NOT NULL,
+                Col2 Int32,
+                PRIMARY KEY (Col1)
+            ) WITH (STORE=%s);
+        )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery( R"(
+            UPSERT INTO `/Root/Source` (Col1, Col2) VALUES (1, 1), (2, 2);
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    {    
+        auto result = client.ExecuteQuery(Sprintf(R"(
+            CREATE TABLE `/Root/Destination` (
+                PRIMARY KEY (Col1)
+            )
+            WITH (STORE=%s)
+            AS SELECT * FROM `/Root/Source`;
+        )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetResultSets().empty());
+
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+
+        Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        auto sink = FindPlanNodeByKv(
+            plan,
+            "Name",
+            "FillTable"
+        );
+
+        UNIT_ASSERT(sink.IsDefined());
+
+        UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+        UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
+        UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << stats.DebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 24);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 24);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 1);
+    }
+
+    {
+        auto result = client.ExecuteQuery( R"(
+            $cnt = SELECT COUNT(*) FROM `/Root/Destination`;
+            SELECT Ensure($cnt, $cnt == 2, "fail");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 } // suite

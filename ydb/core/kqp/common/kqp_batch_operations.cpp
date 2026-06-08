@@ -6,23 +6,20 @@ TSerializedTableRange MakePartitionRange(TMaybe<TKeyDesc::TPartitionRangeInfo> b
     TVector<TCell> tableBegin;
     TVector<TCell> tableEnd;
 
-    bool inclusiveTableBegin = (begin) ? begin->IsInclusive : false;
-    bool inclusiveTableEnd = (end) ? end->IsInclusive : false;
+    bool inclusiveTableBegin = !begin || begin->IsInclusive;
+    bool inclusiveTableEnd = !end || end->IsInclusive;
 
-    if (!begin || !begin->EndKeyPrefix) {
-        inclusiveTableBegin = true;
-        tableBegin.resize(keySize, TCell());
-    } else {
+    if (begin && begin->EndKeyPrefix) {
         const auto& cells = begin->EndKeyPrefix.GetCells();
         tableBegin.assign(cells.begin(), cells.end());
+    } else {
+        tableBegin.resize(keySize, TCell()); // -inf
     }
 
-    if (!end || !end->EndKeyPrefix) {
-        inclusiveTableEnd = true;
-    } else {
+    if (end && end->EndKeyPrefix) {
         const auto& cells = end->EndKeyPrefix.GetCells();
         tableEnd.assign(cells.begin(), cells.end());
-    }
+    } // else empty vector is +inf
 
     return TSerializedTableRange{tableBegin, inclusiveTableBegin, tableEnd, inclusiveTableEnd};
 }

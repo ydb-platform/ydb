@@ -11,6 +11,7 @@ TClientCommandServer::TClientCommandServer(std::shared_ptr<TModuleFactories> fac
     , MemLogInit(NConfig::MakeDefaultMemLogInitializer())
     , NodeBrokerClient(NConfig::MakeDefaultNodeBrokerClient())
     , DynConfigClient(NConfig::MakeDefaultDynConfigClient())
+    , ConfigClient(NConfig::MakeDefaultConfigClient())
     , Env(NConfig::MakeDefaultEnv())
     , Logger(NConfig::MakeDefaultInitLogger())
     , DepsRecorder(NConfig::MakeDefaultInitialConfiguratorDepsRecorder({
@@ -20,6 +21,7 @@ TClientCommandServer::TClientCommandServer(std::shared_ptr<TModuleFactories> fac
         *MemLogInit,
         *NodeBrokerClient,
         *DynConfigClient,
+        *ConfigClient,
         *Env,
         *Logger
     }))
@@ -34,6 +36,7 @@ int TClientCommandServer::Run(TConfig& config) {
         RunConfig.ScopeId,
         RunConfig.TenantName,
         RunConfig.ServicesMask,
+        RunConfig.TinyMode,
         RunConfig.ClusterName,
         RunConfig.ConfigsDispatcherInitInfo);
 

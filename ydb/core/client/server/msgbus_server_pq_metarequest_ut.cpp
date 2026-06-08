@@ -393,7 +393,7 @@ protected:
         for (const TActorId& actorId : TestActors) {
             IActor* actor = Runtime->FindActor(actorId);
             if (actor != nullptr) {
-                const bool isPipe = actor->ActivityType == NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
+                const bool isPipe = actor->GetActivityType() == NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
                 if (isPipe) {
                     UNIT_ASSERT_C(IsIn(destroyedActors, actorId),
                                   "Pipe client was not destroyed after test actor worked. Pipe client actor id: " << actorId);

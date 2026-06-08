@@ -1,4 +1,17 @@
 package NKikimrConfig;
 
-// This is a message that is used for config overrides in Console for https://github.com/ydb-platform/nbs, where it's not empty
-message TBlockstoreConfig {}
+// Copy of the message from cloud/blockstore/config/storage.proto
+enum EVolumePreemptionType
+{
+    // Do not preempt volumes when host is overloaded
+    PREEMPTION_NONE = 0;
+    // Move most resource consuming disk
+    PREEMPTION_MOVE_MOST_HEAVY = 1;
+    // Move least resource consumig disk
+    PREEMPTION_MOVE_LEAST_HEAVY = 2;
+}
+
+message TBlockstoreConfig {
+    // TStorageServiceConfig (134)
+    optional EVolumePreemptionType VolumePreemptionType = 1;
+}

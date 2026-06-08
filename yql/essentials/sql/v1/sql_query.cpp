@@ -64,6 +64,10 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "service_account_id",
+        "initial_token",
+        "initial_token_secret_name",
+        "resource_id",
         "ca_cert",
     };
 
@@ -164,6 +168,10 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "service_account_id",
+        "initial_token",
+        "initial_token_secret_name",
+        "resource_id",
         "ca_cert",
         "flush_interval",
         "batch_size_bytes",
@@ -194,7 +202,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         ctx.Context().Error() << key.Name << " is not supported in ALTER";
         return false;
     }
-    
+
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }

@@ -26,7 +26,7 @@ struct TFind {
     static Value* Generate(Value* string, Value* sub, Value* p, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(Find<Reverse>));
+        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&Find<Reverse>>());
         const auto pos = PosOptional ?
             SelectInst::Create(
                 IsEmpty(p, block, context),

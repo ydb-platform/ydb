@@ -352,6 +352,7 @@ public:
             TEvDataShard::TEvProposeTransactionResult::EventType,
             TEvColumnShard::TEvProposeTransactionResult::EventType,
             TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
         });
     }
 
@@ -445,6 +446,7 @@ public:
             TEvDataShard::TEvProposeTransactionResult::EventType,
             TEvColumnShard::TEvProposeTransactionResult::EventType,
             TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
         });
     }
 
@@ -558,7 +560,7 @@ public:
         context.OnComplete.Send(ackTo, std::move(event));
         return false;
     }
-    
+
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         return HandleReplyImpl(ev, context);
     }

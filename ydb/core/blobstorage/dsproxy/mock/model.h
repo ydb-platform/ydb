@@ -114,7 +114,7 @@ namespace NFake {
             }
             if (const auto& blk = msg->ForceBlockTabletData; blk && blk->Generation) {
                 auto it = Blocks.find(blk->Id);
-                Y_VERIFY_S(it != Blocks.end() && it->second == blk->Generation, "incorrect ForceBlockTabletData"
+                Y_VERIFY_S(it != Blocks.end() && blk->Generation <= it->second, "incorrect ForceBlockTabletData"
                     << " expected Generation# " << blk->Generation
                     << " having Generation# " << (it != Blocks.end() ? ToString(it->second) : "none"));
             }

@@ -518,13 +518,13 @@ bool CheckCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
     case NScheme::NTypeIds::Interval:
         return (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
     case NScheme::NTypeIds::Date32:
-        return cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        return cell.AsValue<i32>() >= NUdf::MIN_DATE32 && cell.AsValue<i32>() <= NUdf::MAX_DATE32;
     case NScheme::NTypeIds::Datetime64:
-        return cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        return cell.AsValue<i64>() >= NUdf::MIN_DATETIME64 && cell.AsValue<i64>() <= NUdf::MAX_DATETIME64;
     case NScheme::NTypeIds::Timestamp64:
-        return cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        return cell.AsValue<i64>() >= NUdf::MIN_TIMESTAMP64 && cell.AsValue<i64>() <= NUdf::MAX_TIMESTAMP64;
     case NScheme::NTypeIds::Interval64:
-        return std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        return std::abs(cell.AsValue<i64>()) <= NUdf::MAX_INTERVAL64;
     case NScheme::NTypeIds::Utf8:
         return NYql::IsUtf8(cell.AsBuf());
     case NScheme::NTypeIds::Yson:

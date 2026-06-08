@@ -303,6 +303,7 @@ private:
         bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
         bool enableStreamWrite = TableServiceConfig.GetEnableStreamWrite();
         bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
+        bool enableDataShardCreateTableAs = TableServiceConfig.GetEnableDataShardCreateTableAs();
         auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
 
         bool enableAstCache = TableServiceConfig.GetEnableAstCache();
@@ -329,6 +330,8 @@ private:
 
         bool enableTempTablesForUser = TableServiceConfig.GetEnableTempTablesForUser();
 
+        bool enableOlapPushdownAggregate = TableServiceConfig.GetEnableOlapPushdownAggregate();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -347,6 +350,7 @@ private:
             TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
             TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||
             TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
+            TableServiceConfig.GetEnableDataShardCreateTableAs() != enableDataShardCreateTableAs ||
             TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
@@ -365,8 +369,8 @@ private:
             TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
             TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
-            TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser
-        )
+            TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
+            TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate)
         {
 
             QueryCache->Clear();

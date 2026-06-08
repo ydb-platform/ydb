@@ -496,6 +496,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             return BuildHistory();
 
         for (auto &xpair : RefsToCheckByGroup) {
+            std::ranges::sort(xpair.second);
             if (!SendRefsCheck(xpair.second, xpair.first)) {
                 BLOG_ERROR("TTabletReqRebuildHistoryGraph::MakeHistory SendRefsCheck A error", "TRRH06");
                 if (IntrospectionTrace) {
@@ -519,6 +520,11 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             ui64 endRequestIdx = endIdx;
             ui64 totalSize = 0;
             for (ui64 i = firstRequestIdx; i != endIdx; ++i) {
+                if (refs[i].Generation() != refs[firstRequestIdx].Generation()) {
+                    endRequestIdx = i;
+                    break;
+                }
+
                 ui64 size = refs[i].BlobSize();
                 Y_ABORT_UNLESS(size != 0);
 
@@ -539,7 +545,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 q[i].Set(refs[i + firstRequestIdx] /*must be index read*/);
             }
             SendToBSProxy(SelfId(), group, new TEvBlobStorage::TEvGet(q, (ui32)count, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true, TEvBlobStorage::TEvGet::TForceBlockTabletData(Info->TabletID, BlockedGen)));
+                NKikimrBlobStorage::EGetHandleClass::FastRead, true, true, TEvBlobStorage::TEvGet::TForceBlockTabletData(
+                    Info->TabletID, refs[firstRequestIdx].Generation())));
             ++RequestsLeft;
 
             firstRequestIdx = endRequestIdx;

@@ -1094,7 +1094,7 @@ class TestJoinStreaming(TestYdsBase):
             ;
             $enriched =
                 SELECT CAST(HOP_END() AS Uint64)/1000000ul as hopTime, uid, ListSort(AGGREGATE_LIST(ts)) AS tsList FROM $enriched
-                    GROUP BY HoppingWindow(event_time, 'PT5S', 'PT10S', "max" AS TimeLimit)
+                    GROUP BY HoppingWindow(event_time, 'PT5S', 'PT10S')
                             , uid
                 ;
 

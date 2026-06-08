@@ -392,6 +392,15 @@ namespace {
         return TWarmupTestEnv{kikimr, runtime, isThreadLocked, 0, params.NodeCount, params.UserSids, expectedUniqueCount};
     }
 
+    TVector<ui32> CollectNodeIds(TWarmupTestEnv& env) {
+        TVector<ui32> nodeIds;
+        nodeIds.reserve(env.NodeCount);
+        for (ui32 i = 0; i < env.NodeCount; ++i) {
+            nodeIds.push_back(env.Runtime.GetNodeId(i));
+        }
+        return nodeIds;
+    }
+
     TEvKqpWarmupComplete::TPtr RunWarmup(TWarmupTestEnv& env, const TKqpWarmupConfig& config,
             TDuration timeout, bool waitBootstrap = false) {
         auto warmupEdge = env.Runtime.AllocateEdgeActor(env.NodeId);
@@ -404,7 +413,8 @@ namespace {
             env.Runtime.DispatchEvents(opts, TDuration::Seconds(1));
         }
 
-        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge, new TEvStartWarmup(env.NodeCount)), env.NodeId);
+        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
+            new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
         return env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, timeout);
     }
 
@@ -818,7 +828,7 @@ namespace {
             }
 
             env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
-                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+                new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
             auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
                 warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(5));
 
@@ -862,7 +872,7 @@ namespace {
             }
 
             env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
-                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+                new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
             auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
                 warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(1));
 

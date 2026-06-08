@@ -111,23 +111,19 @@ public:
         // (and breaking MaxNodesToRequest semantics on sparse selections).
         // UNION ALL of point reads (WHERE NodeId = X) keeps each scan as a single-cell
         // range, so the sysview talks only to the nodes we actually picked.
-        const ui32 nodesToQuery = NodeIds.empty()
-            ? 0u
-            : (MaxNodesToRequest > 0 ? std::min<ui32>(MaxNodesToRequest, NodeIds.size()) : NodeIds.size());
+        // Precondition: NodeIds is non-empty (enforced by TKqpCompileCacheWarmupActor::StartFetch).
+        const ui32 nodesToQuery = MaxNodesToRequest > 0
+            ? std::min<ui32>(MaxNodesToRequest, NodeIds.size())
+            : NodeIds.size();
 
         TStringBuilder inner;
-        if (nodesToQuery == 0) {
-            inner << "SELECT Query, UserSID, Metadata, AccessCount, CompilationDurationMs, QueryType, Syntax "
-                  << "FROM " << tablePath << " WHERE " << commonPredicates;
-        } else {
-            for (ui32 i = 0; i < nodesToQuery; ++i) {
-                if (i > 0) {
-                    inner << " UNION ALL ";
-                }
-                inner << "SELECT Query, UserSID, Metadata, AccessCount, CompilationDurationMs, QueryType, Syntax "
-                      << "FROM " << tablePath
-                      << " WHERE NodeId = " << NodeIds[i] << " AND " << commonPredicates;
+        for (ui32 i = 0; i < nodesToQuery; ++i) {
+            if (i > 0) {
+                inner << " UNION ALL ";
             }
+            inner << "SELECT Query, UserSID, Metadata, AccessCount, CompilationDurationMs, QueryType, Syntax "
+                  << "FROM " << tablePath
+                  << " WHERE NodeId = " << NodeIds[i] << " AND " << commonPredicates;
         }
 
         TStringBuilder sql;
@@ -206,22 +202,18 @@ public:
         // YQL collapses it into [min..max] and compile_cache.cpp ends up scanning every
         // proxy node within that range. UNION ALL of point reads keeps each scan bound
         // to a single node.
-        const ui32 nodesToQuery = NodeIds.empty()
-            ? 0u
-            : (MaxNodesToRequest > 0 ? std::min<ui32>(MaxNodesToRequest, NodeIds.size()) : NodeIds.size());
+        // Precondition: NodeIds is non-empty (enforced by TKqpCompileCacheWarmupActor::StartFetch).
+        const ui32 nodesToQuery = MaxNodesToRequest > 0
+            ? std::min<ui32>(MaxNodesToRequest, NodeIds.size())
+            : NodeIds.size();
 
         TStringBuilder inner;
-        if (nodesToQuery == 0) {
-            inner << "SELECT IsTruncated, QueryType FROM " << tablePath
-                  << " WHERE AccessCount > 0";
-        } else {
-            for (ui32 i = 0; i < nodesToQuery; ++i) {
-                if (i > 0) {
-                    inner << " UNION ALL ";
-                }
-                inner << "SELECT IsTruncated, QueryType FROM " << tablePath
-                      << " WHERE NodeId = " << NodeIds[i] << " AND AccessCount > 0";
+        for (ui32 i = 0; i < nodesToQuery; ++i) {
+            if (i > 0) {
+                inner << " UNION ALL ";
             }
+            inner << "SELECT IsTruncated, QueryType FROM " << tablePath
+                  << " WHERE NodeId = " << NodeIds[i] << " AND AccessCount > 0";
         }
 
         TStringBuilder sql;
@@ -483,6 +475,15 @@ private:
     }
 
     void StartFetch() {
+        if (NodeIds.empty()) {
+            // Should not happen on the happy path: TEvStartWarmup is only sent when
+            // KqpProxy has discovered peers, and HandleSoftDeadlineInTopology now skips
+            // instead of clearing NodeIds. Treat as a soft skip rather than crashing.
+            LOG_W("StartFetch called with empty NodeIds, skipping warmup");
+            Complete(true, "Skipped: empty NodeIds");
+            return;
+        }
+
         ui32 maxNodesToQuery = Config.MaxNodesToRequest;
         if (maxNodesToQuery == 0) {
             maxNodesToQuery = NodeIds.size();
@@ -721,11 +722,12 @@ private:
     }
 
     void HandleSoftDeadlineInTopology() {
-        LOG_I("Soft deadline reached while waiting for topology, fetching without node filter");
-        NodeIds.clear();
-        RescheduleSoftDeadlineForFetch();
-        StartFetch();
-    }
+        // Warmup needs peer NodeIds to issue point reads to /.sys/compile_cache_queries.
+        // Without topology we'd have to fan out to every proxy in the cluster (huge on
+        // large clusters); reading only our own node is useless on warm restart, where
+        // the local cache is what we're trying to repopulate. Skip instead.
+        LOG_I("Soft deadline reached while waiting for topology, skipping warmup");
+        Complete(true, "Skipped: topology not delivered before soft deadline"    }
 
     void HandlePoison() {
         LOG_D("Received poison, stop warmup");

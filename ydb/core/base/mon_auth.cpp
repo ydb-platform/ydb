@@ -1,5 +1,6 @@
 #include "mon_auth.h"
 
+#include "appdata.h"
 #include "auth.h"
 #include "tablet_types.h"
 
@@ -23,7 +24,10 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
     return pathInfo.StartsWith(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX + "/");
 }
 
-bool UsesTabletDevUiSecurePath(TTabletTypes::EType type, bool enableSecurePathFlag) {
+bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type) {
+    if (!appData) {
+        return false;
+    }
     // Tablets that use the `/app/secure` DevUI path.
     constexpr std::array tabletTypes = {
         TTabletTypes::DataShard,
@@ -31,7 +35,8 @@ bool UsesTabletDevUiSecurePath(TTabletTypes::EType type, bool enableSecurePathFl
         TTabletTypes::GraphShard,
     };
 
-    return std::contains(tabletTypes.begin(), tabletTypes.end(), type) && enableSecurePathFlag;
+    return std::contains(tabletTypes.begin(), tabletTypes.end(), type)
+        && appData->FeatureFlags.GetEnableTabletDevUiSecurePath();
 }
 
 bool IsTabletDevUiAccessAllowed(

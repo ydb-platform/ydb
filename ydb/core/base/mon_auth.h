@@ -21,8 +21,8 @@ inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure
 // True if `pathInfo` is exactly `/app/secure` or starts with `/app/secure/`.
 bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
 
-// True if the tablet type uses `/app/secure` for the DevUI path and `enableSecurePathFlag` is true.
-bool UsesTabletDevUiSecurePath(TTabletTypes::EType type, bool enableSecurePathFlag);
+// True if the tablet type uses `/app/secure` and EnableTabletDevUiSecurePath is set.
+bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type);
 
 // Check, caller must reply with HTTPFORBIDDEN when false.
 bool IsTabletDevUiAccessAllowed(

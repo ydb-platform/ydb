@@ -78,7 +78,7 @@ protected:
 
     template<typename T>
     struct TRequestResponse {
-        std::variant<std::monostate, std::shared_ptr<T>, TString, std::nullptr_t> Response;
+        std::variant<std::monostate, std::shared_ptr<T>, TString> Response;
         NWilson::TSpan Span;
 
         TRequestResponse() = default;
@@ -128,17 +128,6 @@ protected:
             if (!IsDone()) {
                 Span.EndError(error);
                 Response = error;
-                return true;
-            }
-            return false;
-        }
-
-        bool FinishOk() {
-            if (!IsDone()) {
-                if (Span) {
-                    Span.EndOk();
-                }
-                Response = nullptr;
                 return true;
             }
             return false;

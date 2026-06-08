@@ -1257,7 +1257,7 @@ private:
     void ForgetQuery() {
         QueryForgotten = true;
         if (!QueryResponse.IsDone()) {
-            QueryResponse.FinishOk();
+            QueryResponse.Error("Cancelled");
         }
     }
 

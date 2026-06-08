@@ -1043,8 +1043,7 @@ protected:
 
         TUnboxedValuePod* persistentKeyBuffer = nullptr;
         bool isNew = false;
-<<<<<<< HEAD
-        auto mapIt = Map->Insert(tempKey, hash, isNew);
+        auto mapIt = Map->Insert(tempKey, GlobalHashToRhItemHash(hash), isNew);
         char* statePtr = nullptr;
         if (isNew) {
             // Copy the value to the specified arena page
@@ -1052,16 +1051,6 @@ protected:
             memcpy(keyBuffer, tempKey, tempKeySize * sizeof(TUnboxedValuePod));
             // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), keyBuffer);
             *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = keyBuffer;
-=======
-        auto mapIt = Map->Insert(keyBuf.data(), GlobalHashToRhItemHash(hash), isNew);
-        char* statePtr = nullptr;
-        if (isNew) {
-            // Copy the value to the specified arena page
-            persistentKeyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
-            memcpy(persistentKeyBuffer, keyBuf.data(), keyBuf.size_bytes());
-            // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), persistentKeyBuffer);
-            *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = persistentKeyBuffer;
->>>>>>> 96b5960d32d (Reduce hash correlations when partitioning keys for aggregation (#42547))
         } else {
             persistentKeyBuffer = Map->GetKeyValue(mapIt);
         }

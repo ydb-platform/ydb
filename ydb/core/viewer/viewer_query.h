@@ -570,7 +570,8 @@ public:
     void PingSession() {
         auto event = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
         event->Record.MutableRequest()->SetSessionId(SessionId);
-        ActorIdToProto(SelfId(), event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+        TActorId ctrlActor = Forget ? MakeViewerID(SelfId().NodeId()) : SelfId();
+        ActorIdToProto(ctrlActor, event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
@@ -682,9 +683,7 @@ public:
         }
 
         SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
-        if (!Forget) {
-            PingSession();
-        }
+        PingSession();
 
         if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;

@@ -8,7 +8,9 @@ The principle is the same in all SDKs:
 2. Redirect the SDK logger to this provider via an adapter (log appender / bridge) that converts each SDK log record into an OTel log record. For the list of adapters and log support status in different languages, see the [OpenTelemetry logs documentation](https://opentelemetry.io/docs/concepts/signals/logs/).
 3. Run the workload — all internal SDK logs are now sent to the collector as OTLP log records.
 
-{% note info %} {#principles}
+{% note info %} 
+
+##Principles {#principles}
 
 The log collection method depends on the language and infrastructure — there is no single format:
 

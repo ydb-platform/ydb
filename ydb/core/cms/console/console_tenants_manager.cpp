@@ -235,11 +235,11 @@ public:
             if (resp.StatusSize() && resp.GetStatus(0).GetErrorDescription())
                 error = resp.GetStatus(0).GetErrorDescription();
 
-            YDB_LOG_DEBUG("cannot read pool ' ' (",
+            YDB_LOG_DEBUG("cannot read pool",
                 {"LogPrefix", LogPrefix},
                 {"poolName", Pool->Config.GetName()},
                 {"poolId", Pool->Config.GetStoragePoolId()},
-                {")", error});
+                {"error", error});
             Pool->Issue = error;
             return false;
         }
@@ -260,11 +260,11 @@ public:
             if (rec.StatusSize() && rec.GetStatus(0).GetErrorDescription())
                 error = rec.GetStatus(0).GetErrorDescription();
 
-            YDB_LOG_ERROR("cannot create pool ' ' (",
+            YDB_LOG_ERROR("cannot create pool",
                 {"LogPrefix", LogPrefix},
                 {"poolName", Pool->Config.GetName()},
                 {"poolId", Pool->Config.GetStoragePoolId()},
-                {")", error});
+                {"error", error});
             Pool->Issue = error;
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, error), ctx);
             return;
@@ -688,7 +688,7 @@ public:
         auto *domain = AppData(ctx)->DomainsInfo->GetDomainByName(ExtractDomain(Tenant->Path));
         if (!domain) {
             TString error = "cannot find domain info";
-            YDB_LOG_CRIT("TSubdomainManip(",
+            YDB_LOG_CRIT("TSubdomainManip: cannot find domain info",
                 {"tenantPath", Tenant->Path},
                 {"error", error});
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, error), ctx);

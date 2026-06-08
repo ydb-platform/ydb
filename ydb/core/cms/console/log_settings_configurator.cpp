@@ -124,7 +124,8 @@ void TLogSettingsConfigurator::SaveLogSettingsConfigToCache(const NKikimrConfig:
             ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
 
     } catch (const yexception& ex) {
-        YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: failed to save log settings config to cache file ' '",
+        YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: failed to save log settings config to cache file",
+            {"path", PathToConfigCacheFile},
             {"exception", ex.what()});
     }
 }
@@ -154,7 +155,7 @@ TLogSettingsConfigurator::ComputeComponentSettings(const NKikimrConfig::TLogConf
 
         if (component == NLog::InvalidComponent) {
             YDB_LOG_CTX_ERROR(ctx, "TLogSettingsConfigurator: ignoring entry for invalid component",
-                {"сomponent", entry.GetComponent()});
+                {"component", entry.GetComponent()});
             continue;
         }
 
@@ -184,8 +185,9 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
             NLog::EPriority prio = static_cast<NLog::EPriority>(settings[i].Raw.X.Level);
             auto logPrio = logSettings->SetLevel(prio, i, msg)
                 ? NLog::PRI_ERROR : NLog::PRI_NOTICE;
-            YDB_LOG_CTX(ctx, logPrio, "",
-                {"TLogSettingsConfigurator", msg});
+            YDB_LOG_CTX(ctx, logPrio, "TLogSettingsConfigurator: updated component log level",
+                {"component", static_cast<ui32>(i)},
+                {"message", msg});
 
             if (i == NKikimrServices::GRPC_LIBRARY) {
                 NConsole::SetGRpcLibraryLogVerbosity(prio);
@@ -195,8 +197,9 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
             NLog::EPriority prio = static_cast<NLog::EPriority>(settings[i].Raw.X.SamplingLevel);
             auto logPrio = logSettings->SetSamplingLevel(prio, i, msg)
                 ? NLog::PRI_ERROR : NLog::PRI_NOTICE;
-            YDB_LOG_CTX(ctx, logPrio, "",
-                {"TLogSettingsConfigurator", msg});
+            YDB_LOG_CTX(ctx, logPrio, "TLogSettingsConfigurator: updated component sampling level",
+                {"component", static_cast<ui32>(i)},
+                {"message", msg});
         }
         if (curSettings.Raw.X.SamplingRate != settings[i].Raw.X.SamplingRate) {
             auto prio = logSettings->SetSamplingRate(settings[i].Raw.X.SamplingRate, i, msg)

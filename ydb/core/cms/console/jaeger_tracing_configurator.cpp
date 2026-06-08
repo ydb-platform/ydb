@@ -137,7 +137,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         ui64 level = samplingRule.GetLevel();
         double fraction = samplingRule.GetFraction();
         if (level > TComponentTracingLevels::MostVerbose) {
-            YDB_LOG_ERROR("sampling level exceeds maximum allowed value ( provided, maximum is ). Lowering the level",
+            YDB_LOG_ERROR("sampling level exceeds maximum allowed value; lowering the level",
                 {"level", level},
                 {"mostVerbose", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
             level = TComponentTracingLevels::MostVerbose;
@@ -183,7 +183,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 
         ui64 level = throttlingRule.HasLevel() ? throttlingRule.GetLevel() : TComponentTracingLevels::ProductionVerbose;
         if (level > TComponentTracingLevels::MostVerbose) {
-            YDB_LOG_ERROR("sampling level exceeds maximum allowed value ( provided, maximum is ). Lowering the level",
+            YDB_LOG_ERROR("sampling level exceeds maximum allowed value; lowering the level",
                 {"level", level},
                 {"mostVerbose", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
             level = TComponentTracingLevels::MostVerbose;

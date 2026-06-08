@@ -69,10 +69,10 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             V2Nodes++;
             V2NodesList.push_back(nodeId);
         } else {
-            YDB_LOG_DEBUG("Received unknown version ' '",
+            YDB_LOG_DEBUG("Received unknown configuration version",
                 {"Marker", "CIG3"},
-                {"Version", record.GetVersion()},
-                {"from_NodeId", nodeId});
+                {"version", record.GetVersion()},
+                {"fromNodeId", nodeId});
             UnknownNodes++;
             UnknownNodesList.push_back(nodeId);
         }
@@ -83,9 +83,8 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
     } else {
         YDB_LOG_WARN("Received unexpected TEvGetNodeConfigurationVersionResponse",
             {"Marker", "CIG4"},
-            {"from_NodeId", nodeId},
-            {"(sender", ev->Sender});
-    }
+            {"fromNodeId", nodeId},
+            {"sender", ev->Sender});
 }
 
 void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
@@ -107,7 +106,7 @@ void TConfigurationInfoCollector::ReplyAndDie() {
         {"V1", V1Nodes},
         {"V2", V2Nodes},
         {"Unknown", UnknownNodes},
-        {"(Total", TotalNodes});
+        {"Total", TotalNodes});
     auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>();
     auto *result = response->Record.MutableResponse();
     result->set_v1_nodes(V1Nodes);

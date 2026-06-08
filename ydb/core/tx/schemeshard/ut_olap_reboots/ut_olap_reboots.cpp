@@ -551,13 +551,13 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+            // Alter on a read-only copy column table must fail
             TestAlterColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
                 Name: "NewTable"
                 AlterSchema {
                     AddColumns { Name: "add_2" Type: "Uint64" }
                 }
-            )");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            )", {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Drop is allowed"}});
 
             {
                 TInactiveZone inactive(activeZone);

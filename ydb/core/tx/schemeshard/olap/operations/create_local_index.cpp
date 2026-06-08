@@ -142,8 +142,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsColumnTable()
-                .NotReadOnlyColumnTable();
+                .IsColumnTable();
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 if (Transaction.HasInternal() && Transaction.GetInternal()) {

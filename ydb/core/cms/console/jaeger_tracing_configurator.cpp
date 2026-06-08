@@ -196,7 +196,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         }
         if (throttlingRule.GetMaxTracesPerMinute() == 0) {
             YDB_LOG_ERROR("max_traces_per_minute should never be zero. Found in rule. Skipping the rule",
-                {"maxTracesPerMinute()", throttlingRule.GetMaxTracesPerMinute()});
+                {"maxTracesPerMinute", throttlingRule.GetMaxTracesPerMinute()});
             continue;
         }
 

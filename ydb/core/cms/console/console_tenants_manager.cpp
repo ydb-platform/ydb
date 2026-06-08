@@ -893,7 +893,7 @@ public:
                 // Check if removal finished or in-progress.
                 if (rec.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist
                     || rec.GetSchemeShardStatus() == NKikimrScheme::StatusMultipleModifications) {
-                    YDB_LOG_DEBUG("TSubdomainManip( ) consider dubdomain is removed",
+                    YDB_LOG_DEBUG("TSubdomainManip( ) consider subdomain is removed",
                         {"tenantPath", Tenant->Path});
                     ActionFinished(ctx);
                     break;
@@ -1110,7 +1110,7 @@ public:
                             hivePolicy->SetAverageCpuUtilizationPercent(p.target_tracking_policy().average_cpu_utilization_percent());
                             break;
                         default:
-                            YDB_LOG_CTX_ERROR(ctx, "TScaleRecommenderManip got unknown taget for target tracking policy for",
+                            YDB_LOG_CTX_ERROR(ctx, "TScaleRecommenderManip got unknown target for target tracking policy for",
                                 {"tenantPath", Tenant->Path},
                                 {"policy", p.target_tracking_policy().ShortDebugString()});
                             Finish();

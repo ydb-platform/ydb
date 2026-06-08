@@ -290,9 +290,9 @@ virtual void Scenario(const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-            YDB_LOG_CTX_NOTICE(ctx, " Test: from= to=",
-                {"from", from.ToString().data()},
-                {"to", to.ToString().data()});
+            YDB_LOG_CTX_NOTICE(ctx, "Test range",
+                {"from", from.ToString()},
+                {"to", to.ToString()});
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -307,7 +307,7 @@ virtual void Scenario(const TActorContext &ctx) {
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
             Y_ABORT_UNLESS(msg->Record.GetStatus() == NKikimrProto::OK);
             done = msg->Record.ResultSize() == 0;
-            YDB_LOG_CTX_NOTICE(ctx, " Test: emptyDb=",
+            YDB_LOG_CTX_NOTICE(ctx, "Test: emptyDb",
                 {"emptyDb", done});
         };
         readCmd.Reset(CreateOneGet(SyncRunner->NotifyID(), sendFunc, checkFunc));
@@ -359,9 +359,9 @@ virtual void Scenario(const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (DefaultTestTabletId, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-            YDB_LOG_CTX_NOTICE(ctx, " Test: from= to=",
-                {"from", from.ToString().data()},
-                {"to", to.ToString().data()});
+            YDB_LOG_CTX_NOTICE(ctx, "Test range",
+                {"from", from.ToString()},
+                {"to", to.ToString()});
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -376,7 +376,7 @@ virtual void Scenario(const TActorContext &ctx) {
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
             Y_ABORT_UNLESS(msg->Record.GetStatus() == NKikimrProto::OK);
             done = msg->Record.ResultSize() == 0;
-            YDB_LOG_CTX_NOTICE(ctx, " Test: emptyDb=",
+            YDB_LOG_CTX_NOTICE(ctx, "Test: emptyDb",
                 {"emptyDb", done});
         };
         readCmd.Reset(CreateOneGet(SyncRunner->NotifyID(), sendFunc, checkFunc));

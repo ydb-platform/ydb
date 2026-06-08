@@ -464,8 +464,8 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
 
         for (unsigned i = 0; i < numIterations; i++) {
             Conf.Prepare(&vdiskSetup, false);
-            YDB_LOG_CTX_NOTICE(*Conf.ActorSystem1, "====================== Iteration ",
-                {"i", i});
+            YDB_LOG_CTX_NOTICE(*Conf.ActorSystem1, "====================== Iteration",
+                {"iteration", i});
             TCheckDbIsEmptyManyPutGet test(false, false, 1000, 100, UNK); // DB must no be empty
             bool success2 = Conf.Run<TCheckDbIsEmptyManyPutGet>(&test, TIMEOUT);
             UNIT_ASSERT(success2);

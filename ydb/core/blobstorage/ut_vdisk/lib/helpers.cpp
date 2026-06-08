@@ -118,9 +118,9 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateFunc);
 
-        YDB_LOG_CTX_NOTICE(ctx, " RANGE READ: from= to=\n",
-            {"from", ReadFrom.ToString().data()},
-            {"to", ReadTo.ToString().data()});
+        YDB_LOG_CTX_NOTICE(ctx, "RANGE READ",
+            {"from", ReadFrom.ToString()},
+            {"to", ReadTo.ToString()});
 
         SendRequest();
     }
@@ -1490,9 +1490,9 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 
 void PutLogoBlobToVDisk(const TActorContext &ctx, const TActorId &actorID, const TVDiskID &vdiskID,
                         const TLogoBlobID &id, const TString &data, NKikimrBlobStorage::EPutHandleClass cls) {
-    YDB_LOG_CTX_DEBUG(ctx, " Sending TEvPut: id= data=''",
-        {"id", id.ToString().data()},
-        {"data", LimitData(data).data()});
+    YDB_LOG_CTX_DEBUG(ctx, "Sending TEvPut",
+        {"id", id.ToString()},
+        {"data", LimitData(data)});
     ctx.Send(actorID, new TEvBlobStorage::TEvVPut(id, TRope(data), vdiskID, false, nullptr, TInstant::Max(), cls, false));
 }
 
@@ -1851,7 +1851,7 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
     // output result
     const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
     int size = rec.GetResult().size();
-    YDB_LOG_CTX_NOTICE(ctx, " TEvVGetResult succeded ( items)",
+    YDB_LOG_CTX_NOTICE(ctx, "TEvVGetResult succeeded",
         {"size", size});
     for (int i = 0; i < size; i++) {
         const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);

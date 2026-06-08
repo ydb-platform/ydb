@@ -76,7 +76,7 @@ private:
         STR << "GoodState_Handle\n";
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
-        YDB_LOG_CTX_NOTICE(ctx, " TEvVPutResult succeded");
+        YDB_LOG_CTX_NOTICE(ctx, " TEvVPutResult succeeded");
 
         Become(&TThis::BrokenState);
         STR << "GoodState_BrakeDevice\n";
@@ -90,7 +90,7 @@ private:
 
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::VDISK_ERROR_STATE, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
-        YDB_LOG_CTX_NOTICE(ctx, " TEvVPutResult succeded");
+        YDB_LOG_CTX_NOTICE(ctx, " TEvVPutResult succeeded");
 
         STR << "BrokenState_Finish\n";
         Finish(ctx);

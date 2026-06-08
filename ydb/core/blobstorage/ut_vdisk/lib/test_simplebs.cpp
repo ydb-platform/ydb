@@ -32,7 +32,7 @@ private:
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
-        YDB_LOG_CTX_NOTICE(ctx, " TEvVPutResult succeded");
+        YDB_LOG_CTX_NOTICE(ctx, " TEvVPutResult succeeded");
 
         --Counter;
         HandlePutPhaseFinish(ctx);
@@ -333,9 +333,9 @@ protected:
     using TBasePutAllFromDataSet::SendReadRequests;
 
     virtual void SendReadRequests(const TActorContext &ctx, const TLogoBlobID &from, const TLogoBlobID &to) {
-        YDB_LOG_CTX_NOTICE(ctx, " Test: from= to=\n",
-            {"from", from.ToString().data()},
-            {"to", to.ToString().data()});
+        YDB_LOG_CTX_NOTICE(ctx, "Test range",
+            {"from", from.ToString()},
+            {"to", to.ToString()});
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
                 from, to, 10);

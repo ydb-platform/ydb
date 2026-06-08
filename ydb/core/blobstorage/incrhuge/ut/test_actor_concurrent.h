@@ -211,7 +211,7 @@ public:
             {"ActionsTaken", ActionsTaken});
 
         while (GetNumRequestsInFlight() < numRequests) {
-            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "GetNumRequestsInFlight# InFlightWritesSize# u",
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "",
                 {"GetNumRequestsInFlight", GetNumRequestsInFlight()},
                 {"InFlightWritesSize", State.InFlightWrites.size()});
 

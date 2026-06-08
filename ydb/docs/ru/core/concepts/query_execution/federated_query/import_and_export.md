@@ -33,13 +33,7 @@ SELECT * FROM postgresql_datasource.source_table
 
 Подробнее про создание внешних источников данных и внешних таблиц, а также про запросы чтения данных из них можно прочитать в статьях:
 
-- [ClickHouse](experimental_external_connectors/clickhouse.md#query)
-- [Greenplum](experimental_external_connectors/greenplum.md#query)
-- [Microsoft SQL Server](experimental_external_connectors/ms_sql_server.md#query)
-- [MySQL](experimental_external_connectors/mysql.md#query)
-- [PostgreSQL](experimental_external_connectors/postgresql.md#query)
-- [S3](s3/external_table.md)
-- [{{ ydb-short-name }}](experimental_external_connectors/ydb.md#query)
+{% include [!](_includes/supported_datasources.md) %}
 
 ## Экспорт данных {#export}
 

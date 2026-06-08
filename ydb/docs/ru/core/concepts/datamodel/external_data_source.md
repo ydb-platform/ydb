@@ -27,7 +27,5 @@ SELECT * FROM test_data_source.test_table;
 
 В качестве источников данных можно использовать:
 
-- [ClickHouse](../query_execution/federated_query/experimental_external_connectors/clickhouse.md)
-- [PostgreSQL](../query_execution/federated_query/experimental_external_connectors/postgresql.md)
-- [Подключения к S3 ({{ objstorage-name }})](../query_execution/federated_query/s3/external_data_source.md)
+{% include [!](../query_execution/federated_query/_includes/supported_datasources.md) %}
 

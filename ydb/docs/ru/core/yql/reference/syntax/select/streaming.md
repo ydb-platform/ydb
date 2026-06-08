@@ -12,10 +12,10 @@
 
 В примерах:
 
-- `ext_source` — это заранее созданный [внешний источник данных](../../../../concepts/datamodel/external_data_source.md);
-- `input_topic` — локальный или внешний топик.
+- `ext_source` — заранее созданный [`external data source`](../../../../concepts/datamodel/external_data_source.md);
+- `input_topic` — топик, откуда читаются данные.
 
-Подробнее — [локальные и внешние топики в потоковых запросах](../../../../dev/streaming-query/local-and-external-topics.md).
+Подробнее — [локальные и внешние топики](../../../../concepts/query_execution/local-and-external-topics.md).
 
 {% endnote %}
 
@@ -38,6 +38,6 @@ LIMIT 1
 
 ## См. также
 
-* [{#T}](../../../../recipes/streaming_queries/debug-read.md) — рецепт с дополнительными примерами
+* [{#T}](../../../../concepts/query_execution/topics.md#streaming-read) — описание потокового чтения из топика
 * [{#T}](../../../../concepts/streaming-query.md)
 * [{#T}](../create-streaming-query.md)

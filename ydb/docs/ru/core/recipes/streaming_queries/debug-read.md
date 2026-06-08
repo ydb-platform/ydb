@@ -1,66 +1,21 @@
 # Отладочное чтение из топика
 
-При разработке [потоковых запросов](../../concepts/streaming-query.md) бывает полезно быстро посмотреть, какие данные поступают в [топик](../../concepts/datamodel/topic.md), без создания полноценного потокового запроса. Для этого можно выполнить обычный `SELECT` с параметром `STREAMING = TRUE`.
+При разработке [потоковых запросов](../../concepts/streaming-query.md) бывает полезно быстро посмотреть, какие данные поступают в [топик](../../concepts/datamodel/topic.md), без создания полноценного потокового запроса. Для этого выполните обычный `SELECT` с параметром `STREAMING = TRUE`.
+
+Описание чтения из топика — в статье [{#T}](../../concepts/query_execution/topics.md):
+
+- [Потоковое чтение](../../concepts/query_execution/topics.md#streaming-read) — чтение новых сообщений с `STREAMING = TRUE`;
+- [Формат и схема сообщений](../../concepts/query_execution/topics.md#format-schema) — разбор JSON и других форматов;
+- [Локальные и внешние топики](../../concepts/query_execution/local-and-external-topics.md) — обращение к топикам текущей и другой базы.
 
 {% note warning %}
 
-Этот способ предназначен только для отладки и проверки данных в топике. Для промышленного использования создавайте потоковые запросы через [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
+Потоковое чтение через `SELECT` предназначено только для отладки. Для промышленного использования создавайте [потоковые запросы](../../concepts/streaming-query.md) через [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
 
 {% endnote %}
-
-{% note info %}
-
-В примерах:
-
-- `ext_source` — заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md);
-- `input_topic` — локальный или внешний топик (см. [локальные и внешние топики в потоковых запросах](../../dev/streaming-query/local-and-external-topics.md)).
-
-{% endnote %}
-
-## Чтение сырых данных
-
-Простейший способ — прочитать сообщения в формате `raw`, без разбора схемы:
-
-```sql
-SELECT
-    Data
-FROM
-    input_topic -- или внешний топик ext_source.input_topic
-WITH (
-    FORMAT = raw,
-    SCHEMA = (
-        Data String
-    ),
-    STREAMING = TRUE
-)
-LIMIT 1
-```
-
-Параметр `LIMIT` обязателен — без него запрос не завершится, так как будет ожидать новые сообщения бесконечно.
-
-## Чтение с разбором JSON
-
-Если данные в топике хранятся в формате JSON, можно сразу разобрать их по полям:
-
-```sql
-SELECT
-    *
-FROM
-    input_topic -- или внешний топик ext_source.input_topic
-WITH (
-    FORMAT = json_each_row,
-    SCHEMA = (
-        Time String NOT NULL,
-        Level String NOT NULL,
-        Host String NOT NULL
-    ),
-    STREAMING = TRUE
-)
-LIMIT 5
-```
 
 ## См. также
 
-* [{#T}](../../concepts/streaming-query.md)
-* [{#T}](../../dev/streaming-query/streaming-query-formats.md) — поддерживаемые форматы данных
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — описание `STREAMING = TRUE` в справочнике YQL
+* [{#T}](../../concepts/query_execution/topics.md)
+* [{#T}](../../yql/reference/syntax/select/streaming.md)
+* [{#T}](../../dev/streaming-query/streaming-query-formats.md)

@@ -5,28 +5,16 @@
 
 ## Чтение данных из топика {#topic-read}
 
-Чтение данных из топика выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` указывает формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы. Этот шаблон используется во всех последующих примерах.
+Чтение структурированных сообщений выполняется с помощью `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. Блок `WITH` задаёт формат входных данных и схему — какие поля ожидаются в каждом сообщении и их типы.
 
-{% note info %}
-
-Показана работа с [локальными и внешними топиками](local-and-external-topics.md).
-
-В примерах:
-
-- `ext_source` — заранее созданный `external data source`;
-- `input_topic` — топик, откуда производится чтение данных;
-- `output_topic` — топик, куда производится запись результатов;
-- `output_table` — таблица {{ ydb-short-name }}, куда производится запись результатов.
-
-{% endnote %}
-
-Следующий фрагмент показывает чтение событий из топика в формате JSON. Он используется внутри [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) в блоке `DO BEGIN ... END DO`:
+Следующий фрагмент используется внутри [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) в блоке `DO BEGIN ... END DO`:
 
 ```yql
 SELECT
-    *
+    Id,
+    Name
 FROM
-    ext_source.input_topic -- или локальный топик input_topic
+    topic_name  -- локальный топик; для внешнего: ext_source.topic_name
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -37,6 +25,19 @@ WITH (
 ```
 
 Подробнее о форматах: [{#T}](streaming-query-formats.md).
+
+Этот шаблон используется во всех последующих примерах.
+
+{% note info %}
+
+В примерах ниже используются [локальные и внешние топики](../../concepts/query_execution/local-and-external-topics.md). Обозначения:
+
+- `ext_source` — заранее созданный [`external data source`](../../concepts/datamodel/external_data_source.md);
+- `input_topic` — топик, откуда читаются данные;
+- `output_topic` — топик, куда записываются результаты;
+- `output_table` — таблица {{ ydb-short-name }}, куда записываются результаты.
+
+{% endnote %}
 
 ## Запись в топик (JSON) {#topic-json}
 
@@ -135,6 +136,6 @@ END DO
 
 ## См. также
 
-- [Локальные и внешние топики в потоковых запросах](local-and-external-topics.md)
+- [Локальные и внешние топики](../../concepts/query_execution/local-and-external-topics.md)
 - [{#T}](../../yql/reference/syntax/create-streaming-query.md)
 - [{#T}](../../recipes/streaming_queries/topics.md)

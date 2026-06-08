@@ -36,15 +36,11 @@ END DO
 
 ## Использование читателя {#consumer-usage}
 
-[Читатель (consumer)](../../../concepts/datamodel/topic.md#consumer) — это именованная подписка на [топик](../../../concepts/datamodel/topic.md), которая хранит текущую позицию чтения.
+{% include [consumer-usage](../../../_includes/consumer-usage.md) %}
 
-Читатель создаётся через [CLI](../../../reference/ydb-cli/topic-consumer-add.md) или при создании топика с помощью [CREATE TOPIC](create-topic.md). Имя читателя указывается в тексте запроса с помощью прагмы:
 
-```sql
-PRAGMA pq.Consumer="my_consumer";
-```
+Независимо от наличия читателя позиция чтения потокового запроса сохраняется в [чекпоинте](../../../dev/streaming-query/checkpoints.md).
 
-Если читатель не указан, чтение из топика выполняется без читателя. Позиция чтения в обоих случаях сохраняется в [чекпоинте](../../../dev/streaming-query/checkpoints.md). Указание читателя позволяет отслеживать позицию чтения и лаг со стороны топика, например, через [CLI](../../../reference/ydb-cli/topic-read.md).
 
 ## Примеры {#examples}
 
@@ -56,7 +52,7 @@ PRAGMA pq.Consumer="my_consumer";
 
 {% note info %}
 
-Потоковые запросы могут работать с [локальными и внешними топиками](../../../dev/streaming-query/local-and-external-topics.md).
+Потоковые запросы могут работать с [локальными и внешними топиками](../../../concepts/query_execution/local-and-external-topics.md).
 
 В примере:
 

@@ -23,17 +23,6 @@ struct TWriteCollector {
 struct TSizeCollector {
     ui32 Size = 0;
     ui32 NumTaggedFields = 0;
-
-    void SetRecordBatchCompressionType(ECompressionType compressionType) {
-        RecordBatchCompressionType = compressionType;
-    }
-
-    ECompressionType GetRecordBatchCompressionType() const {
-        return RecordBatchCompressionType;
-    }
-
-private:
-    ECompressionType RecordBatchCompressionType = ECompressionType::NONE;
 };
 
 template<class T, typename U = std::make_unsigned_t<T>>
@@ -495,6 +484,10 @@ public:
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaRecords& value) {
+        DoRead(readable, version, value, TKafkaCompression{});
+    }
+
+    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaRecords& value, const TKafkaCompression& compression) {
         int length = ReadArraySize<Meta>(readable, version);
         if (length > 0) {
             char magic = readable.take(16);
@@ -534,7 +527,7 @@ public:
                     record.Value = v0.Record.Value;
                 }
             } else {
-                (*value).Read(readable, magic);
+                (*value).Read(readable, magic, compression);
             }
         } else {
             value = std::nullopt;
@@ -625,118 +618,6 @@ public:
     }
 };
 
-template<>
-class TypeStrategy<
-    TKafkaRecordBatch::RecordsMeta,
-    TKafkaRecordBatch::RecordsMeta::Type,
-    TKafkaArrayDesc
-> {
-    using Meta = TKafkaRecordBatch::RecordsMeta;
-    using TValueType = TKafkaRecord;
-    using TValue = std::vector<TValueType>;
-    using ItemStrategy = TypeStrategy<Meta, Meta::ItemType, Meta::ItemTypeDesc>;
-
-    static TString Compress(TStringBuf data, ECompressionType compressionType);
-    static TString Decompress(TStringBuf data, ECompressionType compressionType);
-
-    inline static void DoWriteImpl(TKafkaWritable& writable, TKafkaVersion version, const TValue& value) {
-        WriteArraySize<Meta>(writable, version, value.size());
-
-        for (const auto& v : value) {
-            ItemStrategy::DoWrite(writable, version, v);
-        }
-    }
-
-    inline static void DoReadImpl(TKafkaReadable& readable, TKafkaVersion version, TValue& value) {
-        TKafkaInt32 length = ReadArraySize<Meta>(readable, version);
-        if (length < 0) {
-            ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
-        }
-        value.resize(length);
-
-        for (int i = 0; i < length; ++i) {
-            ItemStrategy::DoRead(readable, version, value[i]);
-        }
-    }
-
-    inline static i64 DoSizeImpl(TSizeCollector& collector, TKafkaVersion version, const TValue& value) {
-        TKafkaInt32 size = 0;
-        for (const auto& v : value) {
-            size += ItemStrategy::DoSize(collector, version, v);
-        }
-        return size + ArraySize<Meta>(version, value.size());
-    }
-
-    inline static TString SerializeImpl(TKafkaVersion version, const TValue& value) {
-        TSizeCollector collector;
-        TKafkaWriteBuffer buffer(DoSizeImpl(collector, version, value));
-        TKafkaWritable writable(buffer);
-        DoWriteImpl(writable, version, value);
-
-        TString result;
-        for (auto it = buffer.GetBuffersDeque().rbegin(); it != buffer.GetBuffersDeque().rend(); ++it) {
-            result.append(it->Data(), it->Size());
-        }
-        return result;
-    }
-
-    inline static void DeserializeImpl(TKafkaVersion version, TStringBuf data, TValue& value) {
-        TBuffer buffer(data.data(), data.size());
-        TKafkaReadable readable(buffer);
-
-        DoReadImpl(readable, version, value);
-        if (readable.left() != 0) {
-            ythrow yexception() << "unexpected extra bytes after Kafka records: " << readable.left();
-        }
-    }
-
-public:
-    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TValue& value) {
-        const auto compressionType = writable.GetRecordBatchCompressionType();
-        if (compressionType == ECompressionType::NONE) {
-            DoWriteImpl(writable, version, value);
-            return;
-        }
-
-        const TString compressed = Compress(SerializeImpl(version, value), compressionType);
-        writable.write(compressed.data(), compressed.size());
-    }
-
-    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TValue& value) {
-        DoWrite(writable, version, value);
-    }
-
-    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TValue& value) {
-        const auto compressionType = readable.GetRecordBatchCompressionType();
-        if (compressionType == ECompressionType::NONE) {
-            DoReadImpl(readable, version, value);
-            return;
-        }
-
-        const auto compressed = readable.Bytes(readable.left());
-        const TString decompressed = Decompress(TStringBuf(compressed.data(), compressed.size()), compressionType);
-        DeserializeImpl(version, decompressed, value);
-        for (auto& record : value) {
-            record.OwnPayload();
-        }
-    }
-
-    inline static i64 DoSize(TSizeCollector& collector, TKafkaVersion version, const TValue& value) {
-        const auto compressionType = collector.GetRecordBatchCompressionType();
-        if (compressionType == ECompressionType::NONE) {
-            return DoSizeImpl(collector, version, value);
-        }
-
-        return Compress(SerializeImpl(version, value), compressionType).size();
-    }
-
-    inline static void DoLog(const TValue& value) {
-        if constexpr (DEBUG_ENABLED) {
-            Cerr << "Was read field '" << Meta::Name << "' type Array. Size " <<  value.size() << Endl;
-        }
-    }
-};
-
 
 
 //
@@ -765,6 +646,25 @@ inline void Read(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::T
             try {
                 TypeStrategy<Meta, typename Meta::Type>::DoRead(readable, version, value);
                 TypeStrategy<Meta, typename Meta::Type>::DoLog(value);
+            } catch (const yexception& e) {
+                ythrow yexception() << "error on read field " << Meta::Name << ": " << e.what();
+            }
+        } else if constexpr (Meta::TypeDesc::Default) {
+            value = Meta::Default;
+        }
+    }
+}
+
+template<typename Meta>
+inline void Read(TKafkaReadable& readable, TKafkaInt16 version, TKafkaRecords& value, const TKafkaCompression& compression) {
+    if (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()
+        && VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
+        return;
+    } else {
+        if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
+            try {
+                TypeStrategy<Meta, TKafkaRecords, TKafkaRecordsDesc>::DoRead(readable, version, value, compression);
+                TypeStrategy<Meta, TKafkaRecords, TKafkaRecordsDesc>::DoLog(value);
             } catch (const yexception& e) {
                 ythrow yexception() << "error on read field " << Meta::Name << ": " << e.what();
             }

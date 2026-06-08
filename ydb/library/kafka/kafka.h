@@ -26,6 +26,12 @@ enum ECompressionType : ui8 {
     ZSTD = 4
 };
 
+struct TKafkaCompression {
+    ECompressionType Type = ECompressionType::NONE;
+    bool AllowCompressed = false;
+    bool SkipDecompression = false;
+};
+
 /*
  * There are four versions of each field:
  * - present version   - field serialized and deserialized for this version of protocol.
@@ -366,17 +372,8 @@ public:
 
     void write(const char* val, size_t length);
 
-    void SetRecordBatchCompressionType(ECompressionType compressionType) {
-        RecordBatchCompressionType = compressionType;
-    }
-
-    ECompressionType GetRecordBatchCompressionType() const {
-        return RecordBatchCompressionType;
-    }
-
 private:
     TKafkaWriteBuffer& Buffer;
-    ECompressionType RecordBatchCompressionType = static_cast<ECompressionType>(0);
 };
 
 class TKafkaReadable {
@@ -435,29 +432,11 @@ public:
 
     size_t position() const;
 
-    void SetRecordBatchCompressionType(ECompressionType compressionType) {
-        RecordBatchCompressionType = compressionType;
-    }
-
-    ECompressionType GetRecordBatchCompressionType() const {
-        return RecordBatchCompressionType;
-    }
-
-    void SetAllowCompressedRecordBatches(bool allow) {
-        AllowCompressedRecordBatches = allow;
-    }
-
-    bool GetAllowCompressedRecordBatches() const {
-        return AllowCompressedRecordBatches;
-    }
-
 private:
     void checkEof(size_t length);
 
     const TBuffer& Is;
     size_t Position;
-    ECompressionType RecordBatchCompressionType = static_cast<ECompressionType>(0);
-    bool AllowCompressedRecordBatches = false;
 };
 
 struct TReadDemand {

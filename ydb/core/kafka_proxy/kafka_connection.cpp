@@ -863,14 +863,23 @@ protected:
                         }
 
                         TKafkaReadable readable(*Request->Buffer);
-                        readable.SetAllowCompressedRecordBatches(
-                            NKikimr::AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
+                        const bool topicMessagesBatching =
+                            NKikimr::AppData()->FeatureFlags.GetEnableTopicMessagesBatching();
+                        const TKafkaCompression recordBatchCompression{
+                            .AllowCompressed = topicMessagesBatching,
+                            .SkipDecompression = true,
+                        };
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
                             Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
-                            Request->Message->Read(readable, Request->ApiVersion);
+                            if (Request->ApiKey == PRODUCE) {
+                                static_cast<TProduceRequestData*>(Request->Message.get())->Read(
+                                    readable, Request->ApiVersion, recordBatchCompression);
+                            } else {
+                                Request->Message->Read(readable, Request->ApiVersion);
+                            }
                         } catch(const yexception& e) {
                             KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request->ApiKey
                                                                     << ", Version=" << Request->ApiVersion

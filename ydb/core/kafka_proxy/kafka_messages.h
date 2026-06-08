@@ -229,6 +229,7 @@ public:
 
             i32 Size(TKafkaVersion version) const override;
             void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+            void Read(TKafkaReadable& readable, TKafkaVersion version, const TKafkaCompression& compression);
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
             bool operator==(const TPartitionProduceData& other) const = default;
@@ -267,6 +268,7 @@ public:
 
         i32 Size(TKafkaVersion version) const override;
         void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        void Read(TKafkaReadable& readable, TKafkaVersion version, const TKafkaCompression& compression);
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
         bool operator==(const TTopicProduceData& other) const = default;
@@ -336,6 +338,7 @@ public:
     i16 ApiKey() const override { return PRODUCE; };
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version, const TKafkaCompression& compression);
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
     bool operator==(const TProduceRequestData& other) const = default;

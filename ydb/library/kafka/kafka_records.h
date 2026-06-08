@@ -210,8 +210,6 @@ private:
     void RebindStorage();
 };
 
-
-
 class TKafkaRecordBatch: public TMessage {
 public:
     struct MessageMeta {
@@ -417,9 +415,12 @@ public:
         static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
     };
     RecordsMeta::Type Records;
+    TKafkaInt32 RecordsCount;
+    TString PackedRecords;
 
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version, const TKafkaCompression& compression);
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
     bool operator==(const TKafkaRecordBatch& other) const = default;
@@ -429,6 +430,12 @@ public:
     bool Transactional() const;
     bool ControlBatch() const;
     bool HasDeleteHorizonMs() const;
+
+    void Compress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
+    void Decompress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
+
+private:
+    void EnsurePackedRecords(TKafkaVersion version) const;
 };
 
 
@@ -599,7 +606,10 @@ public:
     bool operator==(const TKafkaRecordBatchV0& other) const = default;
 };
 
-TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version = 2);
+TKafkaRecordBatch ReadKafkaRecordBatch(
+    TStringBuf data,
+    TKafkaVersion version = 2,
+    TKafkaCompression compression = {.AllowCompressed = true});
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
 } // namespace NKafka

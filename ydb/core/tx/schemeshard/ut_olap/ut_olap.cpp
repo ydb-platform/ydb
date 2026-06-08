@@ -2607,11 +2607,6 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             auto copyDesc = DescribePath(runtime, "/MyRoot/MyDir/Copy");
             copyLocalPathId = copyDesc.GetPathDescription().GetSelf().GetPathId();
         }
-        ui64 srcLocalPathId = 0;
-        {
-            auto srcDesc = DescribePath(runtime, "/MyRoot/MyDir/ColumnTable");
-            srcLocalPathId = srcDesc.GetPathDescription().GetSelf().GetPathId();
-        }
         UNIT_ASSERT_VALUES_UNEQUAL(copyLocalPathId, 0u);
         UNIT_ASSERT_VALUES_UNEQUAL(copyLocalPathId, ownerBefore);
 

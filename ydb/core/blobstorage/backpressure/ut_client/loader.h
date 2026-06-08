@@ -37,8 +37,8 @@ public:
     }
 
     void Bootstrap() {
-        YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, " Bootstrap",
-            {"ClientId", ClientId.ToString().data()});
+        YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, "Bootstrap",
+            {"client_id", ClientId.ToString()});
         TVector<TActorId> vdiskIds;
         vdiskIds.push_back(VDiskActorId);
         auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),

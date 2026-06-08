@@ -1,14 +1,14 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_settings.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_topic_key_parser.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -193,7 +193,7 @@ private:
     THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
 };
 
-}
+} // anonymous namespace
 
 TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway) {
     return new TPqDataSinkProvider(state, gateway);

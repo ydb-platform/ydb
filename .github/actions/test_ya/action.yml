@@ -154,9 +154,6 @@ runs:
       shell: bash
       env:
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
-        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
-        GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
-        GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
         PR_NUMBER: ${{ inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
@@ -450,13 +447,17 @@ runs:
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
+          set +x
+          GH_ALERTS_TG_LOGINS='${{ inputs.telegram_alert_logins }}' \
           .github/scripts/report_ram_analyzer.py \
             --report-file "$CURRENT_REPORT" \
             --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
             --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
             --ram-usage-file ram_usage.txt \
-            --chat-id "$GH_ALERTS_TG_CHAT" \
+            --bot-token '${{ inputs.telegram_ydbot_token }}' \
+            --chat-id '${{ inputs.telegram_alert_chat }}' \
             --memory-threshold 97 || true
+          set -x
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

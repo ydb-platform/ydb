@@ -61,7 +61,7 @@ public:
         EraseIf(*externalDataSourceInfo->ExternalTableReferences.MutableReferences(), [pathId](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) { return TPathId::FromProto(reference.GetPathId()) == pathId; });
 
         context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Sub(1);
-        context.SS->PersistExternalDataSource(db, dataSourcePathId, externalDataSourceInfo);
+        context.SS->PersistExternalDataSource(db, dataSourcePathId);
         context.SS->PersistRemoveExternalTable(db, pathId);
 
         ++parentDir->DirAlterVersion;

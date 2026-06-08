@@ -20,7 +20,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -82,6 +82,26 @@ struct TPhysicalOpProps {
     // Empty vector means shuffle is eliminated.
     std::optional<TVector<TInfoUnit>> LeftShuffleBy;
     std::optional<TVector<TInfoUnit>> RightShuffleBy;
+};
+
+class IOperator;
+
+class ILivenessContext {
+public:
+    virtual ~ILivenessContext() = default;
+
+    virtual const TInfoUnitSet& GetLiveOut(IOperator* op) const = 0;
+    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) = 0;
+    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) = 0;
+    virtual void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) = 0;
+};
+
+class INameConstraintsContext {
+public:
+    virtual ~INameConstraintsContext() = default;
+
+    virtual TInfoUnitSet GetIncomingForbidden(IOperator* op) const = 0;
+    virtual bool AddForbiddenToChild(IOperator* parent, ui32 childIdx, const TInfoUnitSet& forbidden) = 0;
 };
 
 /**
@@ -149,6 +169,9 @@ public:
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) = 0;
+    virtual void PropagateLiveness(ILivenessContext& ctx);
+    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx);
+    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases);
 
     virtual TString GetExplainName() const = 0;
     virtual TString ToString(TExprContext& ctx) = 0;
@@ -167,6 +190,18 @@ public:
         return Type;
     }
 
+    const std::optional<TVector<TInfoUnit>>& GetOutputIUsOverride() const {
+        return OutputIUsOverride;
+    }
+
+    void SetOutputIUsOverride(TVector<TInfoUnit> outputIUs) {
+        OutputIUsOverride = std::move(outputIUs);
+    }
+
+    void ClearOutputIUsOverride() {
+        OutputIUsOverride.reset();
+    }
+
     EOperator GetKind() const {
         return Kind;
     }
@@ -177,6 +212,9 @@ public:
     const TTypeAnnotationNode* Type = nullptr;
     TVector<TIntrusivePtr<IOperator>> Children;
     TVector<std::pair<IOperator*, ui32>> Parents;
+
+private:
+    std::optional<TVector<TInfoUnit>> OutputIUsOverride;
 };
 
 template <class K>
@@ -211,6 +249,8 @@ public:
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
 };
 
 class IBinaryOperator: public IOperator {
@@ -265,6 +305,7 @@ public:
             const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "TableFullScan"; }
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
@@ -298,26 +339,32 @@ public:
 class TMapElement {
 public:
     TMapElement() = default;
-    TMapElement(const TInfoUnit& elementName, const TExpression& expr);
-    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
+    TMapElement(const TInfoUnit& elementName, const TExpression& expr, bool isRename = false);
+    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr, bool isRename = true);
 
     bool IsRename() const;
+    void SetIsRename(bool isRename);
+    bool IsColumnAccess() const;
     TInfoUnit GetRename() const;
+    TInfoUnit GetColumnAccess() const;
 
     TInfoUnit GetElementName() const;
+    void SetElementName(const TInfoUnit& elementName);
     TExpression GetExpression() const;
     TExpression& GetExpressionRef();
+    bool DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const;
     void SetExpression(TExpression expr);
 
 private:
     TInfoUnit ElementName;
     TExpression Expr;
+    bool Rename = false;
 };
 
 class TOpMap: public IUnaryOperator {
 public:
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered = false);
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements, bool project,
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered = false);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements,
            bool ordered = false);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
@@ -325,8 +372,13 @@ public:
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual TVector<std::reference_wrapper<TExpression>> GetComplexExpressions();
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
+    TInfoUnitSet GetRenameSources() const;
+    bool IsExtractableAppend(const TMapElement& element) const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetPropertyPreservingMappings(TPlanProps& props) const;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -344,9 +396,12 @@ public:
     }
 
     TVector<TMapElement>& GetMapElements() { return MapElements; }
+    TMapElement* FindOutputElement(const TInfoUnit& output);
+    const TMapElement* FindOutputElement(const TInfoUnit& output) const;
+    bool HasOutputElement(const TInfoUnit& output) const;
+    bool HasRenames() const;
 
     TVector<TMapElement> MapElements;
-    bool Project = true;
     bool Ordered = false;
 };
 
@@ -363,26 +418,15 @@ public:
     TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> GetDependencyPairs();
     void SetDependencyPairs(const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "AddDependencies"; }
     
 
     TVector<TInfoUnit> Dependencies;
     TVector<const TTypeAnnotationNode*> Types;
-};
-
-class TOpProject: public IUnaryOperator {
-public:
-    TOpProject(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& projectList);
-    virtual TVector<TInfoUnit> GetOutputIUs() override;
-
-    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
-    virtual TString ToString(TExprContext& ctx) override;
-    virtual TString GetExplainName() const override { return "Project"; }
-
-
-    TVector<TInfoUnit> ProjectList;
 };
 
 struct TOpAggregationTraits {
@@ -407,6 +451,8 @@ public:
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -447,6 +493,8 @@ public:
     virtual TString GetExplainName() const override { return "Filter"; }
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
     TVector<TInfoUnit> GetFilterIUs(TPlanProps& props) const;
@@ -473,6 +521,9 @@ public:
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -492,6 +543,8 @@ class TOpUnionAll: public IBinaryOperator {
 public:
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "UnionAll"; }
@@ -511,6 +564,8 @@ public:
              std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -543,6 +598,8 @@ public:
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -570,9 +627,22 @@ private:
     EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
+
 /***
  * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer
  * Currently it requires that the list of operators TreeNodes is in a post-order traversal of the tree
+ *
+ * TreeRoot is the root of the packed subtree. TreeNodes are operators inside the
+ * packed CBO island. Children is inherited from IOperator and stores only
+ * boundary inputs outside TreeNodes:
+ *
+ *     JoinAB       TreeNodes = [JoinAB]
+ *     /   \        Children  = [A, B]
+ *    A     B
+ *
+ * RebuildChildren rebuilds Children by filtering internal TreeNodes from child
+ * edges when the packed island is created.
+ *
  * No validation is currently used
  */
 class TOpCBOTree: public IOperator {
@@ -583,6 +653,7 @@ public:
     virtual TVector<TInfoUnit> GetOutputIUs() override {
         return TreeRoot->GetOutputIUs();
     }
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -594,6 +665,9 @@ public:
 
     TIntrusivePtr<IOperator> TreeRoot;
     TVector<TIntrusivePtr<IOperator>> TreeNodes;
+
+private:
+    void RebuildChildren();
 };
 
 class TOpRoot;

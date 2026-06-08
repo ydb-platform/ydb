@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -200,6 +201,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        // First step of stream lookup join with DQ external sources (not kqp tables)
         TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -235,8 +237,10 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()) >= 2;
-        TExprBase output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
-        DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
+        TMaybeNode<TExprBase> output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
+        if (output) {
+            DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 

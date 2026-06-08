@@ -136,6 +136,18 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& pId : StreamingQueries) {
         ss->PersistStreamingQuery(db, pId);
     }
+
+    for (const auto& pId : ExternalDataSources) {
+        ss->PersistExternalDataSource(db, pId);
+    }
+
+    for (const auto& pId : ExternalTables) {
+        ss->PersistExternalTable(db, pId);
+    }
+
+    for (const auto& pId : ResourcePools) {
+        ss->PersistResourcePool(db, pId);
+    }
 }
 
 }

@@ -13,18 +13,35 @@ SRCS(
     inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
+    logical_output_pruning.cpp
+    inline_generic_in_exists_subplan.cpp
     peephole_predicate.cpp
-    prune_columns_stage.cpp
+    map/projection_pruning.cpp
+    map/projection_pruning_helpers.cpp
+    map/push_append_into_map.cpp
+    map/push_append_through_aggregate.cpp
+    map/push_append_through_join.cpp
+    map/push_append_through_unary.cpp
+    map/push_append_wrappers.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp
     push_limit_into_sort.cpp
-    push_map.cpp
     push_ranges.cpp
     push_olap_filter.cpp
     push_olap_projection.cpp
     disable_blocks_on_columns_limit.cpp
-    remove_extra_renames_stage.cpp
-    remove_identity_map.cpp
+    map/rename_to_append.cpp
+    map/rename_common.cpp
+    map/remove_identity_map.cpp
+    map/push_rename_into_aggregate_result.cpp
+    map/push_rename_into_map_producer.cpp
+    map/push_rename_into_read.cpp
+    map/push_rename_through_aggregate_key.cpp
+    map/push_rename_through_join_side.cpp
+    map/push_rename_through_map.cpp
+    map/push_rename_through_unary.cpp
+    map/push_rename_wrapper.cpp
+    map/rewrite_to_preferred_alias.cpp
     propagate_aggregate_through_stage.cpp
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp

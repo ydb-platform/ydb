@@ -4,15 +4,43 @@ Exit Status: 0
 
 Start balancing iteration 1
 Number of used slots -> number pdisks: 0=>1 9=>1
-Found 2 candidate vslots, 1 groups to reassign
-Checking to relocate vdisk from vslot (1, 1001, 1001) on pdisk (1, 1001) with slot usage 9
+Found 2 candidate vslots, 2 groups to reassign
+Checking to relocate vdisk from vslot (1, 1001, 1000) on pdisk (1, 1001) with slot usage 9, try_blocking=False
+Checking to relocate vdisk from vslot (1, 1001, 1000) on pdisk (1, 1001) with slot usage 9, try_blocking=True
+Checking to relocate vdisk from vslot (1, 1001, 1001) on pdisk (1, 1001) with slot usage 9, try_blocking=False
 Relocated vdisk from pdisk [1:1001] to pdisk [1:1002] with slot usages (9 -> 0)
 
 ===== stderr =====
 INFO: using random hosts
 INFO: using random hosts
+INFO: using random hosts
+INFO: using random hosts
 
 ===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ReassignGroupDisk {
+      GroupId: 2147483649
+      GroupGeneration: 1
+    }
+  }
+  Rollback: true
+}
+
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ReassignGroupDisk {
+      GroupId: 2147483649
+      GroupGeneration: 1
+    }
+  }
+  Rollback: true
+}
+
 === Invoke BlobStorageConfig ===
 Domain: 1
 Request {

@@ -217,7 +217,18 @@ private:
     }
 
     template <typename TProtobufDescription>
-    void CompareDescriptions(const TProtobufDescription& describeResultOrig, const TProtobufDescription& describeResultNew, const std::string& showCreateTableQuery) {
+    void CompareDescriptions(TProtobufDescription describeResultOrig, TProtobufDescription describeResultNew, const std::string& showCreateTableQuery) {
+        if constexpr (std::is_same_v<TProtobufDescription, Ydb::Table::DescribeTableResult>) {
+            auto sortIndexes = [](TProtobufDescription& desc) {
+                if (desc.indexes_size() > 1) {
+                    std::sort(desc.mutable_indexes()->begin(), desc.mutable_indexes()->end(),
+                        [](const auto& a, const auto& b) { return a.name() < b.name(); });
+                }
+            };
+            sortIndexes(describeResultOrig);
+            sortIndexes(describeResultNew);
+        }
+
         TString first;
         ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
         TString second;
@@ -1338,7 +1349,6 @@ Y_UNIT_TEST(Table) {
                 INDEX Index2 GLOBAL USING vector_kmeans_tree ON (Value5) COVER (Value1, Value3) WITH (distance=manhattan, vector_type=float, vector_dimension=2, clusters=2, levels=1),
                 PRIMARY KEY (Key1, Key2, Key3),
             ) WITH (
-                TTL = Interval("PT1H") DELETE ON Value4,
                 KEY_BLOOM_FILTER = ENABLED,
                 PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde")),
                 AUTO_PARTITIONING_BY_LOAD = ENABLED
@@ -1362,8 +1372,7 @@ Y_UNIT_TEST(Table) {
             WITH (
                 AUTO_PARTITIONING_BY_LOAD = ENABLED,
                 PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
-                KEY_BLOOM_FILTER = ENABLED,
-                TTL = INTERVAL('PT1H') DELETE ON Value4
+                KEY_BLOOM_FILTER = ENABLED
             );
         )"
     );
@@ -2041,7 +2050,7 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
 }
 
 Y_UNIT_TEST(TableColumnUpsertIndex) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2095,7 +2104,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 }
 
 Y_UNIT_TEST(TableColumnAlterObject) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2608,7 +2617,263 @@ Y_UNIT_TEST(TableDataShardLocalBloomFilterIndex) {
     );
 }
 
+Y_UNIT_TEST(TableColumnLocalBloomFilterIndex) {
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableLocalBloomFilterIndex = true,
+        .EnableLocalIndexAsSchemeObject = true,
+    });
+
+    TShowCreateChecker checker(env);
+
+    // Single-column bloom filter
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom` LOCAL USING bloom_filter ON (`Key1`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom filter on second column
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key2),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom` LOCAL USING bloom_filter ON (`Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Multiple single-column bloom filter indexes
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key2),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom1` LOCAL USING bloom_filter ON (`Key1`),
+                INDEX `idx_bloom2` LOCAL USING bloom_filter ON (`Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom filter with custom false_positive_probability
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05),
+                PRIMARY KEY (Key1)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom` LOCAL USING bloom_filter ON (`Key1`) WITH (false_positive_probability=0.05),
+                PRIMARY KEY (`Key1`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
 }
+
+Y_UNIT_TEST(TableColumnLocalBloomNgramFilterIndex) {
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableLocalBloomNgramFilterIndex = true,
+        .EnableLocalIndexAsSchemeObject = true,
+    });
+
+    TShowCreateChecker checker(env);
+
+    // Single-column bloom ngram filter
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_ngram` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom ngram filter with custom false_positive_probability
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3, false_positive_probability=0.05),
+                PRIMARY KEY (Key1)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_ngram` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3, false_positive_probability=0.05),
+                PRIMARY KEY (`Key1`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom ngram filter with case_sensitive parameter
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_ngram_false LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3, case_sensitive=false),
+                INDEX idx_ngram_true LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3, case_sensitive=true),
+                PRIMARY KEY (Key1)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_ngram_false` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3, case_sensitive=FALSE),
+                INDEX `idx_ngram_true` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3),
+                PRIMARY KEY (`Key1`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Multiple bloom ngram filter indexes
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value1 String,
+                Value2 String,
+                INDEX idx_ngram1 LOCAL USING bloom_ngram_filter ON (Value1) WITH (ngram_size=3),
+                INDEX idx_ngram2 LOCAL USING bloom_ngram_filter ON (Value2) WITH (ngram_size=4),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value1` String,
+                `Value2` String,
+                INDEX `idx_ngram1` LOCAL USING bloom_ngram_filter ON (`Value1`) WITH (ngram_size=3),
+                INDEX `idx_ngram2` LOCAL USING bloom_ngram_filter ON (`Value2`) WITH (ngram_size=4),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+}
+
+} // ShowCreateSystemView
 
 } // NSysView
 } // NKikimr

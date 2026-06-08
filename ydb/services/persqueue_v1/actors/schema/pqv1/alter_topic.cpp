@@ -72,7 +72,7 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
@@ -82,7 +82,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

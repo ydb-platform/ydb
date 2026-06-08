@@ -286,7 +286,6 @@ public:
                 "TCopyTable TPropose::HandleReply: source path is dropped at plan step"
                 << ", srcPathId: " << srcPathId
                 << ", StepDropped: " << srcPath->StepDropped);
-            srcPath->LastTxId = InvalidTxId;
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
 
@@ -634,7 +633,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
             }
 
@@ -642,7 +640,9 @@ public:
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(maxShardsToCreate);
+                    .PathShardsLimit(maxShardsToCreate)
+                    .ShardsLimit(maxShardsToCreate)
+                ;
             }
 
             if (!checks) {
@@ -1066,6 +1066,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
                     break;
@@ -1078,11 +1079,24 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
                     break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    *operation->MutableBloomFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    *operation->MutableBloomNGrammFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
                 default:
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
+                result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), schema));
+                continue; // local indexes have no impl tables
+            } else {
+                result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            }
         }
 
         // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)

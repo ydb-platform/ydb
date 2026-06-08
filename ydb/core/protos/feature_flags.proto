@@ -316,4 +316,6 @@ message TFeatureFlags {
     optional bool EnableTopicMessagesBatching = 274 [default = false];
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
+    optional bool EnableKqpConstraintsTransformer = 277 [default = true];
+    optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
 }

@@ -186,16 +186,13 @@ TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, con
         }
     }
 
-    // Update join keys.
-    THashMap<TString, ui32> joinKeysIndexMap;
-    for (ui32 i = 0; i < joinKeys.size(); ++i) {
-        joinKeysIndexMap[joinKeys[i]] = i;
-    }
-
     for (const auto& remapTuple: remap) {
-        const auto& oldKey = std::get<0>(remapTuple);
-        const auto& newKey = std::get<1>(remapTuple);
-        joinKeys[joinKeysIndexMap[oldKey]] = newKey;
+        const auto oldKey = std::get<0>(remapTuple).StringValue();
+        const auto newKey = std::get<1>(remapTuple).StringValue();
+        const ui32 joinKeyIndex = std::get<2>(remapTuple);
+        Y_ENSURE(joinKeyIndex < joinKeys.size());
+        Y_ENSURE(joinKeys[joinKeyIndex] == oldKey);
+        joinKeys[joinKeyIndex] = newKey;
     }
 
     return castMap;
@@ -206,12 +203,17 @@ void TPhysicalJoinBuilder::PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVect
                                            THashMap<TString, TString>& rightColumnRemap, TVector<TString>& leftJoinKeyRenames,
                                            TVector<TString>& rightJoinKeyRenames, const TStructExprType* leftInputType, const TStructExprType* rightInputType,
                                            const bool outer, const EJoinSide joinSide) {
+    THashSet<TString> seenLeftKeys;
+    THashSet<TString> seenRightKeys;
+
     for (ui32 i = 0; i < Join->JoinKeys.size(); ++i) {
         const auto joinKeyPair = Join->JoinKeys[i];
         const auto leftKey = joinKeyPair.first.GetFullName();
         leftJoinKeys.emplace_back(leftKey);
         const auto rightKey = joinKeyPair.second.GetFullName();
         rightJoinKeys.emplace_back(rightKey);
+        const bool duplicateLeftKey = !seenLeftKeys.insert(leftKey).second;
+        const bool duplicateRightKey = !seenRightKeys.insert(rightKey).second;
 
         const auto leftKeyType = leftInputType->FindItemType(leftKey);
         const auto rightKeyType = rightInputType->FindItemType(rightKey);
@@ -227,7 +229,7 @@ void TPhysicalJoinBuilder::PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVect
         }
 
         if (commonType) {
-            if (!IsSameAnnotation(*leftKeyType, *commonType)) {
+            if (!IsSameAnnotation(*leftKeyType, *commonType) || duplicateLeftKey) {
                 const TString rename = TString("_rbo_join_key_left_") + ToString(i);
                 leftColumnRemap[leftKey] = rename;
                 const auto joinKey = Ctx.NewAtom(Pos, leftKey);
@@ -235,7 +237,7 @@ void TPhysicalJoinBuilder::PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVect
                 remapLeft.emplace_back(joinKey, renameKey, i, commonType);
                 leftJoinKeyRenames.emplace_back(rename);
             }
-            if (!IsSameAnnotation(*rightKeyType, *commonType)) {
+            if (!IsSameAnnotation(*rightKeyType, *commonType) || duplicateRightKey) {
                 const TString rename = TString("_rbo_join_key_right_") + ToString(i);
                 rightColumnRemap[rightKey] = rename;
                 const auto joinKey = Ctx.NewAtom(Pos, rightKey);
@@ -490,12 +492,14 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     // Prepare renames.
     ui32 outputIdx = 0;
+    TVector<TString> joinOutputColumns;
     TVector<TCoAtom> leftRenames;
     if (!leftSideEmpty) {
         for (ui32 i = 0; i < leftInputColumns.size(); ++i) {
             if (leftOutputColumns.contains(leftInputColumns[i])) {
                 leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
                 leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+                joinOutputColumns.push_back(leftInputColumns[i]);
             }
         }
     }
@@ -506,6 +510,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
             if (rightOutputColumns.contains(rightInputColumns[i])) {
                 rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
                 rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+                joinOutputColumns.push_back(rightInputColumns[i]);
             }
         }
     }
@@ -587,7 +592,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     // clang-format off
     return Build<TCoFromFlow>(Ctx, Pos)
-        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, Join->GetOutputIUs(), Ctx))
+        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, joinOutputColumns, NPhysicalConvertionUtils::BuildNameSet(Join->GetOutputIUs()), Ctx))
     .Done().Ptr();
     // clang-format on
 }

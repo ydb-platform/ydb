@@ -347,6 +347,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         std::vector<std::string> messages = {"key1value1"};
         messages.reserve(2 * executionsLimit + 1);
         for (ui64 i = 0; i < 2 * executionsLimit; ++i) {
+            Sleep(TDuration::Seconds(2)); // Wait for checkpoint completion
+
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
                     FORCE = TRUE
@@ -1809,6 +1811,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1846,6 +1849,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1886,6 +1890,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
@@ -1925,6 +1930,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1964,6 +1970,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -2114,6 +2121,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"time": 0, "event": "A", "host": "host1.example.com"})");
         ReadTopicMessage(outputTopicName, "A-P1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         connectorClient->LockReading();
         WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
@@ -2691,6 +2699,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.OptValidateStreamingConstraints = "false"; -- Unsupported multi-output with switch due to S3 sink
+
                 $rows = SELECT * FROM `{pq_source}`.`{input_topic}`;
 
                 INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Data || "-A" AS X FROM $rows;
@@ -2931,6 +2941,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "key1value1");
         ReadTopicMessage(outputTopicName, "key1value1");
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         // Finish query like shutdown
         {
@@ -3294,6 +3305,115 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             )sql",
             "query_name"_a = queryName
         ));
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithFlattenListBy, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "streamingQueryWithFlattenListByInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryWithFlattenListByOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"sql(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Item FROM `{pq_source}`.`{input_topic}`
+                FLATTEN LIST BY (String::SplitToList(Data, ",") AS Item)
+            END DO;)sql",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "A,B,C,D,E");
+        ReadTopicMessages(outputTopicName, {"A", "B", "C", "D", "E"});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithOffsetAndLimit, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "streamingQueryWithOffsetAndLimitInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryWithOffsetAndLimitOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"sql(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+                LIMIT 1 OFFSET 1
+            END DO;)sql",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessages(inputTopicName, {"A", "B", "C"});
+        ReadTopicMessage(outputTopicName, "B");
+
+        Sleep(TDuration::Seconds(1));
+        CheckScriptExecutionsCount(1, 0);
+    }
+
+    Y_UNIT_TEST_TWIN_F(StreamingQueryWithProcess, EnableKqpConstraintsTransformer, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(EnableKqpConstraintsTransformer);
+
+        constexpr char inputTopicName[] = "streamingQueryWithProcessInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryWithProcessOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"sql(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                {opt_pragma};
+
+                $s = SELECT Data || "-1" AS D1, Data || "-2" AS D2 FROM `{pq_source}`.`{input_topic}` LIMIT 1;
+
+                $serialize_json = ($input)->{{
+                    $serialize = YQL::Udf(AsAtom("ClickHouseClient.SerializeFormat"), Void(), TupleType(TupleType(TypeOf($input))), AsAtom("json_each_row"));
+                    return Yql::Map($serialize($input), ($out)->(<|Data: $out|>));
+                }};
+
+                $p = PROCESS $s USING $serialize_json(TableRows());
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(Data) FROM $p WHERE Data IS NOT NULL;
+            END DO;)sql",
+            "opt_pragma"_a = EnableKqpConstraintsTransformer ? "PRAGMA ydb.OptValidateStreamingConstraints = \"false\";" : "",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "X");
+        ReadTopicMessage(outputTopicName, "{\"D1\":\"X-1\",\"D2\":\"X-2\"}\n");
+
+        Sleep(TDuration::Seconds(1));
+        CheckScriptExecutionsCount(1, 0);
     }
 }
 

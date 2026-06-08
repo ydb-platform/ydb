@@ -577,10 +577,9 @@ struct TKikimrColumnMetadata {
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
-        bool setNotNullInProgress = false,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         const TKikimrPathId& defaultFromSequencePathId = {}, NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
+        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool setNotNullInProgress = false)
         : Name(name)
         , Id(id)
         , Type(type)

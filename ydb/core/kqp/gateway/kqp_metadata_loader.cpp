@@ -230,14 +230,14 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.Id,
                 typeName,
                 notNull,
-                columnDesc.SetNotNullInProgress,
                 columnDesc.PType,
                 columnDesc.PTypeMod,
                 columnDesc.DefaultFromSequence,
                 defaultFromSequencePathId,
                 defaultKind,
                 columnDesc.DefaultFromLiteral,
-                columnDesc.IsBuildInProgress
+                columnDesc.IsBuildInProgress,
+                columnDesc.SetNotNullInProgress
             )
         );
         if (columnDesc.KeyOrder >= 0) {
@@ -296,7 +296,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
         tableMeta->Columns.emplace(
             columnDesc.GetName(),
             NYql::TKikimrColumnMetadata(
-                columnDesc.GetName(), columnDesc.GetId(), typeName, columnDesc.GetNotNull(), false, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
+                columnDesc.GetName(), columnDesc.GetId(), typeName, columnDesc.GetNotNull(), typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
                 columnDesc.GetDefaultFromSequence()
             )
         );
@@ -385,7 +385,8 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
 
         tableMeta->Columns.emplace(
             column.Name,
-            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.SetNotNullInProgress, column.PType, column.PTypeMod)
+            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.PType, column.PTypeMod,
+                {}, {}, NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED, {}, false, column.SetNotNullInProgress)
         );
 
         if (column.KeyOrder >= 0) {
@@ -752,7 +753,7 @@ bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSo
         tableMetadata.Columns.emplace(
             column.name(),
             NYql::TKikimrColumnMetadata(
-                column.name(), id, typeName, !column.type().has_optional_type(), false, typeInfoMod.TypeInfo, typeInfoMod.TypeMod
+                column.name(), id, typeName, !column.type().has_optional_type(), typeInfoMod.TypeInfo, typeInfoMod.TypeMod
             )
         );
         ++id;

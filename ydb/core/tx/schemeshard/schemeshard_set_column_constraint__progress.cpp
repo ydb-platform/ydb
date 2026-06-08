@@ -515,8 +515,8 @@ private:
         return operationInfo.InProgressValidationShards.empty() && operationInfo.ToValidateShards.empty();
     }
 
-    bool ValidateRowCondition(TTransactionContext& txc, TSetColumnConstraintOperationInfo& operationInfo) {
-        LOG_D("ValidateRowCondition Start, id# " << BuildId);
+    bool DriveToSendMessageToPartOfShards(TTransactionContext& txc, TSetColumnConstraintOperationInfo& operationInfo) {
+        LOG_D("DriveToSendMessageToPartOfShards Start, id# " << BuildId);
 
         if (operationInfo.ValidationShards.empty()) {
             NIceDb::TNiceDb db(txc.DB);
@@ -530,7 +530,7 @@ private:
         }) && operationInfo.DoneValidationShards.size() == operationInfo.ValidationShards.size();
 
         if (done) {
-            LOG_D("ValidateRowCondition Done, id# " << BuildId);
+            LOG_D("DriveToSendMessageToPartOfShards Done, id# " << BuildId);
         }
 
         return done;
@@ -582,7 +582,7 @@ public:
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Validate: {
-                if (ValidateRowCondition(txc, operationInfo)) {
+                if (DriveToSendMessageToPartOfShards(txc, operationInfo)) {
                     if (operationInfo.ValidationFailed) {
                         ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites);
                     } else {

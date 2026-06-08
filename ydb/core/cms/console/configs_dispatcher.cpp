@@ -22,10 +22,12 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
+#include <util/string/subst.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
 #error log macro definition clash
@@ -325,6 +327,8 @@ private:
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
     bool YamlConfigEnabled = false;
+    // Unknown/deprecated fields detected in the resolved config (recomputed on each change).
+    NKikimrConsole::TYamlConfigUnknownFields ResolvedConfigUnknownFields;
 
 };
 
@@ -439,11 +443,28 @@ TConfigsDispatcher::TSubscriber::TPtr TConfigsDispatcher::FindSubscriber(TActorI
     return nullptr;
 }
 
+static NJson::TJsonValue UnknownFieldsToJsonArray(const NKikimrConsole::TYamlConfigUnknownFields& fields) {
+    NProtobufJson::TProto2JsonConfig cfg;
+    cfg.SetFieldNameMode(NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense);
+
+    NJson::TJsonValue array(NJson::JSON_ARRAY);
+    for (const auto& f : fields.GetFields()) {
+        NJson::TJsonValue item;
+        NProtobufJson::Proto2Json(f, item, cfg);
+        array.AppendValue(std::move(item));
+    }
+    return array;
+}
+
 NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 {
     NKikimrConfig::TAppConfig newYamlProtoConfig = {};
 
+    ResolvedConfigUnknownFields.Clear();
+
     try {
+        auto unknownFieldsCollector = MakeSimpleShared<NYamlConfig::TBasicUnknownFieldsCollector>();
+
         NYamlConfig::ResolveAndParseYamlConfig(
             MainYamlConfig,
             VolatileYamlConfigs,
@@ -451,7 +472,17 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             newYamlProtoConfig,
             DatabaseYamlConfig,
             &ResolvedYamlConfig,
-            &ResolvedJsonConfig);
+            &ResolvedJsonConfig,
+            unknownFieldsCollector);
+
+        const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+        for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
+            auto *f = ResolvedConfigUnknownFields.AddFields();
+            f->SetPath(path);
+            f->SetName(info.first);
+            f->SetProto(info.second);
+            f->SetDeprecated(deprecatedPaths.contains(path));
+        }
     } catch (const yexception& ex) {
         BLOG_ERROR("Got invalid config from console error# " << ex.what());
     }
@@ -491,6 +522,8 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
 
     response.InsertValue("yaml_config", MainYamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
+
+    response.InsertValue("unknown_fields", UnknownFieldsToJsonArray(ResolvedConfigUnknownFields));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
     
     auto state = GetState();
@@ -568,8 +601,22 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                 str << "{'nodeName':'" << node.Host << "'}, ";
             }
 
-            str << "];" << Endl
-                << "</script>" << Endl
+            str << "];" << Endl;
+
+            // path/name/proto come from user-uploaded YAML keys, so emitting them raw into a JS
+            // string literal would allow breaking out of the string or injecting script. JSON
+            // encoding escapes that; we additionally escape "</" so a value cannot terminate the
+            // surrounding <script> block prematurely.
+            {
+                NJson::TJsonValue unknownFieldsJson = UnknownFieldsToJsonArray(ResolvedConfigUnknownFields);
+                TStringStream unknownFieldsStream;
+                NJson::WriteJson(&unknownFieldsStream, &unknownFieldsJson, {});
+                TString unknownFieldsStr = unknownFieldsStream.Str();
+                SubstGlobal(unknownFieldsStr, "</", "<\\/");
+                str << "var unknownFields = " << unknownFieldsStr << ";" << Endl;
+            }
+
+            str << "</script>" << Endl
                 << "<script src='../cms/ext/fuse.min.js'></script>" << Endl
                 << "<script src='../cms/common.js'></script>" << Endl
                 << "<script src='../cms/ext/fuzzycomplete.min.js'></script>" << Endl
@@ -857,6 +904,10 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                 str << "No storage config available. This is normal for non-seed-nodes initialization." << Endl;
                                 str << "</div>" << Endl;
                             }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("resolved-unknown-fields", "Unknown fields") {
+                            TAG_ATTRS(TDiv, {{"id", "resolved-unknown-fields-list"}, {"class", "unknown-fields-list"}}) { }
                         }
                         str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("resolved-yaml-config", "Resolved YAML config") {

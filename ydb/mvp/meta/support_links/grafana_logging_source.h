@@ -25,6 +25,12 @@ inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(const TE
     if (entityIdentity.Database && !entityIdentity.Database->empty()) {
         bindings.emplace_back("database", *entityIdentity.Database);
     }
+    if (entityIdentity.Node && !entityIdentity.Node->empty()) {
+        bindings.emplace_back("node", *entityIdentity.Node);
+    }
+    if (entityIdentity.Host && !entityIdentity.Host->empty()) {
+        bindings.emplace_back("host", *entityIdentity.Host);
+    }
 
     return bindings;
 }

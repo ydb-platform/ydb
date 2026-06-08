@@ -160,6 +160,7 @@ class TestTpccW16000T0Serializable(TpccSuiteBase):
     threads: int = 0
     tx_mode = TxMode.SerializableRW
 
+
 class TestTpccW20000T0Serializable(TpccSuiteBase):
     warehouses: int = 20000
     threads: int = 0
@@ -188,6 +189,7 @@ class TestTpccW16000T0Snapshot(TpccSuiteBase):
     warehouses: int = 16000
     threads: int = 0
     tx_mode = TxMode.SnapshotRW
+
 
 class TestTpccW20000T0Snapshot(TpccSuiteBase):
     warehouses: int = 20000

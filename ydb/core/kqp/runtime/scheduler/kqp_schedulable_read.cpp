@@ -93,7 +93,7 @@ TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
         // retry using exponencial delays.
         const auto maxRetries = std::bit_width(expectedQuotaMs) - 1;
         if (FairShareRetryCount >= maxRetries) {
-            return expectedQuota + RandomDuration(TDuration::MicroSeconds(expectedQuotaMs >> 2)); // jitter +0..25% of expected quota
+            return expectedQuota + RandomDuration(TDuration::MilliSeconds(expectedQuotaMs >> 2)); // jitter +0..25% of expected quota
         }
         return TDuration::MilliSeconds(1 << FairShareRetryCount++);
     }

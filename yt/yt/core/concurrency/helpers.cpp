@@ -1,4 +1,10 @@
-#include "profiling_helpers.h"
+#include "helpers.h"
+
+#include <yt/yt/core/misc/hazard_ptr.h>
+
+#include <library/cpp/yt/cpu_clock/clock.h>
+
+#include <library/cpp/yt/misc/tls.h>
 
 namespace NYT::NConcurrency {
 
@@ -38,6 +44,21 @@ TTagSet GetQueueTags(
     tags.AddTag(TTag("queue", queueName), -1);
 
     return tags;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_PREVENT_TLS_CACHING bool ReclaimHazardPointersPeriodically(TCpuInstant now, bool force)
+{
+    static const auto ReclaimPeriod = DurationToCpuDuration(HazardPointerReclaimPeriod);
+    static thread_local TCpuInstant LastReclaimInstant;
+
+    if (!force && now < LastReclaimInstant + ReclaimPeriod) {
+        return false;
+    }
+
+    LastReclaimInstant = now;
+    return ReclaimHazardPointers(/*flush*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

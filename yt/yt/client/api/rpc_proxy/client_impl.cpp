@@ -2664,7 +2664,7 @@ TFuture<TCollectCoverageResult> TClient::CollectCoverage(
 
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     NQueryTrackerClient::EQueryEngine engine,
-    const TString& query,
+    const std::string& query,
     const TStartQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -3224,6 +3224,9 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     }
     if (options.Schema) {
         ToProto(req->mutable_schema(), options.Schema);
+    }
+    if (options.PushConfig) {
+        req->set_push_config(ToProto(*options.PushConfig));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {

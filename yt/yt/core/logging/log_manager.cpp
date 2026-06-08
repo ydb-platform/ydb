@@ -10,7 +10,7 @@
 #include "stream_log_writer.h"
 #include "system_log_event_provider.h"
 
-#include <yt/yt/core/concurrency/profiling_helpers.h>
+#include <yt/yt/core/concurrency/helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/scheduler_thread.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>

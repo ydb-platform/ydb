@@ -13,7 +13,7 @@ static constexpr size_t BUFFER_SIZE = 1 << 16;
 Y_UNIT_TEST_SUITE(Serialization) {
 
 Y_UNIT_TEST(RequestHeader) {
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
 
     TRequestHeaderData value;
 
@@ -36,7 +36,7 @@ Y_UNIT_TEST(RequestHeader) {
 }
 
 Y_UNIT_TEST(ResponseHeader) {
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
 
     TResponseHeaderData value;
 
@@ -53,7 +53,7 @@ Y_UNIT_TEST(ResponseHeader) {
 }
 
 Y_UNIT_TEST(ApiVersionsRequest) {
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
 
     TApiVersionsRequestData value;
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST(ApiVersionsRequest) {
 Y_UNIT_TEST(ApiVersionsResponse) {
     TString longString = "long-string-value-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
 
     TApiVersionsResponseData value;
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST(ApiVersionsResponse) {
 }
 
 Y_UNIT_TEST(ApiVersion_WithoutSupportedFeatures) {
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
 
     TApiVersionsResponseData value;
     size_t expectedSize = value.Size(2);
@@ -147,7 +147,7 @@ Y_UNIT_TEST(ApiVersion_WithoutSupportedFeatures) {
 }
 
 Y_UNIT_TEST(ProduceRequest) {
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
 
     TProduceRequestData value;
 
@@ -218,7 +218,7 @@ Y_UNIT_TEST(TRequestHeaderData_reference) {
     ui8 reference[] = {0x00, 0x03, 0x00, 0x07, 0x00, 0x00, 0x00, 0x0D, 0x00, 0x10, 0x63, 0x6C, 0x69, 0x65, 0x6E, 0x74,
                        0x2D, 0x69, 0x64, 0x2D, 0x73, 0x74, 0x72, 0x69, 0x6E, 0x67, 0x00};
 
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
     TKafkaWritable writable(sb);
     TKafkaReadable readable(sb.GetFrontBuffer());
 
@@ -249,7 +249,7 @@ Y_UNIT_TEST(RequestHeader_reference) {
     ui8 reference[] = {0x00, 0x12, 0x00, 0x00, 0x7F, 0x6F, 0x6F, 0x68, 0x00, 0x0A, 0x70, 0x72, 0x6F, 0x64, 0x75, 0x63,
                      0x65, 0x72, 0x2D, 0x31};
 
-    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWriteBuffer sb(BUFFER_SIZE);
     sb.write((char*)reference, sizeof(reference));
 
     TKafkaReadable readable(sb.GetFrontBuffer());
@@ -339,7 +339,7 @@ Y_UNIT_TEST(ProduceRequestData) {
     UNIT_ASSERT_EQUAL(r0.Records[2].Headers[2].Key, TString("h-3", 3));
     UNIT_ASSERT_EQUAL(r0.Records[2].Headers[2].Value, TString("v-3-3", 5));
 
-    TWritableBuf sb(nullptr, sizeof(reference));
+    TKafkaWriteBuffer sb(sizeof(reference));
     TKafkaWritable writable(sb);
 
     header.Write(writable, 2);

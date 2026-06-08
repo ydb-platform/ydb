@@ -22,23 +22,18 @@ static constexpr size_t SizeOfZeroVarint = 1;
 static constexpr size_t BatchFirstTwoFieldsSize = 12;
 static constexpr size_t KafkaMagic = 2;
 
-TSourceData MakeSourceData(const NKikimrPQClient::TDataChunk& dataChunk) {
-    TSourceData sourceData;
-    sourceData.Codec = dataChunk.GetCodec();
-
+void FillRecordFromDataChunk(TKafkaRecord& record, const NKikimrPQClient::TDataChunk& dataChunk) {
     for (const auto& metadata : dataChunk.GetMessageMeta()) {
         if (metadata.key() == "__key") {
-            sourceData.SetKey(metadata.value());
+            record.SetKey(metadata.value());
         } else {
-            sourceData.AddHeader(metadata.key(), metadata.value());
+            record.AddHeader(metadata.key(), metadata.value());
         }
     }
 
     if (dataChunk.HasData()) {
-        sourceData.SetValue(dataChunk.GetData());
+        record.SetValue(dataChunk.GetData());
     }
-
-    return sourceData;
 }
 
 NActors::IActor* CreateKafkaFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFetchRequestData>& message) {
@@ -209,7 +204,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
             continue;
         }
 
-        auto sourceData = MakeSourceData(dataChunk);
+        FillRecordFromDataChunk(record, dataChunk);
 
         NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(dataChunk.GetCodec() + 1);
         TString codecValue;
@@ -230,11 +225,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                 codecValue = std::to_string(static_cast<uint32_t>(codec));
         }
 
-        sourceData.AddHeader("__codec", std::move(codecValue));
-        record.SourceData = std::move(sourceData);
-        record.Key = record.SourceData.Key;
-        record.Value = record.SourceData.Value;
-        record.Headers = record.SourceData.Headers;
+        record.AddHeader("__codec", std::move(codecValue));
 
         record.OffsetDelta = lastOffset - baseOffset;
         record.TimestampDelta = lastTimestamp - baseTimestamp;

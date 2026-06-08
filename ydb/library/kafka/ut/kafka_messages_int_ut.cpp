@@ -11,7 +11,7 @@ static constexpr size_t BUFFER_SIZE = 1 << 16;
     Meta_##Type_::Type value = Value;               \
     Meta_##Type_::Type result;                      \
                                                     \
-    TWritableBuf sb(nullptr, BUFFER_SIZE);          \
+    TKafkaWriteBuffer sb(BUFFER_SIZE);          \
     TKafkaWritable writable(sb);                    \
     TKafkaReadable readable(sb.GetFrontBuffer());   \
                                                     \

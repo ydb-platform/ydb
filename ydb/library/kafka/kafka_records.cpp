@@ -124,108 +124,134 @@ i32 TKafkaHeader::Size(TKafkaVersion _version) const {
 //
 const TKafkaRecord::KeyMeta::Type TKafkaRecord::KeyMeta::Default = std::nullopt;
 
-TSourceData::TSourceData(const TSourceData& other) {
-    *this = other;
+TKafkaRecord::TKafkaRecord()
+    : Length(LengthMeta::Default)
+    , Attributes(AttributesMeta::Default)
+    , TimestampDelta(TimestampDeltaMeta::Default)
+    , OffsetDelta(OffsetDeltaMeta::Default)
+    , Key(KeyMeta::Default)
+{
 }
 
-TSourceData::TSourceData(TSourceData&& other) {
-    *this = std::move(other);
+TKafkaRecord::TKafkaRecord(const TKafkaRecord& other)
+    : Length(other.Length)
+    , Attributes(other.Attributes)
+    , TimestampDelta(other.TimestampDelta)
+    , OffsetDelta(other.OffsetDelta)
+    , Key(other.Key)
+    , Value(other.Value)
+    , Headers(other.Headers)
+    , Storage_(other.Storage_)
+{
+    RebindStorage();
 }
 
-TSourceData& TSourceData::operator=(const TSourceData& other) {
+TKafkaRecord::TKafkaRecord(TKafkaRecord&& other) noexcept
+    : Length(other.Length)
+    , Attributes(other.Attributes)
+    , TimestampDelta(other.TimestampDelta)
+    , OffsetDelta(other.OffsetDelta)
+    , Key(other.Key)
+    , Value(other.Value)
+    , Headers(std::move(other.Headers))
+    , Storage_(std::move(other.Storage_))
+{
+    RebindStorage();
+}
+
+TKafkaRecord& TKafkaRecord::operator=(const TKafkaRecord& other) {
     if (this != &other) {
+        Length = other.Length;
+        Attributes = other.Attributes;
+        TimestampDelta = other.TimestampDelta;
+        OffsetDelta = other.OffsetDelta;
         Key = other.Key;
         Value = other.Value;
         Headers = other.Headers;
-        Codec = other.Codec;
-        KeyStorage = other.KeyStorage;
-        ValueStorage = other.ValueStorage;
-        HeadersStorage = other.HeadersStorage;
+        Storage_ = other.Storage_;
         RebindStorage();
     }
     return *this;
 }
 
-TSourceData& TSourceData::operator=(TSourceData&& other) {
+TKafkaRecord& TKafkaRecord::operator=(TKafkaRecord&& other) noexcept {
     if (this != &other) {
+        Length = other.Length;
+        Attributes = other.Attributes;
+        TimestampDelta = other.TimestampDelta;
+        OffsetDelta = other.OffsetDelta;
         Key = other.Key;
         Value = other.Value;
         Headers = std::move(other.Headers);
-        Codec = other.Codec;
-        KeyStorage = std::move(other.KeyStorage);
-        ValueStorage = std::move(other.ValueStorage);
-        HeadersStorage = std::move(other.HeadersStorage);
+        Storage_ = std::move(other.Storage_);
         RebindStorage();
     }
     return *this;
 }
 
-void TSourceData::SetKey(TString key) {
-    KeyStorage = std::move(key);
-    Key = TArrayRef<const char>(KeyStorage->data(), KeyStorage->size());
+void TKafkaRecord::SetKey(TString key) {
+    Storage_.Key = std::move(key);
+    Key = TArrayRef<const char>(Storage_.Key->data(), Storage_.Key->size());
 }
 
-void TSourceData::SetValue(TString value) {
-    ValueStorage = std::move(value);
-    Value = TArrayRef<const char>(ValueStorage->data(), ValueStorage->size());
+void TKafkaRecord::SetValue(TString value) {
+    Storage_.Value = std::move(value);
+    Value = TArrayRef<const char>(Storage_.Value->data(), Storage_.Value->size());
 }
 
-void TSourceData::AddHeader(TString key, TString value) {
-    HeadersStorage.push_back(THeaderData{
+void TKafkaRecord::AddHeader(TString key, TString value) {
+    Storage_.Headers.push_back(TStorage::THeaderData{
         .Key = std::move(key),
         .Value = std::move(value),
     });
     RebindStorage();
 }
 
-void TSourceData::OwnViews() {
-    std::optional<TString> keyStorage;
+void TKafkaRecord::OwnPayload() {
     if (Key) {
-        keyStorage = TString(Key->data(), Key->size());
+        Storage_.Key = TString(Key->data(), Key->size());
+    } else {
+        Storage_.Key.reset();
     }
 
-    std::optional<TString> valueStorage;
     if (Value) {
-        valueStorage = TString(Value->data(), Value->size());
+        Storage_.Value = TString(Value->data(), Value->size());
+    } else {
+        Storage_.Value.reset();
     }
 
-    std::vector<THeaderData> headersStorage;
-    headersStorage.reserve(Headers.size());
-    for (const auto& header : Headers) {
-        THeaderData headerStorage;
-        if (header.Key) {
-            headerStorage.Key = TString(header.Key->data(), header.Key->size());
+    if (!Headers.empty()) {
+        std::vector<TStorage::THeaderData> headersStorage;
+        headersStorage.reserve(Headers.size());
+        for (const auto& header : Headers) {
+            TStorage::THeaderData headerStorage;
+            if (header.Key) {
+                headerStorage.Key = TString(header.Key->data(), header.Key->size());
+            }
+            if (header.Value) {
+                headerStorage.Value = TString(header.Value->data(), header.Value->size());
+            }
+            headersStorage.push_back(std::move(headerStorage));
         }
-        if (header.Value) {
-            headerStorage.Value = TString(header.Value->data(), header.Value->size());
-        }
-        headersStorage.push_back(std::move(headerStorage));
+        Storage_.Headers = std::move(headersStorage);
+    } else {
+        Storage_.Headers.clear();
     }
 
-    KeyStorage = std::move(keyStorage);
-    ValueStorage = std::move(valueStorage);
-    HeadersStorage = std::move(headersStorage);
     RebindStorage();
 }
 
-bool TSourceData::operator==(const TSourceData& other) const {
-    return Key == other.Key
-        && Value == other.Value
-        && Headers == other.Headers
-        && Codec == other.Codec;
-}
-
-void TSourceData::RebindStorage() {
-    if (KeyStorage) {
-        Key = TArrayRef<const char>(KeyStorage->data(), KeyStorage->size());
+void TKafkaRecord::RebindStorage() {
+    if (Storage_.Key) {
+        Key = TArrayRef<const char>(Storage_.Key->data(), Storage_.Key->size());
     }
-    if (ValueStorage) {
-        Value = TArrayRef<const char>(ValueStorage->data(), ValueStorage->size());
+    if (Storage_.Value) {
+        Value = TArrayRef<const char>(Storage_.Value->data(), Storage_.Value->size());
     }
-    if (!HeadersStorage.empty()) {
+    if (!Storage_.Headers.empty()) {
         Headers.clear();
-        Headers.reserve(HeadersStorage.size());
-        for (const auto& headerStorage : HeadersStorage) {
+        Headers.reserve(Storage_.Headers.size());
+        for (const auto& headerStorage : Storage_.Headers) {
             TKafkaHeader header;
             if (headerStorage.Key) {
                 header.Key = TArrayRef<const char>(headerStorage.Key->data(), headerStorage.Key->size());
@@ -236,15 +262,6 @@ void TSourceData::RebindStorage() {
             Headers.push_back(std::move(header));
         }
     }
-}
-
-TKafkaRecord::TKafkaRecord()
-    : Length(LengthMeta::Default)
-    , Attributes(AttributesMeta::Default)
-    , TimestampDelta(TimestampDeltaMeta::Default)
-    , OffsetDelta(OffsetDeltaMeta::Default)
-    , Key(KeyMeta::Default)
-{
 }
 
 bool TKafkaRecord::operator==(const TKafkaRecord& other) const {
@@ -509,7 +526,7 @@ TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
 }
 
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
-    TWritableBuf buffer(nullptr, batch.Size(version));
+    TKafkaWriteBuffer buffer(batch.Size(version));
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
 

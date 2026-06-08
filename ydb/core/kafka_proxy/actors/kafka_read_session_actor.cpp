@@ -258,7 +258,7 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
 
     auto assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);
 
-    TWritableBuf buf(nullptr, assignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+    TKafkaWriteBuffer buf(assignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
     TKafkaWritable writable(buf);
     writable << ASSIGNMENT_VERSION;
     assignment.Write(writable, ASSIGNMENT_VERSION);

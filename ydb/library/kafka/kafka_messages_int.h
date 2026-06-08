@@ -669,7 +669,7 @@ class TypeStrategy<
 
     inline static TString SerializeImpl(TKafkaVersion version, const TValue& value) {
         TSizeCollector collector;
-        TWritableBuf buffer(nullptr, DoSizeImpl(collector, version, value));
+        TKafkaWriteBuffer buffer(DoSizeImpl(collector, version, value));
         TKafkaWritable writable(buffer);
         DoWriteImpl(writable, version, value);
 
@@ -680,16 +680,14 @@ class TypeStrategy<
         return result;
     }
 
-    inline static TValue DeserializeImpl(TKafkaVersion version, TStringBuf data) {
+    inline static void DeserializeImpl(TKafkaVersion version, TStringBuf data, TValue& value) {
         TBuffer buffer(data.data(), data.size());
         TKafkaReadable readable(buffer);
 
-        TValue value;
         DoReadImpl(readable, version, value);
         if (readable.left() != 0) {
             ythrow yexception() << "unexpected extra bytes after Kafka records: " << readable.left();
         }
-        return value;
     }
 
 public:
@@ -717,15 +715,9 @@ public:
 
         const auto compressed = readable.Bytes(readable.left());
         const TString decompressed = Decompress(TStringBuf(compressed.data(), compressed.size()), compressionType);
-        value = DeserializeImpl(version, decompressed);
+        DeserializeImpl(version, decompressed, value);
         for (auto& record : value) {
-            record.SourceData.Key = record.Key;
-            record.SourceData.Value = record.Value;
-            record.SourceData.Headers = record.Headers;
-            record.SourceData.OwnViews();
-            record.Key = record.SourceData.Key;
-            record.Value = record.SourceData.Value;
-            record.Headers = record.SourceData.Headers;
+            record.OwnPayload();
         }
     }
 

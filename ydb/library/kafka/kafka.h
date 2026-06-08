@@ -4,10 +4,9 @@
 #include <optional>
 #include <ostream>
 
-#include <ydb/core/raw_socket/sock_impl.h>
 #include <yql/essentials/public/decimal/yql_wide_int.h>
 
-#include <yql/essentials/public/decimal/yql_wide_int.h>
+#include "kafka_write_buffer.h"
 
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
@@ -87,8 +86,6 @@ public:
 
 static constexpr TKafkaVersions VersionsNever(0, -1);
 static constexpr TKafkaVersions VersionsAlways(0, Max<TKafkaVersion>());
-
-using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter<>;
 
 namespace NPrivate {
 
@@ -334,7 +331,7 @@ U AsUnsigned(S value) {
 
 class TKafkaWritable {
 public:
-    TKafkaWritable(TWritableBuf& buffer)
+    TKafkaWritable(TKafkaWriteBuffer& buffer)
         : Buffer(buffer){};
 
     template <typename T>
@@ -378,7 +375,7 @@ public:
     }
 
 private:
-    TWritableBuf& Buffer;
+    TKafkaWriteBuffer& Buffer;
     ECompressionType RecordBatchCompressionType = static_cast<ECompressionType>(0);
 };
 

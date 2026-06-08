@@ -1228,8 +1228,7 @@ private:
                         }
 
                         if (!sourcePathMissing) {
-                            AllocateTxId(*exportInfo);
-                            return;
+                            return AllocateTxId(*exportInfo);
                         }
                     }
 

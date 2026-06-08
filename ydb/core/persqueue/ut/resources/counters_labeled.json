@@ -1859,7 +1859,7 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/PartitionMaxWriteMessagesMax"
+        "sensor": "PQ/PartitionMaxWriteMessagesQuotaUsage"
       },
       "value": 0
     },
@@ -2192,7 +2192,7 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "total",
-        "sensor": "PQ/PartitionMaxWriteMessagesMax"
+        "sensor": "PQ/PartitionMaxWriteMessagesQuotaUsage"
       },
       "value": 0
     },

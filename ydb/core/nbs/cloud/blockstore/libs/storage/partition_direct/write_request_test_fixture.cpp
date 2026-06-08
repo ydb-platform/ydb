@@ -194,8 +194,8 @@ TWriteRequestTestFixture::CreatePBufferReplicationExecutor(
         std::move(originalRequest),
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
-        Range,
-        UserLsn);
+        Range);
+    bundle->SetLsn(UserLsn);
 
     WriteClient->Response.reset();
 
@@ -223,8 +223,8 @@ TWriteRequestTestFixture::CreateDirectReplicationExecutor(
         std::move(originalRequest),
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
-        Range,
-        UserLsn);
+        Range);
+    bundle->SetLsn(UserLsn);
 
     WriteClient->Response.reset();
 

@@ -55,7 +55,6 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
         const NWilson::TTraceId& traceId);
 
     void SetHostState(THostIndex hostIndex, EHostState state);
@@ -63,6 +62,11 @@ public:
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
+
+    // This vchunk's contribution to the tablet-wide cleanup watermark: the
+    // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
+    // Must run on the executor thread.
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(

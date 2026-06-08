@@ -443,12 +443,21 @@ public:
         return RecordBatchCompressionType;
     }
 
+    void SetAllowCompressedRecordBatches(bool allow) {
+        AllowCompressedRecordBatches = allow;
+    }
+
+    bool GetAllowCompressedRecordBatches() const {
+        return AllowCompressedRecordBatches;
+    }
+
 private:
     void checkEof(size_t length);
 
     const TBuffer& Is;
     size_t Position;
     ECompressionType RecordBatchCompressionType = static_cast<ECompressionType>(0);
+    bool AllowCompressedRecordBatches = false;
 };
 
 struct TReadDemand {

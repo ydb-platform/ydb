@@ -368,6 +368,9 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
 
     NPrivate::Read<CrcMeta>(_readable, _version, Crc);
     NPrivate::Read<AttributesMeta>(_readable, _version, Attributes);
+    if (!_readable.GetAllowCompressedRecordBatches() && CompressionType() != ECompressionType::NONE) {
+        ythrow yexception() << "Supported only CompressionType::NONE";
+    }
     EnsureSupportedCompressionType(CompressionType());
 
     NPrivate::Read<LastOffsetDeltaMeta>(_readable, _version, LastOffsetDelta);
@@ -516,6 +519,7 @@ i32 TKafkaRecordBatchV0::Size(TKafkaVersion _version) const {
 TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
     TBuffer buffer(data.data(), data.size());
     TKafkaReadable readable(buffer);
+    readable.SetAllowCompressedRecordBatches(true);
 
     TKafkaRecordBatch batch;
     batch.Read(readable, version);

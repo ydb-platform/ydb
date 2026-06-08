@@ -863,6 +863,8 @@ protected:
                         }
 
                         TKafkaReadable readable(*Request->Buffer);
+                        readable.SetAllowCompressedRecordBatches(
+                            NKikimr::AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);

@@ -1482,7 +1482,7 @@ public:
                 description: >
                     execute method:
                       * `execute-query` - execute query (QueryService)
-                      * `execute-query-and-forget` - execute query (QueryService), wait up to forget-after for an immediate response, then leave it running in background; after the query is forgotten, it cannot be cancelled using query_id
+                      * `execute-query-and-forget` - execute query (QueryService), wait up to forget_after for an immediate response, then leave it running in background; after the query is forgotten, it cannot be cancelled using query_id
                       * `execute-data` - execute data query (DataQuery)
                       * `execute-scan` - execute scan query (ScanQuery)
                       * `execute-script` - execute script query (ScriptingService)
@@ -1592,7 +1592,7 @@ public:
                 required: false
               - name: forget_after
                 in: query
-                description: underscore alias for forget-after
+                description: maximum time in ms to wait for an execute-query-and-forget result before leaving the query running in background
                 type: integer
                 required: false
                 default: 1000

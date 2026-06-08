@@ -86,12 +86,13 @@ TRoutingParams ComputeRoutingParams(
 
     const ui32 wantIo = cfg.GetIoSizeBytes();
     const ui64 vChunkSizeBytes = allocConfig.GetVChunkSizeBytes();
-    params.IoValid = wantIo != 0 && vChunkSizeBytes != 0
+    const ui32 targetNumVChunks = allocConfig.GetTargetNumVChunks();
+    const ui64 bytesPerDbg = static_cast<ui64>(targetNumVChunks) * vChunkSizeBytes;
+    params.IoValid = wantIo != 0 && vChunkSizeBytes != 0 && bytesPerDbg != 0
         && wantIo <= vChunkSizeBytes && vChunkSizeBytes % wantIo == 0;
     if (params.IoValid) {
         params.IoSizeBytes = wantIo;
-        params.BytesPerDbg = static_cast<ui64>(allocConfig.GetTargetNumVChunks())
-            * vChunkSizeBytes;
+        params.BytesPerDbg = bytesPerDbg;
     }
 
     return params;

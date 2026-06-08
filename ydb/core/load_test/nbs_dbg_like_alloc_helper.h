@@ -2,8 +2,6 @@
 
 #include "nbs_dbg_like_load_defs.h"
 
-#include <ydb/core/protos/load_test.pb.h>
-
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
@@ -44,9 +42,11 @@ struct TRoutingParams {
 };
 
 // Computes routing params from the run config. ActiveDbgs clamps
-// NumDirectBlockGroupsToUse to [1, numDbgs] (0 means "all"). IoValid is true
-// only when IoSizeBytes is non-zero, does not exceed VChunkSizeBytes, and
-// evenly divides it; when valid, IoSizeBytes and BytesPerDbg are populated.
+// NumDirectBlockGroupsToUse to [0, numDbgs]; 0 (and values > numDbgs) mean
+// "all", and ActiveDbgs is only 0 when numDbgs is 0. IoValid is true only when
+// IoSizeBytes is non-zero, does not exceed VChunkSizeBytes, evenly divides it,
+// and TargetNumVChunks is non-zero (so BytesPerDbg > 0); when valid, IoSizeBytes
+// and BytesPerDbg are populated.
 TRoutingParams ComputeRoutingParams(
     const TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet& cfg,
     const TEvLoadTestRequest::TNbsDbgLikeLoad::TAllocConfig& allocConfig,

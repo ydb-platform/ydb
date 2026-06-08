@@ -626,6 +626,9 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             UNIT_ASSERT_C(resp->Get()->Record.HasPayloadId(),
                 "missing PayloadId for cookie=" << cookie);
             const ui32 payloadId = resp->Get()->Record.GetPayloadId();
+            UNIT_ASSERT_C(payloadId < resp->Get()->GetPayloadCount(),
+                "bad PayloadId=" << payloadId << " PayloadCount="
+                << resp->Get()->GetPayloadCount() << " for cookie=" << cookie);
             const TString payload = resp->Get()->GetPayload(payloadId).ConvertToString();
             UNIT_ASSERT_VALUES_EQUAL_C(payload.size(), kBlockSize,
                 "short payload for cookie=" << cookie);

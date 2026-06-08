@@ -602,15 +602,13 @@ private:
 
     ui64 LsnsTotalAll = 0;   // == Dbg.Lsns.size() for this worker
     ui64 SequenceGenerator = 0;
-    ui32 WriteInFlight = 0;
-    ui32 ReadInFlight = 0;
 
     ui64 NextBatchCookie = 1;
     std::map<ui64, TFlushBatch> FlushInflight;
     std::map<ui64, TEraseBatch> EraseInflight;
     std::map<ui64, TReadInflight> ReadInflight;
 
-    TFastRng64 Rng{0};
+    TFastRng64 Rng{MyDbgIndex};
     TRootCounters RootCnt;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 };
@@ -1709,6 +1707,19 @@ void TNbsDbgLikeActor::Bootstrap() {
 void TNbsDbgLikeActor::HandlePoison() {
     LOG_N("Worker poison DBG# " << MyDbgIndex);
     DisconnectAllPeers();
+    // Reconcile the shared root up/down gauges: subtract whatever this worker
+    // still has in flight so a poisoned worker cannot leak Pending/BytesInFlight
+    // across Create/Delete cycles. The per-DBG gauges hold the exact remainder.
+    for (ui32 i = 0; i < kOpCount; ++i) {
+        auto& root = RootCnt.Op[i];
+        auto& local = Dbg.Counters.Op[i];
+        if (root.Pending && local.Pending) {
+            *root.Pending -= local.Pending->Val();
+        }
+        if (root.BytesInFlight && local.BytesInFlight) {
+            *root.BytesInFlight -= local.BytesInFlight->Val();
+        }
+    }
     if (Counters && Dbg.Counters.Root) {
         Dbg.Counters.Root->ResetCounters();
     }
@@ -2035,13 +2046,18 @@ void TNbsDbgLikeActor::BumpPeerReply(TPerDbgState& dbg, ui32 peerIndex, EOp op, 
 }
 
 void TNbsDbgLikeActor::AccountReadRequest(TPerDbgState& dbg, EOp op, ui32 size) {
-    // Root Pending/BytesInFlight gauges are NOT maintained here: they are
-    // up/down gauges shared by all workers, so a poisoned worker that never
-    // drains its in-flight ops would leak them across Create/Delete cycles.
-    // Solomon derives the root view by summing the per-DBG (dbg=) subgroups,
-    // which HandlePoison resets. Only the cumulative root counters are touched.
+    // Root Pending/BytesInFlight are shared up/down gauges maintained in
+    // lockstep with the per-DBG (dbg=) gauges; HandlePoison reconciles any
+    // ops still in flight when a worker dies so they do not leak across
+    // Create/Delete cycles.
     if (auto& c = RootCnt.Op[static_cast<size_t>(op)]; c.Requests) {
         c.Requests->Inc();
+        if (c.Pending) {
+            c.Pending->Inc();
+        }
+        if (c.BytesInFlight) {
+            *c.BytesInFlight += size;
+        }
     }
     if (auto& c = dbg.Counters.Op[static_cast<size_t>(op)]; c.Requests) {
         c.Requests->Inc();
@@ -2140,7 +2156,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         return;
     }
 
-    if (TotalLsns() >= TabletConfig.GetMaxInflightLsns()) {
+    if (TotalLsns() >= TabletConfig.GetMaxInflightLsns() / Max(1u, NumDbgsTotal)) {
         if (RootCnt.Lsns.BackpressureHits) {
             RootCnt.Lsns.BackpressureHits->Inc();
         }
@@ -2199,14 +2215,19 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
 
     Send(dbg.PBActor[coord], wireEv.release(), 0, lsn);
 
-    ++WriteInFlight;
     ++dbg.WritesInFlight;
     ++dbg.InFlightTo[coord];
 
-    // Root Pending/BytesInFlight gauges left to Solomon aggregation (see
-    // AccountReadRequest); only the cumulative root Requests counter is bumped.
+    // Root Pending/BytesInFlight maintained in lockstep with per-DBG gauges
+    // (see AccountReadRequest); HandlePoison reconciles in-flight ops.
     if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Write)]; c.Requests) {
         c.Requests->Inc();
+        if (c.Pending) {
+            c.Pending->Inc();
+        }
+        if (c.BytesInFlight) {
+            *c.BytesInFlight += IoSizeBytes;
+        }
     }
 
     if (auto& c = dbg.Counters.Op[static_cast<size_t>(EOp::Write)]; c.Requests) {
@@ -2253,7 +2274,6 @@ bool TNbsDbgLikeActor::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 lsn,
     ReadInflight.emplace(cookie, std::move(ri));
     Send(dbg.PBActor[k], ev.release(), 0, cookie);
 
-    ++ReadInFlight;
     ++dbg.ReadsInFlight;
     AccountReadRequest(dbg, EOp::ReadPB, info.Size);
     BumpPeerRequest(dbg, k, EOp::ReadPB);
@@ -2286,7 +2306,6 @@ bool TNbsDbgLikeActor::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
     ReadInflight.emplace(cookie, std::move(ri));
     Send(dbg.DDiskActor[k], ev.release(), 0, cookie);
 
-    ++ReadInFlight;
     ++dbg.ReadsInFlight;
     AccountReadRequest(dbg, EOp::ReadDDisk, size);
     BumpPeerRequest(dbg, kHostsPerDbgMax + k, EOp::ReadDDisk);
@@ -2417,20 +2436,25 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
         }
     }
 
-    --WriteInFlight;
     --dbg.WritesInFlight;
     const ui8 coord = info.CoordinatorIndex;
     if (coord < kPrimaryHostsPerDbg && dbg.InFlightTo[coord] > 0) {
         --dbg.InFlightTo[coord];
     }
 
-    // Root Pending/BytesInFlight gauges left to Solomon aggregation (see
-    // AccountReadRequest); only the cumulative root counters are touched.
+    // Root Pending/BytesInFlight maintained in lockstep with per-DBG gauges
+    // (see AccountReadRequest); HandlePoison reconciles in-flight ops.
     if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Write)]; c.ReplyOk) {
         if (overallOk) {
             c.ReplyOk->Inc();
         } else {
             c.ReplyErr->Inc();
+        }
+        if (c.Pending) {
+            c.Pending->Dec();
+        }
+        if (c.BytesInFlight) {
+            *c.BytesInFlight -= info.Size;
         }
         if (c.Bytes) {
             *c.Bytes += info.Size;
@@ -2525,7 +2549,7 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
 }
 
 void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
-    const ui32 syncGate = SyncGateThreshold();
+    const ui32 syncGate = Max<ui32>(1, SyncGateThreshold() / Max(1u, NumDbgsTotal));
     if (dbg.StateCount[static_cast<ui32>(EPBufferState::PBufferWritten)] < syncGate) {
         if (RootCnt.Lsns.SyncGateFlushBlocked) {
             RootCnt.Lsns.SyncGateFlushBlocked->Inc();
@@ -2610,9 +2634,13 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
         FlushInflight.emplace(cookie, std::move(batchInfo));
         Send(dbg.DDiskActor[k], ev.release(), 0, cookie);
 
-        // Root Pending gauge left to Solomon aggregation (see AccountReadRequest).
+        // Root Pending maintained in lockstep with per-DBG gauge (see
+        // AccountReadRequest); HandlePoison reconciles in-flight ops.
         if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Flush)]; c.Requests) {
             c.Requests->Inc();
+            if (c.Pending) {
+                c.Pending->Inc();
+            }
             if (c.BatchSize) {
                 c.BatchSize->Collect(pending[k].size());
             }
@@ -2731,8 +2759,12 @@ void TNbsDbgLikeActor::HandleSyncResult(
     }
 
     const ui64 latencyMs = (now - sentAt).MilliSeconds();
-    // Root Pending gauge left to Solomon aggregation (see AccountReadRequest).
+    // Root Pending maintained in lockstep with per-DBG gauge (see
+    // AccountReadRequest); HandlePoison reconciles in-flight ops.
     if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Flush)]; c.ReplyOk) {
+        if (c.Pending) {
+            c.Pending->Dec();
+        }
         if (outerOk) {
             c.ReplyOk->Inc();
         } else {
@@ -2765,7 +2797,7 @@ void TNbsDbgLikeActor::HandleSyncResult(
 }
 
 void TNbsDbgLikeActor::DoErase(TPerDbgState& dbg) {
-    const ui32 syncGate = SyncGateThreshold();
+    const ui32 syncGate = Max<ui32>(1, SyncGateThreshold() / Max(1u, NumDbgsTotal));
     if (dbg.ReadyToErase.size() < syncGate) {
         if (RootCnt.Lsns.SyncGateEraseBlocked) {
             RootCnt.Lsns.SyncGateEraseBlocked->Inc();
@@ -2852,9 +2884,13 @@ void TNbsDbgLikeActor::DoErase(TPerDbgState& dbg) {
         EraseInflight.emplace(cookie, std::move(batchInfo));
         Send(dbg.PBActor[k], ev.release(), 0, cookie);
 
-        // Root Pending gauge left to Solomon aggregation (see AccountReadRequest).
+        // Root Pending maintained in lockstep with per-DBG gauge (see
+        // AccountReadRequest); HandlePoison reconciles in-flight ops.
         if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Erase)]; c.Requests) {
             c.Requests->Inc();
+            if (c.Pending) {
+                c.Pending->Inc();
+            }
             if (c.BatchSize) {
                 c.BatchSize->Collect(pending[k].size());
             }
@@ -2968,8 +3004,12 @@ void TNbsDbgLikeActor::HandleEraseResult(
     }
 
     const ui64 latencyMs = (now - batchInfo.SentAt).MilliSeconds();
-    // Root Pending gauge left to Solomon aggregation (see AccountReadRequest).
+    // Root Pending maintained in lockstep with per-DBG gauge (see
+    // AccountReadRequest); HandlePoison reconciles in-flight ops.
     if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Erase)]; c.ReplyOk) {
+        if (c.Pending) {
+            c.Pending->Dec();
+        }
         if (outerOk) {
             c.ReplyOk->Inc();
         } else {
@@ -3033,9 +3073,13 @@ void TNbsDbgLikeActor::BestEffortEraseAll(TPerDbgState& dbg) {
         const ui64 cookie = NextBatchCookie++;
         EraseInflight.emplace(cookie, std::move(batchInfo));
         Send(dbg.PBActor[k], ev.release(), 0, cookie);
-        // Root Pending gauge left to Solomon aggregation (see AccountReadRequest).
+        // Root Pending maintained in lockstep with per-DBG gauge (see
+        // AccountReadRequest); HandlePoison reconciles in-flight ops.
         if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Erase)]; c.Requests) {
             c.Requests->Inc();
+            if (c.Pending) {
+                c.Pending->Inc();
+            }
         }
         if (auto& c = dbg.Counters.Op[static_cast<size_t>(EOp::Erase)]; c.Requests) {
             c.Requests->Inc(); c.Pending->Inc();
@@ -3057,7 +3101,6 @@ bool TNbsDbgLikeActor::CompleteRead(ui64 cookie, bool ok, TActorId& origin,
     originCookie = read.OriginCookie;
     size = read.Size;
 
-    --ReadInFlight;
     auto& dbg = Dbg;
     if (dbg.ReadsInFlight > 0) {
         --dbg.ReadsInFlight;
@@ -3068,13 +3111,19 @@ bool TNbsDbgLikeActor::CompleteRead(ui64 cookie, bool ok, TActorId& origin,
     const ui64 latencyMs = (read.SentAt != NActors::TMonotonic::Zero())
         ? (now - read.SentAt).MilliSeconds() : 0;
 
-    // Root Pending/BytesInFlight gauges left to Solomon aggregation (see
-    // AccountReadRequest); only the cumulative root counters are touched.
+    // Root Pending/BytesInFlight maintained in lockstep with per-DBG gauges
+    // (see AccountReadRequest); HandlePoison reconciles in-flight ops.
     if (auto& c = RootCnt.Op[static_cast<size_t>(op)]; c.ReplyOk) {
         if (ok) {
             c.ReplyOk->Inc();
         } else {
             c.ReplyErr->Inc();
+        }
+        if (c.Pending) {
+            c.Pending->Dec();
+        }
+        if (c.BytesInFlight) {
+            *c.BytesInFlight -= read.Size;
         }
         if (ok && c.Bytes) {
             *c.Bytes += read.Size;

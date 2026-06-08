@@ -283,9 +283,8 @@ public:
             // <type, dc> -> <required, allocated>
             THashMap<std::pair<TString, TString>, std::pair<ui64, ui64>> units;
 
-            for (auto &unit : result.required_resources().storage_units()) {
+            for (auto &unit : result.required_resources().storage_units())
                 pools[unit.unit_kind()] = std::make_pair(unit.count(), 0U);
-            }
 
             for (auto &unit : result.required_resources().computational_units()) {
                 auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
@@ -303,10 +302,9 @@ public:
             Cout << "Database " << result.path() << " status:" << Endl
                  << "  State: " << result.state() << Endl;
             Cout << "  Allocated pools:" << Endl;
-            for (auto &pr : pools) {
+            for (auto &pr : pools)
                 Cout << "    " << pr.first << ": "
                      << pr.second.second << "/" << pr.second.first << Endl;
-            }
             Cout << "  Allocated units:" << Endl;
             for (auto &pr : units)
                 Cout << "    [" << (pr.first.first ? pr.first.first : "ANY") << ":"

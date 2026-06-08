@@ -58,7 +58,7 @@ public:
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         for (const auto& item : msg->Items) {
-            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "Item# {Id# 16 Lsn# LogoBlobId# }",
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "",
                 {"Id", item.Id},
                 {"Lsn", item.Lsn},
                 {"LogoBlobId", TLogoBlobID(item.Meta.RawU64).ToString().data()});

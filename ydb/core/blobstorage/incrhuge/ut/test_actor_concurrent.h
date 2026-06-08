@@ -309,7 +309,7 @@ public:
         TEvIncrHugeWriteResult *msg = ev->Get();
         TPayload *payload = static_cast<TPayload *>(msg->Payload.get());
 
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Write Id# 16 LogoBlobId# Lsn# ",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished write",
             {"Id", msg->Id},
             {"LogoBlobId", payload->LogoBlobId.ToString().data()},
             {"Lsn", payload->Lsn});
@@ -323,7 +323,7 @@ public:
         State.BytesWritten += it->second.LogoBlobId.BlobSize();
         TDuration delta = Now() - State.StartTime;
         double speed = State.BytesWritten * 1000 * 1000 / delta.GetValue() / 1048576.0;
-        YDB_LOG_CTX_COMP_INFO(ctx, NActorsServices::TEST, "BytesWritten# MB ElapsedTime# Speed# 2lf MB/s",
+        YDB_LOG_CTX_COMP_INFO(ctx, NActorsServices::TEST, "",
             {"BytesWritten", (State.BytesWritten + 512 * 1024) / 1048576},
             {"ElapsedTime", delta.ToString().data()},
             {"speed", speed});

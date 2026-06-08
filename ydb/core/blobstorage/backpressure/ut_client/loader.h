@@ -53,7 +53,7 @@ public:
     void IssuePutRequest() {
         if (InFlightRemain && Ready) {
             const TLogoBlobID blobId(0x0123456789abcdefUL, 1, BlobIdx++, 0, 1, Buffer.size());
-            YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, " ",
+            YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, "",
                 {"client_id", ClientId.ToString().data()},
                 {"blob_id", blobId.ToString().data()});
             Send(QueueId, new TEvBlobStorage::TEvVPut(blobId, TRope(Buffer), VDiskId, false, nullptr, TInstant::Max(),

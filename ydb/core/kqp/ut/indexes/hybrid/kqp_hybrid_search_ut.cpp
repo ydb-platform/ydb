@@ -12,7 +12,7 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-TKikimrRunner MakeRunner() {
+TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
     // Fix the kmeans-tree build sampling seed so the index tree is reproducible run-to-run (otherwise it
     // seeds from the tablet id). Combined with the exhaustive search probe in TargetDecl below, this makes
     // the vector branch fully deterministic. See gVectorIndexSeed in schemeshard_impl.h (tests only).
@@ -22,6 +22,9 @@ TKikimrRunner MakeRunner() {
     featureFlags.SetEnableFulltextIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    // EnableHybridSearch is on by default; the explicit set both documents the dependency and lets
+    // DisabledByFlag exercise the off path.
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(enableHybridSearch);
     return TKikimrRunner(settings);
 }
 
@@ -462,6 +465,21 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         )sql", TTxControl::NoTx(), params).ExtractValueSync();
         UNIT_ASSERT_C(limitResult.GetStatus() != EStatus::SUCCESS, "expected failure for a parameterised LIMIT");
         UNIT_ASSERT_STRING_CONTAINS(limitResult.GetIssues().ToString(), "requires a literal LIMIT");
+    }
+
+    // The TableServiceConfig.EnableHybridSearch kill-switch. It is on by default (so every other test
+    // exercises the enabled path); with it off, a HybridRank query must fail with a clear message rather
+    // than being rewritten.
+    Y_UNIT_TEST(DisabledByFlag) {
+        auto kikimr = MakeRunner(/*enableHybridSearch=*/false);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql"), "hybrid search is disabled");
     }
 
     // HybridRank needs both a fulltext relevance index and a vector index; missing either is an error.

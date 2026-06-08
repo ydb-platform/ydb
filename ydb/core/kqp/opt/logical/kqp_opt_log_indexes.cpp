@@ -2155,6 +2155,14 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return {};
     };
 
+    // Feature kill-switch (TableServiceConfig.EnableHybridSearch, on by default). Checked only after a
+    // HybridRank marker is confirmed, so non-hybrid TopSort/Top queries are untouched. Failing here with a
+    // clear message is better than skipping the rewrite and letting the bare HybridRank reach the peephole
+    // stub (ExpandHybridRankBuiltin), which fails at runtime with a cryptic "could not be rewritten".
+    if (!kqpCtx.Config->GetEnableHybridSearch()) {
+        return addError("hybrid search is disabled (set TableServiceConfig.EnableHybridSearch=true to enable)");
+    }
+
     if (top.KeySelectorLambda().Body().Ptr() != hybridRank) {
         return addError("must be the entire ORDER BY key; it cannot be negated or combined with other expressions");
     }

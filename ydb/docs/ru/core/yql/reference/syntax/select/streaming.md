@@ -13,7 +13,7 @@
 В примерах:
 
 - `ext_source` — заранее созданный [`external data source`](../../../../concepts/datamodel/external_data_source.md);
-- `input_topic` — топик, откуда читаются данные.
+- `input_topic` — локальный или внешний топик.
 
 Подробнее — [локальные и внешние топики](../../../../concepts/query_execution/local-and-external-topics.md).
 

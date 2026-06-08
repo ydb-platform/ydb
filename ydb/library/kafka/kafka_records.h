@@ -611,4 +611,14 @@ TKafkaRecordBatch ReadKafkaRecordBatch(
     TKafkaCompression compression = {.AllowCompressed = true});
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
+namespace NPrivate {
+
+void ReadLegacyRecordBatch(
+    TKafkaReadable& readable,
+    TKafkaVersion magic,
+    size_t length,
+    TKafkaRecordBatch& batch);
+
+} // namespace NPrivate
+
 } // namespace NKafka

@@ -14,6 +14,10 @@ ECompressionType GetCompressionType(TKafkaRecordBatch::AttributesMeta::Type attr
     return static_cast<ECompressionType>(attributes & 0x07);
 }
 
+ECompressionType GetLegacyCompressionType(TKafkaRecordV0::AttributesMeta::Type attributes) {
+    return static_cast<ECompressionType>(attributes & 0x07);
+}
+
 void EnsureSupportedCompressionType(ECompressionType compressionType) {
     switch (compressionType) {
         case ECompressionType::NONE:
@@ -113,6 +117,65 @@ TString SerializeRecordBatchRecords(
         result.append(it->Data(), it->Size());
     }
     return result;
+}
+
+std::vector<TKafkaRecordBatchV0> ReadLegacyRecordEntries(TStringBuf data, TKafkaVersion magic) {
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+    std::vector<TKafkaRecordBatchV0> entries;
+
+    while (readable.left() > 0) {
+        const TKafkaVersion entryMagic = readable.take(16);
+        if (entryMagic != magic) {
+            ythrow yexception() << "compressed Kafka legacy record magic " << entryMagic
+                << " does not match wrapper magic " << magic;
+        }
+
+        auto& entry = entries.emplace_back();
+        entry.Read(readable, magic);
+    }
+
+    return entries;
+}
+
+void AppendLegacyRecord(
+    TKafkaRecordBatch& batch,
+    const TKafkaRecordBatchV0& entry,
+    i64 offset,
+    std::optional<i64> timestamp = std::nullopt)
+{
+    auto& record = batch.Records.emplace_back();
+    record.Length = entry.Record.MessageSize;
+    record.OffsetDelta = offset;
+    record.TimestampDelta = timestamp.value_or(entry.Record.Timestamp);
+    if (entry.Record.Key) {
+        record.SetKey(TString(entry.Record.Key->data(), entry.Record.Key->size()));
+    }
+    if (entry.Record.Value) {
+        record.SetValue(TString(entry.Record.Value->data(), entry.Record.Value->size()));
+    }
+}
+
+void AppendLegacyRecords(
+    TKafkaRecordBatch& batch,
+    const std::vector<TKafkaRecordBatchV0>& entries,
+    TKafkaVersion magic,
+    i64 wrapperOffset = 0,
+    std::optional<i64> wrapperTimestamp = std::nullopt)
+{
+    if (entries.empty()) {
+        return;
+    }
+
+    i64 absoluteBaseOffset = 0;
+    if (magic == 1) {
+        absoluteBaseOffset = wrapperOffset == 0 ? 0 : wrapperOffset - entries.back().Offset;
+    }
+
+    for (const auto& entry : entries) {
+        const i64 offset = magic == 1 ? absoluteBaseOffset + entry.Offset : entry.Offset;
+        AppendLegacyRecord(batch, entry, offset, wrapperTimestamp);
+    }
 }
 
 } // namespace
@@ -623,6 +686,66 @@ i32 TKafkaRecordBatchV0::Size(TKafkaVersion _version) const {
     NPrivate::Size<RecordMeta>(_collector, _version, Record);
 
     return _collector.Size;
+}
+
+void NPrivate::ReadLegacyRecordBatch(
+    TKafkaReadable& readable,
+    TKafkaVersion magic,
+    size_t length,
+    TKafkaRecordBatch& batch)
+{
+    const auto data = readable.Bytes(length);
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable recordsReadable(buffer);
+
+    batch = {};
+    batch.Magic = 2;
+    batch.BaseOffset = 0;
+    batch.BaseTimestamp = 0;
+    batch.MaxTimestamp = 0;
+
+    while (recordsReadable.left() > 0) {
+        const TKafkaVersion entryMagic = recordsReadable.take(16);
+        if (entryMagic != magic) {
+            ythrow yexception() << "Kafka legacy record magic " << entryMagic << " does not match expected magic " << magic;
+        }
+
+        TKafkaRecordBatchV0 entry;
+        entry.Read(recordsReadable, magic);
+
+        const ECompressionType compressionType = GetLegacyCompressionType(entry.Record.Attributes);
+        if (compressionType == ECompressionType::NONE) {
+            AppendLegacyRecord(batch, entry, entry.Offset);
+            continue;
+        }
+
+        if (!readable.GetCompression().AllowCompressed) {
+            ythrow yexception() << "Supported only CompressionType::NONE";
+        }
+        EnsureSupportedCompressionType(compressionType);
+        if (!entry.Record.Value) {
+            ythrow yexception() << "compressed Kafka legacy record has null value";
+        }
+
+        batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
+        if (readable.GetCompression().SkipDecompression) {
+            batch.PackedRecords.assign(entry.Record.Value->data(), entry.Record.Value->size());
+            continue;
+        }
+
+        const auto& value = *entry.Record.Value;
+        const TString decompressed = DecompressRecordBatchPayload(
+            TStringBuf(value.data(), value.size()),
+            compressionType);
+        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(decompressed, magic);
+        const std::optional<i64> wrapperTimestamp = magic == 1
+            ? std::optional<i64>(entry.Record.Timestamp)
+            : std::nullopt;
+        AppendLegacyRecords(batch, innerEntries, magic, entry.Offset, wrapperTimestamp);
+    }
+
+    batch.RecordsCount = static_cast<TKafkaInt32>(batch.Records.size());
+    batch.LastOffsetDelta = batch.Records.empty() ? 0 : batch.Records.back().OffsetDelta;
 }
 
 TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version, TKafkaCompression compression) {

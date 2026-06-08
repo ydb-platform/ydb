@@ -202,6 +202,78 @@ TString KafkaProducerBatchBytes(ECompressionType compressionType) {
     }
 }
 
+// Generated with Apache Kafka Java code:
+//
+// for (byte magic : new byte[]{RecordBatch.MAGIC_VALUE_V0, RecordBatch.MAGIC_VALUE_V1}) {
+//     for (CompressionType type : new CompressionType[]{CompressionType.NONE, CompressionType.GZIP}) {
+//         MemoryRecords records = MemoryRecords.withRecords(
+//             magic, 42L, Compression.of(type).build(), TimestampType.CREATE_TIME,
+//             new SimpleRecord(1007L, "key-0".getBytes(), "value-0".getBytes()),
+//             new SimpleRecord(1010L, "key-1".getBytes(), "value-1".getBytes()));
+//         ByteBuffer buffer = records.buffer();
+//         byte[] bytes = new byte[buffer.remaining()];
+//         buffer.get(bytes);
+//         System.out.println("magic" + magic + "-" + type + " " + toCppBytes(bytes));
+//     }
+// }
+TString KafkaLegacyProducerBatchBytes(TKafkaVersion magic, ECompressionType compressionType) {
+    switch (magic) {
+        case 0:
+            switch (compressionType) {
+                case ECompressionType::NONE:
+                    return Bytes({
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x1A, 0xE4, 0xFF, 0xC8, 0x29,
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x6B, 0x65, 0x79, 0x2D, 0x30, 0x00, 0x00, 0x00, 0x07, 0x76,
+                        0x61, 0x6C, 0x75, 0x65, 0x2D, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2B, 0x00, 0x00,
+                        0x00, 0x1A, 0x08, 0x5D, 0xB4, 0xD0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x6B, 0x65, 0x79, 0x2D,
+                        0x31, 0x00, 0x00, 0x00, 0x07, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x2D, 0x31,
+                    });
+                case ECompressionType::GZIP:
+                    return Bytes({
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2B, 0x00, 0x00, 0x00, 0x4D, 0xB0, 0xC5, 0x48, 0xB4,
+                        0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x3F, 0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0xFF, 0x63, 0x60, 0x00, 0x03, 0x2D, 0x20, 0x96, 0x7A, 0xF2, 0xFF, 0x84, 0x26,
+                        0x98, 0xC7, 0x9A, 0x9D, 0x5A, 0xA9, 0x6B, 0x00, 0x64, 0xB0, 0x97, 0x25, 0xE6, 0x94, 0xA6, 0x82,
+                        0x99, 0x20, 0xA0, 0x0D, 0x52, 0xC5, 0x11, 0xBB, 0xE5, 0x02, 0x42, 0x95, 0x21, 0x42, 0x95, 0x21,
+                        0x00, 0xB1, 0xFA, 0xE3, 0x39, 0x4C, 0x00, 0x00, 0x00,
+                    });
+                default:
+                    break;
+            }
+            break;
+        case 1:
+            switch (compressionType) {
+                case ECompressionType::NONE:
+                    return Bytes({
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x22, 0x54, 0x45, 0x73, 0x90,
+                        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xEF, 0x00, 0x00, 0x00, 0x05, 0x6B, 0x65,
+                        0x79, 0x2D, 0x30, 0x00, 0x00, 0x00, 0x07, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x2D, 0x30, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x2B, 0x00, 0x00, 0x00, 0x22, 0x5B, 0xD2, 0x93, 0xD6, 0x01, 0x00,
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xF2, 0x00, 0x00, 0x00, 0x05, 0x6B, 0x65, 0x79, 0x2D,
+                        0x31, 0x00, 0x00, 0x00, 0x07, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x2D, 0x31,
+                    });
+                case ECompressionType::GZIP:
+                    return Bytes({
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2B, 0x00, 0x00, 0x00, 0x5A, 0xB0, 0x86, 0xC9, 0x13,
+                        0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xF2, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
+                        0x00, 0x44, 0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x63, 0x60, 0x80, 0x03,
+                        0xA5, 0x10, 0xD7, 0xE2, 0x09, 0x8C, 0x50, 0x0E, 0xF3, 0x7B, 0x20, 0xC1, 0x9A, 0x9D, 0x5A, 0xA9,
+                        0x6B, 0x00, 0x64, 0xB0, 0x97, 0x25, 0xE6, 0x94, 0xA6, 0x82, 0x99, 0x20, 0x00, 0x52, 0xA4, 0x14,
+                        0x7D, 0x69, 0xF2, 0x35, 0xB8, 0xEA, 0x4F, 0x30, 0xD5, 0x86, 0x08, 0xD5, 0x86, 0x00, 0xE6, 0x0F,
+                        0xD7, 0x68, 0x5C, 0x00, 0x00, 0x00,
+                    });
+                default:
+                    break;
+            }
+            break;
+        default:
+            break;
+    }
+
+    ythrow yexception() << "unexpected golden Kafka legacy record batch magic/compression: "
+        << magic << "/" << static_cast<int>(compressionType);
+}
+
 void AssertKafkaRecord(
     const TKafkaRecord& record,
     i64 timestampDelta,
@@ -222,6 +294,22 @@ void AssertKafkaRecord(
     UNIT_ASSERT(record.Headers[0].Value);
     UNIT_ASSERT_VALUES_EQUAL(*record.Headers[0].Key, headerKey);
     UNIT_ASSERT_VALUES_EQUAL(*record.Headers[0].Value, headerValue);
+}
+
+void AssertKafkaLegacyRecord(
+    const TKafkaRecord& record,
+    i64 timestampDelta,
+    i64 offsetDelta,
+    TStringBuf key,
+    TStringBuf value)
+{
+    UNIT_ASSERT_VALUES_EQUAL(record.TimestampDelta, timestampDelta);
+    UNIT_ASSERT_VALUES_EQUAL(record.OffsetDelta, offsetDelta);
+    UNIT_ASSERT(record.Key);
+    UNIT_ASSERT(record.Value);
+    UNIT_ASSERT_VALUES_EQUAL(*record.Key, key);
+    UNIT_ASSERT_VALUES_EQUAL(*record.Value, value);
+    UNIT_ASSERT(record.Headers.empty());
 }
 
 void AssertKafkaProducerBatchDeserialized(ECompressionType compressionType) {
@@ -256,6 +344,65 @@ void AssertKafkaProducerBatchSerialized(ECompressionType compressionType) {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(WriteKafkaRecordBatch(parsed), serialized);
+}
+
+TKafkaRecordBatch ReadKafkaLegacyProducerBatch(TStringBuf data, TKafkaVersion magic) {
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+    readable.SetCompression({.AllowCompressed = true});
+
+    TKafkaRecordBatch parsed;
+    NPrivate::ReadLegacyRecordBatch(readable, magic, data.size(), parsed);
+    UNIT_ASSERT_VALUES_EQUAL(readable.left(), 0);
+    return parsed;
+}
+
+std::vector<TKafkaRecordBatchV0> ReadKafkaLegacyRecordBatchWrappers(TStringBuf data, TKafkaVersion magic) {
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+    std::vector<TKafkaRecordBatchV0> records;
+    while (readable.left() > 0) {
+        UNIT_ASSERT_VALUES_EQUAL(readable.take(16), magic);
+        auto& record = records.emplace_back();
+        record.Read(readable, magic);
+    }
+    return records;
+}
+
+TString WriteKafkaLegacyRecordBatchWrappers(const std::vector<TKafkaRecordBatchV0>& records, TKafkaVersion magic) {
+    size_t size = 0;
+    for (const auto& record : records) {
+        size += record.Size(magic);
+    }
+
+    TKafkaWriteBuffer buffer(size);
+    TKafkaWritable writable(buffer);
+    for (const auto& record : records) {
+        record.Write(writable, magic);
+    }
+    return buffer.AsString();
+}
+
+void AssertKafkaLegacyProducerBatchDeserialized(
+    TKafkaVersion magic,
+    ECompressionType compressionType,
+    i64 expectedFirstTimestamp,
+    i64 expectedSecondTimestamp)
+{
+    const TKafkaRecordBatch parsed = ReadKafkaLegacyProducerBatch(
+        KafkaLegacyProducerBatchBytes(magic, compressionType),
+        magic);
+
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(parsed.CompressionType()), static_cast<int>(compressionType));
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), 2);
+    AssertKafkaLegacyRecord(parsed.Records[0], expectedFirstTimestamp, 42, "key-0", "value-0");
+    AssertKafkaLegacyRecord(parsed.Records[1], expectedSecondTimestamp, 43, "key-1", "value-1");
+}
+
+void AssertKafkaLegacyProducerBatchSerialized(TKafkaVersion magic, ECompressionType compressionType) {
+    const TString serialized = KafkaLegacyProducerBatchBytes(magic, compressionType);
+    const std::vector<TKafkaRecordBatchV0> records = ReadKafkaLegacyRecordBatchWrappers(serialized, magic);
+    UNIT_ASSERT_VALUES_EQUAL(WriteKafkaLegacyRecordBatchWrappers(records, magic), serialized);
 }
 
 Y_UNIT_TEST_SUITE(KafkaRecords) {
@@ -326,6 +473,20 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
         AssertKafkaProducerBatchSerialized(ECompressionType::NONE);
         AssertKafkaProducerBatchSerialized(ECompressionType::GZIP);
         AssertKafkaProducerBatchSerialized(ECompressionType::ZSTD);
+    }
+
+    Y_UNIT_TEST(KafkaLegacyProducerRecordBatchDeserialize) {
+        AssertKafkaLegacyProducerBatchDeserialized(0, ECompressionType::NONE, 0, 0);
+        AssertKafkaLegacyProducerBatchDeserialized(0, ECompressionType::GZIP, 0, 0);
+        AssertKafkaLegacyProducerBatchDeserialized(1, ECompressionType::NONE, 1007, 1010);
+        AssertKafkaLegacyProducerBatchDeserialized(1, ECompressionType::GZIP, 1010, 1010);
+    }
+
+    Y_UNIT_TEST(KafkaLegacyProducerRecordBatchSerialize) {
+        AssertKafkaLegacyProducerBatchSerialized(0, ECompressionType::NONE);
+        AssertKafkaLegacyProducerBatchSerialized(0, ECompressionType::GZIP);
+        AssertKafkaLegacyProducerBatchSerialized(1, ECompressionType::NONE);
+        AssertKafkaLegacyProducerBatchSerialized(1, ECompressionType::GZIP);
     }
 
     Y_UNIT_TEST(RecordBatchUnsupportedCompressionType) {

@@ -29,7 +29,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvChunkReserveResult)",
-            {"Marker", "BSDD04"},
+            {"marker", "BSDD04"},
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 
@@ -96,7 +96,7 @@ namespace NKikimr::NDDisk {
         }
         if (ChunkReserve.size() < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
             YDB_LOG_DEBUG("TDDiskActor::HandleChunkReserved requesting chunk reserve",
-                {"Marker", "BSDD28"},
+                {"marker", "BSDD28"},
                 {"DDiskId", DDiskId},
                 {"ChunkReserveSize", ChunkReserve.size()},
                 {"MinChunksReserved", MinChunksReserved},
@@ -134,7 +134,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvCutLog::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvCutLog)",
-            {"Marker", "BSDD06"},
+            {"marker", "BSDD06"},
             {"DDiskId", DDiskId},
             {"Msg", msg});
 
@@ -207,7 +207,7 @@ namespace NKikimr::NDDisk {
         const ui64 tabletId = creds.TabletId;
 
         YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvDeleteTabletChunks)",
-            {"Marker", "BSDD51"},
+            {"marker", "BSDD51"},
             {"DDiskId", DDiskId},
             {"TabletId", tabletId});
 

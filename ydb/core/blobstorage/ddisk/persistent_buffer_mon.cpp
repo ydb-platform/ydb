@@ -70,7 +70,7 @@ namespace NKikimr {
 
             void HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
                 YDB_LOG_DEBUG("TPersistentBufferMonActor::HandleWakeup",
-                    {"Marker", "BSDD32"},
+                    {"marker", "BSDD32"},
                     {"cookie", ev->Get()->Tag});
                 for (auto [cookie, _] : Inflight[ev->Get()->Tag].Requests) {
                     PBuffersInflight.erase(cookie);
@@ -401,7 +401,7 @@ namespace NKikimr {
                 }
                 Send(inflight.Sender, new NMon::TEvHttpInfoRes(str.Str(), inflight.SubRequestId), 0, inflight.Cookie);
                 YDB_LOG_DEBUG("TPersistentBufferMonActor::Reply()",
-                    {"Marker", "BSDD39"},
+                    {"marker", "BSDD39"},
                     {"Responses", inflight.Responses.size()},
                     {"Requests", inflight.Requests.size()});
                 Inflight.erase(it);
@@ -412,7 +412,7 @@ namespace NKikimr {
                 auto cookie = PBuffersInflight[reqCookie];
                 PBuffersInflight.erase(reqCookie);
                 YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvPersistentBufferInfo)",
-                    {"Marker", "BSDD33"},
+                    {"marker", "BSDD33"},
                     {"Sender", ev->Sender},
                     {"reqCookie", reqCookie},
                     {"cookie", cookie});
@@ -423,7 +423,7 @@ namespace NKikimr {
                 auto& inflight = it->second;
                 if (inflight.Requests.count(ev->Cookie) == 0) {
                     YDB_LOG_ERROR("TPersistentBufferMonActor::Handle(TEvPersistentBufferInfo) unknown persistent buffer",
-                        {"Marker", "BSDD34"},
+                        {"marker", "BSDD34"},
                         {"Sender", ev->Sender},
                         {"cookie", cookie});
                 } else {
@@ -450,7 +450,7 @@ namespace NKikimr {
             void Handle(TEvNodeWardenListLocalDDisksResult::TPtr& ev) {
                 auto cookie = ev->Cookie;
                 YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult)",
-                    {"Marker", "BSDD35"},
+                    {"marker", "BSDD35"},
                     {"cookie", cookie});
                 auto it = Inflight.find(cookie);
                 Y_ABORT_UNLESS(it != Inflight.end());
@@ -475,7 +475,7 @@ namespace NKikimr {
                     infoReq->DescribeTablets = inflight.ShowTablets;
                     Send(r.PersistentBufferId, infoReq.release(), 0, reqCookie);
                     YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
-                        {"Marker", "BSDD36"},
+                        {"marker", "BSDD36"},
                         {"r.PersistentBufferId", r.PersistentBufferId},
                         {"reqCookie", reqCookie});
                 }
@@ -563,7 +563,7 @@ namespace NKikimr {
                 auto nwId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 Send(nwId, new TEvNodeWardenListLocalDDisks(), 0, cookie);
                 YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvHttpInfo)",
-                    {"Marker", "BSDD37"},
+                    {"marker", "BSDD37"},
                     {"cookie", cookie});
             }
 

@@ -9,7 +9,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvConnect)",
-            {"Marker", "BSDD00"},
+            {"marker", "BSDD00"},
             {"DDiskId", DDiskId},
             {"Record", record});
 
@@ -37,7 +37,7 @@ namespace NKikimr::NDDisk {
         connection.InterconnectSessionId = ev->InterconnectSession;
 
         YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvConnect) sending OK",
-            {"Marker", "BSDD11"},
+            {"marker", "BSDD11"},
             {"DDiskId", DDiskId},
             {"Recipient", ev->Sender},
             {"ICSession", ev->InterconnectSession});

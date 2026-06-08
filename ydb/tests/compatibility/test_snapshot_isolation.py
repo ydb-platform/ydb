@@ -33,9 +33,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             table_service_config={
                 "enable_snapshot_isolation_rw": True,
             },
-            column_shard_config={
-                "disabled_on_scheme_shard": False,
-            },
         )
 
     # -------------------------------------------------------------------------
@@ -47,6 +44,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             return pool.execute_with_retries(query)
 
     def setup_tables(self):
+        # 13 approximately uniformly partitioned shards in PK range [0, 10000)
         self._execute("""
             CREATE TABLE `datashard_table` (
                 key     Int32 NOT NULL,
@@ -55,8 +53,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 PRIMARY KEY (key),
                 INDEX int_val_index GLOBAL ON (int_val)
             ) WITH (
-                PARTITION_AT_KEYS = (770, 1540, 2310, 3080, 3850, 4620, 5390, 6160, 6930, 7700, 8470, 9240),
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 13
+                PARTITION_AT_KEYS = (770, 1540, 2310, 3080, 3850, 4620, 5390, 6160, 6930, 7700, 8470, 9240)
             )
         """)
         self._execute("""
@@ -91,36 +88,23 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         # str_val = "0000" || digit, a zero-padded 5-char mirror of int_val so that
         # lexicographic and numeric ordering agree for values 0-9.
         query = """
-            $data = ListMap(ListFromRange(0, 10000), ($x) -> {
+            $data = ListMap(ListFromRange(0, {n_rows}), ($x) -> {{
                 RETURN AsStruct(
-                    UNWRAP(CAST($x AS Int32)) AS key,
+                    CAST($x AS Int32) AS key,
                     CAST($x % 10 AS Int32) AS int_val,
-                    "0000" || COALESCE(CAST($x % 10 AS String), "0") AS str_val
+                    "0000" || CAST($x % 10 AS String) AS str_val
                 );
-            });
+            }});
             UPSERT INTO `{table}` SELECT * FROM AS_TABLE($data)
         """
-        self._execute(query.format(table='datashard_table'))
-
-        # Column tables use bulk_upsert (one atomic batch per group of GROUP_SIZE rows
-        # maintains the group sum invariant).
-        rows = [
-            {"key": k, "int_val": k % GROUP_SIZE, "str_val": f"{k % GROUP_SIZE:05d}".encode()}
-            for k in range(N_ROWS)
-        ]
-        col_types = ydb.BulkUpsertColumns()
-        col_types.add_column("key", ydb.PrimitiveType.Int32)
-        col_types.add_column("int_val", ydb.PrimitiveType.Int32)
-        col_types.add_column("str_val", ydb.PrimitiveType.String)
-        self.driver.table_client.bulk_upsert(
-            f"{self.database_path}/column_table", rows, col_types
-        )
+        self._execute(query.format(table='datashard_table', n_rows=N_ROWS))
+        self._execute(query.format(table='column_table', n_rows=N_ROWS))
 
     # -------------------------------------------------------------------------
     # Worker threads
     # -------------------------------------------------------------------------
 
-    def _updater(self, table_name, use_bulk_upsert, stop_event, counter, lock):
+    def _updater(self, table_name, stop_event, counter, lock):
         """Repeatedly picks a random group and redistributes its int_val values
         while preserving the group sum invariant (SUM == FIXED_GROUP_SUM)."""
         while not stop_event.is_set():
@@ -131,30 +115,13 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 new_vals = list(range(GROUP_SIZE))
                 random.shuffle(new_vals)
 
-                if use_bulk_upsert:
-                    rows = [
-                        {
-                            "key": lo + i,
-                            "int_val": new_vals[i],
-                            "str_val": f"{new_vals[i]:05d}".encode(),
-                        }
-                        for i in range(GROUP_SIZE)
-                    ]
-                    ct = ydb.BulkUpsertColumns()
-                    ct.add_column("key", ydb.PrimitiveType.Int32)
-                    ct.add_column("int_val", ydb.PrimitiveType.Int32)
-                    ct.add_column("str_val", ydb.PrimitiveType.String)
-                    self.driver.table_client.bulk_upsert(
-                        f"{self.database_path}/{table_name}", rows, ct
-                    )
-                else:
-                    values_str = ", ".join(
-                        f"({lo + i}, {new_vals[i]}, \"{new_vals[i]:05d}\")"
-                        for i in range(GROUP_SIZE)
-                    )
-                    self._execute(
-                        f"UPSERT INTO `{table_name}` (key, int_val, str_val) VALUES {values_str}"
-                    )
+                values_str = ", ".join(
+                    f"({lo + i}, {new_vals[i]}, \"{new_vals[i]:05d}\")"
+                    for i in range(GROUP_SIZE)
+                )
+                self._execute(
+                    f"UPSERT INTO `{table_name}` (key, int_val, str_val) VALUES {values_str}"
+                )
 
                 with lock:
                     counter[0] += 1
@@ -337,8 +304,19 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             t.start()
 
         # --- Updaters (1 per table) ---
-        start('ds_upd',  self._updater, 'datashard_table', False)
-        start('col_upd', self._updater, 'column_table',    True)
+        start('ds_upd',  self._updater, 'datashard_table')
+        start('col_upd', self._updater, 'column_table')
+
+        time.sleep(60)
+        stop_event.set()
+        for t in threads:
+            t.join(timeout=60)
+        res1 = self._execute("select sum(int_val) from datashard_table")
+        logger.warn(f"FFF1 {[rs.rows for rs in res1]}")
+        res2 = self._execute("select sum(int_val) from column_table")
+        logger.warn(f"FFF2 {[rs.rows for rs in res2]}")
+        logger.warn(f"FFF3 {counters}")
+        return
 
         # --- Datashard PK-range aggregators (2 threads, N_PK_SLOTS slots) ---
         for i in range(2):

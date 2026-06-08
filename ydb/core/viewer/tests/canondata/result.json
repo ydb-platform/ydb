@@ -1363,7 +1363,8 @@
                     "SeqNo": 12,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 1,
@@ -1375,7 +1376,8 @@
                     "SeqNo": 13,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 1,
@@ -1387,7 +1389,8 @@
                     "SeqNo": 14,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 1,
@@ -1399,7 +1402,8 @@
                     "SeqNo": 15,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 1,
@@ -1411,7 +1415,8 @@
                     "SeqNo": 16,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 }
             ],
             "StartOffset": 0,
@@ -1430,7 +1435,8 @@
                     "SeqNo": 1,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 0,
@@ -1442,7 +1448,8 @@
                     "SeqNo": 2,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 0,
@@ -1454,7 +1461,8 @@
                     "SeqNo": 3,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 }
             ],
             "StartOffset": 0,
@@ -1483,7 +1491,8 @@
                     "SeqNo": 11,
                     "StorageSize": 37,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 }
             ],
             "StartOffset": 0,
@@ -1502,7 +1511,8 @@
                     "SeqNo": 21,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 }
             ],
             "StartOffset": 0,
@@ -1521,7 +1531,8 @@
                     "SeqNo": 1,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 0,
@@ -1533,7 +1544,8 @@
                     "SeqNo": 2,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 0,
@@ -1545,7 +1557,8 @@
                     "SeqNo": 3,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 0,
@@ -1557,7 +1570,8 @@
                     "SeqNo": 4,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 },
                 {
                     "Codec": 0,
@@ -1569,7 +1583,8 @@
                     "SeqNo": 5,
                     "StorageSize": 9,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 }
             ],
             "StartOffset": 0,
@@ -1588,7 +1603,8 @@
                     "SeqNo": 21,
                     "StorageSize": 38,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": "text"
                 }
             ],
             "StartOffset": 0,
@@ -1610,7 +1626,8 @@
                     "SeqNo": 1,
                     "StorageSize": 40,
                     "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
+                    "WriteTimestamp": "not-zero-number",
+                    "Ip": ""
                 }
             ],
             "StartOffset": 0,

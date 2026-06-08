@@ -47,7 +47,7 @@ struct TTilingSettings {
     ui8 K = 10;
     /// Exclusive upper bound on middle-level index (allowed middle indices: 2 .. MiddleLevelCount - 1).
     ui64 MiddleLevelCount = TILING_LAYERS_COUNT;
-    bool EnableCompatibilityMode = false;
+    bool EnableCompatibilityMode = true;
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

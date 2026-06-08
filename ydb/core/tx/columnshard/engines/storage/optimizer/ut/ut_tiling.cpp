@@ -491,6 +491,16 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         return settings;
     }
 
+    // Accumulator-only settings with a wide overload band, so a large backlog maps to a high
+    // useful-level and IncPercent(10) yields a non-truncated, proportional headroom.
+    // Normalize(1, 901, count): range = 900, level = 1 + (count - 1) * 9 / 900.
+    static TTestTiling::TilingSettings MakeWideBandSettings() {
+        auto settings = MakeCountPrioritySettings(/*compatibilityMode=*/true);
+        settings.AccumulatorSettings.Trigger.Portions = 1;
+        settings.AccumulatorSettings.Overload.Portions = 901;
+        return settings;
+    }
+
     static TVector<TTestPortion::TPtr> MakeAccumulatorPortions(const ui64 count) {
         TVector<TTestPortion::TPtr> portions;
         for (ui64 i = 0; i < count; ++i) {
@@ -530,38 +540,78 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         }
     }
 
-    // 2) Compatibility recovery: overload ceiling stays one above the current load (ratcheting
-    //    down only); a spike above the ceiling re-reports overload; once the ceiling drops below
-    //    critical we return to regular.
+    // 2) Compatibility recovery: the overload ceiling ratchets down with the load (IncPercent(10)
+    //    headroom above current useful, lowered only); a spike back above the ratcheted ceiling
+    //    re-reports overload; once the load drops far enough that the ceiling falls below critical
+    //    we return to regular. Uses the wide overload band so the ceiling stays critical across the
+    //    ratchet/spike cycle (the tiny-band scale truncates IncPercent to a no-op).
     Y_UNIT_TEST(CompatibilityRecoveryRatchetsAndDetectsSpike) {
         TCounters counters;
-        TTestTiling tiling(MakeCountPrioritySettings(/*compatibilityMode=*/true), counters);
+        TTestTiling tiling(MakeWideBandSettings(), counters);
 
-        auto portions = MakeAccumulatorPortions(10);
+        // 9000 portions -> useful level 90, ceiling IncPercent(10) = (99, 9900).
+        auto portions = MakeAccumulatorPortions(9000);
         tiling.ModifyPortions(portions, {});
         UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
         UNIT_ASSERT(!tiling.IsOverloaded());
 
         const TInstant now = TInstant::Now();
 
-        // Load drops to level 9: ceiling ratchets to 10, still compatibility, not overloaded.
-        tiling.RemovePortion(portions[9]);
+        // Load drops to ~5000 (level 50): ceiling ratchets down to (55, 5500), still critical ->
+        // stays compatibility, not overloaded.
+        for (ui64 i = 5000; i < 9000; ++i) {
+            tiling.RemovePortion(portions[i]);
+        }
         tiling.DoActualize(now);
         UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
         UNIT_ASSERT(!tiling.IsOverloaded());
 
-        // Spike back to level 10 (above the lowered ceiling of 10) -> overloaded again.
-        tiling.AddPortion(portions[9]);
+        // Spike back to 9000 (level 90, above the ratcheted ceiling level 55) -> overloaded again.
+        for (ui64 i = 5000; i < 9000; ++i) {
+            tiling.AddPortion(portions[i]);
+        }
         UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
         UNIT_ASSERT(tiling.IsOverloaded());
         UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
 
-        // Recover below critical (level 8): ceiling drops below critical -> back to regular.
-        tiling.RemovePortion(portions[9]);
-        tiling.RemovePortion(portions[8]);
+        // Recover well below the overload band (to 500, level 5): ceiling drops below critical ->
+        // back to regular.
+        for (ui64 i = 500; i < 9000; ++i) {
+            tiling.RemovePortion(portions[i]);
+        }
         tiling.DoActualize(now);
         UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
         UNIT_ASSERT(!tiling.IsOverloaded());
+    }
+
+    // 3) Compatibility ceiling gives ~10% headroom (IncPercent(10)), not the near-zero margin that
+    //    Inc() produced once the level stopped tracking single-portion deltas. Reproduces the cluster
+    //    case where a 65k-portion backlog re-reported overload after only a handful of extra writes.
+    Y_UNIT_TEST(CompatibilityCeilingToleratesProportionalGrowth) {
+        TCounters counters;
+        TTestTiling tiling(MakeWideBandSettings(), counters);
+
+        // Enter compatibility with a large backlog: level 90 -> ceiling IncPercent(10) = (99, 9900).
+        auto portions = MakeAccumulatorPortions(9990);
+        tiling.ModifyPortions(TVector<TTestPortion::TPtr>(portions.begin(), portions.begin() + 9000), {});
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+        UNIT_ASSERT(tiling.DoGetUsefulMetric().IsCritical());
+        UNIT_ASSERT(!tiling.IsOverloaded());
+
+        // Grow +5% (to 9450): still under the ceiling level -> not overloaded. With the old Inc(),
+        // the stale-weight ceiling would already have tripped here.
+        for (ui64 i = 9000; i < 9450; ++i) {
+            tiling.AddPortion(portions[i]);
+        }
+        UNIT_ASSERT(!tiling.IsOverloaded());
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
+
+        // Grow past +10% (to 9990, level 100 > ceiling level 99) -> overload re-reported.
+        for (ui64 i = 9450; i < 9990; ++i) {
+            tiling.AddPortion(portions[i]);
+        }
+        UNIT_ASSERT(tiling.IsOverloaded());
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::COMPATIBILITY);
     }
 
     // Settings for the aging/promotion tests: accumulator disabled, routing purely by measure.
@@ -680,7 +730,7 @@ Y_UNIT_TEST_SUITE(TilingPlusPlusParallelCompaction) {
         NJson::TJsonValue restoredJson;
         UNIT_ASSERT(NJson::ReadJsonFastTree(proto.GetTiling().GetJson(), &restoredJson));
         UNIT_ASSERT(restoredJson.Has("compaction_threads"));
-        UNIT_ASSERT_VALUES_EQUAL(restoredJson["compaction_threads"].GetUInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(restoredJson["compaction_threads"].GetUInteger(), 2);
     }
 }
 

@@ -74,7 +74,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 toAccumulator.push_back(portion);
                 continue;
             }
-            if (lastKey && *lastKey > portion->IndexKeyStart()) {
+            if (lastKey && *lastKey >= portion->IndexKeyStart()) {
                 toMiddleLevels.push_back(portion);
                 continue;
             }
@@ -101,7 +101,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         const auto usefulMetric = DoGetUsefulMetric();
         if (usefulMetric.IsCritical() && Settings.EnableCompatibilityMode) {
             State = EState::COMPATIBILITY;
-            OverloadPriority = usefulMetric.Inc();
+            OverloadPriority = usefulMetric.IncPercent(10);
         } else {
             State = EState::REGULAR;
         }
@@ -140,7 +140,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
 
         if (State == EState::COMPATIBILITY) {
             const auto useful = DoGetUsefulMetric();
-            const auto desiredCeiling = useful.Inc();
+            const auto desiredCeiling = useful.IncPercent(10);
             const auto prevOverload = OverloadPriority;
             if (desiredCeiling < OverloadPriority) {
                 OverloadPriority = desiredCeiling;

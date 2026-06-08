@@ -78,19 +78,19 @@ namespace NKikimr {
             }
         } catch (const TExDie&) {
             YDB_LOG_CTX_DEBUG(GetActorContext(), VDISKP(LogPrefix, "catched TExDie"),
-                {"Marker", "VDS23"});
+                {"marker", "VDS23"});
         } catch (const TDtorException&) {
             return; // actor system is stopping, no actor activities allowed
         } catch (const TExPoison&) { // poison pill from the skeleton
             YDB_LOG_CTX_DEBUG(GetActorContext(), VDISKP(LogPrefix, "caught TExPoison"),
-                {"Marker", "VDS25"});
+                {"marker", "VDS25"});
         }
         Send(new IEventHandle(TEvents::TSystem::Poison, 0, std::exchange(BlobRecoveryActorId, {}), {}, nullptr, 0));
     }
 
     void TScrubCoroImpl::RequestState() {
         YDB_LOG_CTX_DEBUG(GetActorContext(), VDISKP(LogPrefix, "requesting scrub state"),
-            {"Marker", "VDS01"});
+            {"marker", "VDS01"});
         Send(MakeBlobStorageNodeWardenID(SelfActorId.NodeId()), new TEvBlobStorage::TEvControllerScrubQueryStartQuantum(
             ScrubCtx->NodeId, ScrubCtx->PDiskId, ScrubCtx->VSlotId), 0, ScrubCtx->ScrubCookie);
         CurrentState = TStringBuilder() << "in queue for scrub state";
@@ -100,7 +100,7 @@ namespace NKikimr {
             State.emplace();
             if (!State->ParseFromString(r.GetState())) {
                 YDB_LOG_CTX_CRIT(GetActorContext(), VDISKP(LogPrefix, "failed to parse scrub state protobuf"),
-                    {"Marker", "VDS06"});
+                    {"marker", "VDS06"});
                 State.reset();
             } else if (State->HasIncarnationGuid() && State->GetIncarnationGuid() != ScrubCtx->IncarnationGuid) {
                 State.reset(); // restart scrub from the beginning
@@ -109,7 +109,7 @@ namespace NKikimr {
             State.reset();
         }
         YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "requested scrub state"),
-            {"Marker", "VDS02"},
+            {"marker", "VDS02"},
             {"State", State});
     }
 
@@ -186,7 +186,7 @@ namespace NKikimr {
 
     void TScrubCoroImpl::CommitStateUpdate() {
         YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "reporting scrub complete"),
-            {"Marker", "VDS05"},
+            {"marker", "VDS05"},
             {"State", State},
             {"Success", Success},
             {"UnreadableBlobsEmpty", UnreadableBlobs.empty()});
@@ -276,7 +276,7 @@ namespace NKikimr {
 
         if (res->Get()->Status != NKikimrProto::OK) {
             YDB_LOG_CTX_WARN(GetActorContext(), VDISKP(LogPrefix, "TEvCheckIntegrity request failed"),
-                {"Marker", "VDS97"},
+                {"marker", "VDS97"},
                 {"BlobId", blobId},
                 {"ErrorReason", res->Get()->ErrorReason});
             if (counters) {
@@ -297,7 +297,7 @@ namespace NKikimr {
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_LOST:
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE:
                 YDB_LOG_CTX_CRIT(GetActorContext(), VDISKP(LogPrefix, "TEvCheckIntegrity discovered placement issue"),
-                    {"Marker", "VDS98"},
+                    {"marker", "VDS98"},
                     {"BlobId", blobId},
                     {"Erasure", TErasureType::ErasureSpeciesName(erasure)},
                     {"CheckIntegrityResult", res->Get()->ToString()});
@@ -318,7 +318,7 @@ namespace NKikimr {
                 break;
             case TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR:
                 YDB_LOG_CTX_CRIT(GetActorContext(), VDISKP(LogPrefix, "TEvCheckIntegrity discovered data issue"),
-                    {"Marker", "VDS99"},
+                    {"marker", "VDS99"},
                     {"BlobId", blobId},
                     {"Erasure", TErasureType::ErasureSpeciesName(erasure)},
                     {"CheckIntegrityResult", res->Get()->ToString()});

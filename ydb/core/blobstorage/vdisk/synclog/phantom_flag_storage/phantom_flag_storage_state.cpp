@@ -39,7 +39,7 @@ void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& da
 void TPhantomFlagStorageState::StartBuilding() {
     if (GType.BlobSubgroupSize() > MaxExpectedDisksInGroup) {
         YDB_LOG_ERROR(VDISKP(SlCtx->VCtx, "Attempted to start phantom flag storage building on unsupported configuration"),
-            {"Marker", "BSPFS01"},
+            {"marker", "BSPFS01"},
             {"MaxExpectedDisksInGroup", MaxExpectedDisksInGroup},
             {"GroupSize", GType.BlobSubgroupSize()});
         // PhantomFlagStorage doesn't work with weird group configurations to minimize memory consumption
@@ -59,7 +59,7 @@ void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* 
     if (blobRec->Ingress.IsDoNotKeep(GType) &&
             (Building || Thresholds.IsBehindThresholdOnUnsynced(blobRec->LogoBlobID(), SyncedMask))) {
         YDB_LOG_COMP_DEBUG(BS_PHANTOM_FLAG_STORAGE, VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
-            {"Marker", "BSPFS09"},
+            {"marker", "BSPFS09"},
             {"BlobId", blobRec->LogoBlobID().ToString()},
             {"Building", Building},
             {"SyncedMask", SyncedMask.to_ullong()},
@@ -116,7 +116,7 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
         Thresholds.Merge(std::move(thresholds));
 
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Finish building"),
-            {"Marker", "BSPFS06"},
+            {"marker", "BSPFS06"},
             {"FlagsAdded", flagsAdded},
             {"FlagsReceived", flags.size()});
     }
@@ -126,14 +126,14 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
 
 void TPhantomFlagStorageState::Recover(TPhantomFlagStorageSnapshot&& snapshot) {
     YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"),
-        {"Marker", "BSPFS10"});
+        {"marker", "BSPFS10"});
     Building = false;
     Thresholds.Merge(std::move(snapshot.Thresholds));
 }
 
 void TPhantomFlagStorageState::Deactivate() {
     YDB_LOG_NOTICE(VDISKP(SlCtx->VCtx, "Deactivating PhantomFlagStorage"),
-        {"Marker", "BSPFS07"},
+        {"marker", "BSPFS07"},
         {"FlagsDropped", StoredFlags.size()});
     Thresholds.Clear();
     Active = false;
@@ -150,7 +150,7 @@ void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot:
         TActivationContext::Send(ev->Forward(ProcessorId));
     } else {
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
-            {"Marker", "BSPFS05"},
+            {"marker", "BSPFS05"},
             {"FlagsCount", StoredFlags.size()});
         auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(TPhantomFlagStorageSnapshot(StoredFlags, Thresholds));
         TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, res.release()));
@@ -210,7 +210,7 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
     if (newCapacity > MaxFlagsStoredCount) {
         StoredFlags.reserve(newCapacity);
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Reserving additional space for PhantomFlagStorage"),
-            {"Marker", "BSPFS03"},
+            {"marker", "BSPFS03"},
             {"OldCapacity", MaxFlagsStoredCount},
             {"NewCapacity", newCapacity},
             {"ActualCapacity", StoredFlags.capacity()});
@@ -223,7 +223,7 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
         StoredFlags.shrink_to_fit();
         StoredFlags.reserve(newCapacity);
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Shrinking PhantomFlagStorage"),
-            {"Marker", "BSPFS04"},
+            {"marker", "BSPFS04"},
             {"OldCapacity", MaxFlagsStoredCount},
             {"NewCapacity", newCapacity},
             {"ActualCapacity", StoredFlags.capacity()},
@@ -238,7 +238,7 @@ bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
         return true;
     } else {
         YDB_LOG_INFO(VDISKP(SlCtx->VCtx, "Cannot add flag to PhantomFlagStorage, memory limit reached"),
-            {"Marker", "BSPFS02"},
+            {"marker", "BSPFS02"},
             {"Capacity", StoredFlags.capacity()},
             {"Size", StoredFlags.size()},
             {"BlobId", blobRec.LogoBlobID().ToString()});

@@ -284,9 +284,9 @@ namespace NKikimr {
 
         void StartReplication() {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL START"),
-                {"Marker", "BSVR14"});
+                {"marker", "BSVR14"});
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
-                {"Marker", "BSVR15"});
+                {"marker", "BSVR15"});
 
             LastReplStart = TAppData::TimeProvider->Now();
             ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 1;
@@ -319,7 +319,7 @@ namespace NKikimr {
                     Y_VERIFY_S(!RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
                     if (RequestedReplicationToken) {
                         YDB_LOG_CRIT("excessive replication token requested",
-                            {"Marker", "BSVR38"},
+                            {"marker", "BSVR38"},
                             {"VDiskLogPrefix", ReplCtx->VCtx->VDiskLogPrefix});
                         break;
                     }
@@ -397,7 +397,7 @@ namespace NKikimr {
             TEvReplFinished::TInfoPtr info = msg->Info;
             TInstant now = TAppData::TimeProvider->Now();
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM COMPLETED"),
-                {"Marker", "BSVR16"},
+                {"marker", "BSVR16"},
                 {"Info", *info});
             LastReplQuantumEnd = now;
 
@@ -480,7 +480,7 @@ namespace NKikimr {
 
             if (finished) {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL COMPLETED"),
-                    {"Marker", "BSVR17"},
+                    {"marker", "BSVR17"},
                     {"BlobsToReplicate", BlobsToReplicatePtr->GetNumItems()});
                 LastReplEnd = now;
 
@@ -520,7 +520,7 @@ namespace NKikimr {
                 }
             } else {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
-                    {"Marker", "BSVR18"});
+                    {"marker", "BSVR18"});
                 RunRepl(info->KeyPos);
                 timeRemaining = EstimateTimeOfArrival();
             }
@@ -544,7 +544,7 @@ namespace NKikimr {
 
             const auto& donor = DonorQueue.front();
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TReplScheduler::RunRepl"),
-                {"Marker", "BSVR32"},
+                {"marker", "BSVR32"},
                 {"From", from},
                 {"Donor", donor ? TString(TStringBuilder() << "{VDiskId# " << donor->VDiskId << " VSlotId# " <<                 donor->NodeId << ":" << donor->PDiskId << ":" << donor->VSlotId << "}") : "generic"});
             ReplJobActorId = Register(CreateReplJobActor(ReplCtx, SelfId(), from, QueueActorMapPtr,
@@ -741,7 +741,7 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken && !HoldingReplicationToken);
                 if (RequestedReplicationToken || HoldingReplicationToken) {
                     YDB_LOG_CRIT("stuck replication token",
-                        {"Marker", "BSVR37"},
+                        {"marker", "BSVR37"},
                         {"VDiskLogPrefix", ReplCtx->VCtx->VDiskLogPrefix});
                 }
             }

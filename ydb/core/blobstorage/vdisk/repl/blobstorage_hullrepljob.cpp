@@ -342,7 +342,7 @@ namespace NKikimr {
     private:
         void Finish() {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "finished replication job"),
-                {"Marker", "BSVR01"},
+                {"marker", "BSVR01"},
                 {"LastKey", LastKey},
                 {"Eof", Eof});
 
@@ -350,7 +350,7 @@ namespace NKikimr {
                 HandleDetectedPhantomBlobCommitted();
             } else {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "sending phantoms"),
-                    {"Marker", "BSVR06"},
+                    {"marker", "BSVR06"},
                     {"NumPhantoms", Phantoms.size()});
                 Send(ReplCtx->SkeletonId, new TEvDetectedPhantomBlob(std::exchange(Phantoms, {})));
             }
@@ -382,7 +382,7 @@ namespace NKikimr {
 
         void Bootstrap() {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Bootstrap"),
-                {"Marker", "BSVR02"});
+                {"marker", "BSVR02"});
 
             TimeAccount.SetState(ETimeState::PREPARE_PLAN);
             auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo, BlobsToReplicatePtr,
@@ -394,7 +394,7 @@ namespace NKikimr {
 
         void Handle(TEvReplPlanFinished::TPtr& ev) {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Handle(TEvReplPlanFinished)"),
-                {"Marker", "BSVR03"});
+                {"marker", "BSVR03"});
             ActiveActors.Erase(ev->Sender);
             RecoveryMachine = std::move(ev->Get()->RecoveryMachine);
             LastKey = ev->Get()->LastKey;
@@ -410,7 +410,7 @@ namespace NKikimr {
             if ((mon.ReplWorkUnitsRemaining() && ReplInfo->WorkUnitsTotal > (ui64)mon.ReplWorkUnitsRemaining()) ||
                     (mon.ReplItemsRemaining() && ReplInfo->ItemsTotal > (ui64)mon.ReplItemsRemaining())) {
                 YDB_LOG_WARN(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "replication work added"),
-                    {"Marker", "BSVR36"},
+                    {"marker", "BSVR36"},
                     {"WorkUnitsTotal", ReplInfo->WorkUnitsTotal},
                     {"ReplWorkUnitsRemaining", (ui64)mon.ReplWorkUnitsRemaining()},
                     {"ItemsTotal", ReplInfo->ItemsTotal},
@@ -437,7 +437,7 @@ namespace NKikimr {
 
         void HandleResume() {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::HandleResume"),
-                {"Marker", "BSVR04"});
+                {"marker", "BSVR04"});
             TimeAccount.SetState(ETimeState::PROXY_WAIT);
 
             // run proxies
@@ -656,7 +656,7 @@ namespace NKikimr {
                         if (proxy->IsEof()) {
                             // count this proxy as finished one
                             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "proxy finished"),
-                                {"Marker", "BSVR05"},
+                                {"marker", "BSVR05"},
                                 {"VDiskId", proxy->VDiskId});
                             --NumRunningProxies;
                         } else {
@@ -709,7 +709,7 @@ namespace NKikimr {
                 RecoveryMachine->Finish(RecoveryQueue, *this);
                 RecoveryMachineFinished = true;
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "finished recovery machine"),
-                    {"Marker", "BSVR07"},
+                    {"marker", "BSVR07"},
                     {"RecoveryQueueSize", RecoveryQueue.size()});
 
                 // sort unreplicated blobs vector as it may contain records in incorrect order due to phantom checking
@@ -719,7 +719,7 @@ namespace NKikimr {
 
             if (!WriterFinished && Writer.GetState() != TReplSstStreamWriter::EState::STOPPED) {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "finished writer"),
-                    {"Marker", "BSVR08"});
+                    {"marker", "BSVR08"});
                 Writer.Finish();
                 WriterFinished = true;
                 return true;
@@ -728,7 +728,7 @@ namespace NKikimr {
             if (HugeBlobsInFlight != 0) {
                 // do not finish until all in-flight requests are completed
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "huge blobs unwritten"),
-                    {"Marker", "BSVR09"},
+                    {"marker", "BSVR09"},
                     {"HugeBlobsInFlight", HugeBlobsInFlight});
                 return false;
             }
@@ -770,7 +770,7 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             YDB_LOG_INFO(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Received phantom validation reply"),
-                {"Marker", "BSVR34"},
+                {"marker", "BSVR34"},
                 {"Msg", ev->Get()->ToString()});
 
             auto [begin, end] = PhantomChecksInFlight.equal_range(ev->Cookie);
@@ -844,7 +844,7 @@ namespace NKikimr {
 
         void AddPhantomBlobRecord(const TRecoveryMachine::TPartSet& item, TIngress ingress, NMatrix::TVectorType partsToRecover) {
             YDB_LOG_INFO(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Sending phantom validation query"),
-                {"Marker", "BSVR33"},
+                {"marker", "BSVR33"},
                 {"GroupId", GInfo->GroupID},
                 {"CurKey", item.Id});
             PhantomChecksPending.emplace_back(item.Id, partsToRecover, item, ingress);
@@ -909,7 +909,7 @@ namespace NKikimr {
         void HandleYard(NPDisk::TEvChunkReserveResult::TPtr& ev) {
             CHECK_PDISK_RESPONSE(ReplCtx->VCtx, ev, ActorContext());
             YDB_LOG_INFO(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "reserved chunks"),
-                {"Marker", "BSVR10"},
+                {"marker", "BSVR10"},
                 {"ChunkIds", FormatList(ev->Get()->ChunkIds)});
             Writer.Apply(ev->Get());
             CheckSpace(ev);
@@ -918,14 +918,14 @@ namespace NKikimr {
 
         void Handle(TEvReplProxyNextResult::TPtr &ev) {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Handle(TEvReplProxyNextResult)"),
-                {"Marker", "BSVR11"});
+                {"marker", "BSVR11"});
             TEvReplProxyNextResult *msg = ev->Get();
             TIntrusivePtr<TVDiskProxy> proxy = DiskProxySet.at(Donor ? 0 : ReplCtx->VCtx->Top->GetOrderNumber(msg->VDiskId));
             proxy->HandleNext(ev);
 
             if (proxy->IsEof()) {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "proxy finished"),
-                    {"Marker", "BSVR12"},
+                    {"marker", "BSVR12"},
                     {"VDiskId", msg->VDiskId.ToString()});
                 --NumRunningProxies;
             } else {
@@ -935,7 +935,7 @@ namespace NKikimr {
             }
 
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Handle(TEvReplProxyNextResult)"),
-                {"Marker", "BSVR13"},
+                {"marker", "BSVR13"},
                 {"MergeHeapSize", MergeHeap.size()},
                 {"NumRunningProxies", NumRunningProxies});
 
@@ -960,7 +960,7 @@ namespace NKikimr {
             switch (record.GetStatus()) {
                 case NKikimrProto::OUT_OF_SPACE:
                     YDB_LOG_ERROR(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "PDisk out of space, delaying replication"),
-                        {"Marker", "BSVR43"},
+                        {"marker", "BSVR43"},
                         {"StatusFlags", flags.ToString()});
                     SwitchToRetriableErrorState();
                     break;
@@ -968,7 +968,7 @@ namespace NKikimr {
                 default: {  // TODO: Handle other reply statuses
                     if (flags.Check(PostponeReplicationThreshold)) {
                         YDB_LOG_ERROR(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Available space is running low, delaying replication"),
-                            {"Marker", "BSVR41"},
+                            {"marker", "BSVR41"},
                             {"StatusFlags", flags.ToString()});
                         SwitchToRetriableErrorState();
                     }
@@ -1001,7 +1001,7 @@ namespace NKikimr {
             TStorageStatusFlags flags(ev->Get()->StatusFlags);
             if (flags.Check(PostponeReplicationThreshold)) {
                 YDB_LOG_ERROR(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Available space is running low, delaying replication"),
-                    {"Marker", "BSVR40"},
+                    {"marker", "BSVR40"},
                     {"StatusFlags", flags.ToString()});
                 SwitchToRetriableErrorState();
             }
@@ -1011,7 +1011,7 @@ namespace NKikimr {
             TStorageStatusFlags flags(ev->Get()->StatusFlags);
             if (!flags.Check(PostponeReplicationThreshold)) {
                 YDB_LOG_NOTICE(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Enough space on PDisk, continuing replication"),
-                    {"Marker", "BSVR42"});
+                    {"marker", "BSVR42"});
                 EStatus prevStatus = std::exchange(Status, EStatus::Working);
                 Y_DEBUG_ABORT_UNLESS(prevStatus == EStatus::WaitingForRetry);
                 Merge();

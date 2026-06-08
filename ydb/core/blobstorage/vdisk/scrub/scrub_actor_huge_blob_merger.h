@@ -52,7 +52,7 @@ namespace NKikimr {
                             const TLogoBlobID partId(key.LogoBlobID(), i + 1); // part id for this blob
                             std::optional<TRcBuf> data = Read(*part, partId);
                             YDB_LOG_CTX_COMP(Impl->GetActorContext(), data ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDISKP(LogPrefix, "huge blob read"),
-                                {"Marker", "VDS21"},
+                                {"marker", "VDS21"},
                                 {"Id", key.LogoBlobID()},
                                 {"Local", local},
                                 {"Location", *part},

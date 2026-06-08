@@ -800,7 +800,7 @@ namespace NKikimr {
             const ui64 confirmedLsn = RTCtx->LsnMngr->GetConfirmedLsnForHull();
             auto *msg = ev->Get();
             YDB_LOG_COMP_INFO(BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
-                {"Marker", "VDHC01"},
+                {"marker", "VDHC01"},
                 {"ConfirmedLsn", confirmedLsn},
                 {"Msg", *msg},
                 {"CompState", TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())});

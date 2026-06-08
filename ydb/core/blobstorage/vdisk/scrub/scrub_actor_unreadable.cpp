@@ -10,7 +10,7 @@ namespace NKikimr {
         Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             YDB_LOG_CTX_NOTICE(GetActorContext(), VDISKP(LogPrefix, "dropped garbage unreadable blob"),
-                {"Marker", "VDS39"},
+                {"marker", "VDS39"},
                 {"BlobId", it->first},
                 {"UnreadableParts", it->second.UnreadableParts});
             MonGroup.UnreadableBlobsFound() -= it->second.UnreadableParts.CountBits();
@@ -38,7 +38,7 @@ namespace NKikimr {
             const NMatrix::TVectorType becameCorrupted = corrupted & ~prevCorrupted;
 
             YDB_LOG_CTX(GetActorContext(), becameCorrupted.Empty() ? PRI_NOTICE : PRI_ERROR, VDISKP(LogPrefix, "huge blob corrupted state updated"),
-                {"Marker", "VDS41"},
+                {"marker", "VDS41"},
                 {"BlobId", fullId},
                 {"UnreadablePartsBefore", prevCorrupted},
                 {"UnreadablePartsAfter", corrupted},
@@ -67,7 +67,7 @@ namespace NKikimr {
         Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             YDB_LOG_CTX_NOTICE(GetActorContext(), VDISKP(LogPrefix, "read parts of previously unreadable blob"),
-                {"Marker", "VDS42"},
+                {"marker", "VDS42"},
                 {"BlobId", it->first},
                 {"UnreadablePartsBefore", it->second.UnreadableParts},
                 {"ReadableParts", readable});
@@ -90,7 +90,7 @@ namespace NKikimr {
                 const auto& p = data;
                 const auto& q = blobId;
                 YDB_LOG_INFO(VDISKP(LogPrefix, "going to restore unreadable blob"),
-                    {"Marker", "VDS22"},
+                    {"marker", "VDS22"},
                     {"Cookie", p.RecoveryInFlightCookie},
                     {"BlobId", q},
                     {"UnreadableParts", p.UnreadableParts},
@@ -123,7 +123,7 @@ namespace NKikimr {
 
                 if (item.Status == NKikimrProto::OK) {
                     YDB_LOG_NOTICE(VDISKP(LogPrefix, "recovered parts of previously unreadable blob"),
-                        {"Marker", "VDS40"},
+                        {"marker", "VDS40"},
                         {"BlobId", it->first},
                         {"UnreadablePartsBefore", data.UnreadableParts},
                         {"RecoveredParts", item.Needed});
@@ -136,7 +136,7 @@ namespace NKikimr {
 
                 } else {
                     YDB_LOG_WARN(VDISKP(LogPrefix, "failed to restore corrupted blob"),
-                        {"Marker", "VDS07"},
+                        {"marker", "VDS07"},
                         {"BlobId", item.BlobId},
                         {"Status", item.Status});
                 }

@@ -139,7 +139,7 @@ namespace NKikimr {
 
                 if (LostVec.empty() || LostVec.front().Id != id) {
                     YDB_LOG_COMP_ERROR(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "blob not in LostVec"),
-                        {"Marker", "BSVR27"},
+                        {"marker", "BSVR27"},
                         {"BlobId", id});
                     return;
                 }
@@ -172,7 +172,7 @@ namespace NKikimr {
                         processor.AddPhantomBlobRecord(item, lost.Ingress, lost.PartsToRecover);
                     } else {
                         YDB_LOG_COMP_INFO(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
-                            {"Marker", "BSVR28"},
+                            {"marker", "BSVR28"},
                             {"BlobId", id},
                             {"NumPresentParts", presentParts},
                             {"MinParts", groupType.DataParts()},
@@ -249,7 +249,7 @@ namespace NKikimr {
                     } catch (const std::exception& ex) {
                         ++ReplCtx->MonGroup.ReplRecoveryGroupTypeErrors();
                         YDB_LOG_COMP_ERROR(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "recovery exception"),
-                            {"Marker", "BSVR29"},
+                            {"marker", "BSVR29"},
                             {"BlobId", id},
                             {"Error", TString(ex.what())});
                         BlobDone(item, false /*success*/, true /*unrecovered*/, &TEvReplFinished::TInfo::ItemsException,
@@ -264,7 +264,7 @@ namespace NKikimr {
             void ProcessPhantomBlob(const TPartSet& item, NMatrix::TVectorType parts, bool isPhantom, bool looksLikePhantom,
                     TIngress ingress, TBlobProcessor&& processor) {
                 YDB_LOG_COMP_INFO(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "phantom check completed"),
-                    {"Marker", "BSVR00"},
+                    {"marker", "BSVR00"},
                     {"BlobId", item.Id},
                     {"Parts", parts},
                     {"IsPhantom", isPhantom},
@@ -289,7 +289,7 @@ namespace NKikimr {
             void BlobDone(const TPartSet& item, bool success, bool unrecovered, ui64 TEvReplFinished::TInfo::*counter,
                     TIngress ingress, bool looksLikePhantom, TBlobProcessor&& processor) {
                 YDB_LOG_COMP_DEBUG(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "BlobDone"),
-                    {"Marker", "BSVR35"},
+                    {"marker", "BSVR35"},
                     {"BlobId", item.Id},
                     {"Success", success});
 
@@ -399,7 +399,7 @@ namespace NKikimr {
                     const bool isHugeBlob = ReplCtx->HugeBlobCtx->IsHugeBlob(ReplCtx->VCtx->Top->GType, id.FullID(), ReplCtx->MinHugeBlobInBytes);
                     MetadataParts.pop_front();
                     YDB_LOG_COMP_DEBUG(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TRecoveryMachine::RecoverMetadata"),
-                        {"Marker", "BSVR30"},
+                        {"marker", "BSVR30"},
                         {"BlobId", id});
                     const TBlobStorageGroupType gtype = ReplCtx->VCtx->Top->GType;
                     if (isHugeBlob) {
@@ -420,7 +420,7 @@ namespace NKikimr {
             template<typename TBlobProcessor>
             void SkipItem(const TLost& item, TBlobProcessor&& processor) {
                 YDB_LOG_COMP_INFO(BS_REPL, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TRecoveryMachine::SkipItem"),
-                    {"Marker", "BSVR31"},
+                    {"marker", "BSVR31"},
                     {"BlobId", item.Id});
                 ++ReplInfo->ItemsNotRecovered;
                 if (item.PossiblePhantom) {

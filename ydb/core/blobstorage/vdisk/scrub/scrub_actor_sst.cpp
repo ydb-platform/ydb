@@ -8,7 +8,7 @@ namespace NKikimr {
     void TScrubCoroImpl::ScrubSst(TLevelSegmentPtr sst) {
         SstId = sst->AssignedSstId;
         YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "starting to scrub SST"),
-            {"Marker", "VDS03"},
+            {"marker", "VDS03"},
             {"SstId", SstId});
         auto blobsOnDisk = MakeBlobList(sst);
         ReadOutAndResilverIndex(sst);
@@ -87,7 +87,7 @@ namespace NKikimr {
             std::optional<TRcBuf> data = Read(part, {});
             if (!data) {
                 YDB_LOG_CTX_WARN(GetActorContext(), VDISKP(LogPrefix, "index is corrupt, restoring"),
-                    {"Marker", "VDS13"},
+                    {"marker", "VDS13"},
                     {"SstId", sst->AssignedSstId},
                     {"Location", part});
 
@@ -101,7 +101,7 @@ namespace NKikimr {
                         part.Size += prefixLen;
                     } else {
                         YDB_LOG_CTX_CRIT(GetActorContext(), VDISKP(LogPrefix, "index is corrupt and can't be restored"),
-                            {"Marker", "VDS38"},
+                            {"marker", "VDS38"},
                             {"SstId", sst->AssignedSstId});
                         Success = false;
                         return;
@@ -138,7 +138,7 @@ namespace NKikimr {
 
     void TScrubCoroImpl::ReadOutSelectedBlobs(std::vector<TBlobOnDisk>&& blobsOnDisk) {
         YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "reading out SST"),
-            {"Marker", "VDS14"},
+            {"marker", "VDS14"},
             {"SstId", SstId},
             {"NumBlobs", blobsOnDisk.size()});
 
@@ -163,7 +163,7 @@ namespace NKikimr {
         for (const auto& [chunkIdx, blobs] : chunks) {
             const auto chunkIdx_{chunkIdx};
             YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "reading out chunk"),
-                {"Marker", "VDS08"},
+                {"marker", "VDS08"},
                 {"SstId", SstId},
                 {"ChunkIdx", chunkIdx_});
             TDiskPart interval;
@@ -171,7 +171,7 @@ namespace NKikimr {
                 if (interval != TDiskPart()) {
                     const bool intervalReadable = IsReadable(interval, {});
                     YDB_LOG_CTX(GetActorContext(), intervalReadable ? PRI_DEBUG : PRI_ERROR, VDISKP(LogPrefix, "small blob interval checked"),
-                        {"Marker", "VDS04"},
+                        {"marker", "VDS04"},
                         {"Interval", interval},
                         {"IsReadable", intervalReadable},
                         {"NumBlobsOfInterest", pendingBlobs.size()});
@@ -182,7 +182,7 @@ namespace NKikimr {
                         const bool blobReadable = intervalReadable || IsReadable(blob->Part, {});
                         if (!intervalReadable) {
                             YDB_LOG_CTX(GetActorContext(), blobReadable ? PRI_INFO : PRI_ERROR, VDISKP(LogPrefix, "small blob from unreadable interval checked"),
-                                {"Marker", "VDS12"},
+                                {"marker", "VDS12"},
                                 {"Key", blob->Id},
                                 {"Location", blob->Part},
                                 {"IsReadable", blobReadable});
@@ -235,7 +235,7 @@ namespace NKikimr {
                 Y_VERIFY_S(!needed.Empty(), LogPrefix);
 
                 YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "reading out blob"),
-                    {"Marker", "VDS11"},
+                    {"marker", "VDS11"},
                     {"SstId", SstId},
                     {"Id", blob.Id});
 
@@ -243,7 +243,7 @@ namespace NKikimr {
                     if (!(replica.Local & needed).Empty()) {
                         const bool blobReadable = IsReadable(replica.Part, {});
                         YDB_LOG_CTX(GetActorContext(), blobReadable ? PRI_DEBUG : PRI_ERROR, VDISKP(LogPrefix, "read replica"),
-                            {"Marker", "VDS16"},
+                            {"marker", "VDS16"},
                             {"SstId", SstId},
                             {"Id", blob.Id},
                             {"Location", replica.Part},

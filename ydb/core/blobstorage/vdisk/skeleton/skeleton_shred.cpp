@@ -50,7 +50,7 @@ namespace NKikimr {
         void Bootstrap() {
             Become(&TThis::StateFunc);
             YDB_LOG_DEBUG("TSkeletonShredActor bootstrap",
-                {"Marker", "BSSV05"},
+                {"marker", "BSSV05"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()},
                 {"ChunksToShred", ChunksToShred},
@@ -72,7 +72,7 @@ namespace NKikimr {
 
         void HandleHugeShredNotifyResult() {
             YDB_LOG_DEBUG("EvHugeShredNotifyResult received or timer hit",
-                {"Marker", "BSSV06"},
+                {"marker", "BSSV06"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()});
             Send(ShredCtx->DefragId, new TEvHullShredDefrag(ChunksToShred));
@@ -88,7 +88,7 @@ namespace NKikimr {
             auto *msg = ev->Get();
 
             YDB_LOG_DEBUG("TEvListChunksResult received",
-                {"Marker", "BSSV07"},
+                {"marker", "BSSV07"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()},
                 {"ChunksHuge", msg->ChunksHuge},
@@ -115,7 +115,7 @@ namespace NKikimr {
 
         void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
             YDB_LOG_DEBUG("TEvTakeHullSnapshotResult received",
-                {"Marker", "BSSV08"},
+                {"marker", "BSSV08"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()});
 
@@ -132,7 +132,7 @@ namespace NKikimr {
             CheckDefragStage();
 
             YDB_LOG_DEBUG("TEvTakeHullSnapshotResult processed",
-                {"Marker", "BSSV09"},
+                {"marker", "BSSV09"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()},
                 {"TablesToCompactLogoBlobs", TablesToCompactLogoBlobs},
@@ -178,7 +178,7 @@ namespace NKikimr {
                         it->second = EChunkType::INDEX;
                         tablesToCompact.insert(seg.AssignedSstId);
                         YDB_LOG_DEBUG("going to compact SST",
-                            {"Marker", "BSSV13"},
+                            {"marker", "BSSV13"},
                             {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                             {"SstId", seg.AssignedSstId},
                             {"AllChunks", seg.AllChunks});
@@ -213,7 +213,7 @@ namespace NKikimr {
 
         void HandleHullShredDefragResult() {
             YDB_LOG_DEBUG("EvHullShredDefragResult received",
-                {"Marker", "BSSV14"},
+                {"marker", "BSSV14"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()});
             DefragCompleted = true;
@@ -242,7 +242,7 @@ namespace NKikimr {
 
         void Handle(TEvCompactVDiskResult::TPtr /*ev*/) {
             YDB_LOG_DEBUG("TEvCompactVDiskResult received",
-                {"Marker", "BSSV11"},
+                {"marker", "BSSV11"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()});
             CheckDefragStage();
@@ -250,7 +250,7 @@ namespace NKikimr {
 
         void Handle(TEvNotifyChunksDeleted::TPtr ev) {
             YDB_LOG_DEBUG("TEvNotifyChunksDeleted received",
-                {"Marker", "BSSV10"},
+                {"marker", "BSSV10"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()},
                 {"Lsn", ev->Get()->Lsn},
@@ -326,7 +326,7 @@ namespace NKikimr {
 
         void PassAway() override {
             YDB_LOG_INFO("shredding finished",
-                {"Marker", "BSSV12"},
+                {"marker", "BSSV12"},
                 {"VDiskLogPrefix", ShredCtx->VCtx->VDiskLogPrefix},
                 {"ActorId", SelfId()},
                 {"Status", Status},

@@ -367,8 +367,8 @@ public:
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
-        if (params.Has("forget-after")) {
-            ForgetAfter = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("forget-after"), ForgetAfter.MilliSeconds()), 1, MaxForgetAfter.MilliSeconds()));
+        if (params.Has("forget_after")) {
+            ForgetAfter = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("forget_after"), ForgetAfter.MilliSeconds()), 1, MaxForgetAfter.MilliSeconds()));
         }
         if (Streaming == EStreamingType::None || params.Has("timeout")) {
             Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
@@ -1591,9 +1591,9 @@ public:
                 description: timeout in ms, for synchronous queries it's 60s by default, for streaming queries it's off by default
                 type: integer
                 required: false
-              - name: forget-after
+              - name: forget_after
                 in: query
-                description: wait timeout in ms for execute-query-and-forget before returning success and leaving query running in background, clamped to 1..60000 ms
+                description: underscore alias for forget-after
                 type: integer
                 required: false
                 default: 1000

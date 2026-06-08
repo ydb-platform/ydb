@@ -235,15 +235,11 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
     return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
-std::optional<ui64> TVChunk::GetMinInflightLsn() const
+std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    const ui64 minInflightLsn = BlocksDirtyMap.GetMinInflightLsn();
-    if (minInflightLsn == 0) {
-        return std::nullopt;
-    }
-    return minInflightLsn;
+    return BlocksDirtyMap.GetSafeBarrierForErase();
 }
 
 TString TVChunk::DebugPrintDirtyMap()

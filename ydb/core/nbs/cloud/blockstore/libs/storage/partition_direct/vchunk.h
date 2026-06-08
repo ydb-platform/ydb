@@ -66,7 +66,7 @@ public:
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
     // Must run on the executor thread.
-    [[nodiscard]] std::optional<ui64> GetMinInflightLsn() const;
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(

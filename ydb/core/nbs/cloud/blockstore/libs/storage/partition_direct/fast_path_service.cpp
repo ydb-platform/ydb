@@ -261,9 +261,6 @@ TFastPathService::WriteBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
-    // The lsn is generated later, inside the vchunk on its executor thread (see
-    // TVChunk::DoWriteBlocksLocal), so that lsn generation and dirty-map
-    // registration happen on the same thread.
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
@@ -354,16 +351,13 @@ ui64 TFastPathService::GenerateLsn()
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
     const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
-    if (!step) {
+    if (!step || lsn % step != 0) {
         return;
     }
-    // GenerateLsn runs concurrently on multiple executor threads, so lsn can be
-    // observed here out of order. Only ever advance the watermark forward.
-    ui64 last = LastCleanupLsn.load();
-    if (lsn <= last || lsn - last < step) {
-        return;
-    }
-    if (!LastCleanupLsn.compare_exchange_strong(last, lsn)) {
+    // lsn values are unique, so exactly one generator hits each multiple of
+    // step. Skip if a previous cleanup is still gathering, to avoid overlap.
+    bool expected = false;
+    if (!CleanupGather.Active.compare_exchange_strong(expected, true)) {
         return;
     }
     PBufferCleanup();
@@ -371,43 +365,53 @@ void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 
 void TFastPathService::PBufferCleanup()
 {
-    // Pull the smallest inflight lsn from every DirectBlockGroup, then erase
-    // PBuffer records below the global minimum once all responses arrive. Each
-    // DBG writes its own result slot; the last responder reads them all.
+    // Pull the smallest inflight lsn from every DirectBlockGroup. Each group
+    // writes its own result slot; the last responder computes the global
+    // minimum (see FinishPBufferCleanup).
     const size_t dbgCount = DirectBlockGroups.size();
-    auto results = std::make_shared<TVector<std::optional<ui64>>>(dbgCount);
-    auto remaining = std::make_shared<std::atomic<size_t>>(dbgCount);
+    CleanupGather.SafeBarriers.assign(dbgCount, std::nullopt);
+    CleanupGather.PendingResponses.store(dbgCount);
 
     for (size_t i = 0; i < dbgCount; ++i) {
-        DirectBlockGroups[i]->GatherMinInflightLsn().Subscribe(
-            [weakSelf = weak_from_this(), results, remaining, i]   //
+        DirectBlockGroups[i]->GatherSafeBarrierForErase().Subscribe(
+            [weakSelf = weak_from_this(), i]   //
             (const NThreading::TFuture<std::optional<ui64>>& f)
             {
-                (*results)[i] = f.GetValue();
-                if (remaining->fetch_sub(1) != 1) {
-                    return;
-                }
-
-                std::optional<ui64> globalMin;
-                for (const auto& result: *results) {
-                    if (result && (!globalMin || *result < *globalMin)) {
-                        globalMin = result;
-                    }
-                }
-                if (!globalMin) {
-                    return;
-                }
-
-                auto self = weakSelf.lock();
-                if (!self) {
-                    return;
-                }
-
-                const ui64 cleanupBound = *globalMin - 1;
-                for (const auto& dbg: self->DirectBlockGroups) {
-                    dbg->BarrierEraseFromPBuffer(cleanupBound);
+                if (auto self = weakSelf.lock()) {
+                    self->OnGatherSafeBarrierForErase(i, f.GetValue());
                 }
             });
+    }
+}
+
+void TFastPathService::OnGatherSafeBarrierForErase(
+    size_t dbgIndex,
+    std::optional<ui64> safeBarrier)
+{
+    CleanupGather.SafeBarriers[dbgIndex] = safeBarrier;
+    if (CleanupGather.PendingResponses.fetch_sub(1) == 1) {
+        FinishPBufferCleanup();
+    }
+}
+
+void TFastPathService::FinishPBufferCleanup()
+{
+    std::optional<ui64> globalMin;
+    for (const auto& safeBarrier: CleanupGather.SafeBarriers) {
+        if (safeBarrier && (!globalMin || *safeBarrier < *globalMin)) {
+            globalMin = safeBarrier;
+        }
+    }
+
+    CleanupGather.Active.store(false);
+
+    if (!globalMin) {
+        return;
+    }
+
+    const ui64 cleanupBound = *globalMin - 1;
+    for (const auto& dbg: DirectBlockGroups) {
+        dbg->BarrierEraseFromPBuffer(cleanupBound);
     }
 }
 

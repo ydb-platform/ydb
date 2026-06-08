@@ -197,7 +197,8 @@ public:
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
 
-    NThreading::TFuture<std::optional<ui64>> GatherMinInflightLsn() override;
+    NThreading::TFuture<std::optional<ui64>>
+    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;

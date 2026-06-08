@@ -932,7 +932,7 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
 }
 
 NThreading::TFuture<std::optional<ui64>>
-TDirectBlockGroup::GatherMinInflightLsn()
+TDirectBlockGroup::GatherSafeBarrierForErase()
 {
     auto promise = NewPromise<std::optional<ui64>>();
     auto future = promise.GetFuture();
@@ -946,18 +946,18 @@ TDirectBlockGroup::GatherMinInflightLsn()
                 return;
             }
 
-            std::optional<ui64> minInflightLsn;
+            std::optional<ui64> safeBarrier;
             for (const auto& weakVChunk: self->VChunks) {
                 auto vChunk = weakVChunk.lock();
                 if (!vChunk) {
                     continue;
                 }
-                const auto lsn = vChunk->GetMinInflightLsn();
-                if (lsn && (!minInflightLsn || *lsn < *minInflightLsn)) {
-                    minInflightLsn = lsn;
+                const auto lsn = vChunk->GetSafeBarrierForErase();
+                if (lsn && (!safeBarrier || *lsn < *safeBarrier)) {
+                    safeBarrier = lsn;
                 }
             }
-            promise.SetValue(minInflightLsn);
+            promise.SetValue(safeBarrier);
         });
 
     return future;

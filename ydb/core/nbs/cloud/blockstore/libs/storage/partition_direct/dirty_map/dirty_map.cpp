@@ -644,9 +644,9 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
     return *ReadyToErase.begin();
 }
 
-ui64 TBlocksDirtyMap::GetMinInflightLsn() const
+std::optional<ui64> TBlocksDirtyMap::GetSafeBarrierForErase() const
 {
-    return Inflight.GetMinKey().value_or(0);
+    return Inflight.GetMinKey();
 }
 
 const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(

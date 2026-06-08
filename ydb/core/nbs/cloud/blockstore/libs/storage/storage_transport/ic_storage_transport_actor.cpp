@@ -646,13 +646,13 @@ void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
         "requestId# %lu",
         requestId);
 
-    if (auto* r = EraseFromPBufferRequests.FindPtr(requestId)) {
+    if (auto* r = BatchEraseFromPBufferRequests.FindPtr(requestId)) {
         auto& request = **r;
         auto result =
             NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult();
         SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
-        EraseFromPBufferRequests.erase(requestId);
+        BatchEraseFromPBufferRequests.erase(requestId);
     } else {
         // That means that request is already completed
         LOG_ERROR(

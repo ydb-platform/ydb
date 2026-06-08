@@ -262,7 +262,7 @@ public:
     [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
-    [[nodiscard]] ui64 GetMinInflightLsn() const;
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
 

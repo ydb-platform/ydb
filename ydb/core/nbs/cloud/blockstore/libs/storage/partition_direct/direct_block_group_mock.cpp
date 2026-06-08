@@ -289,7 +289,7 @@ void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
 }
 
 NThreading::TFuture<std::optional<ui64>>
-TDirectBlockGroupMock::GatherMinInflightLsn()
+TDirectBlockGroupMock::GatherSafeBarrierForErase()
 {
     return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
 }

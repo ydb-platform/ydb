@@ -864,20 +864,17 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
             LOG_DEBUG(
                 *self->ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "DBG[%lu] barrier-erase lsn=%lu on %lu PBuffer hosts",
-                self->DirectBlockGroupIndex,
+                "%s barrier-erase lsn=%lu on %lu PBuffer hosts",
+                self->LogTitle.GetWithTime().c_str(),
                 lsn,
                 self->PBufferConnections.size());
             for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
-                auto future =
-                    self->DoBarrierEraseFromPBuffer(h, lsn, NWilson::TTraceId{});
-                Y_UNUSED(future);
+                self->DoBarrierEraseFromPBuffer(h, lsn, NWilson::TTraceId{});
             }
         });
 }
 
-NThreading::TFuture<TDBGEraseResponse>
-TDirectBlockGroup::DoBarrierEraseFromPBuffer(
+void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
     THostIndex hostIndex,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
@@ -899,12 +896,8 @@ TDirectBlockGroup::DoBarrierEraseFromPBuffer(
         lsn,
         childSpan.get());
 
-    auto promise = NewPromise<TDBGEraseResponse>();
-    auto result = promise.GetFuture();
-
     future.Subscribe(
         [weakSelf = weak_from_this(),
-         promise = std::move(promise),
          childSpan = std::move(childSpan),
          hostIndex,
          startAt,
@@ -916,7 +909,6 @@ TDirectBlockGroup::DoBarrierEraseFromPBuffer(
 
             executor->ExecuteSimple(
                 [weakSelf,
-                 promise = std::move(promise),
                  childSpan = std::move(childSpan),
                  hostIndex,
                  startAt,
@@ -926,22 +918,49 @@ TDirectBlockGroup::DoBarrierEraseFromPBuffer(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    NProto::TError error = TranslateError(result);
-
-                    if (auto self = weakSelf.lock()) {
-                        self->OnResponse(
-                            hostIndex,
-                            TMonotonic::Now() - startAt,
-                            EOperation::BarrierErase,
-                            error);
+                    auto self = weakSelf.lock();
+                    if (!self) {
+                        return;
                     }
-
-                    promise.SetValue(
-                        TDBGEraseResponse{.Error = std::move(error)});
+                    self->OnResponse(
+                        hostIndex,
+                        TMonotonic::Now() - startAt,
+                        EOperation::BarrierErase,
+                        TranslateError(result));
                 });
         });
+}
 
-    return result;
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroup::GatherMinInflightLsn()
+{
+    auto promise = NewPromise<std::optional<ui64>>();
+    auto future = promise.GetFuture();
+
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), promise]() mutable
+        {
+            auto self = weakSelf.lock();
+            if (!self) {
+                promise.SetValue(std::nullopt);
+                return;
+            }
+
+            std::optional<ui64> minInflightLsn;
+            for (const auto& weakVChunk: self->VChunks) {
+                auto vChunk = weakVChunk.lock();
+                if (!vChunk) {
+                    continue;
+                }
+                const auto lsn = vChunk->GetMinInflightLsn();
+                if (lsn && (!minInflightLsn || *lsn < *minInflightLsn)) {
+                    minInflightLsn = lsn;
+                }
+            }
+            promise.SetValue(minInflightLsn);
+        });
+
+    return future;
 }
 
 NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(

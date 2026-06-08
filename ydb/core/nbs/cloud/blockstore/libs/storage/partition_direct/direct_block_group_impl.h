@@ -114,6 +114,8 @@ public:
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
 
+    NThreading::TFuture<std::optional<ui64>> GatherMinInflightLsn() override;
+
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
 
@@ -171,7 +173,7 @@ private:
         const TEvSyncWithPersistentBufferResult& response,
         size_t segmentCount);
 
-    NThreading::TFuture<TDBGEraseResponse> DoBarrierEraseFromPBuffer(
+    void DoBarrierEraseFromPBuffer(
         THostIndex hostIndex,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
@@ -197,7 +199,6 @@ private:
 
     void Thinking();
     void ScheduleOracleThinking();
-
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;

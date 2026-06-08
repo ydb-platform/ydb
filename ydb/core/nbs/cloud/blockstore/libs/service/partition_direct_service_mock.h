@@ -38,15 +38,11 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(cfg);
     }
 
-    void ReportCleanupBound(ui32 vChunkIndex, ui64 bound) override
-    {
-        Y_UNUSED(vChunkIndex);
-        Y_UNUSED(bound);
-    }
+    ui64 LsnGenerator = 0;
 
-    void CompleteOutstandingLsns(const TVector<ui64>& lsns) override
+    ui64 GenerateLsn() override
     {
-        Y_UNUSED(lsns);
+        return ++LsnGenerator;
     }
 };
 

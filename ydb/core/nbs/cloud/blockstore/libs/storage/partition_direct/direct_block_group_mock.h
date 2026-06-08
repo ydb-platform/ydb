@@ -126,9 +126,6 @@ public:
 
     TVector<TVChunkWeakPtr> VChunks;
 
-    // Records every lsn passed to BarrierEraseFromPBuffer (tests assert on it).
-    TVector<ui64> IssuedBarrierErases;
-
     TDirectBlockGroupMock();
 
     void Register(TVChunkWeakPtr vChunk) override;
@@ -199,6 +196,8 @@ public:
         const NWilson::TTraceId& traceId) override;
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
+
+    NThreading::TFuture<std::optional<ui64>> GatherMinInflightLsn() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;

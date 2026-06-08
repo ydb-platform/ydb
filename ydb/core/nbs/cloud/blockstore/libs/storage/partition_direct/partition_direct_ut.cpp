@@ -1029,10 +1029,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         }
     }
 
-    // PBuffer cleanup: once the write LSN advances by PBufferCleanupLsnStep the tablet
-    // barrier-erases PBuffer records up to the cleanup bound. Drive two write
-    // batches and assert a real barrier-erase (TEvErasePersistentBuffer with
-    // Lsn > 0) reaches the persistent buffer, with no data lost.
+    // PBuffer cleanup: once the write LSN advances by PBufferCleanupLsnStep the
+    // tablet barrier-erases PBuffer records up to the cleanup bound. Drive two
+    // write batches and assert a real barrier-erase (TEvErasePersistentBuffer
+    // with Lsn > 0) reaches the persistent buffer, with no data lost.
     Y_UNIT_TEST(ShouldBarrierErasePBufferOnCleanup)
     {
         TEnvironmentSetup env{{

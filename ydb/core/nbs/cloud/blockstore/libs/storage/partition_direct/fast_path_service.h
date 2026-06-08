@@ -13,9 +13,6 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
-#include <util/generic/hash_set.h>
-#include <util/system/mutex.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,7 +26,6 @@ private:
     NActors::TActorSystem* const ActorSystem = nullptr;
     const NActors::TActorId PartitionActorId;
     const TStorageConfigPtr StorageConfig;
-    TVector<std::atomic<ui64>> VChunkCleanupBounds;
     const TString DiskId;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
@@ -49,9 +45,6 @@ private:
     TMap<size_t, TDBGDumpResponse> DebugDumps;
 
     std::atomic<ui64> LastCleanupLsn{0};
-
-    mutable TAdaptiveLock OutstandingLock;
-    THashSet<ui64> OutstandingLsns;
 
 public:
     TFastPathService(
@@ -98,20 +91,15 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
-    void ReportCleanupBound(ui32 vChunkIndex, ui64 bound) override;
-    void CompleteOutstandingLsns(const TVector<ui64>& lsns) override;
+    ui64 GenerateLsn() override;
 
 private:
-    ui64 GenerateSequenceNumber();
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
 
     void MaybeTriggerPBufferCleanup(ui64 lsn);
     void PBufferCleanup();
-
-    void RegisterOutstandingLsn(ui64 lsn);
-    ui64 GetMinOutstandingLsn() const;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -1,7 +1,5 @@
 #include "direct_block_group_mock.h"
 
-#include "vchunk.h"
-
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 using namespace NThreading;
@@ -287,7 +285,13 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
 
 void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
 {
-    IssuedBarrierErases.push_back(lsn);
+    Y_UNUSED(lsn);
+}
+
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroupMock::GatherMinInflightLsn()
+{
+    return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>

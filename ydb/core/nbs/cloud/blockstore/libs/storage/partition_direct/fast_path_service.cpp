@@ -92,11 +92,6 @@ size_t RegionCount(ui64 blockCount, ui32 blockSize)
     return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
-size_t VChunkCount(ui64 blockCount, ui32 blockSize, ui64 vChunkSize)
-{
-    return RegionCount(blockCount, blockSize) * (RegionSize / vChunkSize);
-}
-
 TVector<std::shared_ptr<TRegion>> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
@@ -146,8 +141,6 @@ TFastPathService::TFastPathService(
     : ActorSystem(actorSystem)
     , PartitionActorId(partitionActorId)
     , StorageConfig(std::move(storageConfig))
-    , VChunkCleanupBounds(
-          VChunkCount(blockCount, blockSize, StorageConfig->GetVChunkSize()))
     , DiskId(diskId)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
@@ -268,14 +261,12 @@ TFastPathService::WriteBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
-    const ui64 lsn = GenerateSequenceNumber();
-    RegisterOutstandingLsn(lsn);
-    MaybeTriggerPBufferCleanup(lsn);
-
+    // The lsn is generated later, inside the vchunk on its executor thread (see
+    // TVChunk::DoWriteBlocksLocal), so that lsn generation and dirty-map
+    // registration happen on the same thread.
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        lsn,
         span->GetTraceId());
 
     result.Subscribe(
@@ -353,39 +344,11 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
         new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(cfg));
 }
 
-ui64 TFastPathService::GenerateSequenceNumber()
+ui64 TFastPathService::GenerateLsn()
 {
-    return ++SequenceGenerator;
-}
-
-void TFastPathService::RegisterOutstandingLsn(ui64 lsn)
-{
-    TGuard guard(OutstandingLock);
-    OutstandingLsns.insert(lsn);
-}
-
-void TFastPathService::CompleteOutstandingLsns(const TVector<ui64>& lsns)
-{
-    TGuard guard(OutstandingLock);
-    for (const ui64 lsn: lsns) {
-        OutstandingLsns.erase(lsn);
-    }
-}
-
-ui64 TFastPathService::GetMinOutstandingLsn() const
-{
-    TGuard guard(OutstandingLock);
-    ui64 minLsn = Max<ui64>();
-    for (const ui64 lsn: OutstandingLsns) {
-        minLsn = std::min(minLsn, lsn);
-    }
-    return minLsn;
-}
-
-void TFastPathService::ReportCleanupBound(ui32 vChunkIndex, ui64 bound)
-{
-    Y_ABORT_UNLESS(vChunkIndex < VChunkCleanupBounds.size());
-    VChunkCleanupBounds[vChunkIndex].store(bound);
+    const ui64 lsn = ++SequenceGenerator;
+    MaybeTriggerPBufferCleanup(lsn);
+    return lsn;
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
@@ -394,9 +357,10 @@ void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
     if (!step) {
         return;
     }
+    // GenerateLsn runs concurrently on multiple executor threads, so lsn can be
+    // observed here out of order. Only ever advance the watermark forward.
     ui64 last = LastCleanupLsn.load();
-    Y_DEBUG_ABORT_UNLESS(lsn >= last);
-    if (lsn - last < step) {
+    if (lsn <= last || lsn - last < step) {
         return;
     }
     if (!LastCleanupLsn.compare_exchange_strong(last, lsn)) {
@@ -407,20 +371,43 @@ void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 
 void TFastPathService::PBufferCleanup()
 {
-    const ui64 minOutstanding = GetMinOutstandingLsn();
+    // Pull the smallest inflight lsn from every DirectBlockGroup, then erase
+    // PBuffer records below the global minimum once all responses arrive. Each
+    // DBG writes its own result slot; the last responder reads them all.
+    const size_t dbgCount = DirectBlockGroups.size();
+    auto results = std::make_shared<TVector<std::optional<ui64>>>(dbgCount);
+    auto remaining = std::make_shared<std::atomic<size_t>>(dbgCount);
 
-    ui64 cleanupBound = Max<ui64>();
-    for (const auto& bound: VChunkCleanupBounds) {
-        cleanupBound = std::min(cleanupBound, bound.load());
-    }
-    if (minOutstanding != Max<ui64>()) {
-        cleanupBound = std::min(cleanupBound, minOutstanding - 1);
-    }
+    for (size_t i = 0; i < dbgCount; ++i) {
+        DirectBlockGroups[i]->GatherMinInflightLsn().Subscribe(
+            [weakSelf = weak_from_this(), results, remaining, i]   //
+            (const NThreading::TFuture<std::optional<ui64>>& f)
+            {
+                (*results)[i] = f.GetValue();
+                if (remaining->fetch_sub(1) != 1) {
+                    return;
+                }
 
-    if (cleanupBound != 0 && cleanupBound != Max<ui64>()) {
-        for (const auto& dbg: DirectBlockGroups) {
-            dbg->BarrierEraseFromPBuffer(cleanupBound);
-        }
+                std::optional<ui64> globalMin;
+                for (const auto& result: *results) {
+                    if (result && (!globalMin || *result < *globalMin)) {
+                        globalMin = result;
+                    }
+                }
+                if (!globalMin) {
+                    return;
+                }
+
+                auto self = weakSelf.lock();
+                if (!self) {
+                    return;
+                }
+
+                const ui64 cleanupBound = *globalMin - 1;
+                for (const auto& dbg: self->DirectBlockGroups) {
+                    dbg->BarrierEraseFromPBuffer(cleanupBound);
+                }
+            });
     }
 }
 

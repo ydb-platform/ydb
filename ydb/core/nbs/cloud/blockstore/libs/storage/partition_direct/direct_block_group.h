@@ -196,6 +196,11 @@ public:
 
     virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
 
+    // Smallest inflight lsn across all vchunks of this DirectBlockGroup, used
+    // to compute the tablet-wide cleanup watermark. Resolves on the executor
+    // thread. nullopt means nothing is inflight here.
+    virtual NThreading::TFuture<std::optional<ui64>> GatherMinInflightLsn() = 0;
+
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) = 0;

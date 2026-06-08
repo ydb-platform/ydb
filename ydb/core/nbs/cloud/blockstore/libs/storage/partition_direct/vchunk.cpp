@@ -146,7 +146,6 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
     // VHost thread
@@ -177,8 +176,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
         std::move(request),
         traceId,
         std::move(callContext),
-        vchunkRange,
-        lsn);
+        vchunkRange);
 
     bundle->GetSpan().Attribute("VChunkIndex", VChunkConfig.GetVChunkIndex());
 
@@ -237,29 +235,15 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
     return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
-void TVChunk::PublishCleanupBound(const TVector<ui64>& completedLsns)
+std::optional<ui64> TVChunk::GetMinInflightLsn() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    ui64 bound = 0;
-    if (DirtyMapRestored) {
-        const ui64 minInflightLsn = BlocksDirtyMap.GetMinInflightLsn();
-        bound = minInflightLsn == 0 ? Max<ui64>() : minInflightLsn - 1;
+    const ui64 minInflightLsn = BlocksDirtyMap.GetMinInflightLsn();
+    if (minInflightLsn == 0) {
+        return std::nullopt;
     }
-
-    if (bound != LastReportedCleanupBound) {
-        LastReportedCleanupBound = bound;
-        PartitionDirectService->ReportCleanupBound(
-            VChunkConfig.GetVChunkIndex(),
-            bound);
-    }
-
-    // Release the just-flushed lsns from OutstandingLsns only after the bound
-    // covering them is published, so the handoff stays gap-free. Done even when
-    // the bound is unchanged: the current bound already covers them.
-    if (!completedLsns.empty()) {
-        PartitionDirectService->CompleteOutstandingLsns(completedLsns);
-    }
+    return minInflightLsn;
 }
 
 TString TVChunk::DebugPrintDirtyMap()
@@ -349,7 +333,6 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
         BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
     }
     DirtyMapRestored = true;
-    PublishCleanupBound();
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
@@ -504,11 +487,18 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    // Generate the lsn and register the write as inflight on the same executor
+    // thread, so the cleanup watermark covers it from the moment of generation.
+    const ui64 lsn = PartitionDirectService->GenerateLsn();
+    bundle->SetLsn(lsn);
+    BlocksDirtyMap.RegisterInflightWrite(lsn, bundle->GetVChunkRange());
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s DoWriteBlocksLocal: %s",
+        "%s DoWriteBlocksLocal: lsn %lu %s",
         LogTitle.GetWithTime().c_str(),
+        lsn,
         bundle->GetVChunkRange().Print().c_str());
 
     auto writeExecutor = CreateWriteRequestExecutor(
@@ -539,16 +529,6 @@ void TVChunk::DoFlush(bool force)
         LogTitle.GetWithTime().c_str(),
         flushBatch.GetAllHints().size(),
         force ? "force" : "normal");
-
-    TVector<ui64> flushingLsns;
-    for (const auto& [route, hint]: flushBatch.GetAllHints()) {
-        for (const auto& segment: hint.Segments) {
-            flushingLsns.push_back(segment.Lsn);
-        }
-    }
-    if (!flushingLsns.empty()) {
-        PublishCleanupBound(flushingLsns);
-    }
 
     for (auto& [route, hint]: flushBatch.TakeAllHints()) {
         auto flushExecutor = std::make_shared<TFlushRequestExecutor>(
@@ -677,8 +657,6 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
         response.Host,
         response.EraseOk,
         response.EraseFailed);
-
-    PublishCleanupBound();
 
     for (size_t i = 0; i < response.EraseOk.size(); ++i) {
         Counters.RequestFinished(EVChunkOperation::Erase, true);

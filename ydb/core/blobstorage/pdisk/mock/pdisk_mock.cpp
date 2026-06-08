@@ -479,7 +479,7 @@ public:
         // report message and validate PDisk guid
         auto *msg = ev->Get();
         YDB_LOG_PDISK_MOCK(PRI_NOTICE, "received TEvYardInit",
-            {"Marker", "PDM01"},
+            {"marker", "PDM01"},
             {"Msg", msg->ToString()});
         Y_VERIFY(msg->PDiskGuid == Impl.PDiskGuid, "PDiskGuid mismatch");
 
@@ -525,7 +525,7 @@ public:
         }
 
         YDB_LOG_PDISK_MOCK(PRI_INFO, "sending TEvYardInitResult",
-            {"Marker", "PDM02"},
+            {"marker", "PDM02"},
             {"Msg", res->ToString()},
             {"Created", created});
         Send(ev->Sender, res.release());
@@ -534,7 +534,7 @@ public:
     void Handle(NPDisk::TEvYardResize::TPtr ev) {
         auto *msg = ev->Get();
         YDB_LOG_PDISK_MOCK(PRI_NOTICE, "received TEvYardResize",
-            {"Marker", "PDM03"},
+            {"marker", "PDM03"},
             {"Msg", msg->ToString()});
 
         auto res = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(), TString());
@@ -548,7 +548,7 @@ public:
     void Handle(NPDisk::TEvSlay::TPtr ev) {
         auto *msg = ev->Get();
         YDB_LOG_PDISK_MOCK(PRI_INFO, "received TEvSlay",
-            {"Marker", "PDM17"},
+            {"marker", "PDM17"},
             {"Msg", msg->ToString()});
 
         auto res = std::make_unique<NPDisk::TEvSlayResult>(NKikimrProto::OK, GetStatusFlags(), msg->VDiskId,
@@ -641,7 +641,7 @@ public:
             } else {
                 TImpl::TOwner& owner = it->second;
                 YDB_LOG_PDISK_MOCK(PRI_DEBUG, "received TEvLog",
-                    {"Marker", "PDM11"},
+                    {"marker", "PDM11"},
                     {"Msg", msg->ToString()},
                     {"VDiskId", owner.VDiskId});
 
@@ -706,7 +706,7 @@ public:
             auto *ev = msg->CastAsLocal<NPDisk::TEvLogResult>();
             const TActorId& recipient = msg->Recipient;
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "sending TEvLogResult",
-                {"Marker", "PDM12"},
+                {"marker", "PDM12"},
                 {"Msg", ev->ToString()},
                 {"Recipient", recipient});
             TActivationContext::Send(msg.release());
@@ -741,7 +741,7 @@ public:
         } else {
             TImpl::TOwner& owner = it->second;
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "received TEvChunkForget",
-                {"Marker", "PDMxx"},
+                {"marker", "PDMxx"},
                 {"Msg", msg->ToString()},
                 {"VDiskId", owner.VDiskId});
             for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
@@ -757,7 +757,7 @@ public:
             true, GetStatusFlags(), TString(), msg->Owner);
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             YDB_LOG_PDISK_MOCK(PRI_INFO, "received TEvReadLog",
-                {"Marker", "PDM05"},
+                {"marker", "PDM05"},
                 {"Msg", msg->ToString()},
                 {"VDiskId", owner->VDiskId});
             ui64 size = 0;
@@ -771,7 +771,7 @@ public:
                 }
             }
             YDB_LOG_PDISK_MOCK(PRI_INFO, "sending TEvReadLogResult",
-                {"Marker", "PDM06"},
+                {"marker", "PDM06"},
                 {"Msg", res->ToString()});
         }
         Send(ev->Sender, res.release());
@@ -786,7 +786,7 @@ public:
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
                 YDB_LOG_PDISK_MOCK(PRI_NOTICE, "received TEvChunkReserve",
-                    {"Marker", "PDM09"},
+                    {"marker", "PDM09"},
                     {"Msg", msg->ToString()},
                     {"Error", "no free chunks"});
                 res->Status = NKikimrProto::OUT_OF_SPACE;
@@ -794,7 +794,7 @@ public:
                 res->ErrorReason = "no free chunks";
             } else {
                 YDB_LOG_PDISK_MOCK(PRI_DEBUG, "received TEvChunkReserve",
-                    {"Marker", "PDM07"},
+                    {"marker", "PDM07"},
                     {"Msg", msg->ToString()},
                     {"VDiskId", owner->VDiskId});
                 for (ui32 i = 0; i < msg->SizeChunks; ++i) {
@@ -802,7 +802,7 @@ public:
                 }
                 res->StatusFlags = GetStatusFlags();
                 YDB_LOG_PDISK_MOCK(PRI_DEBUG, "sending TEvChunkReserveResult",
-                    {"Marker", "PDM10"},
+                    {"marker", "PDM10"},
                     {"Msg", res->ToString()});
             }
         }
@@ -815,7 +815,7 @@ public:
             msg->Cookie, GetStatusFlags(), TString());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "received TEvChunkRead",
-                {"Marker", "PDM13"},
+                {"marker", "PDM13"},
                 {"Msg", msg->ToString()},
                 {"VDiskId", owner->VDiskId});
             Y_VERIFY_S(owner->ReservedChunks.count(msg->ChunkIdx) || owner->CommittedChunks.count(msg->ChunkIdx),
@@ -871,7 +871,7 @@ public:
                 res->Data.Commit();
             }
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "sending TEvChunkReadResult",
-                {"Marker", "PDM14"},
+                {"marker", "PDM14"},
                 {"Msg", res->ToString()});
         }
         Send(ev->Sender, res.release());
@@ -884,7 +884,7 @@ public:
             GetStatusFlags(), TString());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "received TEvChunkWrite",
-                {"Marker", "PDM15"},
+                {"marker", "PDM15"},
                 {"Msg", msg->ToString()},
                 {"VDiskId", owner->VDiskId});
             if (!msg->ChunkIdx) { // allocate chunk
@@ -952,7 +952,7 @@ public:
                 }
             }
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "received TEvChunkWriteResult",
-                {"Marker", "PDM16"},
+                {"marker", "PDM16"},
                 {"Msg", res->ToString()});
         }
         Send(ev->Sender, res.release());
@@ -1056,7 +1056,7 @@ public:
     void Handle(NPDisk::TEvHarakiri::TPtr ev) {
         auto *msg = ev->Get();
         YDB_LOG_PDISK_MOCK(PRI_INFO, "received TEvHarakiri",
-            {"Marker", "PDM18"},
+            {"marker", "PDM18"},
             {"Msg", msg->ToString()});
 
         TString errorReason = "";

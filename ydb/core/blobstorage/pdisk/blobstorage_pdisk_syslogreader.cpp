@@ -324,7 +324,7 @@ void TSysLogReader::FindTheBestRecord() {
         }
     }
     YDB_LOG_P_LOG(PRI_INFO, "SysLogReader found the best record",
-        {"Marker", "BPD01"},
+        {"marker", "BPD01"},
         {"BestRecordFirstOffset", BestRecordFirstOffset},
         {"BestRecordLastOffset", BestRecordLastOffset},
         {"BestNonce", BestNonce});
@@ -395,7 +395,7 @@ void TSysLogReader::PrepareResult() {
 void TSysLogReader::Reply() {
     if (!IsReplied) {
         YDB_LOG_P_LOG(PRI_DEBUG, Result->ToString(),
-            {"Marker", "BPD01"});
+            {"marker", "BPD01"});
         PCtx->ActorSystem->Send(PCtx->PDiskActor, Result.Release());
         IsReplied = true;
     }
@@ -411,7 +411,7 @@ bool TSysLogReader::VerboseCheck(bool condition, const char *desctiption) {
             DumpDebugInfo(str, true);
             Result->ErrorReason = str.Str();
             YDB_LOG_P_LOG(PRI_ERROR, "SysLogRead check failed",
-                {"Marker", "BPD01"},
+                {"marker", "BPD01"},
                 {"Result", Result->ToString()});
             Reply();
         }

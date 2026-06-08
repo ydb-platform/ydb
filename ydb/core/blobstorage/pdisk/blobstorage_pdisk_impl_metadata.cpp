@@ -108,7 +108,7 @@ namespace NKikimr::NPDisk {
                 auto& [key, buffer] = WriteQueue.front();
                 const ui64 writeOffset = PDisk->Format.Offset(key.ChunkIdx, key.OffsetInSectors);
                 YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteMetadata::IssueQuery",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Buffer.size", buffer.size()},
                     {"WriteOffset", writeOffset},
                     {"ChunkIdx", key.ChunkIdx},
@@ -118,7 +118,7 @@ namespace NKikimr::NPDisk {
 
             void Exec(TActorSystem *actorSystem) override {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteMetadata::Exec",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Result", Result});
                 Y_VERIFY_S(!WriteQueue.empty(), PDisk->PCtx->PDiskLogPrefix);
                 WriteQueue.pop_front();
@@ -236,7 +236,7 @@ namespace NKikimr::NPDisk {
                 }
 
                 YDB_LOG_CTX_DEBUG(*PDisk->PCtx->ActorSystem, "TCompletionWriteUnformattedMetadata::IssueQuery",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"FormatIndex", FormatIndex},
                     {"Payload.size", Payload.size()},
                     {"Offset", offset});
@@ -248,7 +248,7 @@ namespace NKikimr::NPDisk {
 
             void Exec(TActorSystem * actorSystem) override {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteUnformattedMetadata::Exec",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Result", Result},
                     {"FormatIndex", FormatIndex},
                     {"BadSectors", BadSectors},
@@ -323,7 +323,7 @@ namespace NKikimr::NPDisk {
         }
 
         YDB_LOG_P_LOG(PRI_DEBUG, "InitMetadata",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"MetadataChunks", FormatList(metadataChunks)});
     }
 
@@ -350,7 +350,7 @@ namespace NKikimr::NPDisk {
             const ui64 readOffset = Format.Offset(key.ChunkIdx, key.OffsetInSectors);
 
             YDB_LOG_P_LOG(PRI_DEBUG, "ReadMetadataIfNeeded: initiating read",
-                {"Marker", "BPD01"},
+                {"marker", "BPD01"},
                 {"ChunkIdx", key.ChunkIdx},
                 {"OffsetInSectors", key.OffsetInSectors},
                 {"ReadOffset", readOffset},
@@ -379,7 +379,7 @@ namespace NKikimr::NPDisk {
             [](std::monostate&) { Y_ABORT("incorrect case"); },
             [&](NMeta::TUnformatted&) {
                 YDB_LOG_P_LOG(PRI_DEBUG, "ProcessInitialReadMetadataResult (unformatted)",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"ErrorReason", request.ErrorReason},
                     {"Payload.size", request.Payload.size()});
 
@@ -398,7 +398,7 @@ namespace NKikimr::NPDisk {
                 --formatted.NumReadsInFlight;
 
                 YDB_LOG_P_LOG(PRI_DEBUG, "ProcessInitialReadMetadataResult (formatted)",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"ChunkIdx", request.Key.ChunkIdx},
                     {"OffsetInSectors", request.Key.OffsetInSectors},
                     {"ErrorReason", request.ErrorReason},
@@ -516,7 +516,7 @@ namespace NKikimr::NPDisk {
 
     void TPDisk::ProcessReadMetadata(std::unique_ptr<TRequestBase> req) {
         YDB_LOG_P_LOG(PRI_DEBUG, "ProcessReadMetadata: new request",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Sender", req->Sender},
             {"ScanInProgress", std::holds_alternative<NMeta::TScanInProgress>(Meta.StoredMetadata)},
             {"Requests.size", Meta.Requests.size()});
@@ -537,7 +537,7 @@ namespace NKikimr::NPDisk {
             [&](NMeta::TUnformatted&) { return std::nullopt; },
         }, Meta.State);
         YDB_LOG_P_LOG(PRI_DEBUG, "HandleNextReadMetadata",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Guid", guid},
             {"Sender", front->Sender},
             {"StoredMetadata", NMeta::ToString(&Meta.StoredMetadata)});
@@ -553,7 +553,7 @@ namespace NKikimr::NPDisk {
 
     void TPDisk::ProcessWriteMetadata(std::unique_ptr<TRequestBase> req) {
         YDB_LOG_P_LOG(PRI_DEBUG, "ProcessWriteMetadata: new request",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Sender", req->Sender},
             {"ScanInProgress", std::holds_alternative<NMeta::TScanInProgress>(Meta.StoredMetadata)},
             {"Requests.size", Meta.Requests.size()});
@@ -572,7 +572,7 @@ namespace NKikimr::NPDisk {
         Y_VERIFY_S(!Meta.WriteInFlight, PCtx->PDiskLogPrefix);
 
         YDB_LOG_P_LOG(PRI_DEBUG, "HandleNextWriteMetadata",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Metadata.size", write.Metadata.size()});
 
         std::visit(TOverloaded{
@@ -597,7 +597,7 @@ namespace NKikimr::NPDisk {
                 // check we have them enough
                 if (freeSlotKeys.size() < numSlotsRequired) {
                     YDB_LOG_P_LOG(PRI_ERROR, "ProcessWriteMetadata (formatted): not enough free slots",
-                        {"Marker", "BPD01"},
+                        {"marker", "BPD01"},
                         {"Required", numSlotsRequired},
                         {"Available", freeSlotKeys.size()});
                     PCtx->ActorSystem->Send(write.Sender, new TEvWriteMetadataResult(EPDiskMetadataOutcome::ERROR, Format.Guid));
@@ -660,7 +660,7 @@ namespace NKikimr::NPDisk {
 
                 if (endOffset < bytesToWrite + FormatSectorSize * ReplicationFactor) { // way too large metadata
                     YDB_LOG_P_LOG(PRI_ERROR, "ProcessWriteMetadata (unformatted): not enough free space",
-                        {"Marker", "BPD01"},
+                        {"marker", "BPD01"},
                         {"EndOffset", endOffset},
                         {"RawDeviceSize", rawDeviceSize},
                         {"DeviceSizeInBytes", deviceSizeInBytes},
@@ -782,7 +782,7 @@ namespace NKikimr::NPDisk {
 
     bool TPDisk::WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format) {
         YDB_LOG_P_LOG(PRI_DEBUG, "WriteMetadataSync: transferring metadata",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Metadata.size", metadata.size()});
 
         // calculate number of slots required to store provided meta

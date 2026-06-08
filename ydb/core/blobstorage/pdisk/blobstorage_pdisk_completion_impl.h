@@ -149,7 +149,7 @@ public:
         Span.Event("PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
         YDB_LOG_CTX_COMP_DEBUG(*actorSystem, BS_PDISK, "TCompletionChunkWrite::Exec",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"DiskId", PDiskId},
             {"ReqId", ReqId},
             {"Event", Event->ToString()},

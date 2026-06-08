@@ -191,7 +191,7 @@ public:
     [[nodiscard]] TReq* CreateFromEvPtr(TEvPtr &ev, double *burstMs = nullptr) {
         auto& sender = ev->Sender;
         YDB_LOG_P_LOG(PRI_DEBUG, "CreateReqFromEv",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"ev", ToString(ev)},
             {"Sender", sender.LocalId()},
             {"ReqId", AtomicGet(LastReqId)});
@@ -204,7 +204,7 @@ public:
     template<typename TReq, typename TEv>
     [[nodiscard]] TReq* CreateFromEv(TEv &&ev, const TActorId &sender, ui64 cookie = 0, double *burstMs = nullptr) {
         YDB_LOG_P_LOG(PRI_DEBUG, "CreateReqFromEv with sender",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"ev", ToString(ev)},
             {"Sender", sender.LocalId()},
             {"ReqId", AtomicGet(LastReqId)});
@@ -217,7 +217,7 @@ public:
     template<typename TReq, typename... TArgs>
     [[nodiscard]] TReq* CreateFromArgs(TArgs&&... args) {
         YDB_LOG_P_LOG(PRI_DEBUG, "CreateReqFromArgs",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Req", TypeName<TReq>()},
             {"ReqId", AtomicGet(LastReqId)});
         auto req = MakeHolder<TReq>(std::forward<TArgs>(args)..., AtomicIncrement(LastReqId));
@@ -238,7 +238,7 @@ public:
 
         TReqId reqId(TReqId::LogWrite, AtomicIncrement(LastReqId));
         YDB_LOG_P_LOG(PRI_DEBUG, "CreateLogWrite",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Event", ev.ToString()},
             {"Sender", sender.LocalId()},
             {"ReqId", reqId.Id});
@@ -258,7 +258,7 @@ public:
 
         TReqId reqId(TReqId::ChunkRead, AtomicIncrement(LastReqId));
         YDB_LOG_P_LOG(PRI_DEBUG, "CreateChunkRead",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Event", ev.ToString()},
             {"Sender", sender.LocalId()},
             {"ReqId", reqId.Id});
@@ -284,7 +284,7 @@ public:
 
         TReqId reqId(TReqId::ChunkWrite, AtomicIncrement(LastReqId));
         YDB_LOG_P_LOG(PRI_DEBUG, "CreateChunkWrite",
-            {"Marker", "BPD01"},
+            {"marker", "BPD01"},
             {"Event", ev.ToString()},
             {"Sender", sender.LocalId()},
             {"ReqId", reqId.Id});

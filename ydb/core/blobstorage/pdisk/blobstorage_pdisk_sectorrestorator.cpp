@@ -47,7 +47,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
         if (!isCrcOk) {
             if (PCtx) {
                 YDB_LOG_P_LOG(PRI_INFO, " Bad hash",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"OwnerId", owner},
                     {"IsErasureEncode", IsErasureEncode},
                     {"ErasureDataParts", ErasureDataParts},
@@ -78,7 +78,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
             if (sectorFooterNonce <= lastNonce || sectorFooterNonce <= maxNonce) {
                 if (PCtx) {
                     YDB_LOG_P_LOG(PRI_WARN, "Sector nonce reordering",
-                        {"Marker", "BPD01"},
+                        {"marker", "BPD01"},
                         {"OwnerId", owner},
                         {"IsErasureEncode", IsErasureEncode},
                         {"ErasureDataParts", ErasureDataParts},
@@ -104,7 +104,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
         if (!IsTrippleCopy && GoodSectorCount == ErasureDataParts) {
             if (PCtx) {
                 YDB_LOG_P_LOG(PRI_WARN, "Restoring a sector",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"OwnerId", owner},
                     {"ErasureDataParts", ErasureDataParts},
                     {"LastBadIdx", LastBadIdx},
@@ -162,7 +162,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                     ui8 *goodSector = source + LastGoodIdx * Format.SectorSize;
                     if (PCtx) {
                         YDB_LOG_P_LOG(PRI_WARN, "Restoring trippleCopy sector",
-                            {"Marker", "BPD01"},
+                            {"marker", "BPD01"},
                             {"Sector", i},
                             {"OwnerId", owner},
                             {"GoodSectorCount", GoodSectorCount},

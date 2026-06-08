@@ -266,7 +266,7 @@ class TRealBlockDevice : public IBlockDevice {
                         return;
                     } else {
                         YDB_LOG_P_LOG(PRI_WARN, "Exceed 1 second deadline in SubmitThreadQueue",
-                            {"Marker", "BPD01"},
+                            {"marker", "BPD01"},
                             {"PDiskId", Device.PCtx->PDiskId},
                             {"Path", Device.Path},
                             {"TotalTimeInWaitingSec", NHPTimer::GetSeconds(HPNow() - start)},
@@ -448,7 +448,7 @@ class TRealBlockDevice : public IBlockDevice {
                         << " size# " << op->GetSize()
                         << " Result# " << result);
                 YDB_LOG_P_LOG(PRI_ERROR, "IAsyncIoOperation error",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Reason", action->ErrorReason});
                 ++*Device.Mon.DeviceIoErrors;
             }
@@ -507,7 +507,7 @@ class TRealBlockDevice : public IBlockDevice {
                     LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), duration, opSize);
                 }
                 YDB_LOG_P_LOG(PRI_TRACE, "iop is done",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Type", op->GetType()},
                     {"Duration", duration},
                     {"Offset", op->GetOffset()},
@@ -784,7 +784,7 @@ class TRealBlockDevice : public IBlockDevice {
                             *Device.Mon.DeviceEstimatedCostNs += completion->CostNs;
                             if (Device.PCtx->ActorSystem && Device.IsTrimEnabled) {
                                 YDB_LOG_P_LOG(PRI_DEBUG, "trim is done",
-                                    {"Marker", "BPD01"},
+                                    {"marker", "BPD01"},
                                     {"ReqId", op->GetReqId()},
                                     {"TrimDurationMs", HPMilliSeconds(endTime - startTime)},
                                     {"Path", Device.Path},
@@ -936,7 +936,7 @@ protected:
         //IoContext->InitializeMonitoring(Mon.DeviceOperationPoolTotalAllocations, Mon.DeviceOperationPoolFreeObjectsMin);
         if (!LastWarning.empty() && PCtx->ActorSystem) {
             YDB_LOG_P_LOG(PRI_WARN, LastWarning,
-                {"Marker", "BPD01"});
+                {"marker", "BPD01"});
         }
         if (IsFileOpened) {
             IoContext->SetActorSystem(PCtx->ActorSystem);
@@ -1166,12 +1166,12 @@ protected:
             TStringStream details;
             if (DriveData = ::NKikimr::NPDisk::GetDriveData(Path, &details)) {
                 YDB_LOG_P_LOG(PRI_NOTICE, "Gathered DriveData",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Data", DriveData->ToString(false)},
                     {"Details", details.Str()});
             } else {
                 YDB_LOG_P_LOG(PRI_WARN, "Error on gathering DriveData",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Details", details.Str()});
             }
         }
@@ -1184,7 +1184,7 @@ protected:
             EWriteCacheResult res = NKikimr::NPDisk::SetWriteCache(*handle, Path, isEnable, &details);
             if (res != WriteCacheResultOk) {
                 YDB_LOG_P_LOG(PRI_WARN, "Error on setting write cache",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"Details", details.Str()});
             }
         }
@@ -1305,7 +1305,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
         void Exec(TActorSystem *actorSystem) override {
             if (actorSystem) {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "Exec TCachedReadCompletion",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"ReqId", ReqId},
                     {"Offset", Offset});
             }
@@ -1315,7 +1315,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
         void Release(TActorSystem *actorSystem) override {
             if (actorSystem) {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "Release TCachedReadCompletion",
-                    {"Marker", "BPD01"},
+                    {"marker", "BPD01"},
                     {"ReqId", ReqId},
                     {"Offset", Offset});
             }
@@ -1419,7 +1419,7 @@ public:
                 if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
                     // TODO: split buffer if crossing chunk boundary instead of completely discarding it
                     YDB_LOG_P_LOG(PRI_INFO, "Skip caching log read due to chunk boundary crossing",
-                        {"Marker", "BPD01"});
+                        {"marker", "BPD01"});
                 } else {
                     if (Cache.Size() >= MaxCount) {
                         Cache.Pop();

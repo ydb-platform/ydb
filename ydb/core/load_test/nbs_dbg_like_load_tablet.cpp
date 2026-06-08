@@ -1019,9 +1019,25 @@ public:
             }
         }
 
-        // If we lost any rows or the config is malformed, force UNINITIALIZED;
-        // operator must re-Create.
-        if (malformedConfig || !DroppedDbgIndices.empty()) {
+        // Verify the surviving rows form a contiguous 0..N-1 sequence. A gap
+        // (e.g. rows 0, 1, 3 with row 2 missing) would crash SpawnDbgActors
+        // via Y_DEBUG_ABORT_UNLESS, so we must catch it here and roll back
+        // gracefully instead. Since DbgIndex is the schema key the range scan
+        // returns rows in order, so a single position check suffices.
+        bool hasGap = false;
+        for (ui32 i = 0; i < Dbgs.size(); ++i) {
+            if (Dbgs[i].DbgIndex != i) {
+                LOG_E("Gap in loaded Dbgs at position " << i
+                    << " (DbgIndex=" << Dbgs[i].DbgIndex
+                    << "); rolling back to UNINITIALIZED so the user can re-Create.");
+                hasGap = true;
+                break;
+            }
+        }
+
+        // If we lost any rows, found a gap, or the config is malformed, force
+        // UNINITIALIZED; operator must re-Create.
+        if (hasGap || malformedConfig || !DroppedDbgIndices.empty()) {
             Self->AllocConfigSerialized.clear();
             Self->AllocConfig.Clear();
             Self->Dbgs.clear();
@@ -1504,8 +1520,9 @@ void TNbsDbgLikeLoadTablet::SpawnDbgActors(const TActorContext& ctx) {
         // Routing maps address -> position in DbgActors[], while workers identify
         // themselves by logical DbgIndex and GetSummary indexes DbgPbConnected by it.
         // All three agree only because alloc assigns DbgIndex = position and
-        // TTxLoadEverything rolls back to UNINITIALIZED on any gap. Enforce it here.
-        Y_ABORT_UNLESS(Dbgs[i].DbgIndex == i);
+        // TTxLoadEverything rolls back to UNINITIALIZED on any gap. That path
+        // guarantees contiguousness before we reach here; verify in debug builds.
+        Y_DEBUG_ABORT_UNLESS(Dbgs[i].DbgIndex == i);
         DbgActors[i] = ctx.Register(new TNbsDbgLikeActor(
             SelfId(), Dbgs[i].DbgIndex, static_cast<ui32>(Dbgs.size()),
             Generation(), AllocConfig, Dbgs[i], Counters));
@@ -2156,7 +2173,9 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         return;
     }
 
-    if (TotalLsns() >= TabletConfig.GetMaxInflightLsns() / Max(1u, NumDbgsTotal)) {
+    const ui64 maxInflight = TabletConfig.GetMaxInflightLsns();
+    const ui64 denom = Max<ui32>(1, NumDbgsTotal);
+    if (maxInflight == 0 || TotalLsns() >= Max<ui64>(1, maxInflight / denom)) {
         if (RootCnt.Lsns.BackpressureHits) {
             RootCnt.Lsns.BackpressureHits->Inc();
         }

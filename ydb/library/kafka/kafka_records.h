@@ -424,7 +424,7 @@ public:
 
     bool operator==(const TKafkaRecordBatch& other) const = default;
 
-    ECompressionType CompressionType();
+    ECompressionType CompressionType() const;
     ETimestampType TimestampType();
     bool Transactional();
     bool ControlBatch();
@@ -557,6 +557,8 @@ public:
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
     bool operator==(const TKafkaRecordV0& other) const = default;
+
+    ECompressionType CompressionType() const;
 };
 
 class TKafkaRecordBatchV0: public TMessage {

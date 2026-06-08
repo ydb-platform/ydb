@@ -105,13 +105,9 @@ public:
             << "AND QueryType IS NOT NULL AND QueryType != '' "
             << "AND CompilationDurationMs < " << MaxCompilationDurationMs;
 
-        // Build the inner per-node source. We must NOT use NodeId IN (...) on a sysview:
-        // YQL collapses it into one [min..max] range, and compile_cache.cpp then filters
-        // every proxy node by that range, hitting nodes we did not intend to query
-        // (and breaking MaxNodesToRequest semantics on sparse selections).
-        // UNION ALL of point reads (WHERE NodeId = X) keeps each scan as a single-cell
-        // range, so the sysview talks only to the nodes we actually picked.
-        // Precondition: NodeIds is non-empty (enforced by TKqpCompileCacheWarmupActor::StartFetch).
+        // NodeId IN (...) on this sysview collapses into one [min..max] range scan,
+        // hitting every proxy node within that range. UNION ALL of single-key reads
+        // keeps each scan bound to one node and honours MaxNodesToRequest.
         const ui32 nodesToQuery = MaxNodesToRequest > 0
             ? std::min<ui32>(MaxNodesToRequest, NodeIds.size())
             : NodeIds.size();
@@ -198,11 +194,7 @@ public:
     void OnRunQuery() override {
         const TString tablePath = TStringBuilder() << "`" << Database << "/.sys/compile_cache_queries`";
 
-        // Same reasoning as TFetchCacheActor: avoid NodeId IN (...) on a sysview because
-        // YQL collapses it into [min..max] and compile_cache.cpp ends up scanning every
-        // proxy node within that range. UNION ALL of point reads keeps each scan bound
-        // to a single node.
-        // Precondition: NodeIds is non-empty (enforced by TKqpCompileCacheWarmupActor::StartFetch).
+        // See TFetchCacheActor::OnRunQuery for why UNION ALL instead of NodeId IN (...).
         const ui32 nodesToQuery = MaxNodesToRequest > 0
             ? std::min<ui32>(MaxNodesToRequest, NodeIds.size())
             : NodeIds.size();
@@ -476,9 +468,6 @@ private:
 
     void StartFetch() {
         if (NodeIds.empty()) {
-            // Should not happen on the happy path: TEvStartWarmup is only sent when
-            // KqpProxy has discovered peers, and HandleSoftDeadlineInTopology now skips
-            // instead of clearing NodeIds. Treat as a soft skip rather than crashing.
             LOG_W("StartFetch called with empty NodeIds, skipping warmup");
             Complete(true, "Skipped: empty NodeIds");
             return;
@@ -722,12 +711,11 @@ private:
     }
 
     void HandleSoftDeadlineInTopology() {
-        // Warmup needs peer NodeIds to issue point reads to /.sys/compile_cache_queries.
-        // Without topology we'd have to fan out to every proxy in the cluster (huge on
-        // large clusters); reading only our own node is useless on warm restart, where
-        // the local cache is what we're trying to repopulate. Skip instead.
+        // Without peer NodeIds we'd either fan out to every proxy in the cluster
+        // or read only self (useless on warm restart).
         LOG_I("Soft deadline reached while waiting for topology, skipping warmup");
-        Complete(true, "Skipped: topology not delivered before soft deadline"    }
+        Complete(true, "Skipped: topology not delivered before soft deadline");
+    }
 
     void HandlePoison() {
         LOG_D("Received poison, stop warmup");

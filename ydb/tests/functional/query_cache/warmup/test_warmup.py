@@ -176,6 +176,40 @@ class CompileCacheView:
             "saved_ms": counters.get("Warmup/SavedCompileMs", 0),
         }
 
+    @staticmethod
+    def get_peer_scan_warnings(node):
+        """Read CompileCacheView/PeerScanWarnings from the node's monitoring port."""
+        try:
+            url = f"http://localhost:{node.mon_port}/counters/counters=kqp/json"
+            response = requests.get(url, timeout=5)
+            if response.status_code != 200:
+                return 0
+            for sensor in response.json().get("sensors", []):
+                if sensor.get("labels", {}).get("sensor") == "CompileCacheView/PeerScanWarnings":
+                    return sensor.get("value", 0)
+        except Exception as e:
+            logger.warning("Failed to read PeerScanWarnings from node %d: %s", node.node_id, e)
+        return 0
+
+    def trigger_compile_cache_scan(self, node, timeout_seconds=30):
+        """Run a SELECT against compile_cache_queries sysview from the given node."""
+        driver = ydb.Driver(endpoint=f"grpc://localhost:{node.port}", database=self.database)
+        driver.wait(timeout=10)
+        try:
+            pool = ydb.SessionPool(driver)
+            try:
+                def _do(session):
+                    sql = f"SELECT NodeId, Query FROM `{self.database}/.sys/compile_cache_queries`"
+                    return session.transaction(ydb.SerializableReadWrite()).execute(
+                        sql, commit_tx=True,
+                        settings=ydb.BaseRequestSettings().with_timeout(timeout_seconds),
+                    )
+                pool.retry_operation_sync(_do)
+            finally:
+                pool.stop()
+        finally:
+            driver.stop()
+
     @classmethod
     def wait_for_warmup_finished(cls, node, timeout=60):
         """Poll warmup counters until compilation stabilizes."""
@@ -647,3 +681,57 @@ class TestWarmupCounters:
             "not match any warmup-populated entry, while the window is still open. "
             f"after_hit={after_hit}, after_miss={after_miss}"
         )
+
+
+class TestCompileCacheViewPeerWarnings:
+    """Wiring sanity check for CompileCacheView/PeerScanWarnings."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.config = _make_warmup_config(nodes=3)
+        cls.cluster = kikimr_cluster_factory(cls.config)
+        cls.cluster.start()
+        cls.cache = CompileCacheView(cls.cluster)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, "cluster"):
+            cls.cluster.stop()
+
+    def test_peer_scan_warnings_increment_on_dead_peer(self):
+        all_node_ids = sorted(self.cluster.nodes.keys())
+        live_node_id = all_node_ids[0]
+        dead_node_id = all_node_ids[-1]
+        live_node = self.cluster.nodes[live_node_id]
+        dead_node = self.cluster.nodes[dead_node_id]
+
+        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
+        time.sleep(2)
+
+        baseline = CompileCacheView.get_peer_scan_warnings(live_node)
+        logger.info("[PeerWarnings] baseline on node %d: %d", live_node_id, baseline)
+
+        logger.info("[PeerWarnings] stopping node %d to simulate dead peer", dead_node_id)
+        dead_node.stop()
+        # Give interconnect time to publish the disconnect; without this the
+        # first scan falls through to NodeRequestTimeout (10s).
+        time.sleep(3)
+
+        try:
+            deadline = time.time() + 60
+            final = baseline
+            while time.time() < deadline:
+                self.cache.trigger_compile_cache_scan(live_node, timeout_seconds=30)
+                final = CompileCacheView.get_peer_scan_warnings(live_node)
+                logger.info("[PeerWarnings] after scan: %d (baseline %d)", final, baseline)
+                if final > baseline:
+                    break
+                time.sleep(2)
+
+            assert final > baseline, (
+                "CompileCacheView/PeerScanWarnings must increment when a peer is "
+                f"unreachable; baseline={baseline}, final={final}"
+            )
+        finally:
+            dead_node.start()
+            time.sleep(3)

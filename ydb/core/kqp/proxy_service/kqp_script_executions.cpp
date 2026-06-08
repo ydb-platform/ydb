@@ -2530,9 +2530,6 @@ private:
                 StartLeaseChecking(event.RunScriptActorId, event.LeaseGeneration);
             }
         } else {
-            // Do not re-trigger finalization from GetOperation: it is already handled by
-            // TKqpFinalizeScriptService after query completion. Re-triggering caused duplicate
-            // finalize requests and spurious EXEC_STATUS_ABORTED during S3 atomic commit.
             Reply();
         }
     }

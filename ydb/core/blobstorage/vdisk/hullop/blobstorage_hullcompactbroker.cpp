@@ -412,7 +412,7 @@ namespace NKikimr {
             }
 
             if (!longWorkingCompactions.empty()) {
-                YDB_LOG_CTX_WARN(ctx, "Long working compactions detected: Compactions# [",
+                YDB_LOG_CTX_WARN(ctx, "Long working compactions detected",
                     {"Count", longWorkingCompactions.size()},
                     {"longWaitingCompactions", JoinSeq(", ", longWorkingCompactions)});
             }

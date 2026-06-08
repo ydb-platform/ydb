@@ -293,7 +293,7 @@ namespace NKikimr::NStorage {
         if (nodesToReplace.size() == 1 && needReconfigSS != ReconfigType::FULL && needReconfigSSB != ReconfigType::FULL && needReconfigSB != ReconfigType::FULL) {
             YDB_LOG_DEBUG("Need to reconfig one node to",
                 {"marker", "NW100"},
-                {"first", nodesToReplace.begin()->first},
+                {"node", nodesToReplace.begin()->first},
                 {"to_node", std::get<2>(nodesToReplace.begin()->second)},
                 {"CurrentConfig", currentConfig},
                 {"TargetConfig", targetConfig});

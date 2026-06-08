@@ -36,6 +36,16 @@ void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TTableInfo>(pathId, ss->Tables, Tables);
 }
 
+void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId) {
+    Y_ABORT_UNLESS(!ss->ColumnTables.contains(pathId));
+    ColumnTables.emplace(pathId, nullptr);
+}
+
+void TMemoryChanges::GrabColumnTable(TSchemeShard* ss, const TPathId& pathId) {
+    Y_ABORT_UNLESS(ss->ColumnTables.contains(pathId));
+    ColumnTables.emplace(pathId, ss->ColumnTables.GetVerified(pathId).GetPtr());
+}
+
 void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
     Shards.emplace(shardId, nullptr);
 }
@@ -263,6 +273,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->Tables.erase(id);
         }
         Tables.pop();
+    }
+
+    while (ColumnTables) {
+        const auto& [id, elem] = ColumnTables.top();
+        // Drop current entry first (if any), then re-create with the saved value (if any)
+        ss->ColumnTables.Drop(id);
+        if (elem) {
+            ss->ColumnTables.BuildNew(id, elem);
+        }
+        ColumnTables.pop();
     }
 
     while (Shards) {

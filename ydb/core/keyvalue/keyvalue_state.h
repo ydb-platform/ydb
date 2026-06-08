@@ -301,8 +301,12 @@ protected:
     TMemorizableControlWrapper ReadRequestsInFlightLimit;
     TControlWrapper UsePayload_Base;
     TMemorizableControlWrapper UsePayload;
+    TControlWrapper RejectNonExistentStorageChannel_Base;
+    TMemorizableControlWrapper RejectNonExistentStorageChannel;
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
+
+    bool RejectNonExistentStorageChannelEnabled(const TActorContext& ctx) const;
 
 public:
     TKeyValueState();
@@ -574,7 +578,7 @@ public:
     TPrepareResult PrepareOneCmd(const TCommand::Concat &request, THolder<TIntermediate> &intermediate);
     TPrepareResult PrepareOneCmd(const TCommand::CopyRange &request, THolder<TIntermediate> &intermediate);
     TPrepareResult PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info, const TEvKeyValue::TEvExecuteTransaction& ev);
+        const TTabletStorageInfo *info, const TActorContext &ctx, const TEvKeyValue::TEvExecuteTransaction& ev);
     TPrepareResult PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate,
         const TActorContext &ctx);
     TPrepareResult PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate,
@@ -583,7 +587,8 @@ public:
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx,
         const TEvKeyValue::TEvExecuteTransaction& ev);
     TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
-        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info);
+        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info,
+        const TActorContext& ctx);
     void ReplyError(const TActorContext &ctx, TString errorDescription,
         NMsgBusProxy::EResponseStatus oldStatus, NKikimrKeyValue::Statuses::ReplyStatus newStatus,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info = nullptr);
@@ -637,7 +642,7 @@ public:
     bool PrepareExecuteTransactionRequest(const TActorContext &ctx, TEvKeyValue::TEvExecuteTransaction::TPtr &ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     TPrepareResult PrepareOneGetStatus(TIntermediate::TGetStatus &cmd, ui64 publicStorageChannel,
-        const TTabletStorageInfo *info);
+        const TTabletStorageInfo *info, const TActorContext& ctx);
     bool PrepareGetStorageChannelStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStorageChannelStatus::TPtr &ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,

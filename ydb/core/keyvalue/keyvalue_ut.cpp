@@ -156,6 +156,13 @@ void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
     UNIT_ASSERT(isEnd);
 }
 
+void EnableRejectNonExistentStorageChannel(TTestContext &tc) {
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper rejectNonExistentStorageChannel(0, 0, 1);
+    TControlBoard::RegisterSharedControl(rejectNonExistentStorageChannel, icb->KeyValueVolumeControls.RejectNonExistentStorageChannel);
+    rejectNonExistentStorageChannel = 1;
+}
+
 void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
@@ -1574,7 +1581,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
                 values.push_back(value.Str());
             }
         }
-        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::MAIN,
+        CmdWrite(keys, values, NKikimrClient::TKeyValueRequest::EXTRA9,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
 
         TDeque<TString> expectedKeys;
@@ -1621,7 +1628,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOkNewApi) {
             }
         }
 
-        ExecuteWrite(tc, pairs, 0, 4, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteWrite(tc, pairs, 0, 11, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
 
         TDeque<TKeyValuePair> expectedPairs;
         for (ui32 itemIdx = 1; itemIdx < 4; ++itemIdx) {
@@ -2887,6 +2894,7 @@ Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsError) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
         activeZone = false;
 
         TAutoPtr<IEventHandle> handle;
@@ -2902,7 +2910,7 @@ Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsError) {
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
             result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
             UNIT_ASSERT(result);
-            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_INTERNALERROR);
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
             return true;
         });
     });
@@ -2915,8 +2923,9 @@ Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsErrorNewApi) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
 
-        ExecuteWrite<NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR>(tc, {{"key", "value"}}, 0, 5,
+        ExecuteWrite<NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST>(tc, {{"key", "value"}}, 0, 5,
             NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     });
 }
@@ -2928,6 +2937,7 @@ Y_UNIT_TEST(TestGetStatusNonExistentChannelReturnsError) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
         activeZone = false;
 
         TAutoPtr<IEventHandle> handle;
@@ -2941,7 +2951,7 @@ Y_UNIT_TEST(TestGetStatusNonExistentChannelReturnsError) {
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
             result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
             UNIT_ASSERT(result);
-            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_INTERNALERROR);
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
             return true;
         });
     });
@@ -2954,8 +2964,9 @@ Y_UNIT_TEST(TestGetStatusNonExistentChannelReturnsErrorNewApi) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
 
-        ExecuteGetStatus<NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR>(tc, {5}, 0);
+        ExecuteGetStatus<NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST>(tc, {5}, 0);
     });
 }
 

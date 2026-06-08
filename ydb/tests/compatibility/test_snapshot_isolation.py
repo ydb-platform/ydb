@@ -124,11 +124,11 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 )
 
                 with lock:
-                    counter[0] += 1
+                    exec_counter[0] += 1
             except Exception as e:
                 logger.warning("Updater [%s] error: %s", table_name, e)
 
-    def _pk_aggregator(self, table_name, result_table, agg_id, stop_event, counter, lock):
+    def _pk_aggregator(self, table_name, result_table, agg_id, stop_event, exec_counter, lock):
         """Reads a group-aligned PK range under snapshot isolation, computes the
         aggregate, and writes it to the result table (generating write conflicts
         when multiple threads share the same agg_id slot)."""
@@ -154,11 +154,11 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 with ydb.QuerySessionPool(self.driver) as pool:
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
                 with lock:
-                    counter[0] += 1
+                    exec_counter[0] += 1
             except Exception as e:
                 logger.warning("PK aggregator [%s] error: %s", table_name, e)
 
-    def _sec_idx_aggregator(self, result_table, agg_id, stop_event, counter, lock):
+    def _sec_idx_aggregator(self, result_table, agg_id, stop_event, exec_counter, lock):
         """Reads datashard_table via its secondary index under snapshot isolation.
         Invariant: every returned row must have int_val inside the filter range.
         A snapshot violation would allow the index shard to return stale PKs whose
@@ -187,11 +187,11 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 with ydb.QuerySessionPool(self.driver) as pool:
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
                 with lock:
-                    counter[0] += 1
+                    exec_counter[0] += 1
             except Exception as e:
                 logger.warning("Secondary index aggregator error: %s", e)
 
-    def _str_aggregator(self, table_name, result_table, agg_id, stop_event, counter, lock):
+    def _str_aggregator(self, table_name, result_table, agg_id, stop_event, exec_counter, lock):
         """Reads via a string-range filter under snapshot isolation.
         Same out-of-range invariant as the secondary index aggregator: str_val and
         int_val are always updated together, so a snapshot-consistent read must not
@@ -222,7 +222,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 with ydb.QuerySessionPool(self.driver) as pool:
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
                 with lock:
-                    counter[0] += 1
+                    exec_counter[0] += 1
             except Exception as e:
                 logger.warning("String aggregator [%s] error: %s", table_name, e)
 
@@ -261,17 +261,17 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # Progress tracking
     # -------------------------------------------------------------------------
 
-    def _wait_for_progress(self, counters, lock, min_per_counter=5, timeout=300):
+    def _wait_for_progress(self, exec_counters, lock, min_per_counter, timeout=300):
         baseline = {}
         with lock:
-            for name, c in counters.items():
+            for name, c in exec_counters.items():
                 baseline[name] = c[0]
         deadline = time.time() + timeout
         while time.time() < deadline:
             with lock:
                 done = all(
-                    counters[name][0] - baseline[name] >= min_per_counter
-                    for name in counters
+                    exec_counters[name][0] - baseline[name] >= min_per_counter
+                    for name in exec_counters
                 )
             if done:
                 return
@@ -290,14 +290,14 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
         stop_event = threading.Event()
         lock = threading.Lock()
-        counters = {}
+        exec_counters = {}
         threads = []
 
         def start(name, target, *args):
-            counters[name] = [0]
+            exec_counters[name] = [0]
             t = threading.Thread(
                 target=target,
-                args=(*args, stop_event, counters[name], lock),
+                args=(*args, stop_event, exec_counters[name], lock),
                 daemon=True,
             )
             threads.append(t)
@@ -306,17 +306,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         # --- Updaters (1 per table) ---
         start('ds_upd',  self._updater, 'datashard_table')
         start('col_upd', self._updater, 'column_table')
-
-        time.sleep(60)
-        stop_event.set()
-        for t in threads:
-            t.join(timeout=60)
-        res1 = self._execute("select sum(int_val) from datashard_table")
-        logger.warn(f"FFF1 {[rs.rows for rs in res1]}")
-        res2 = self._execute("select sum(int_val) from column_table")
-        logger.warn(f"FFF2 {[rs.rows for rs in res2]}")
-        logger.warn(f"FFF3 {counters}")
-        return
 
         # --- Datashard PK-range aggregators (2 threads, N_PK_SLOTS slots) ---
         for i in range(2):
@@ -343,7 +332,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
         try:
             for _ in self.roll():
-                self._wait_for_progress(counters, lock, min_per_counter=5)
+                self._wait_for_progress(exec_counters, lock, min_per_counter=5)
                 self.check_results('datashard_results')
                 self.check_results('column_results')
         finally:

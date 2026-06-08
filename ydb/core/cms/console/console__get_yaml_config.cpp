@@ -40,9 +40,7 @@ public:
         Response->Record.MutableResponse()->add_config(Self->MainYamlConfig);
 
         // Unknown/deprecated fields of the main config, cached at upload time.
-        for (const auto& field : Self->MainYamlConfigUnknownFields.GetFields()) {
-            *Response->Record.AddMainConfigUnknownFields() = field;
-        }
+        *Response->Record.MutableMainConfigUnknownFields() = Self->MainYamlConfigUnknownFields.GetFields();
 
         for (const auto& [database, config] : Self->DatabaseYamlConfigs) {
             auto& dbIdentity = *Response->Record.MutableResponse()->add_identity();

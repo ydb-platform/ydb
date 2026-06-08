@@ -1048,10 +1048,10 @@ protected:
         char* statePtr = nullptr;
         if (isNew) {
             // Copy the value to the specified arena page
-            keyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
-            memcpy(keyBuffer, tempKey, tempKeySize * sizeof(TUnboxedValuePod));
+            persistentKeyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
+            memcpy(persistentKeyBuffer, tempKey, tempKeySize * sizeof(TUnboxedValuePod));
             // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), keyBuffer);
-            *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = keyBuffer;
+            *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = persistentKeyBuffer;
         } else {
             persistentKeyBuffer = Map->GetKeyValue(mapIt);
         }

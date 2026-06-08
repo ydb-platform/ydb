@@ -316,6 +316,7 @@ LIMIT 1"""
         restart_node()
         self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
         expected_data = ['value2']
+        self.wait_completed_checkpoints(kikimr, path)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 

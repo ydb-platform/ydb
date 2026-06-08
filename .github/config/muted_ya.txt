@@ -16,6 +16,9 @@ ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.CreateExternalDataSourceAuthMethodIam
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.OffsetsAndStateRecoveryAfterQueryTextChange
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithTwoGroupByHopsOnSameKey
+ydb/core/kqp/ut/indexes/hybrid KqpHybridSearch.NamedIndexesOverride
+ydb/core/kqp/ut/indexes/hybrid KqpHybridSearch.SimilarityFunctionFuses
 ydb/core/kqp/ut/rbo KqpRboYql.Aggregation+ColumnStore
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless

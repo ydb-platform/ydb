@@ -85,31 +85,54 @@ namespace NKikimr {
                 }
             };
 
-            static TDuration GetRecalculationDelay(const TLevelSstPtr &p, TDuration calcPeriod) {
+            static ui64 GetSstId(const TLevelSstPtr &p) {
+                return p.SstPtr->AssignedSstId ? p.SstPtr->AssignedSstId : p.SstPtr->VolatileOrderId;
+            }
+
+            static TDuration GetInitialRecalculationAge(const TLevelSstPtr &p, TDuration calcPeriod) {
                 const ui64 calcPeriodUs = calcPeriod.MicroSeconds();
                 if (!calcPeriodUs) {
                     return calcPeriod;
                 }
 
-                const ui64 sstId = p.SstPtr->AssignedSstId ? p.SstPtr->AssignedSstId : p.SstPtr->VolatileOrderId;
-                const ui64 jitterUs = IntHash(sstId) % calcPeriodUs;
-                return TDuration::MicroSeconds(calcPeriodUs / 2 + jitterUs);
+                return TDuration::MicroSeconds(IntHash(GetSstId(p)) % calcPeriodUs);
             }
 
-            static TInstant GetNextCalculationTime(const TLevelSstPtr &p, TDuration calcPeriod) {
-                const TInstant time = p.SstPtr->StorageRatio.GetTime();
-                return time == TInstant::Zero()
-                    ? time
-                    : time + GetRecalculationDelay(p, calcPeriod);
+            static TInstant GetInitialCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
+                const TInstant createTime = p.SstPtr->Info.CTime;
+                if (createTime != TInstant::Zero() && startTime < createTime + calcPeriod) {
+                    return createTime;
+                }
+
+                return startTime - GetInitialRecalculationAge(p, calcPeriod);
             }
 
-            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec, TDuration calcPeriod) {
+            static TInstant GetCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
+                TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
+                if (!ratio) {
+                    return TInstant::Zero();
+                }
+
+                if (ratio->Time == TInstant::Zero()) {
+                    ratio = MakeIntrusive<TSstRatio>(*ratio);
+                    ratio->Time = GetInitialCalculationTime(p, startTime, calcPeriod);
+                    p.SstPtr->StorageRatio.Set(ratio);
+                }
+
+                return ratio->Time;
+            }
+
+            static TInstant GetNextCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
+                return GetCalculationTime(p, startTime, calcPeriod) + calcPeriod;
+            }
+
+            void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec, TInstant startTime, TDuration calcPeriod) {
                 vec.clear();
                 TSstIterator it(&LevelSnap.SliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
                     TLevelSstPtr p = it.Get();
-                    vec.push_back(TTimeSst(GetNextCalculationTime(p, calcPeriod), p));
+                    vec.push_back(TTimeSst(GetNextCalculationTime(p, startTime, calcPeriod), p));
                     it.Next();
                 }
                 Sort(vec.begin(), vec.end());
@@ -122,7 +145,7 @@ namespace NKikimr {
                 // order all ssts (including level 0) by storage ratio calculation time
                 TVector<TTimeSst> vec;
                 vec.reserve(1000u);
-                OrderSstByStorageRatioTime(vec, calcPeriod);
+                OrderSstByStorageRatioTime(vec, startTime, calcPeriod);
 
                 // calculate storage ratio, don't spend much time on it, skip ssts that are actualized
                 for (const auto &x : vec) {

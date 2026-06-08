@@ -169,7 +169,8 @@ struct TOpCounters {
     }
 };
 
-// `subsystem=request` (per-LSN end-to-end) counters.
+// `subsystem=request` counters. Completed/Failed/LatencyMs/WriteQuorumMs are
+// per-LSN end-to-end; FlushMs/EraseMs are per flush/erase request round-trip.
 struct TRequestCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr Completed;
     ::NMonitoring::TDynamicCounters::TCounterPtr Failed;
@@ -2568,7 +2569,7 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
 }
 
 void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
-    const ui32 syncGate = Max<ui32>(1, SyncGateThreshold() / Max(1u, NumDbgsTotal));
+    const ui32 syncGate = SyncGateThreshold();
     if (dbg.StateCount[static_cast<ui32>(EPBufferState::PBufferWritten)] < syncGate) {
         if (RootCnt.Lsns.SyncGateFlushBlocked) {
             RootCnt.Lsns.SyncGateFlushBlocked->Inc();
@@ -2745,15 +2746,6 @@ void TNbsDbgLikeActor::HandleSyncResult(
                 if (dbg.ReadyToErase.insert(lsn).second) {
                     dbg.PendingErase.push_back(lsn);
                 }
-                const ui64 flushMs = ((info.WrittenAt != NActors::TMonotonic::Zero())
-                    ? (now - info.WrittenAt).MilliSeconds()
-                    : (now - info.WriteStart).MilliSeconds());
-                if (RootCnt.Request.FlushMs) {
-                    RootCnt.Request.FlushMs->Collect(flushMs);
-                }
-                if (dbg.Counters.Request.FlushMs) {
-                    dbg.Counters.Request.FlushMs->Collect(flushMs);
-                }
             }
         } else {
             info.FlushRequested.reset(k);
@@ -2778,6 +2770,14 @@ void TNbsDbgLikeActor::HandleSyncResult(
     }
 
     const ui64 latencyMs = (now - sentAt).MilliSeconds();
+    // FlushMs samples the flush request round-trip, once per request (not per
+    // LSN in the batch), so its rate tracks flush requests rather than quorums.
+    if (RootCnt.Request.FlushMs) {
+        RootCnt.Request.FlushMs->Collect(latencyMs);
+    }
+    if (dbg.Counters.Request.FlushMs) {
+        dbg.Counters.Request.FlushMs->Collect(latencyMs);
+    }
     // Root Pending maintained in lockstep with per-DBG gauge (see
     // AccountReadRequest); HandlePoison reconciles in-flight ops.
     if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Flush)]; c.ReplyOk) {
@@ -2816,8 +2816,14 @@ void TNbsDbgLikeActor::HandleSyncResult(
 }
 
 void TNbsDbgLikeActor::DoErase(TPerDbgState& dbg) {
-    const ui32 syncGate = Max<ui32>(1, SyncGateThreshold() / Max(1u, NumDbgsTotal));
-    if (dbg.ReadyToErase.size() < syncGate) {
+    const ui32 syncGate = SyncGateThreshold();
+    // Drain-at-schedule gate: count LSNs flushed but not yet erase-requested
+    // (decremented at the Flushed->Erasing transition below), mirroring the
+    // flush gate (StateCount[PBufferWritten]) and the partition's MakeEraseHint
+    // which swaps ReadyToErase empty at schedule. ReadyToErase stays sticky
+    // until erase completes, so using it here keeps the gate open under high
+    // inflight and erases degrade to 1:1 with quorums.
+    if (dbg.StateCount[static_cast<ui32>(EPBufferState::PBufferFlushed)] < syncGate) {
         if (RootCnt.Lsns.SyncGateEraseBlocked) {
             RootCnt.Lsns.SyncGateEraseBlocked->Inc();
         }
@@ -2993,10 +2999,7 @@ void TNbsDbgLikeActor::HandleEraseResult(
         if (CanDropErasedLsn(info.EraseTarget, info.EraseConfirmed)) {
             EnterState(dbg, info.State, /*delta=*/-1);
             const NActors::TMonotonic ws = info.WriteStart;
-            const NActors::TMonotonic fa = info.FlushedAt;
             const ui64 fullMs = (now - ws).MilliSeconds();
-            const ui64 eraseMs = (fa != NActors::TMonotonic::Zero()
-                ? (now - fa).MilliSeconds() : 0);
             ClearInflightSlotIfMatches(dbg, info, lsn);
             dbg.Lsns.erase(it);
             --LsnsTotalAll;
@@ -3013,16 +3016,18 @@ void TNbsDbgLikeActor::HandleEraseResult(
             if (dbg.Counters.Request.LatencyMs) {
                 dbg.Counters.Request.LatencyMs->Collect(fullMs);
             }
-            if (eraseMs && RootCnt.Request.EraseMs) {
-                RootCnt.Request.EraseMs->Collect(eraseMs);
-            }
-            if (eraseMs && dbg.Counters.Request.EraseMs) {
-                dbg.Counters.Request.EraseMs->Collect(eraseMs);
-            }
         }
     }
 
     const ui64 latencyMs = (now - batchInfo.SentAt).MilliSeconds();
+    // EraseMs samples the erase request round-trip, once per request (not per
+    // LSN in the batch), so its rate tracks erase requests rather than quorums.
+    if (RootCnt.Request.EraseMs) {
+        RootCnt.Request.EraseMs->Collect(latencyMs);
+    }
+    if (dbg.Counters.Request.EraseMs) {
+        dbg.Counters.Request.EraseMs->Collect(latencyMs);
+    }
     // Root Pending maintained in lockstep with per-DBG gauge (see
     // AccountReadRequest); HandlePoison reconciles in-flight ops.
     if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Erase)]; c.ReplyOk) {

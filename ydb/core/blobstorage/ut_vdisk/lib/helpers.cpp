@@ -1827,7 +1827,7 @@ void CheckQueryResult(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NA
                 const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
                 const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
                 const TString& data = ev->Get()->GetBlobData(q).ConvertToString();
-                YDB_LOG_CTX_NOTICE(ctx, " @@@@@@@@@@ Status= LogoBlob= Data='' Cookie=",
+                YDB_LOG_CTX_NOTICE(ctx, "@@@@@@@@@@",
                     {"Status", NKikimrProto::EReplyStatus_Name(q.GetStatus()).data()},
                     {"LogoBlob", id.ToString().data()},
                     {"Data", LimitData(data).data()},
@@ -1864,7 +1864,7 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
             ingressRaw = ingress.Raw();
         }
         const TString& data = ev->Get()->GetBlobData(q).ConvertToString();
-        YDB_LOG_CTX_NOTICE(ctx, " @@@@@@@@@@ Status= LogoBlob= Data='' Ingress='' Raw=0xx",
+        YDB_LOG_CTX_NOTICE(ctx, "@@@@@@@@@@",
             {"Status", NKikimrProto::EReplyStatus_Name(q.GetStatus()).data()},
             {"LogoBlob", id.ToString().data()},
             {"Data", LimitData(data).data()},

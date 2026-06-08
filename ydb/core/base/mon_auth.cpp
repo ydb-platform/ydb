@@ -5,6 +5,7 @@
 
 #include <util/string/builder.h>
 
+#include <algorithm>
 #include <array>
 
 namespace NKikimr {
@@ -12,23 +13,6 @@ namespace NKikimr {
 namespace {
 
 const TString TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX = TStringBuilder() << "/" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
-
-enum class ETabletDevUiSecurePathPolicy {
-    AlwaysOn,   // Always uses `/app/secure`.
-    FlagGated,  // Uses `/app/secure` only when EnableTabletDevUiSecurePath is set.
-};
-
-struct TTabletDevUiSecurePathRule {
-    TTabletTypes::EType Type;
-    ETabletDevUiSecurePathPolicy Policy;
-};
-
-// Tablets that use the `/app/secure` DevUI path with their activation policy.
-constexpr std::array TABLET_DEV_UI_SECURE_PATH_RULES = {
-    TTabletDevUiSecurePathRule{TTabletTypes::DataShard,  ETabletDevUiSecurePathPolicy::AlwaysOn},
-    TTabletDevUiSecurePathRule{TTabletTypes::Hive,       ETabletDevUiSecurePathPolicy::AlwaysOn},
-    TTabletDevUiSecurePathRule{TTabletTypes::GraphShard, ETabletDevUiSecurePathPolicy::FlagGated},
-};
 
 } // namespace
 
@@ -39,19 +23,15 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
     return pathInfo.StartsWith(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX + "/");
 }
 
-bool UsesTabletDevUiSecurePath(TTabletTypes::EType type, bool enableSecurePathFlag) {
-    for (const auto& rule : TABLET_DEV_UI_SECURE_PATH_RULES) {
-        if (rule.Type != type) {
-            continue;
-        }
-        switch (rule.Policy) {
-            case ETabletDevUiSecurePathPolicy::AlwaysOn:
-                return true;
-            case ETabletDevUiSecurePathPolicy::FlagGated:
-                return enableSecurePathFlag;
-        }
-    }
-    return false;
+bool UsesTabletDevUiSecurePath(TTabletTypes::EType type) {
+    // Tablets that use the `/app/secure` DevUI path.
+    constexpr std::array tabletTypes = {
+        TTabletTypes::DataShard,
+        TTabletTypes::Hive,
+        TTabletTypes::GraphShard,
+    };
+
+    return std::contains(tabletTypes.begin(), tabletTypes.end(), type);
 }
 
 bool IsTabletDevUiAccessAllowed(

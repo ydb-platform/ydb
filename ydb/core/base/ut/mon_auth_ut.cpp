@@ -18,4 +18,13 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
         UNIT_ASSERT(!IsTabletDevUiSecurePath("app/secure"));
         UNIT_ASSERT(!IsTabletDevUiSecurePath("/x/app/secure"));
     }
+
+    Y_UNIT_TEST(UsesTabletDevUiSecurePath) {
+        UNIT_ASSERT(UsesTabletDevUiSecurePath(TTabletTypes::DataShard));
+        UNIT_ASSERT(UsesTabletDevUiSecurePath(TTabletTypes::Hive));
+        UNIT_ASSERT(UsesTabletDevUiSecurePath(TTabletTypes::GraphShard));
+
+        UNIT_ASSERT(!UsesTabletDevUiSecurePath(TTabletTypes::BSController));
+        UNIT_ASSERT(!UsesTabletDevUiSecurePath(TTabletTypes::Coordinator));
+    }
 }

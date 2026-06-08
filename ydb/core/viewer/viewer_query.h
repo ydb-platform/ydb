@@ -411,12 +411,9 @@ public:
         if (Timeout) {
             Deadline = TActivationContext::Now() + Timeout;
         }
-        if (Forget) {
-            QueryRequestStartTime = TActivationContext::Now();
-        }
         SendKpqProxyRequest();
         Become(&TThis::StateWork);
-        if (Timeout || KeepAlive || Long || Action == "fetch-long-query" || Forget) {
+        if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
             Schedule(GetWakeupPeriod(), new TEvents::TEvWakeup());
         }
         QueryStartTime = TActivationContext::Now();
@@ -1272,7 +1269,7 @@ private:
         if (Forget && QueryRequestStartTime && (now - QueryRequestStartTime >= ForgetAfter)) {
             return ReplyAndForgetQuery();
         }
-        if (!Forget && Timeout && (now - QueryStartTime > Timeout)) {
+        if (Timeout && (!Forget || !QueryRequestStartTime) && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
         if (!Forget && KeepAlive && (now - LastSendTime > KeepAlive)) {

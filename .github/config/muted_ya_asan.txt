@@ -114,6 +114,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueSetsContent
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueSetsDefaultTopicMessageRateLimit
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithAllAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithAllAttributes_TableImplementation
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithBadQueueName_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithEmptyName
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithSameNameAndDifferentParams
@@ -248,6 +249,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageInva
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageInvalidSize
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageNonExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageReturnToQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBadQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchLong
@@ -332,6 +334,7 @@ ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtl
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtlAndForgetAfter
+ydb/core/kqp/ut/service KqpWarmup.WarmupPgSyntaxQueriesSkipped
 ydb/core/kqp/ut/service KqpWarmup.WarmupQueryTypePropagation
 ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.BasicDataQuery
@@ -516,6 +519,8 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPar
 ydb/core/tx/columnshard/backup/iscan/ut IScan.MultiExport
 ydb/core/tx/columnshard/backup/iscan/ut unittest.sole chunk
 ydb/core/tx/columnshard/data_accessor/ut unittest.sole chunk
+ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPostingWithKeyRange
+ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable-WithForeign
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.MainTable
@@ -998,6 +1003,8 @@ ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_
 ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_export
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_solomon
+ydb/tests/stress/federated_queries/tests py3test.sole chunk
+ydb/tests/stress/federated_queries/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

@@ -1224,6 +1224,9 @@ private:
                         if (!exportInfo->DependencyTxIds.empty()) {
                             return;
                         }
+
+                        AllocateTxId(*exportInfo);
+                        return;
                     }
 
                     exportInfo->Issue = record.GetReason();

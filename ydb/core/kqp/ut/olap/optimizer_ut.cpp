@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(100000));
+        // csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(100000));
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
 
@@ -478,18 +478,33 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             return result;
         };
 
+        // CompactionLevel in the sys view is the portion's *persisted* level (the target level of
+        // the compaction that last rewrote it), not the optimizer's internal routing:
+        //   level 0  -> freshly inserted / accumulator (not yet promoted)
+        //   level 1  -> last-level compacted
+        //   level >=2 -> middle-level compacted
+        //
+        // Phase 1: aging disabled. Lay out data so that, after compaction settles, every level is
+        // populated -- overlapping per-region batches get merged into the last level, wide batches
+        // spanning all regions land on the middle levels, and a final fresh write stays at level 0.
+        //
+        // Keep accumulator_portion_size_limit at 1 so nothing is routed into the accumulator bucket
+        // (level-0 portions here are just freshly inserted ones), and last_level_compaction_portions
+        // large so the last level can merge everything into disjoint portions in a single task.
         alterPlanner(
             R"({"accumulator_portion_size_limit":1, )"
-            R"("portion_expected_size":50000, )"
-            R"("last_level_compaction_portions":4, )"
-            R"("last_level_compaction_bytes":1000000, )"
-            R"("last_level_candidate_portions_overload":2, )"
+            R"("last_level_compaction_portions":1000, )"
+            R"("last_level_compaction_bytes":67108864, )"
+            R"("last_level_candidate_portions_overload":8, )"
             R"("middle_level_trigger_height":2, )"
-            R"("middle_level_overload_height":2, )"
+            R"("middle_level_overload_height":4, )"
             R"("k":2, )"
             R"("aging_enabled":false})");
 
-        const ui64 regionStride = 1'000'000'000ULL; // 1e9 us between regions
+        // Regions: several overlapping batches per region (same key range). Within a region they
+        // overlap, so they become last-level candidates and get merged -> the resulting portions are
+        // rewritten with target level 1. Across regions the keys are disjoint (regionStride apart).
+        const ui64 regionStride = 1'000'000'000ULL;   // 1e9 us between regions
         const ui32 regionCount = 4;
         for (ui32 region = 0; region < regionCount; ++region) {
             const ui64 base = static_cast<ui64>(region) * regionStride;
@@ -500,6 +515,9 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
 
         Sleep(TDuration::Seconds(15));
 
+        // Wide batches: each one spans every region, so it overlaps many last-level portions and is
+        // routed to a middle level (then middle-compacted -> target level >= 2). Distinct per-batch
+        // offsets keep the keys unique (no fat keys), so later last-level merges stay splittable.
         const ui64 wideStep = (regionCount * regionStride) / 1000ULL;
         for (ui32 i = 0; i < 12; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, i, 1000, false, wideStep);
@@ -507,7 +525,11 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
 
         Sleep(TDuration::Seconds(20));
 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 999'999'999'999ULL, 100, false, 1);
+        // A fresh write right before the snapshot, in its own disjoint key range. It is not compacted
+        // yet (and, being non-overlapping, would not be compacted at all), so it reliably stays at
+        // level 0 for the phase-1 snapshot.
+        const ui64 freshBase = 10'000'000'000ULL;
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, freshBase, 100, false, 1);
         Sleep(TDuration::Seconds(1));
 
         {
@@ -528,15 +550,22 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
                 "Phase 1: expected portions at the last level (level 1), got 0");
         }
 
+        // Phase 2: enable aging. Every portion should age down to the last level, so the only level
+        // that remains populated is level 1. accumulator_portion_size_limit stays at 1 so nothing is
+        // parked in the accumulator while things settle.
         alterPlanner(
-            R"({"k":2, )"
+            R"({"accumulator_portion_size_limit":1, )"
+            R"("k":2, )"
             R"("aging_enabled":true, )"
             R"("aging_promote_time_seconds":1, )"
-            R"("aging_max_portion_promotion":100000})");
+            R"("aging_max_portion_promotion":1000000})");
 
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 0, 1000, false, 2'000'000'000ULL);
+        // Aging only re-buckets portions internally; it never rewrites a non-overlapping portion, so
+        // the disjoint fresh portion above would stay stuck at its persisted level 0. Give it an
+        // overlapping neighbour so it becomes a last-level candidate and is merged down to level 1.
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, freshBase, 100, false, 1);
 
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(20));
 
         {
             auto byLevel = countByLevel();

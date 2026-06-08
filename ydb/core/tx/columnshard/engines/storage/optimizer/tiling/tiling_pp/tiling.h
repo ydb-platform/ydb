@@ -67,6 +67,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         std::vector<typename TPortion::TPtr> toMiddleLevels;
         std::optional<TKey> lastKey;
 
+        State = EState::COMPATIBILITY;
+
         for (auto portion : sortedPortions) {
             if (portion->GetTotalBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
                 toAccumulator.push_back(portion);
@@ -79,6 +81,10 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             toLastLevel.push_back(portion);
             lastKey = portion->IndexKeyEnd();
         }
+
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_initial_add")("total", add.size())(
+            "to_last_level", toLastLevel.size())("to_middle_levels", toMiddleLevels.size())(
+            "to_accumulator", toAccumulator.size())("compatibility_enabled", Settings.EnableCompatibilityMode);
 
         for (auto& portion : toLastLevel) {
             this->AddPortion(portion);
@@ -99,6 +105,13 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         } else {
             State = EState::REGULAR;
         }
+
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_initial_add_done")(
+            "useful_metric", usefulMetric.DebugString())("useful_is_critical", usefulMetric.IsCritical())(
+            "state", (ui32)State)("overload_priority", OverloadPriority.DebugString())("is_overloaded", IsOverloaded())(
+            "acc_metric", Accumulator.DoGetUsefulMetric().DebugString())(
+            "last_level_metric", LastLevel.DoGetUsefulMetric().DebugString())(
+            "middle_metric", GetMiddleUsefulMetric().first.DebugString());
     }
 
     void ModifyPortions(const std::vector<typename TPortion::TPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
@@ -126,11 +139,19 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
 
         if (State == EState::COMPATIBILITY) {
-            const auto desiredCeiling = DoGetUsefulMetric().Inc();
+            const auto useful = DoGetUsefulMetric();
+            const auto desiredCeiling = useful.Inc();
+            const auto prevOverload = OverloadPriority;
             if (desiredCeiling < OverloadPriority) {
                 OverloadPriority = desiredCeiling;
             }
-            if (!OverloadPriority.IsCritical()) {
+            const bool exiting = !OverloadPriority.IsCritical();
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_compatibility_actualize")(
+                "useful_metric", useful.DebugString())("desired_ceiling", desiredCeiling.DebugString())(
+                "prev_overload", prevOverload.DebugString())("new_overload", OverloadPriority.DebugString())(
+                "overload_still_critical", OverloadPriority.IsCritical())("exiting_compatibility", exiting)(
+                "is_overloaded", IsOverloaded());
+            if (exiting) {
                 State = EState::REGULAR;
                 OverloadPriority = TOptimizationPriority::Critical(0);
             }
@@ -171,7 +192,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             level = 0;
         } else {
             measure = LastLevel.Measure(p);
-            if (p->GetCompactionLevel() == 1) {
+            if (p->GetCompactionLevel() == 1 && State != EState::COMPATIBILITY) {
                 level = 1;
             }
             else if (forcedLevel.has_value()) {
@@ -192,6 +213,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 }
             }
         }
+
+        Cerr << "PLACE " << portionId << " " << level << "\n";
 
         if (level == 0) {
             Accumulator.AddPortion(p);
@@ -231,6 +254,9 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             AFL_VERIFY(false)("reason", "Remove unknown portion");
             return;
         }
+
+
+        Cerr << "REMORE " << portionId << " " << lit->second.Level << "\n";
         if (lit->second.Level == 0) {
             Accumulator.RemovePortion(p);
         } else if (lit->second.Level == 1) {
@@ -255,6 +281,8 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     }
 
     void PromoteExpiredPortions(const TInstant currentInstant) {
+
+        Cerr << "GET PROMOTE " << (State == EState::BOARDED) << "\n";
         if (!Settings.AgingSettings.Enabled || State == EState::COMPATIBILITY) {
             return;
         }
@@ -336,7 +364,14 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     }
 
     bool IsOverloaded() const {
-        return OverloadPriority < DoGetUsefulMetric();
+        const auto useful = DoGetUsefulMetric();
+        const bool overloaded = OverloadPriority < useful;
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_is_overloaded")("overloaded", overloaded)(
+            "state", (ui32)State)("overload_priority", OverloadPriority.DebugString())(
+            "useful_metric", useful.DebugString())("acc_metric", Accumulator.DoGetUsefulMetric().DebugString())(
+            "last_level_metric", LastLevel.DoGetUsefulMetric().DebugString())(
+            "middle_metric", GetMiddleUsefulMetric().first.DebugString());
+        return overloaded;
     }
 };
 

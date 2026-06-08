@@ -26,7 +26,7 @@ using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
 struct TPlannerSettings {
     TTilingSettings TilingSettings;
     ui64 PortionExpectedSize = 4ULL * 1024 * 1024;
-    ui32 CompactionThreads = 1;
+    ui32 CompactionThreads = 2;
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
         NJson::TJsonValue json(NJson::JSON_MAP);
@@ -207,8 +207,20 @@ protected:
 
         const auto task = Core.GetNextOptimizationTask(isLocked);
         if (!task) {
+            Cerr << "GET ZERO\n";
             return nullptr;
         }
+        Cerr << "GET priority:" << task->Priority.GetGeneralPriority() << " size: " << task->Portions.size() << "\n";
+
+        ui64 taskBlobBytes = 0;
+        for (const auto& p : task->Portions) {
+            taskBlobBytes += p->GetTotalBlobBytes();
+        }
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_next_compaction_task")(
+            "target_level", (ui32)task->TargetLevel)("portions_in_task", task->Portions.size())(
+            "task_blob_bytes", taskBlobBytes)("priority", task->Priority.DebugString())(
+            "tracked_portions_total", Core.InternalLevel.size())(
+            "grabs_all", task->Portions.size() == Core.InternalLevel.size());
 
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task->Portions, TSaverContext(StoragesManager));
         result->SetTargetCompactionLevel(task->TargetLevel);
@@ -233,6 +245,7 @@ protected:
     }
 
     void DoActualize(const TInstant currentInstant) override {
+        Cerr << "Actualise\n";
         Core.DoActualize(currentInstant);
     }
 

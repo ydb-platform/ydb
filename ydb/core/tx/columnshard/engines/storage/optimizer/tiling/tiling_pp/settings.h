@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 struct TAgingSettings {
     bool Enabled = true;
     TDuration PromoteTime = TDuration::Minutes(30);
-    ui64 MaxPortionPromotion = 100;
+    ui64 MaxPortionPromotion = 10;
 };
 
 struct TLastLevelSettings {
@@ -17,7 +17,7 @@ struct TLastLevelSettings {
     };
 
     TLimit Compaction{ 1'000, 64ULL * 1024 * 1024 };
-    ui64 CandidatePortionsOverload = 10;
+    ui64 CandidatePortionsOverload = 100;
 };
 
 struct TAccumulatorSettings {

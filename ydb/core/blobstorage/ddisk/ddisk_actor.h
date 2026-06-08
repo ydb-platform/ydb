@@ -785,6 +785,7 @@ namespace NKikimr::NDDisk {
         void ReplyReadPersistentBuffer(ui64 operationCookie);
         void ReplyReadPersistentBuffer(TPersistentBuffer::TRecord& pr, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, std::optional<TString> errorMessage);
 
+        bool PersistentBufferPreprocessWrite(TEvWritePersistentBuffer::TPtr ev);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         void ProcessPersistentBufferBatchWrite(std::vector<TEvWritePersistentBuffer::TPtr> evs);
         double GetPersistentBufferFreeSpace();

@@ -16,6 +16,7 @@ namespace {
 constexpr TStringBuf DestroyErrorMessage =
     "TICStorageTransportActor is destroyed";
 constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
+constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -65,6 +66,15 @@ void RejectAllPending(TMap& map)
             event.Record);
         request.second->Promise.SetValue(std::move(event.Record));
     }
+}
+
+template <typename T>
+void SetUndeliveryError(T& record)
+{
+    SetErrorStatus(
+        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+        UndeliveryErrorMessage,
+        record);
 }
 
 }   // namespace
@@ -125,7 +135,8 @@ void TICStorageTransportActor::HandleConnect(
         ctx,
         msg->ServiceId,
         std::make_unique<NDDisk::TEvConnect>(msg->Credentials),
-        requestId);
+        requestId,
+        NWilson::TTraceId());
 }
 
 void TICStorageTransportActor::HandleConnectUndelivery(
@@ -143,8 +154,7 @@ void TICStorageTransportActor::HandleConnectUndelivery(
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
         auto result = NKikimrBlobStorage::NDDisk::TEvConnectResult();
-        // How to set undelivery error?
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         ConnectRequests.erase(requestId);
     } else {
@@ -216,7 +226,8 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
             ctx,
             msg->ServiceId,
             std::move(request),
-            requestId);
+            requestId,
+            std::move(msg->TraceId));
 
         return;
     }
@@ -285,7 +296,7 @@ void TICStorageTransportActor::HandleWritePersistentBufferUndelivery(
         auto& request = **r;
         auto result =
             NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult();
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         WriteToPBufferRequests.erase(requestId);
     } else {
@@ -346,7 +357,8 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
             ctx,
             msg->ServiceId,
             std::move(request),
-            requestId);
+            requestId,
+            std::move(msg->TraceId));
         return;
     }
 
@@ -390,11 +402,10 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
         auto& request = *requestInfo.Request;
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-            DestroyErrorMessage,
+            UndeliveryErrorMessage,
             request.PersistentBufferIds);
-        if (request.Callback) {
-            request.Callback(std::move(response->Record));
-        }
+        Y_ABORT_UNLESS(request.Callback);
+        request.Callback(std::move(response->Record));
         WriteToManyPBuffersRequests.erase(requestId);
     } else {
         LOG_ERROR(
@@ -475,7 +486,8 @@ void TICStorageTransportActor::HandleWriteToDDisk(
             ctx,
             msg->ServiceId,
             std::move(request),
-            requestId);
+            requestId,
+            std::move(msg->TraceId));
         return;
     }
 
@@ -514,7 +526,7 @@ void TICStorageTransportActor::HandleWriteToDDiskUndelivery(
     if (auto* r = WriteToDDiskRequests.FindPtr(requestId)) {
         auto& request = **r;
         auto result = NKikimrBlobStorage::NDDisk::TEvWriteResult();
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         WriteToDDiskRequests.erase(requestId);
     } else {
@@ -581,7 +593,8 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
         ctx,
         msg->ServiceId,
         std::move(request),
-        requestId);
+        requestId,
+        std::move(msg->TraceId));
 }
 
 void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
@@ -601,7 +614,7 @@ void TICStorageTransportActor::HandleErasePersistentBufferUndelivery(
         auto& request = **r;
         auto result =
             NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult();
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         EraseFromPBufferRequests.erase(requestId);
     } else {
@@ -669,7 +682,8 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
         ctx,
         msg->ServiceId,
         std::move(request),
-        requestId);
+        requestId,
+        std::move(msg->TraceId));
 }
 
 void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
@@ -689,7 +703,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
         auto& request = **r;
         auto result =
             NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult();
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         ReadFromPBufferRequests.erase(requestId);
     } else {
@@ -770,7 +784,8 @@ void TICStorageTransportActor::HandleRead(
         ctx,
         msg->ServiceId,
         std::move(request),
-        requestId);
+        requestId,
+        std::move(msg->TraceId));
 }
 
 void TICStorageTransportActor::HandleReadUndelivery(
@@ -788,7 +803,7 @@ void TICStorageTransportActor::HandleReadUndelivery(
     if (auto* r = ReadFromDDiskRequests.FindPtr(requestId)) {
         auto& request = **r;
         auto result = NKikimrBlobStorage::NDDisk::TEvReadResult();
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         ReadFromDDiskRequests.erase(requestId);
     } else {
@@ -881,7 +896,8 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         ctx,
         msg->ServiceId,
         std::move(request),
-        requestId);
+        requestId,
+        std::move(msg->TraceId));
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
@@ -901,7 +917,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
         auto& request = **r;
         auto result =
             NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult();
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         FlushFromPBufferRequests.erase(requestId);
     } else {
@@ -957,7 +973,8 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
         ctx,
         msg->ServiceId,
         std::move(request),
-        requestId);
+        requestId,
+        NWilson::TTraceId());
 }
 
 void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
@@ -977,7 +994,7 @@ void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
         auto& request = **r;
         auto result =
             NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult();
-        result.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        SetUndeliveryError(result);
         request.Promise.SetValue(std::move(result));
         ListPBufferEntriesRequests.erase(requestId);
     } else {

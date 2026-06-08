@@ -23,6 +23,7 @@ ydb/tests/fq/multi_plane py3test.[test_retry.py] chunk
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes
 ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/olap py3test.[*/*] chunk

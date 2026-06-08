@@ -239,8 +239,6 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
     )
 
 
-
-
 _SCHEMESHARD_PUBLIC_PAGES = (
     ('Main', ''),
     ('TxList', 'Page=TxList'),
@@ -331,12 +329,24 @@ def test_schemeshard_page_access_matrix_with_secure_path_mode(
     )
 
 
+def _schemeshard_post_form_body(endpoint_path, post_data):
+    if '?' not in endpoint_path:
+        return post_data
+    _, query = endpoint_path.rsplit('?', 1)
+    if not query:
+        return post_data
+    if not post_data:
+        return query
+    return f'{query}&{post_data}'
+
+
 def _schemeshard_post_endpoints(cluster, endpoint_paths, post_data):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
     base_url = f'https://{host}:{mon_port}'
     for endpoint_path, expected_statuses in endpoint_paths.items():
         endpoint_url = f'{base_url}{endpoint_path}'
+        form_body = _schemeshard_post_form_body(endpoint_path, post_data)
         for token, expected_status in expected_statuses.items():
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
             if token is not None:
@@ -344,7 +354,7 @@ def _schemeshard_post_endpoints(cluster, endpoint_paths, post_data):
             response = requests.post(
                 endpoint_url,
                 headers=headers,
-                data=post_data,
+                data=form_body,
                 verify=False,
             )
             token_desc = token if token is not None else 'null'
@@ -425,21 +435,22 @@ def test_schemeshard_force_drop_unsafe_form_uses_secure_path(
     assert "action='app/secure?" in response.text or 'action="app/secure?' in response.text
     assert 'Action=ForceDropUnsafe' in response.text
 
+
 def test_schemeshard_new_action_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token_and_schemeshard,
+    ydb_cluster_with_enforce_user_token_and_schemeshard_tablet,
 ):
-    tid = ydb_cluster_with_enforce_user_token_and_schemeshard.schemeshard_tablet_id
+    tid = ydb_cluster_with_enforce_user_token_and_schemeshard_tablet.schemeshard_tablet_id
     _test_endpoints(
-        ydb_cluster_with_enforce_user_token_and_schemeshard,
+        ydb_cluster_with_enforce_user_token_and_schemeshard_tablet,
         tablet_devui_new_action_paths(tid, 'Page=FuturePage', secure_path_mode=False),
     )
 
 
 def test_schemeshard_new_action_with_enforce_user_token_and_secure_path_mode(
-    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard,
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
 ):
-    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard.schemeshard_tablet_id
+    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet.schemeshard_tablet_id
     _test_endpoints(
-        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard,
+        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
         tablet_devui_new_action_paths(tid, 'Page=FuturePage', secure_path_mode=True),
     )

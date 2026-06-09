@@ -108,7 +108,7 @@ namespace NKikimr::NPDisk {
                 auto& [key, buffer] = WriteQueue.front();
                 const ui64 writeOffset = PDisk->Format.Offset(key.ChunkIdx, key.OffsetInSectors);
                 YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteMetadata::IssueQuery",
-                    {"marker", "BPD01"},
+                    {"Marker", "BPD01"},
                     {"Buffer.size", buffer.size()},
                     {"WriteOffset", writeOffset},
                     {"ChunkIdx", key.ChunkIdx},
@@ -118,7 +118,7 @@ namespace NKikimr::NPDisk {
 
             void Exec(TActorSystem *actorSystem) override {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteMetadata::Exec",
-                    {"marker", "BPD01"},
+                    {"Marker", "BPD01"},
                     {"Result", Result});
                 Y_VERIFY_S(!WriteQueue.empty(), PDisk->PCtx->PDiskLogPrefix);
                 WriteQueue.pop_front();
@@ -236,7 +236,7 @@ namespace NKikimr::NPDisk {
                 }
 
                 YDB_LOG_CTX_DEBUG(*PDisk->PCtx->ActorSystem, "TCompletionWriteUnformattedMetadata::IssueQuery",
-                    {"marker", "BPD01"},
+                    {"Marker", "BPD01"},
                     {"FormatIndex", FormatIndex},
                     {"Payload.size", Payload.size()},
                     {"Offset", offset});
@@ -248,7 +248,7 @@ namespace NKikimr::NPDisk {
 
             void Exec(TActorSystem * actorSystem) override {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteUnformattedMetadata::Exec",
-                    {"marker", "BPD01"},
+                    {"Marker", "BPD01"},
                     {"Result", Result},
                     {"FormatIndex", FormatIndex},
                     {"BadSectors", BadSectors},

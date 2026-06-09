@@ -1233,7 +1233,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                     isLogged = true;
                     YDB_LOG_CTX_CRIT(*PCtx->ActorSystem, "Commit DirtyChunk contains invalid",
                         {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
-                        {"chunkIdx", chunkIdx},
+                        {"ChunkIdx", chunkIdx},
                         {"ShredGeneration", ShredGeneration});
                 }
             } else {
@@ -1242,7 +1242,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                     isDirtyMarked = true;
                     YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "marked as dirty",
                         {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
-                        {"chunkIdx", chunkIdx},
+                        {"ChunkIdx", chunkIdx},
                         {"chunk.ShredGeneration", ChunkState[chunkIdx].ShredGeneration},
                         {"ShredGeneration", ShredGeneration});
                 }

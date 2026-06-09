@@ -204,10 +204,10 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
                 YDB_LOG_CTX_COMP_INFO(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes. Marker# BPC001",
                     {"PDiskId", PDisk->PCtx->PDiskId},
                     {"ReqId", Read->ReqId},
-                    {"chunkIdx", Read->ChunkIdx},
-                    {"owner", Read->Owner},
-                    {"beginBadUserOffet", beginBadUserOffset},
-                    {"endBadUserOffset", endBadUserOffset});
+                    {"ChunkIdx", Read->ChunkIdx},
+                    {"Owner", Read->Owner},
+                    {"BeginBadUserOffet", beginBadUserOffset},
+                    {"EndBadUserOffset", endBadUserOffset});
                 CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
                 beginBadUserOffset = 0xffffffff;
                 endBadUserOffset = 0xffffffff;
@@ -226,11 +226,11 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
                 YDB_LOG_CTX_COMP_INFO(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for nonce mismatch: for ! Marker# BPC002",
                     {"PDiskId", PDisk->PCtx->PDiskId},
                     {"ReqId", Read->ReqId},
-                    {"chunkIdx", Read->ChunkIdx},
-                    {"owner", Read->Owner},
-                    {"expected", (ui64)(ChunkNonce + sectorIdx)},
+                    {"ChunkIdx", Read->ChunkIdx},
+                    {"Owner", Read->Owner},
+                    {"Expected", (ui64)(ChunkNonce + sectorIdx)},
                     {"on-disk", (ui64)footer->Nonce},
-                    {"userOffset", userOffset});
+                    {"UserOffset", userOffset});
                 if (beginBadUserOffset == 0xffffffff) {
                     beginBadUserOffset = userOffset;
                 }
@@ -269,10 +269,10 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
         YDB_LOG_CTX_COMP_INFO(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes/nonces. Marker# BPC003",
             {"PDiskId", PDisk->PCtx->PDiskId},
             {"ReqId", Read->ReqId},
-            {"chunkIdx", Read->ChunkIdx},
-            {"owner", Read->Owner},
-            {"beginBadUserOffet", beginBadUserOffset},
-            {"endBadUserOffset", endBadUserOffset});
+            {"ChunkIdx", Read->ChunkIdx},
+            {"Owner", Read->Owner},
+            {"BeginBadUserOffet", beginBadUserOffset},
+            {"EndBadUserOffset", endBadUserOffset});
         CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
         beginBadUserOffset = 0xffffffff;
         endBadUserOffset = 0xffffffff;
@@ -375,7 +375,7 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     YDB_LOG_CTX_COMP_DEBUG(*actorSystem, NKikimrServices::BS_PDISK, "Reply from TCompletionChunkRead,",
         {"PDiskId", PDisk->PCtx->PDiskId},
         {"ReqId", Read->ReqId.Id},
-        {"result", result->ToString()},
+        {"Result", result->ToString()},
         {"To", Read->Sender.LocalId()});
 
     double responseTimeMs = HPMilliSecondsFloat(HPNow() - Read->CreationTime);
@@ -406,7 +406,7 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
     YDB_LOG_CTX_COMP_WARN(*actorSystem, NKikimrServices::BS_PDISK, "Reply Error from TCompletionChunkRead",
         {"PDiskId", PDisk->PCtx->PDiskId},
         {"ReqId", Read->ReqId},
-        {"reason", reason});
+        {"Reason", reason});
     actorSystem->Send(Read->Sender, result.Release());
     Read->IsReplied = true;
     Read->Span.EndError(reason);
@@ -454,8 +454,8 @@ void TChunkTrimCompletion::Exec(TActorSystem *actorSystem) {
     YDB_LOG_CTX_COMP_DEBUG(*actorSystem, NKikimrServices::BS_PDISK, "TChunkTrimCompletion",
         {"PDiskId", PDisk->PCtx->PDiskId},
         {"ReqId", ReqId},
-        {"timeMs", ui64(responseTimeMs)},
-        {"sizeBytes", SizeBytes});
+        {"TimeMs", ui64(responseTimeMs)},
+        {"SizeBytes", SizeBytes});
     LWPROBE(PDiskTrimResponseTime, PDisk->PCtx->PDiskId, ReqId.Id, responseTimeMs, SizeBytes);
     PDisk->Mon.Trim.CountResponse();
     TTryTrimChunk *tryTrim = PDisk->ReqCreator.CreateFromArgs<TTryTrimChunk>(SizeBytes);

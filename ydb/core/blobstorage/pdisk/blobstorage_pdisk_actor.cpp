@@ -442,7 +442,7 @@ public:
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
                         YDB_LOG_CTX_ERROR(*actorSystem, "Formatting error",
-                            {"marker", "BSP01"},
+                            {"Marker", "BSP01"},
                             {"What", readOnlyError});
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
                         return nullptr;
@@ -477,7 +477,7 @@ public:
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
                         YDB_LOG_CTX_ERROR(*actorSystem, "Formatting error",
-                            {"marker", "BSP01"},
+                            {"Marker", "BSP01"},
                             {"What", ex.what()});
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, ex.what()));
                     }
@@ -511,7 +511,7 @@ public:
                 if (cfg->ReadOnly) {
                     TString readOnlyError = "PDisk is in read-only mode";
                     YDB_LOG_CTX_ERROR(*pCtx->ActorSystem, "Formatting error",
-                        {"marker", "BSP01"},
+                        {"Marker", "BSP01"},
                         {"What", readOnlyError});
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
                     return nullptr;
@@ -530,7 +530,7 @@ public:
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(true, ""));
                 } catch (yexception ex) {
                     YDB_LOG_CTX_ERROR(*pCtx->ActorSystem, "Reencryption error",
-                        {"marker", "BPD01"},
+                        {"Marker", "BPD01"},
                         {"What", ex.what()});
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(false, ex.what()));
                 }

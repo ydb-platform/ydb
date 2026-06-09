@@ -1305,7 +1305,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
         void Exec(TActorSystem *actorSystem) override {
             if (actorSystem) {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "Exec TCachedReadCompletion",
-                    {"marker", "BPD01"},
+                    {"Marker", "BPD01"},
                     {"ReqId", ReqId},
                     {"Offset", Offset});
             }
@@ -1315,7 +1315,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
         void Release(TActorSystem *actorSystem) override {
             if (actorSystem) {
                 YDB_LOG_CTX_DEBUG(*actorSystem, "Release TCachedReadCompletion",
-                    {"marker", "BPD01"},
+                    {"Marker", "BPD01"},
                     {"ReqId", ReqId},
                     {"Offset", Offset});
             }

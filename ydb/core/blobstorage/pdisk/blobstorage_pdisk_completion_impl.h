@@ -149,13 +149,13 @@ public:
         Span.Event("PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
         YDB_LOG_CTX_COMP_DEBUG(*actorSystem, BS_PDISK, "TCompletionChunkWrite::Exec",
-            {"marker", "BPD01"},
+            {"Marker", "BPD01"},
             {"DiskId", PDiskId},
             {"ReqId", ReqId},
             {"Event", Event->ToString()},
             {"PriorityClass", (ui32)PriorityClass},
-            {"timeMs", responseTimeMs},
-            {"sizeBytes", SizeBytes});
+            {"TimeMs", responseTimeMs},
+            {"SizeBytes", SizeBytes});
         if (Mon) {
             Mon->IncrementResponseTime(PriorityClass, responseTimeMs, SizeBytes);
         }

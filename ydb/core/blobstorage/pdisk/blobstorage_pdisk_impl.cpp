@@ -447,7 +447,7 @@ bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui3
             reason = "outLastSectorIdx >= chunkSizeUsableSectors";
         }
         YDB_LOG_CTX_COMP_ERROR(*actorSystem, BS_PDISK, reason,
-            {"marker", "BPD01"},
+            {"Marker", "BPD01"},
             {"PDiskId", pDiskId},
             {"OutSectorIdx", outSectorIdx},
             {"OutLastSectorIdx", outLastSectorIdx},
@@ -2401,11 +2401,11 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                     Mon.UncommitedDataChunks->Dec();
                 } else if (state.CommitState == TChunkState::DATA_COMMITTED) {
                     Mon.CommitedDataChunks->Dec();
-                    YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PDiskId# Line# --CommitedDataChunks# chunkIdx# Marker# BPD84",
+                    YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "Marker# BPD84",
                         {"PDiskId", (ui32)PCtx->PDiskId},
                         {"Line", (ui32)__LINE__},
                         {"CommitedDataChunks", (i64)Mon.CommitedDataChunks->Val()},
-                        {"chunkIdx", (ui32)i});
+                        {"ChunkIdx", (ui32)i});
                 } else if (state.CommitState == TChunkState::LOCKED) {
                     Mon.LockedChunks->Dec();
                 }
@@ -3749,10 +3749,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 void TPDisk::PushRequestToScheduler(TRequestBase *request) {
     if (request->GateId == GateFastOperation) {
         FastOperationsQueue.push_back(std::unique_ptr<TRequestBase>(request));
-        YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PDiskId# ReqId# PushRequestToScheduler Push to FastOperationsQueue.size# ",
+        YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PushRequestToScheduler Push to",
             {"PDiskId", (ui32)PCtx->PDiskId},
             {"ReqId", (ui64)request->ReqId.Id},
-            {"FastOperationsQueue_size", (ui64)FastOperationsQueue.size()});
+            {"FastOperationsQueueSize", (ui64)FastOperationsQueue.size()});
         return;
     }
 
@@ -3900,7 +3900,7 @@ void TPDisk::AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind)
 }
 
 void TPDisk::RouteRequest(TRequestBase *request) {
-    YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PDiskId# ReqId# Type# RouteRequest",
+    YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "RouteRequest",
         {"PDiskId", (ui32)PCtx->PDiskId},
         {"ReqId", (ui64)request->ReqId.Id},
         {"Type", (ui64)request->GetType()});
@@ -3954,10 +3954,10 @@ void TPDisk::RouteRequest(TRequestBase *request) {
         }
         default:
             FastOperationsQueue.push_back(std::unique_ptr<TRequestBase>(request));
-            YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PDiskId# ReqId# PushRequestToScheduler Push to FastOperationsQueue.size# ",
+            YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PushRequestToScheduler Push to",
                 {"PDiskId", (ui32)PCtx->PDiskId},
                 {"ReqId", (ui64)request->ReqId.Id},
-                {"FastOperationsQueue_size", (ui64)FastOperationsQueue.size()});
+                {"FastOperationsQueueSize", (ui64)FastOperationsQueue.size()});
             break;
     }
 }
@@ -4039,7 +4039,7 @@ void TPDisk::EnqueueAll() {
         TRequestBase* request = InputQueue.Pop();
 
         if (Cfg->ReadOnly && HandleReadOnlyIfWrite(request)) {
-            YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PDiskId# ReqId# got write request in ReadOnly mode type# ",
+            YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "got write request in ReadOnly mode",
                 {"PDiskId", (ui32)PCtx->PDiskId},
                 {"ReqId", (ui64)request->ReqId.Id},
                 {"Type", (ui32)request->GetType()});
@@ -4518,7 +4518,7 @@ TChunkIdx TPDisk::GetUnshreddedFreeChunk() {
                 // Mark it as being shredded and update its generation
                 YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "found unshredded free",
                     {"PDisk", PCtx->PDiskId},
-                    {"chunk", chunkIdx},
+                    {"Chunk", chunkIdx},
                     {"ShredGeneration", ShredGeneration});
                 return unshreddedChunkIdx;
             }
@@ -4530,7 +4530,7 @@ TChunkIdx TPDisk::GetUnshreddedFreeChunk() {
 void TPDisk::ProgressShredState() {
     TGuard<TMutex> guard(StateMutex);
     YDB_LOG_CTX_COMP_TRACE(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProgressShredState",
-        {"at_PDisk", PCtx->PDiskId},
+        {"AtPDisk", PCtx->PDiskId},
         {"ShredGeneration", ShredGeneration},
         {"ShredState", (ui32)ShredState});
     if (ShredState == EShredStateFinished || ShredState == EShredStateDefault || ShredState == EShredStateFailed) {
@@ -4545,8 +4545,8 @@ void TPDisk::ProgressShredState() {
                 if (data.Status == TOwnerData::VDISK_STATUS_DEFAULT || data.Status == TOwnerData::VDISK_STATUS_HASNT_COME) {
                     YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "can't send compact request as",
                         {"PDisk", PCtx->PDiskId},
-                        {"to_VDisk", data.VDiskId},
-                        {"ownerId", ownerId},
+                        {"ToVDisk", data.VDiskId},
+                        {"OwnerId", ownerId},
                         {"owner.Status", data.Status});
                     data.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
                 } else {
@@ -4555,19 +4555,19 @@ void TPDisk::ProgressShredState() {
                         THolder<TEvPreShredCompactVDisk> compactRequest(new TEvPreShredCompactVDisk(ShredGeneration));
                         YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "sends compact request",
                             {"PDisk", PCtx->PDiskId},
-                            {"to_VDisk", data.VDiskId},
-                            {"ownerId", ownerId},
-                            {"request", compactRequest->ToString()});
+                            {"ToVDisk", data.VDiskId},
+                            {"OwnerId", ownerId},
+                            {"Request", compactRequest->ToString()});
                         PCtx->ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, compactRequest.Release()));
                         data.LastShredGeneration = ShredGeneration;
                         data.ShredState = TOwnerData::VDISK_SHRED_STATE_COMPACT_REQUESTED;
                     }
                 }
                 if (data.ShredState != TOwnerData::VDISK_SHRED_STATE_COMPACT_FINISHED) {
-                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "is waiting for before finishing pre-shred compact ShredState#",
+                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "is waiting for before finishing pre-shred compact",
                         {"PDisk", PCtx->PDiskId},
                         {"ShredGeneration", ShredGeneration},
-                        {"ownerId", ownerId},
+                        {"OwnerId", ownerId},
                         {"VDiskId", data.VDiskId},
                         {"VDiskStatus", data.GetStringStatus()},
                         {"GetStringShredState", data.GetStringShredState()});
@@ -4579,7 +4579,7 @@ void TPDisk::ProgressShredState() {
         YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "has finished all pre-shred compact VDisk requests",
             {"PDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"finishedCount", finishedCount});
+            {"FinishedCount", finishedCount});
         // All preparations are done, no junk chunks can be unmarked,
         // Update chunk states and start shredding the empty space
         for (TChunkIdx chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
@@ -4682,9 +4682,9 @@ void TPDisk::ProgressShredState() {
                             THolder<TEvShredVDisk> shredRequest(new TEvShredVDisk(ShredGeneration, chunksToShred));
                             YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "sends shred request",
                                 {"PDisk", PCtx->PDiskId},
-                                {"to_VDisk", data.VDiskId},
-                                {"ownerId", ownerId},
-                                {"request", shredRequest->ToString()});
+                                {"ToVDisk", data.VDiskId},
+                                {"OwnerId", ownerId},
+                                {"Request", shredRequest->ToString()});
                         PCtx->ActorSystem->Send(new IEventHandle(data.CutLogId, PCtx->PDiskActor, shredRequest.Release()));
                         data.ShredState = TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED;
                         data.LastShredGeneration = ShredGeneration;
@@ -4694,10 +4694,10 @@ void TPDisk::ProgressShredState() {
                     }
                 }
                 if (data.ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_FINISHED) {
-                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "is waiting for ShredState# before finishing shred",
+                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "is waiting for before finishing shred",
                         {"PDisk", PCtx->PDiskId},
                         {"ShredGeneration", ShredGeneration},
-                        {"ownerId", ownerId},
+                        {"OwnerId", ownerId},
                         {"VDiskId", data.VDiskId},
                         {"GetStringShredState", data.GetStringShredState()});
                     return;
@@ -4770,7 +4770,7 @@ void TPDisk::ProgressShredState() {
                 if (!ShredIsWaitingForCutLog) {
                     YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Is now waiting for VDisks to cut their log,",
                         {"PDisk", PCtx->PDiskId},
-                        {"requestsSent", requestsSent},
+                        {"RequestsSent", requestsSent},
                         {"ShredGeneration", ShredGeneration});
                     ShredIsWaitingForCutLog = 1;
                 }
@@ -4786,18 +4786,18 @@ void TPDisk::ProgressShredState() {
                 if (ContinueShredsInFlight) {
                     // There are continue shreds in flight, so we don't need to schedule a new one.
                     // Just wait for it to arrive.
-                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "found a dirtyInTransition, there are already so just wait for it to arrive.",
+                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "found a dirtyInTransition, there are already so just wait for it to arrive",
                         {"PDisk", PCtx->PDiskId},
-                        {"chunkIdx", chunkIdx},
-                        {"state", state.ToString()},
+                        {"ChunkIdx", chunkIdx},
+                        {"State", state.ToString()},
                         {"ContinueShredsInFlight", ContinueShredsInFlight.load()},
                         {"ShredGeneration", ShredGeneration});
                     return;
                 } else {
-                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "found a dirtyInTransition, scheduling ContinueShred.",
+                    YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "found a dirtyInTransition, scheduling ContinueShred",
                         {"PDisk", PCtx->PDiskId},
-                        {"chunkIdx", chunkIdx},
-                        {"state", state.ToString()},
+                        {"ChunkIdx", chunkIdx},
+                        {"State", state.ToString()},
                         {"ShredGeneration", ShredGeneration});
                     ContinueShredsInFlight++;
                     PCtx->ActorSystem->Schedule(TDuration::MilliSeconds(50),
@@ -4812,11 +4812,11 @@ void TPDisk::ProgressShredState() {
         YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "has finished all shred requests",
             {"PDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"finishedCount", finishedCount});
+            {"FinishedCount", finishedCount});
         ShredState = EShredStateFinished;
         // TODO: send result to the requester after actual shred is done
         YDB_LOG_CTX_COMP_NOTICE(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Shred request is finished",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration});
         for (auto& [requester, cookie] : ShredRequesters) {
             PCtx->ActorSystem->Send(new IEventHandle(requester, PCtx->PDiskActor, new TEvShredPDiskResult(
@@ -4829,14 +4829,14 @@ void TPDisk::ProgressShredState() {
 void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
     if (NPDisk::TPDisk::IS_SHRED_ENABLED) {
         YDB_LOG_CTX_COMP_NOTICE(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessShredPDisk",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"request", request.ToString()});
+            {"Request", request.ToString()});
     } else {
-        YDB_LOG_CTX_COMP_CRIT(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessShredPDisk with IS_SHRED_ENABLED# false",
-            {"at_PDisk", PCtx->PDiskId},
+        YDB_LOG_CTX_COMP_CRIT(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessShredPDisk with false",
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"request", request.ToString()});
+            {"Request", request.ToString()});
     }
     if (!PCtx->ActorSystem) {
         return;
@@ -4859,16 +4859,16 @@ void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
             // Do nothing, since we already have a shred request with the same generation.
             // Just add the sender to the list of requesters.
             YDB_LOG_CTX_COMP_NOTICE(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Registered one more shred requester",
-                {"at_PDisk", PCtx->PDiskId},
+                {"AtPDisk", PCtx->PDiskId},
                 {"ShredGeneration", ShredGeneration},
-                {"request", request.ToString()});
+                {"Request", request.ToString()});
             ShredRequesters.emplace_back(request.Sender, request.Cookie);
             return;
         }
         YDB_LOG_CTX_COMP_NOTICE(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Retrying a failed shred",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"request", request.ToString()});
+            {"Request", request.ToString()});
     }
     // ShredGeneration > request.ShredGeneration
     if (ShredRequesters.size() > 0) {
@@ -4891,40 +4891,40 @@ void TPDisk::ProcessShredPDisk(TShredPDisk& request) {
 
 void TPDisk::ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request) {
     YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessPreShredCompactVDiskResult",
-        {"at_PDisk", PCtx->PDiskId},
+        {"AtPDisk", PCtx->PDiskId},
         {"ShredGeneration", ShredGeneration},
-        {"request", request.ToString()});
+        {"Request", request.ToString()});
     TGuard<TMutex> guard(StateMutex);
     if (request.ShredGeneration != ShredGeneration) {
         // Ignore old results
         YDB_LOG_CTX_COMP_WARN(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Old PreShredCompactVDiskResult is ignored for PreShredCompactVDiskResult",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"generation", request.ShredGeneration},
-            {"owner", request.Owner},
-            {"ownerRound", request.OwnerRound});
+            {"Generation", request.ShredGeneration},
+            {"Owner", request.Owner},
+            {"OwnerRound", request.OwnerRound});
         return;
     }
     TStringStream err;
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&request, err);
     if (errStatus != NKikimrProto::OK) {
         YDB_LOG_CTX_COMP_ERROR(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Incorrect PreShredCompactVDiskResult is received",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"owner", request.Owner},
-            {"ownerRound", request.OwnerRound},
+            {"Owner", request.Owner},
+            {"OwnerRound", request.OwnerRound},
             {"Str", err.Str()});
         return;
     }
     if (OwnerData[request.Owner].ShredState != TOwnerData::VDISK_SHRED_STATE_COMPACT_REQUESTED) {
         // Ignore incorrect state results
         YDB_LOG_CTX_COMP_ERROR(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Unexpected PreShredCompactVDiskResult is received for PreShredCompactVDiskResult",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"generation", request.ShredGeneration},
-            {"owner", request.Owner},
-            {"ownerRound", request.OwnerRound},
-            {"ownerShredState", OwnerData[request.Owner].ShredState});
+            {"Generation", request.ShredGeneration},
+            {"Owner", request.Owner},
+            {"OwnerRound", request.OwnerRound},
+            {"OwnerShredState", OwnerData[request.Owner].ShredState});
         return;
     }
     if (request.Status != NKikimrProto::OK) {
@@ -4939,10 +4939,10 @@ void TPDisk::ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& requ
                 << " and ErrorReason# " << request.ErrorReason;
             YDB_LOG_CTX_COMP_ERROR(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Shred request failed and replied with PreShredCompactVDiskResult",
                 {"PDisk", PCtx->PDiskId},
-                {"shredGeneration", request.ShredGeneration},
-                {"owner", request.Owner},
-                {"ownerRound", request.OwnerRound},
-                {"status", request.Status},
+                {"ShredGeneration", request.ShredGeneration},
+                {"Owner", request.Owner},
+                {"OwnerRound", request.OwnerRound},
+                {"Status", request.Status},
                 {"ErrorReason", request.ErrorReason});
             PCtx->ActorSystem->Send(new IEventHandle(requester, PCtx->PDiskActor, new TEvShredPDiskResult(
                 NKikimrProto::ERROR, request.ShredGeneration, str.Str()), 0, cookie));
@@ -4956,40 +4956,40 @@ void TPDisk::ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& requ
 
 void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
     YDB_LOG_CTX_COMP_DEBUG(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessShredVDiskResult",
-        {"at_PDisk", PCtx->PDiskId},
+        {"AtPDisk", PCtx->PDiskId},
         {"ShredGeneration", ShredGeneration},
-        {"request", request.ToString()});
+        {"Request", request.ToString()});
     TGuard<TMutex> guard(StateMutex);
     if (request.ShredGeneration != ShredGeneration) {
         // Ignore old results
         YDB_LOG_CTX_COMP_WARN(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Old ShredVDiskResult is ignored for",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"shredGeneration", request.ShredGeneration},
-            {"owner", request.Owner},
-            {"ownerRound", request.OwnerRound});
+            {"ShredGeneration", request.ShredGeneration},
+            {"Owner", request.Owner},
+            {"OwnerRound", request.OwnerRound});
         return;
     }
     TStringStream err;
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&request, err);
     if (errStatus != NKikimrProto::OK) {
         YDB_LOG_CTX_COMP_ERROR(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Incorrect ShredVDiskResult is received",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"owner", request.Owner},
-            {"ownerRound", request.OwnerRound},
+            {"Owner", request.Owner},
+            {"OwnerRound", request.OwnerRound},
             {"Str", err.Str()});
         return;
     }
     if (OwnerData[request.Owner].ShredState != TOwnerData::VDISK_SHRED_STATE_SHRED_REQUESTED) {
         // Ignore incorrect state results
         YDB_LOG_CTX_COMP_ERROR(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Unexpected ShredVDiskResult is received for ShredVDiskResult",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
-            {"generation", request.ShredGeneration},
-            {"owner", request.Owner},
-            {"ownerRound", request.OwnerRound},
-            {"ownerShredState", OwnerData[request.Owner].ShredState});
+            {"Generation", request.ShredGeneration},
+            {"Owner", request.Owner},
+            {"OwnerRound", request.OwnerRound},
+            {"OwnerShredState", OwnerData[request.Owner].ShredState});
         return;
     }
     if (request.Status != NKikimrProto::OK) {
@@ -5005,10 +5005,10 @@ void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
 
             YDB_LOG_CTX_COMP_ERROR(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "Shred request failed replied with status",
                 {"PDisk", PCtx->PDiskId},
-                {"shredGeneration", request.ShredGeneration},
-                {"owner", request.Owner},
-                {"ownerRound", request.OwnerRound},
-                {"status", request.Status},
+                {"ShredGeneration", request.ShredGeneration},
+                {"Owner", request.Owner},
+                {"OwnerRound", request.OwnerRound},
+                {"Status", request.Status},
                 {"ErrorReason", request.ErrorReason});
             PCtx->ActorSystem->Send(new IEventHandle(requester, PCtx->PDiskActor, new TEvShredPDiskResult(
                 NKikimrProto::ERROR, request.ShredGeneration, str.Str()), 0, cookie));
@@ -5022,9 +5022,9 @@ void TPDisk::ProcessShredVDiskResult(TShredVDiskResult& request) {
 
 void TPDisk::ProcessChunkShredResult(TChunkShredResult& request) {
     YDB_LOG_CTX_COMP_TRACE(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessChunkShredResult",
-        {"at_PDisk", PCtx->PDiskId},
+        {"AtPDisk", PCtx->PDiskId},
         {"ShredGeneration", ShredGeneration},
-        {"request", request.ToString()});
+        {"Request", request.ToString()});
     Y_VERIFY_S(ChunkBeingShreddedInFlight > 0, PCtx->PDiskLogPrefix);
     --ChunkBeingShreddedInFlight;
     ProgressShredState();
@@ -5039,16 +5039,16 @@ void TPDisk::ProcessContinueShred(TContinueShred& request) {
         ContinueShredsInFlight--;
     } else {
         YDB_LOG_CTX_COMP_CRIT(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessContinueShred ContinueShredInFlight miscalculation,",
-            {"at_PDisk", PCtx->PDiskId},
+            {"AtPDisk", PCtx->PDiskId},
             {"ShredGeneration", ShredGeneration},
             {"ContinueShredsInFlight", ContinueShredsInFlight.load()},
-            {"request", request.ToString()});
+            {"Request", request.ToString()});
     }
     YDB_LOG_CTX_COMP_TRACE(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED, "ProcessContinueShred",
-        {"at_PDisk", PCtx->PDiskId},
+        {"AtPDisk", PCtx->PDiskId},
         {"ShredGeneration", ShredGeneration},
         {"ContinueShredsInFlight", ContinueShredsInFlight.load()},
-        {"request", request.ToString()});
+        {"Request", request.ToString()});
     ProgressShredState();
 }
 
@@ -5080,11 +5080,11 @@ void TPDisk::InputRequest(TRequestBase* request) {
             HPSecondsFloat(request->Deadline),
             request->Owner, request->IsFast, request->PriorityClass, InputQueue.GetWaitingSize());
 
-    YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "PDiskId# ReqId# InputRequest InputQueue.Push priortiyClass# creationTime# ",
+    YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "InputRequest InputQueue.Push",
         {"PDiskId", (ui32)PCtx->PDiskId},
         {"ReqId", (ui64)request->ReqId.Id},
-        {"priortiyClass", (ui64)request->PriorityClass},
-        {"creationTime", HPSecondsFloat(request->CreationTime)});
+        {"PriortiyClass", (ui64)request->PriorityClass},
+        {"CreationTime", HPSecondsFloat(request->CreationTime)});
 
     InputQueue.Push(request);
 }

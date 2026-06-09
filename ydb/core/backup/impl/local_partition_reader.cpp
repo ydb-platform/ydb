@@ -67,7 +67,7 @@ private:
         Worker = ev->Sender;
         YDB_LOG_DEBUG("HandleInit TEvWorker::TEvHandshake",
             {"LogPrefix", GetLogPrefix()},
-            {"worker", Worker});
+            {"Worker", Worker});
 
         Send(PQTablet, CreateGetOffsetRequest().Release());
     }
@@ -75,7 +75,7 @@ private:
     void HandleInit(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_DEBUG("HandleInit",
             {"LogPrefix", GetLogPrefix()},
-            {"event", ev->Get()->ToString()});
+            {"Event", ev->Get()->ToString()});
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
@@ -87,7 +87,7 @@ private:
             // Retry via worker
             YDB_LOG_WARN("HandleInit unexpected response,",
                 {"LogPrefix", GetLogPrefix()},
-                {"leaving", ev->Get()->ToString()});
+                {"Leaving", ev->Get()->ToString()});
             Y_ABORT_UNLESS(Worker, "Worker is always set before any PQ response: the offset request is only sent from the handshake handler");
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
@@ -118,7 +118,7 @@ private:
     void Handle(TEvWorker::TEvPoll::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"LogPrefix", GetLogPrefix()},
-            {"event", ev->Get()->ToString()});
+            {"Event", ev->Get()->ToString()});
 
         Offset = SentOffset;
         // TODO: commit offset to PQ
@@ -138,7 +138,7 @@ private:
         auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle",
             {"LogPrefix", GetLogPrefix()},
-            {"event", ev->Get()->ToString()});
+            {"Event", ev->Get()->ToString()});
 
         TString error;
         if (!NPQ::BasicCheck(record, error)) {

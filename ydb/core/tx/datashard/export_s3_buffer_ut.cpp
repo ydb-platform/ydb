@@ -7,8 +7,6 @@
 
 #include <util/generic/array_ref.h>
 
-#include <chrono>
-
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 namespace NKikimr::NDataShard {

@@ -23,6 +23,8 @@
 #include <util/generic/buffer.h>
 #include <util/stream/buffer.h>
 
+#include <set>
+
 namespace NKikimr::NDataShard {
 
 namespace {
@@ -244,6 +246,7 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
 void TS3ParquetExportBuffer::Clear() {
     Rows = 0;
     BytesRead = 0;
+    ErrorString.clear();
     BatchBuilder.FlushBatch(true, false);
     ArrowWriter.reset();
     auto newOutStream = ICheckpointOutputStream::Create();

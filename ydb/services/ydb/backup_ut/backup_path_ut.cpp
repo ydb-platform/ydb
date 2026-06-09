@@ -6,8 +6,9 @@
 #include <util/folder/tempdir.h>
 
 #include <ydb/library/testlib/helpers.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
+#include <arrow/api.h>
+#include <arrow/io/memory.h>
 #include <parquet/arrow/reader.h>
 
 #include <fmt/format.h>

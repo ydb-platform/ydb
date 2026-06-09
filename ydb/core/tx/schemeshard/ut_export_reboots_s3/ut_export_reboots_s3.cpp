@@ -28,34 +28,6 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 
 }
 
-// Parquet configuration helpers
-TString MakeParquetSettings(const TString& extraSettings = "") {
-    TStringBuilder sb;
-    sb << "parquet { } ";
-    if (extraSettings) {
-        sb << extraSettings << " ";
-    }
-    return sb;
-}
-
-TString MakeParquetSettingsWithRowGroupSize(ui32 rowGroupSize, const TString& extraSettings = "") {
-    TStringBuilder sb;
-    sb << "parquet { row_group_size: " << rowGroupSize << " } ";
-    if (extraSettings) {
-        sb << extraSettings << " ";
-    }
-    return sb;
-}
-
-TString MakeParquetSettingsWithCompression(const TString& compression, const TString& extraSettings = "") {
-    TStringBuilder sb;
-    sb << "parquet { } compression: \"" << compression << "\" ";
-    if (extraSettings) {
-        sb << extraSettings << " ";
-    }
-    return sb;
-}
-
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
     struct TExportItem {
@@ -84,6 +56,34 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                << "\" destination_path: \"" << item.Destination << "\" } ";
         }
         sb << "}";
+        return sb;
+    }
+
+    // Parquet configuration helpers
+    TString MakeParquetSettings(const TString& extraSettings = "") {
+        TStringBuilder sb;
+        sb << "parquet { } ";
+        if (extraSettings) {
+            sb << extraSettings << " ";
+        }
+        return sb;
+    }
+
+    TString MakeParquetSettingsWithRowGroupSize(ui32 rowGroupSize, const TString& extraSettings = "") {
+        TStringBuilder sb;
+        sb << "parquet { row_group_size: " << rowGroupSize << " } ";
+        if (extraSettings) {
+            sb << extraSettings << " ";
+        }
+        return sb;
+    }
+
+    TString MakeParquetSettingsWithCompression(const TString& compression, const TString& extraSettings = "") {
+        TStringBuilder sb;
+        sb << "parquet { } compression: \"" << compression << "\" ";
+        if (extraSettings) {
+            sb << extraSettings << " ";
+        }
         return sb;
     }
 

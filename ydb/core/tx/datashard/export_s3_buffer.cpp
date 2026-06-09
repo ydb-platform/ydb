@@ -510,12 +510,12 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
 
     if (Task.HasS3Settings()) {
         // Get Parquet row group size from the new format field if Parquet is selected
-        if (Task.GetS3Settings().has_parquet()) {
-            bufferSettings.WithParquetRowGroupSize(Task.GetS3Settings().parquet().GetRowGroupSize());
+        if (Task.GetS3Settings().HasParquet()) {
+            bufferSettings.WithParquetRowGroupSize(Task.GetS3Settings().GetParquet().GetRowGroupSize());
         }
-        
+
         // Check the new format field
-        switch (Task.GetS3Settings().format_case()) {
+        switch (Task.GetS3Settings().GetFormatCase()) {
         case NKikimrSchemeOp::TS3Settings::kYdbDump:
             return CreateS3ExportBuffer(std::move(bufferSettings));
         case NKikimrSchemeOp::TS3Settings::kParquet:

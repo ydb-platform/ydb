@@ -786,7 +786,7 @@ public:
     }
 
     EDataFormat DataFormatFromS3Settings(const NKikimrSchemeOp::TS3Settings& s3Settings) {
-        switch (s3Settings.format_case()) {
+        switch (s3Settings.GetFormatCase()) {
             case NKikimrSchemeOp::TS3Settings::kYdbDump:
                 return EDataFormat::Invalid; // YdbDump format doesn't use the DataFormat field
             case NKikimrSchemeOp::TS3Settings::kParquet:

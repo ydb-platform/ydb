@@ -190,7 +190,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_counter[0] += 1
-                    logger.info(f"Updater [{table_name}] iter: {exec_counter[0]}")
                 except Exception as e:
                     logger.warning("Updater [%s] error: %s", table_name, e)
 
@@ -293,7 +292,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     with lock:
                         exec_counter[0] += 1
                 except Exception as e:
-                    logger.warning("Int range aggregator error: %s", e)
+                    logger.warning("Int range aggregator [%s] error: %s", table_name, e)
 
     def _str_range_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
         """

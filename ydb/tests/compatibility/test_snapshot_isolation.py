@@ -155,6 +155,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             }) as results:
                             res = list(results)[0].rows[0]
 
+                        time.sleep(random.uniform(0, 0.1))
+
                         with tx.execute(
                             f"UPSERT INTO `{result_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
@@ -205,6 +207,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             }) as results:
                             res = list(results)[0].rows[0]
 
+                        time.sleep(random.uniform(0, 0.1))
+
                         with tx.execute(
                             f"UPSERT INTO `{result_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
@@ -251,6 +255,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$str_hi': str_hi,
                             }) as results:
                             res = list(results)[0].rows[0]
+
+                        time.sleep(random.uniform(0, 0.1))
 
                         with tx.execute(
                             f"UPSERT INTO `{result_table}` "
@@ -300,7 +306,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 assert row.row_count == range_len * N_GROUPS
                 assert row.int_sum == (range_len * (row.filter_hi + row.filter_lo) / 2) * N_GROUPS
                 assert row.count_distinct == range_len
-            
+
             else:
                 assert False, f"unknown filter type {filter_type}"
 
@@ -316,6 +322,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         deadline = time.time() + timeout
         while time.time() < deadline:
             with lock:
+                logger.debug(f"worker exec counters: {exec_counters}")
                 done = all(
                     exec_counters[name][0] - baseline[name] >= min_per_counter
                     for name in exec_counters
@@ -354,30 +361,25 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         start('ds_upd',  self._updater, 'datashard_table')
         start('col_upd', self._updater, 'column_table')
 
-        # --- Aggregators (2 threads each) ---
+        # --- Aggregators ---
         for i in range(2):
             start(f'ds_pk_{i}', self._pk_aggregator,
                 'datashard_table', 'datashard_results')
             start(f'col_pk_{i}', self._pk_aggregator,
                 'column_table', 'column_results')
 
+        for i in range(2):
             start(f'ds_int_{i}', self._int_range_aggregator,
                 'datashard_table', 'datashard_results')
-            start(f'col_int_{i}', self._int_range_aggregator,
-                'column_table', 'column_results')
+        start(f'col_int', self._int_range_aggregator,
+            'column_table', 'column_results')
 
-            start(f'ds_str_{i}', self._str_range_aggregator,
-                'datashard_table', 'datashard_results')
-            start(f'col_str_{i}', self._str_range_aggregator,
-                'column_table', 'column_results')
+        start(f'ds_str', self._str_range_aggregator,
+            'datashard_table', 'datashard_results')
+        start(f'col_str', self._str_range_aggregator,
+            'column_table', 'column_results')
 
-        self._wait_for_progress(exec_counters, lock, min_per_counter=5)
-
-        self.check_results('datashard_results')
-        self.check_results('column_results')
-
-        return
-
+        # --- Rolling upgrade and checks ---
         try:
             for _ in self.roll():
                 self._wait_for_progress(exec_counters, lock, min_per_counter=5)

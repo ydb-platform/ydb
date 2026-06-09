@@ -539,7 +539,7 @@ class StaticConfigGenerator(object):
 
         if self.composite_conveyor_config:
             normalized_config["composite_conveyor_config"] = self.composite_conveyor_config
-            
+
         if self.comp_disk_limiter_config:
             normalized_config["comp_disk_limiter_config"] = self.comp_disk_limiter_config
 

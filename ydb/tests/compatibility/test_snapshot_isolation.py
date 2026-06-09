@@ -15,17 +15,6 @@ GROUP_SIZE = 10
 N_GROUPS = N_ROWS // GROUP_SIZE  # 1000
 FIXED_GROUP_SUM = GROUP_SIZE * (GROUP_SIZE - 1) // 2  # 45 = 0+1+...+9
 
-# Pooled result-table slots: multiple threads writing to the same slot generate write conflicts.
-# datashard_results slot layout:  0..N_PK_SLOTS-1   = pk_range
-#                                 N_PK_SLOTS..      = sec_idx  (1st slot)
-#                                 N_PK_SLOTS+N_SEC_SLOTS.. = str_range (1st slot)
-# column_results slot layout:     0..N_PK_SLOTS-1   = pk_range
-#                                 N_PK_SLOTS..      = str_range (1st slot)
-N_PK_SLOTS = 2
-N_SEC_SLOTS = 1
-N_STR_SLOTS = 1
-
-
 class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -70,14 +59,13 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         for name in ('datashard_results', 'column_results'):
             query = f"""
                 CREATE TABLE `{name}` (
-                    agg_id             Int32 NOT NULL,
-                    filter_type        String,
+                    filter_type        String NOT NULL,
                     filter_lo          Int32,
                     filter_hi          Int32,
                     row_count          Int32,
                     int_sum            Int64,
                     count_distinct     Int32,
-                    PRIMARY KEY (agg_id)
+                    PRIMARY KEY (filter_type)
                 )
             """
             if name == 'column_results':
@@ -139,10 +127,10 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 except Exception as e:
                     logger.warning("Updater [%s] error: %s", table_name, e)
 
-    def _pk_aggregator(self, table_name, result_table, agg_id, stop_event, exec_counter, lock):
+    def _pk_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
         """Reads a group-aligned PK range under snapshot isolation, computes the
         aggregate, and writes it to the result table (generating write conflicts
-        when multiple threads share the same agg_id slot)."""
+        when multiple threads write with the same filter_type)."""
 
         driver = self.create_driver()
         with ydb.QuerySessionPool(self.driver) as pool:
@@ -167,10 +155,9 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                         with tx.execute(
                             f"UPSERT INTO `{result_table}` "
-                            "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
-                            f"VALUES ($agg_id, \"pk_range\", $lo, $hi, $row_count, $int_sum, $cd)",
+                            "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
+                            f"VALUES (\"pk_range\", $lo, $hi, $row_count, $int_sum, $cd)",
                             parameters={
-                                '$agg_id': (agg_id, ydb.PrimitiveType.Int32),
                                 '$lo': (lo, ydb.PrimitiveType.Int32),
                                 '$hi': (hi, ydb.PrimitiveType.Int32),
                                 '$row_count': (res.rc, ydb.PrimitiveType.Int32),
@@ -187,9 +174,10 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 except Exception as e:
                     logger.warning("PK aggregator [%s] error: %s", table_name, e)
 
-    def _sec_idx_aggregator(self, result_table, agg_id, stop_event, exec_counter, lock):
+    def _int_filter_aggregator(self, result_table, stop_event, exec_counter, lock):
         """Reads datashard_table via its secondary index under snapshot isolation.
-        Invariant: count(distinct str_val) must equal hi - lo + 1.
+
+        Invariant 2: count(distinct str_val) must equal hi - lo + 1.
         A snapshot violation would allow the index shard to return stale PKs whose
         data rows have already been updated to a different int_val, introducing an
         unexpected distinct str_val value (or missing an expected one)."""
@@ -216,10 +204,9 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                         with tx.execute(
                             f"UPSERT INTO `{result_table}` "
-                            "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
-                            "VALUES ($agg_id, \"sec_idx\", $lo, $hi, $row_count, $int_sum, $cd)",
+                            "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
+                            "VALUES (\"int_range\", $lo, $hi, $row_count, $int_sum, $cd)",
                             parameters={
-                                '$agg_id': (agg_id, ydb.PrimitiveType.Int32),
                                 '$lo': (lo, ydb.PrimitiveType.Int32),
                                 '$hi': (hi, ydb.PrimitiveType.Int32),
                                 '$row_count': (res.rc, ydb.PrimitiveType.Int32),
@@ -236,7 +223,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 except Exception as e:
                     logger.warning("Secondary index aggregator error: %s", e)
 
-    def _str_aggregator(self, table_name, result_table, agg_id, stop_event, exec_counter, lock):
+    def _str_filter_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
         """Reads via a string-range filter under snapshot isolation.
         Invariant: count(distinct str_val) must equal hi - lo + 1.
         Since str_val is a zero-padded mirror of int_val, a snapshot-consistent
@@ -266,10 +253,9 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                         with tx.execute(
                             f"UPSERT INTO `{result_table}` "
-                            "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
-                            "VALUES ($agg_id, \"str_range\", $lo, $hi, $row_count, $int_sum, $cd)",
+                            "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
+                            "VALUES (\"str_range\", $lo, $hi, $row_count, $int_sum, $cd)",
                             parameters={
-                                '$agg_id': (agg_id, ydb.PrimitiveType.Int32),
                                 '$lo': (lo, ydb.PrimitiveType.Int32),
                                 '$hi': (hi, ydb.PrimitiveType.Int32),
                                 '$row_count': (res.rc, ydb.PrimitiveType.Int32),
@@ -314,7 +300,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                         f"filter=[{row.filter_lo},{row.filter_hi}], "
                         f"count_distinct={row.count_distinct}, expected={GROUP_SIZE}"
                     )
-            elif filter_type in ('sec_idx', 'str_range'):
+            elif filter_type in ('int_range', 'str_range'):
                 if row.count_distinct is None:
                     continue
                 expected_cd = row.filter_hi - row.filter_lo + 1
@@ -374,28 +360,28 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         start('ds_upd',  self._updater, 'datashard_table')
         start('col_upd', self._updater, 'column_table')
 
-        # --- Datashard PK-range aggregators (2 threads, N_PK_SLOTS slots) ---
+        # --- Datashard PK-range aggregators (2 threads) ---
         for i in range(2):
             start(f'ds_pk_{i}', self._pk_aggregator,
-                  'datashard_table', 'datashard_results', i % N_PK_SLOTS)
+                  'datashard_table', 'datashard_results')
 
-        # --- Secondary-index aggregators (2 threads share 1 slot → conflicts) ---
+        # --- Secondary-index aggregators (2 threads) ---
         for i in range(2):
-            start(f'ds_sec_{i}', self._sec_idx_aggregator,
-                  'datashard_results', N_PK_SLOTS)
+            start(f'ds_int_{i}', self._int_filter_aggregator,
+                  'datashard_results')
 
         # --- Datashard string-range aggregator ---
-        start('ds_str', self._str_aggregator,
-              'datashard_table', 'datashard_results', N_PK_SLOTS + N_SEC_SLOTS)
+        start('ds_str', self._str_filter_aggregator,
+              'datashard_table', 'datashard_results')
 
         # --- Column PK-range aggregators (2 threads, N_PK_SLOTS slots) ---
         for i in range(2):
             start(f'col_pk_{i}', self._pk_aggregator,
-                  'column_table', 'column_results', i % N_PK_SLOTS)
+                  'column_table', 'column_results')
 
         # --- Column string-range aggregator ---
-        start('col_str', self._str_aggregator,
-              'column_table', 'column_results', N_PK_SLOTS)
+        start('col_str', self._str_filter_aggregator,
+              'column_table', 'column_results')
 
         self._wait_for_progress(exec_counters, lock, min_per_counter=5)
         res1 = self._execute("select * from column_results")

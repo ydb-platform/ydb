@@ -106,8 +106,9 @@ TString SerializeRecordBatchRecords(
     return result;
 }
 
-std::vector<TKafkaRecordBatchV0> ReadLegacyRecordEntries(TStringBuf data, TKafkaVersion magic) {
-    TBuffer buffer(data.data(), data.size());
+// The returned entries keep TKafkaBytes views into `buffer`, so the caller must
+// keep `buffer` alive for as long as the entries are used.
+std::vector<TKafkaRecordBatchV0> ReadLegacyRecordEntries(const TBuffer& buffer, TKafkaVersion magic) {
     TKafkaReadable readable(buffer);
     std::vector<TKafkaRecordBatchV0> entries;
 
@@ -477,6 +478,9 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
 
     if (CompressionType() == ECompressionType::NONE) {
         NPrivate::Read<RecordsMeta>(_readable, _version, Records);
+        for (auto& record : Records) {
+            record.OwnPayload();
+        }
     } else {
         const TKafkaInt32 recordsCount = NPrivate::ReadArraySize<RecordsMeta>(_readable, _version);
         EnsureValidRecordBatchRecordsCount(recordsCount);
@@ -690,7 +694,8 @@ void NPrivate::ReadLegacyRecordBatch(
         const TString decompressed = DecompressRecordBatchPayload(
             TStringBuf(value.data(), value.size()),
             compressionType);
-        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(decompressed, magic);
+        TBuffer innerBuffer(decompressed.data(), decompressed.size());
+        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(innerBuffer, magic);
         const std::optional<i64> wrapperTimestamp = magic == 1
             ? std::optional<i64>(entry.Record.Timestamp)
             : std::nullopt;

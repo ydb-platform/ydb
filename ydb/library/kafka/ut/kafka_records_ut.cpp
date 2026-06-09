@@ -338,8 +338,9 @@ TKafkaRecordBatch ReadKafkaLegacyProducerBatch(TStringBuf data, TKafkaVersion ma
     return parsed;
 }
 
-std::vector<TKafkaRecordBatchV0> ReadKafkaLegacyRecordBatchWrappers(TStringBuf data, TKafkaVersion magic) {
-    TBuffer buffer(data.data(), data.size());
+// TKafkaRecordBatchV0 keeps TKafkaBytes views into `buffer`, so the caller must
+// keep `buffer` alive for as long as the returned records are used.
+std::vector<TKafkaRecordBatchV0> ReadKafkaLegacyRecordBatchWrappers(const TBuffer& buffer, TKafkaVersion magic) {
     TKafkaReadable readable(buffer);
     std::vector<TKafkaRecordBatchV0> records;
     while (readable.left() > 0) {
@@ -382,7 +383,8 @@ void AssertKafkaLegacyProducerBatchDeserialized(
 
 void AssertKafkaLegacyProducerBatchSerialized(TKafkaVersion magic, ECompressionType compressionType) {
     const TString serialized = KafkaLegacyProducerBatchBytes(magic, compressionType);
-    const std::vector<TKafkaRecordBatchV0> records = ReadKafkaLegacyRecordBatchWrappers(serialized, magic);
+    TBuffer buffer(serialized.data(), serialized.size());
+    const std::vector<TKafkaRecordBatchV0> records = ReadKafkaLegacyRecordBatchWrappers(buffer, magic);
     UNIT_ASSERT_VALUES_EQUAL(WriteKafkaLegacyRecordBatchWrappers(records, magic), serialized);
 }
 

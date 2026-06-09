@@ -70,8 +70,8 @@ message TTableServiceConfig {
             optional bool Enable = 1 [default = true];
             optional string Root = 2 [default = ""];
             optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
-            optional uint64 MaxFileSize = 4 [default = 5368709120, deprecated = true];    // 5 GiB
-            optional uint64 MaxFilePartSize = 5 [default = 104857600, deprecated = true]; // 100 MB
+            reserved 4, 5;
+            reserved "MaxFileSize", "MaxFilePartSize";
 
             message TIoThreadPoolConfig {
                 optional uint32 WorkersCount = 1 [default = 2];

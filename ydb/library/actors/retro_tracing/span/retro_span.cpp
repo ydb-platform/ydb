@@ -61,15 +61,6 @@ void TRetroSpan::AttachToTrace(const NWilson::TTraceId& parentId) {
     SpanId = ParentId.Span(DefaultVerbosity);
 }
 
-TRetroSpan* TRetroSpan::Deserialize(const void* data) {
-    const TRetroSpan* base = reinterpret_cast<const TRetroSpan*>(data);
-    return TRetroSpan::DeserializeImpl(base->GetType(), base->GetSize(), data);
-}
-
-std::unique_ptr<TRetroSpan> TRetroSpan::DeserializeToUnique(const void* data) {
-    return std::unique_ptr<TRetroSpan>(TRetroSpan::Deserialize(data));
-}
-
 void TRetroSpan::Serialize(void* destination) const {
     std::memcpy(destination, GetData(), GetSize());
 }
@@ -87,12 +78,12 @@ void TRetroSpan::End() {
 }
 
 void TRetroSpan::EndError() {
-    StatusCode = EStatusCode::STATUS_CODE_OK;
+    StatusCode = EStatusCode::STATUS_CODE_ERROR;
     End();
 }
 
 void TRetroSpan::EndOk() {
-    StatusCode = EStatusCode::STATUS_CODE_ERROR;
+    StatusCode = EStatusCode::STATUS_CODE_OK;
     End();
 }
 

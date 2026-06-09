@@ -1,7 +1,8 @@
 #include "retro_collector.h"
-#include "span_buffer.h"
-
 #include "events.h"
+#include "retro_span_deserialization.h"
+
+#include <ydb/library/actors/retro_tracing/span/span_buffer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -30,9 +31,11 @@ private:
 
     void ConvertAndSend(std::vector<std::unique_ptr<TRetroSpan>>&& spans) {
         for (const std::unique_ptr<TRetroSpan>& span : spans) {
-            std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
-            wilson->Attribute("type", "RETRO");
-            wilson->End();
+            Y_ABORT_UNLESS(span);
+            if (std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan()) {
+                wilson->Attribute("type", "RETRO");
+                wilson->End();
+            }
         }
     }
 

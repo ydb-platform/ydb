@@ -145,7 +145,11 @@ namespace NActors {
         Subscribers.clear();
 
         for (auto& d : DelayedEvents) {
-            d.Span.EndError("nondelivery");
+            if (NWilson::TSpan* wilsonSpan = d.Span.GetWilsonSpanPtr()) {
+                wilsonSpan->EndError("nondelivery");
+            } else if (NActors::TDelayedEventSpan* retroSpan = d.Span.GetRetroSpanPtr()) {
+                retroSpan->EndError();
+            }
             TActivationContext::Send(IEventHandle::ForwardOnNondelivery(d.Event, TEvents::TEvUndelivered::Disconnected));
         }
         DelayedEvents.clear();
@@ -275,7 +279,7 @@ namespace NActors {
         Y_ABORT_UNLESS(!DelayedEvents.empty());
         auto d = std::move(DelayedEvents.front());
         DelayedEvents.pop_front();
-        d.Span.End();
+        d.Span.EndOk();
         Enqueue(d.Event);
     }
 

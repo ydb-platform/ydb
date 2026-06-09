@@ -970,7 +970,6 @@ public:
 };
 
 struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
-    // TODO(flown4qqqq): rename statuses
     enum class EOperationState: ui32 {
         Invalid = 0,
         Locking = 10,

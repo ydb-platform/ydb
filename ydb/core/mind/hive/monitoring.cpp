@@ -18,7 +18,7 @@ namespace NHive {
 static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
 static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 
-void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, bool enableSecurePath) {
+static void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, bool enableSecurePath) {
     const TStringBuf monRoot = IsTabletDevUiSecurePath(pathInfo) ? TStringBuf("../..") : TStringBuf("..");
     out << "<script src=\"" << monRoot << "/cms/hive.js\"></script>";
     out << "<script>EnableTabletDevUiSecurePath=" << (enableSecurePath ? "true" : "false") << ";</script>";
@@ -504,6 +504,10 @@ public:
 
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
+        AppendTabletDevUiMonScript(
+            out,
+            Event.Get()->PathInfo(),
+            AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath());
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr>";

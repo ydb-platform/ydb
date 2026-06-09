@@ -21,23 +21,6 @@ function makeTabletDevUiUrl(queryAndMaybeHash) {
     return makeMonUrl('/tablets/' + getTabletDevUiPath() + '?' + queryAndMaybeHash);
 }
 
-function detectTabletDevUiModeAndRun(onReady) {
-    $.get(makeMonUrl('/viewer/capabilities'))
-        .done(function(data) {
-            EnableTabletDevUiSecurePath = Boolean(
-                data &&
-                data.Settings &&
-                data.Settings.Features &&
-                data.Settings.Features.EnableTabletDevUiSecurePath
-            );
-            onReady();
-        })
-        .fail(function() {
-            EnableTabletDevUiSecurePath = false;
-            onReady();
-        });
-}
-
 function hiveAppUrl(query) {
     return makeTabletDevUiUrl(query);
 }

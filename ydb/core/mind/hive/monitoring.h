@@ -27,7 +27,5 @@ struct THttpStatus {
 
 NMon::TEvRemoteBinaryInfoRes* MakeRawHttpEvent(const TString& status, const TString& content);
 
-void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, bool enableSecurePath);
-
 }
 }

@@ -195,7 +195,7 @@ bool HasOnlySchemeShardDevUiParams(const TCgiParameters& cgi, std::initializer_l
     return true;
 }
 
-bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi) {
+bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi, const TActorContext& ctx) {
     if (cgi.Has(TCgi::Action)) {
         return false;
     }
@@ -223,7 +223,7 @@ bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi) {
     if (page == TCgi::TPages::BuildIndexInfo) {
         return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::BuildIndexId});
     }
-    ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
     return false;
 }
@@ -2143,7 +2143,7 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
             securePathMode,
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            IsPublicSchemeShardDevUiRequest(cgi)))
+            IsPublicSchemeShardDevUiRequest(cgi, ctx)))
     {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

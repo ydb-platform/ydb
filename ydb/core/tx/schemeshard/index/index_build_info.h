@@ -880,7 +880,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     TTxId ValidationSnapshotTxId = TTxId();
     TStepId ValidationSnapshotStep = TStepId();
 
-    ui32 MaxInProgressValidationShards = 10;
+    constexpr static ui32 MaxInProgressValidationShards = 10;
 
     bool ValidationFailed = false;  // true if any shard found NULL values
 

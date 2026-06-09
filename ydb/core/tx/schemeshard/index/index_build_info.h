@@ -700,31 +700,31 @@ public:
             << " for index type " << static_cast<int>(IndexType);
     }
 
-    virtual bool IsBuildSecondaryIndex() const {
+    bool IsBuildSecondaryIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryIndex;
     }
 
-    virtual bool IsBuildSecondaryUniqueIndex() const {
+    bool IsBuildSecondaryUniqueIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
-    virtual bool IsBuildPrefixedVectorIndex() const {
+    bool IsBuildPrefixedVectorIndex() const {
         return BuildKind == EBuildKind::BuildPrefixedVectorIndex;
     }
 
-    virtual bool IsBuildVectorIndex() const {
+    bool IsBuildVectorIndex() const {
         return BuildKind == EBuildKind::BuildVectorIndex || IsBuildPrefixedVectorIndex();
     }
 
-    virtual bool IsBuildFulltextIndex() const {
+    bool IsBuildFulltextIndex() const {
         return BuildKind == EBuildKind::BuildFulltext;
     }
 
-    virtual bool IsBuildIndex() const {
+    bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
 
-    virtual bool IsBuildColumns() const {
+    bool IsBuildColumns() const {
         return BuildKind == EBuildKind::BuildColumns;
     }
 
@@ -732,14 +732,14 @@ public:
         return false;
     }
 
-    virtual bool IsPreparing() const {
+    bool IsPreparing() const {
         return State == EState::AlterMainTable ||
                State == EState::Locking ||
                State == EState::GatheringStatistics ||
                State == EState::Initiating;
     }
 
-    virtual bool IsTransferring() const {
+    bool IsTransferring() const {
         return State == EState::Filling ||
                State == EState::DropBuild ||
                State == EState::CreateBuild ||
@@ -747,7 +747,7 @@ public:
                State == EState::AlterSequence;
     }
 
-    virtual bool IsApplying() const {
+    bool IsApplying() const {
         return State == EState::Applying ||
                State == EState::Unlocking;
     }
@@ -756,19 +756,19 @@ public:
         return State == EState::Done;
     }
 
-    virtual bool IsCancelled() const {
+    bool IsCancelled() const {
         return State == EState::Cancelled || State == EState::Rejected;
     }
 
-    virtual bool IsFinished() const {
+    bool IsFinished() const {
         return IsDone() || IsCancelled();
     }
 
-    virtual bool IsValidatingUniqueIndex() const {
+    bool IsValidatingUniqueIndex() const {
         return SubState == ESubState::UniqIndexValidation || SubState == ESubState::UniqConsistentValidation;
     }
 
-    virtual bool IsFlatRelevanceFulltext() const {
+    bool IsFlatRelevanceFulltext() const {
         if (BuildKind != EBuildKind::BuildFulltext) {
             return false;
         }

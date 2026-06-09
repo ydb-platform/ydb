@@ -215,6 +215,7 @@ public:
     }
 
     void PassAway() override {
+        ReleaseCompileHost();
         TActor::PassAway();
     }
 
@@ -491,10 +492,13 @@ private:
         Reply(status, {issue});
     }
 
-    void ResetForNextRequest() {
-        Gateway.Reset();
-        KqpHost.Reset();
+    void ReleaseCompileHost() {
         AsyncCompileResult.Reset();
+        KqpHost.Reset();
+        Gateway.Reset();
+    }
+
+    void ResetForNextRequest() {
         Query.reset();
         MetadataLoader.reset();
         GUCSettings = std::make_shared<TGUCSettings>();
@@ -533,6 +537,8 @@ private:
 
     void Handle(TQueryReplayEvents::TEvCompileRequest::TPtr& ev) {
         Owner = ev->Sender;
+
+        ReleaseCompileHost();
 
         ReplayDetails = std::move(ev->Get()->ReplayDetails);
 

@@ -361,6 +361,11 @@ bool GetOrdered(const TKqpOpMap& map) {
     return maybeOrdered && maybeOrdered.Cast().StringValue() == "True";
 }
 
+bool GetDistinct(const TKqpOpAggregationTraits& aggTraits) {
+    auto maybeDistinct = aggTraits.Distinct();
+    return maybeDistinct && maybeDistinct.Cast().StringValue() == "distinct";
+}
+
 } // anonymous namespace
 
 void RepairPlanOutputIUs(TOpRoot& root, TExprContext& ctx) {
@@ -745,7 +750,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
         const auto resultColName = TInfoUnit(TString(traits.ResultColName()));
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName, GetDistinct(traits));
         opAggTraitsList.push_back(opAggTraits);
     }
 

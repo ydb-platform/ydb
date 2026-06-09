@@ -50,7 +50,7 @@ message TS3Settings {
     optional bool UseVirtualAddressing = 15 [default = true];
 
     oneof Format {
-        TYdbDumpFormat YdbDump = 16;
+        TYdbDumpFormat YdbDump = 16; // CSV
         TParquetFormat Parquet = 17;
     }
 

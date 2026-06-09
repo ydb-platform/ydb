@@ -14,13 +14,16 @@ namespace NKikimr::NDataShard {
 class TExportS3BufferFixture : public NUnitTest::TBaseFixture {
 public:
     void SetUp(NUnitTest::TTestContext&) override {
-        Columns[0] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
-        Columns[1] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
-        TVector<ui32> tags{0, 1};
+        TVector<ui32> tags;
+        {
+            ui32 tag = 0;
+            Columns[tag] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
+            tags.push_back(tag);
+        }
 
-        for (ui32 tag = 2; tag < 20; ++tag) {
-            auto name = "key" + ToString(tag);
-            Columns[tag] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", name, false);
+        for (ui32 tag = 1; tag < 20; ++tag) {
+            auto name = "value" + ToString(tag);
+            Columns[tag] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", name, false);
             tags.push_back(tag);
         }
         Tags.swap(tags);
@@ -47,8 +50,6 @@ public:
         case EDataFormat::PARQUET:
             buffer = CreateS3ParquetExportBuffer(std::move(settings));
             break;
-        default:
-            return nullptr;
         }
         
         buffer->ColumnsOrder(Tags);
@@ -65,9 +66,6 @@ public:
             case EDataFormat::PARQUET:
                 exportBuffer = &ParquetBuffer;
                 break;
-            default:
-                UNIT_FAIL((std::ostringstream() << "Unknown data format " << int(dataFormat)).str());
-                return nullptr;
         }
 
         if (!*exportBuffer) {
@@ -80,9 +78,9 @@ public:
         NTable::IScan::TRow row;
         row.Init(Columns.size());
         row.Set(0, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(k));
-        row.Set(1, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(v.data(), v.size()));
-        for (ui32 tag = 2; tag < Columns.size(); ++tag) {
-            row.Set(tag, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(100000*tag+k));
+        for (ui32 tag = 1; tag < Columns.size(); ++tag) {
+            auto value = (TStringBuilder() << v << "_" << tag << "_" << k);
+            row.Set(tag, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(value.data(), value.size()));
         }
         auto buffer = Buffer(dataFormat);
         auto res = buffer->Collect(row);
@@ -92,7 +90,7 @@ public:
     // Tests impl
     void TestMinBufferSize(ui64 minBufferSize, EDataFormat dataFormat) {
         for (ui32 i = 0; i < 10000; ++i) {
-            UNIT_ASSERT(CollectKeyValue(dataFormat, i, "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"));
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString("v") * 20));
             NExportScan::IBuffer::TStats stats;
             auto buffer = Buffer(dataFormat);
             if (buffer->IsFilled()) {
@@ -115,7 +113,7 @@ public:
 
 Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
     Y_UNIT_TEST(MinBufferSize, EDataFormat) {
-        ui64 minBufferSize = 5000;
+        ui64 minBufferSize = 50000;
         auto dataFormat = Arg<0>();
         Settings()
             .WithMaxRows(2)
@@ -137,7 +135,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
     }
 
     Y_UNIT_TEST(MinBufferSizeWithCompression, EDataFormat) {
-        ui64 minBufferSize = 5000;
+        ui64 minBufferSize = 50000;
         auto dataFormat = Arg<0>();
         Settings()
             .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))
@@ -149,7 +147,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
     }
 
     Y_UNIT_TEST(MinBufferSizeWithCompressionAndEncryption, EDataFormat) {
-        ui64 minBufferSize = 5000;
+        ui64 minBufferSize = 50000;
         auto dataFormat = Arg<0>();
         Settings()
             .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))

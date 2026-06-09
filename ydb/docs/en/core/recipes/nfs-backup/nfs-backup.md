@@ -52,7 +52,7 @@ Permissions on the NFS directory for **import** (reading files):
 
 Because files are created by the `ydbd` process during export, file permissions cannot be set in advance. In NFSv4, **ACE inheritance** is used — flags `f` (file-inherit) and `d` (directory-inherit) on the parent directory ACE. When a new file or subdirectory is created, ACEs with these flags are automatically copied to the new object.
 
-{% cut "Пошаговая настройка NFS-сервера и клиентов" %}
+{% cut "Step-by-step NFS-server and clients setting" %}
 
 Below are instructions for setting up an NFS server and {{ ydb-short-name }} client nodes for two permission management options: standard POSIX permissions and extended NFSv4 ACL.
 

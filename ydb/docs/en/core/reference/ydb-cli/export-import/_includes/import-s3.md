@@ -34,7 +34,7 @@ The import from S3 command requires [S3 connection parameters](../auth-s3.md). B
 
 {% include [import-objects-params.md](./import-objects-params.md) %}
 
-{% cut "Альтернативный способ" %}
+{% cut "Alternative method" %}
 
 {% include [import-alternative-syntax.md](./import-alternative-syntax.md) %}
 

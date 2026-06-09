@@ -30,11 +30,11 @@ The export to NFS command requires a mounted directory (or subdirectory) shared 
 
 {% include [export-root-include-exclude-params.md](_includes/export-root-include-exclude-params.md) %}
 
-{% cut "Альтернативный способ" %}
+{% cut "Alternative method" %}
 
 An alternate syntax is supported to specify the list of objects:
 
-`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. `STRING` is set in `<свойство>=<значение>,...` format with the following mandatory properties:
+`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
 
 - `source`, `src`, or `s`: Path to the exported directory or table; `.` indicates the database root directory. If you specify a directory, all non-system objects in it and, recursively, all non-system subdirectories are exported.
 - `destination`, `dst`, or `d`: Path in NFS (relative to `--fs-path`).

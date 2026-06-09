@@ -1,0 +1,88 @@
+# Minidumps (built-in Google Breakpad)
+
+The `ydbd` server binary in {{ ydb-short-name }} can collect **minidumps** when the process crashes, using the built-in [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad/). A minidump is a compact snapshot of the process state (stack, registers, list of loaded modules) at the moment of a crash caused by an unhandled signal (`SIGSEGV`, `SIGABRT`, `SIGFPE`, and others).
+
+Unlike a system core dump, a minidump:
+
+- takes up significantly less space;
+- is collected by its own signal handler and does not depend on the host's `ulimit` and `core_pattern` settings;
+- is written out-of-process, which makes it possible to obtain a dump even when the heap is corrupted and collecting a full core dump is unreliable;
+- can be automatically passed to an external script for post-processing (uploading, symbolization, alerting).
+
+{% note info %}
+
+Minidump collection is supported on Linux only. The functionality is absent on other platforms.
+
+{% endnote %}
+
+## Enabling minidump collection {#enable}
+
+By default, minidump collection is disabled. To enable it, specify the directory where dumps will be written. This can be done in two ways: through environment variables or through `ydbd server` command-line options. Command-line options take precedence over environment variables.
+
+If the directory is not set by either method, the built-in Breakpad is not activated and does not install signal handlers.
+
+### Environment variables {#env}
+
+| Variable | Purpose |
+|----------|---------|
+| `BREAKPAD_MINIDUMPS_PATH` | directory for writing minidumps; setting this variable enables minidump collection at process startup |
+| `BREAKPAD_MINIDUMPS_SCRIPT` | path to the minidump [post-processing](#script) script |
+
+### Command-line options {#cli}
+
+The options are added to the `ydbd server` command:
+
+| Option | Purpose |
+|--------|---------|
+| `--breakpad-minidumps-path PATH` | directory for writing minidumps |
+| `--breakpad-minidumps-script SCRIPT` | path to the minidump [post-processing](#script) script |
+
+Startup example:
+
+```bash
+ydbd server \
+    --breakpad-minidumps-path /var/log/ydb/minidumps \
+    --breakpad-minidumps-script /usr/local/bin/process-minidump.sh \
+    ...
+```
+
+## Post-processing script {#script}
+
+If a post-processing script is set, it is run immediately after the minidump is written. The script is called with the following arguments:
+
+| Argument | Value |
+|----------|-------|
+| `$1` | `true` or `false` — whether the minidump was written successfully |
+| `$2` | path to the minidump file (empty string if writing failed) |
+
+The `ydbd` process environment is not passed to the script, so any parameters it needs must be hardcoded in the script itself or derived from the arguments.
+
+{% note warning %}
+
+The script is run in the context of the crashed process, from a signal handler. It must be as lightweight as possible at startup; heavy processing (uploading the dump, symbolization, alerting) should be delegated to separate processes launched by the script.
+
+{% endnote %}
+
+Example of a script that only moves the dump to an archive directory:
+
+```bash
+#!/bin/sh
+# $1 — succeeded (true|false), $2 — path to the minidump
+if [ "$1" = "true" ]; then
+    mv "$2" /var/log/ydb/minidumps/archive/
+fi
+```
+
+## Analyzing minidumps {#analyze}
+
+A minidump does not contain symbols: to obtain a human-readable stack, you need the symbols of the same `ydbd` build artifact. The standard Google Breakpad tools (`minidump_stackwalk` and `.sym` files) produced from the symbols of the corresponding build are used for the analysis.
+
+## Checking for built-in Breakpad {#check}
+
+You can find out whether the `ydbd` binary was built with the built-in Breakpad from the version compatibility information: when the built-in Breakpad is present, the line `HasInternalBreakpad: true` is added to it.
+
+## See also {#see-also}
+
+- [{#T}](logging.md)
+- [{#T}](monitoring.md)
+- [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad/)

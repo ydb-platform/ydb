@@ -1,20 +1,22 @@
 # Changing columns
 
-{{ backend_name }} supports adding columns to {% if backend_name == "YDB" %} [row](../../../../concepts/datamodel/table.md#row-oriented-tables) and [column](../../../../concepts/datamodel/table.md#column-oriented-tables) tables{% else %} [tables](../../../../concepts/datamodel/table.md) {% endif %}, deleting non-key columns from tables, and changing properties of existing columns.
+{{ backend_name }} supports adding columns to {% if backend_name == "YDB" %} [row](%E2%9F%A6U1%E2%9F%A7) and [column](%E2%9F%A6U2%E2%9F%A7) tables{% else %} [tables](%E2%9F%A6U3%E2%9F%A7) {% endif %}, deleting non-key columns from tables, and changing properties of existing columns.
 
 ## ADD COLUMN
 
 Builds a new column with the specified name, type, and options for the specified table.
 
+
 ```yql
 ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
+
 
 ## Request parameters
 
 ### table_name
 
-The path of the table to be modified.
+The path of the table to which you want to add a new column.
 
 ### column_name
 
@@ -28,26 +30,33 @@ The data type of the column. The complete list of data types supported by {{ ydb
 
 ## Example
 
-The code below will add a column named `views` with data type `Uint64` to the `episodes` table.
+The code below will add a column named `episodes` with data type `views` to the `Uint64` table.
+
 
 ```yql
 ALTER TABLE episodes ADD COLUMN views Uint64;
 ```
 
-The code below will add a column named `rate` with data type `Double` and default value `5.0` to the `episodes` table.
+
+The code below will add a column named `episodes` with data type `rate` and default value `Double` to the `5.0` table.
+
 
 ```yql
 ALTER TABLE episodes ADD COLUMN rate Double NOT NULL DEFAULT 5.0;
-ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- alternative syntax
+ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альтернативный синтаксис
 ```
+
 
 ## ALTER COLUMN
 
 Modifies properties of an existing column in the specified table. Property changes are applied without recreating the column. Some properties apply only to newly written data or during compaction (see the description of each property for details).
 
+
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
+ALTER TABLE table_name ALTER COLUMN column_name SET [FAMILY <family_name>] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
+ALTER TABLE table_name ALTER COLUMN column_name DROP [FAMILY] [NOT NULL] [DEFAULT] [COMPRESSION] [ENCODING];
 ```
+
 
 ### Request parameters
 
@@ -61,11 +70,11 @@ The name of the column to change in the specified table.
 
 #### SET
 
-Set a column option.
+Set a column property.
 
 #### DROP
 
-Remove a column option.
+Remove a column property.
 
 {% include [column_option_list_alter.md](../_includes/column_option_list_alter.md) %}
 
@@ -75,11 +84,14 @@ A single `ALTER TABLE` statement can specify multiple `ALTER COLUMN` actions sep
 
 The code below sets a default value for the `rate` column of the `episodes` table.
 
+
 ```yql
 ALTER TABLE episodes ALTER COLUMN rate SET DEFAULT 5.0;
 ```
 
+
 The code below changes default values for several columns of a table in a single statement — setting new defaults for `col_1` and `col_2` and clearing the default for `col_3`.
+
 
 ```yql
 ALTER TABLE default_columns
@@ -88,33 +100,40 @@ ALTER TABLE default_columns
     ALTER COLUMN col_3 DROP DEFAULT;
 ```
 
+
 Reset column compression settings:
+
 
 ```yql
 ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 ```
 
+
 After the query runs, the column uses the default compression algorithm again (see the `COMPRESSION` option above).
 
 Enable dictionary encoding on a column:
+
 
 ```yql
 ALTER TABLE movies ALTER COLUMN genre SET ENCODING(DICT);
 ```
 
+
 ## DROP COLUMN
 
 Deletes a column with the specified name from the specified table.
+
 
 ```yql
 ALTER TABLE table_name DROP COLUMN column_name;
 ```
 
+
 ### Request parameters
 
 #### table_name
 
-The path of the table to be modified.
+The path of the table from which you want to delete a column.
 
 #### column_name
 
@@ -123,6 +142,7 @@ The name of the column to be deleted.
 ### Example
 
 The code below will delete the column named `views` from the `episodes` table.
+
 
 ```yql
 ALTER TABLE episodes DROP COLUMN views;

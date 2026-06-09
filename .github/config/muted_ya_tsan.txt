@@ -739,6 +739,7 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[13]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[14]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[15]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[16]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[17]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[18]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[1]
@@ -937,6 +938,7 @@ ydb/tests/stress/cdc/tests py3test.sole chunk
 ydb/tests/stress/cdc/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/ctas/tests py3test.sole chunk
 ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/federated_queries/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests py3test.sole chunk

@@ -469,7 +469,7 @@ public:
 
         auto& operationInfo = *operationInfoPtr->get();
 
-        if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validate) {
+        if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validating) {
             LOG_I("TTxReplyRetrySetColumnConstraint: superfluous event, id# " << BuildId
                 << ", state# " << ToString(operationInfo.OperationState));
             return true;

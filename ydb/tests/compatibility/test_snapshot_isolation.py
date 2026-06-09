@@ -68,7 +68,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             )
         """)
         for name in ('datashard_results', 'column_results'):
-            self._execute(f"""
+            query = f"""
                 CREATE TABLE `{name}` (
                     agg_id             Int32 NOT NULL,
                     filter_type        String,
@@ -79,7 +79,14 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     count_distinct     Int32,
                     PRIMARY KEY (agg_id)
                 )
-            """)
+            """
+            if name == 'column_results':
+                query += """
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT = 1
+                )"""
+            self._execute(query)
 
     def populate_tables(self):
         # Use ListMap/AS_TABLE to generate 10k rows in a single YQL query.
@@ -182,71 +189,102 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
     def _sec_idx_aggregator(self, result_table, agg_id, stop_event, exec_counter, lock):
         """Reads datashard_table via its secondary index under snapshot isolation.
-        Invariant: every returned row must have int_val inside the filter range.
+        Invariant: count(distinct str_val) must equal hi - lo + 1.
         A snapshot violation would allow the index shard to return stale PKs whose
-        data rows have already been updated to a different int_val."""
-        while not stop_event.is_set():
-            try:
-                lo = random.randint(0, GROUP_SIZE - 2)
-                hi = random.randint(lo + 1, GROUP_SIZE - 1)
+        data rows have already been updated to a different int_val, introducing an
+        unexpected distinct str_val value (or missing an expected one)."""
 
-                def callee(tx, lo=lo, hi=hi):
-                    rows = list(tx.execute(
-                        "SELECT int_val FROM `datashard_table` VIEW int_val_index "
-                        f"WHERE int_val BETWEEN {lo} AND {hi}"
-                    )[0].rows)
-                    row_count = len(rows)
-                    int_sum = sum(r.int_val or 0 for r in rows)
-                    out_of_range = sum(
-                        1 for r in rows if (r.int_val or 0) < lo or (r.int_val or 0) > hi
-                    )
-                    tx.execute(
-                        f"UPSERT INTO `{result_table}` "
-                        "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, out_of_range_count) "
-                        f"VALUES ({agg_id}, \"sec_idx\", {lo}, {hi}, {row_count}, {int_sum}, {out_of_range})"
-                    )
+        driver = self.create_driver()
+        with ydb.QuerySessionPool(self.driver) as pool:
+            while not stop_event.is_set():
+                try:
+                    lo = random.randint(0, GROUP_SIZE - 2)
+                    hi = random.randint(lo + 1, GROUP_SIZE - 1)
 
-                with ydb.QuerySessionPool(self.driver) as pool:
+                    def callee(tx, lo=lo, hi=hi):
+                        tx.begin()
+
+                        with tx.execute(
+                            "SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
+                            "FROM `datashard_table` VIEW int_val_index "
+                            "WHERE int_val BETWEEN $lo AND $hi",
+                            parameters={
+                                '$lo': lo,
+                                '$hi': hi,
+                            }) as results:
+                            res = list(results)[0].rows[0]
+
+                        with tx.execute(
+                            f"UPSERT INTO `{result_table}` "
+                            "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
+                            "VALUES ($agg_id, \"sec_idx\", $lo, $hi, $row_count, $int_sum, $cd)",
+                            parameters={
+                                '$agg_id': (agg_id, ydb.PrimitiveType.Int32),
+                                '$lo': (lo, ydb.PrimitiveType.Int32),
+                                '$hi': (hi, ydb.PrimitiveType.Int32),
+                                '$row_count': (res.rc, ydb.PrimitiveType.Int32),
+                                '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
+                                '$cd': (res.cd, ydb.PrimitiveType.Int32),
+                            },
+                            commit_tx=True):
+                            pass
+
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
-                with lock:
-                    exec_counter[0] += 1
-            except Exception as e:
-                logger.warning("Secondary index aggregator error: %s", e)
+
+                    with lock:
+                        exec_counter[0] += 1
+                except Exception as e:
+                    logger.warning("Secondary index aggregator error: %s", e)
 
     def _str_aggregator(self, table_name, result_table, agg_id, stop_event, exec_counter, lock):
         """Reads via a string-range filter under snapshot isolation.
-        Same out-of-range invariant as the secondary index aggregator: str_val and
-        int_val are always updated together, so a snapshot-consistent read must not
-        return any row with int_val outside the int equivalent of [str_lo, str_hi]."""
-        while not stop_event.is_set():
-            try:
-                lo = random.randint(0, GROUP_SIZE - 2)
-                hi = random.randint(lo + 1, GROUP_SIZE - 1)
-                str_lo = f"{lo:05d}"
-                str_hi = f"{hi:05d}"
+        Invariant: count(distinct str_val) must equal hi - lo + 1.
+        Since str_val is a zero-padded mirror of int_val, a snapshot-consistent
+        read must see exactly the expected set of distinct values in the range."""
 
-                def callee(tx, lo=lo, hi=hi, str_lo=str_lo, str_hi=str_hi):
-                    rows = list(tx.execute(
-                        f"SELECT int_val FROM `{table_name}` "
-                        f"WHERE str_val BETWEEN \"{str_lo}\" AND \"{str_hi}\""
-                    )[0].rows)
-                    row_count = len(rows)
-                    int_sum = sum(r.int_val or 0 for r in rows)
-                    out_of_range = sum(
-                        1 for r in rows if (r.int_val or 0) < lo or (r.int_val or 0) > hi
-                    )
-                    tx.execute(
-                        f"UPSERT INTO `{result_table}` "
-                        "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, out_of_range_count) "
-                        f"VALUES ({agg_id}, \"str_range\", {lo}, {hi}, {row_count}, {int_sum}, {out_of_range})"
-                    )
+        driver = self.create_driver()
+        with ydb.QuerySessionPool(self.driver) as pool:
+            while not stop_event.is_set():
+                try:
+                    lo = random.randint(0, GROUP_SIZE - 2)
+                    hi = random.randint(lo + 1, GROUP_SIZE - 1)
+                    str_lo = f"{lo:05d}"
+                    str_hi = f"{hi:05d}"
 
-                with ydb.QuerySessionPool(self.driver) as pool:
+                    def callee(tx, lo=lo, hi=hi, str_lo=str_lo, str_hi=str_hi):
+                        tx.begin()
+
+                        with tx.execute(
+                            f"SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
+                            f"FROM `{table_name}` "
+                            f"WHERE str_val BETWEEN $str_lo AND $str_hi",
+                            parameters={
+                                '$str_lo': str_lo,
+                                '$str_hi': str_hi,
+                            }) as results:
+                            res = list(results)[0].rows[0]
+
+                        with tx.execute(
+                            f"UPSERT INTO `{result_table}` "
+                            "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
+                            "VALUES ($agg_id, \"str_range\", $lo, $hi, $row_count, $int_sum, $cd)",
+                            parameters={
+                                '$agg_id': (agg_id, ydb.PrimitiveType.Int32),
+                                '$lo': (lo, ydb.PrimitiveType.Int32),
+                                '$hi': (hi, ydb.PrimitiveType.Int32),
+                                '$row_count': (res.rc, ydb.PrimitiveType.Int32),
+                                '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
+                                '$cd': (res.cd, ydb.PrimitiveType.Int32),
+                            },
+                            commit_tx=True):
+                            pass
+
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
-                with lock:
-                    exec_counter[0] += 1
-            except Exception as e:
-                logger.warning("String aggregator [%s] error: %s", table_name, e)
+
+                    with lock:
+                        exec_counter[0] += 1
+                except Exception as e:
+                    logger.warning("String aggregator [%s] error: %s", table_name, e)
 
     # -------------------------------------------------------------------------
     # Checker (runs in the main thread)
@@ -261,22 +299,29 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             if isinstance(filter_type, bytes):
                 filter_type = filter_type.decode()
             if filter_type == 'pk_range':
-                if row.row_count is None or row.int_sum is None:
+                if row.row_count is None or row.int_sum is None or row.count_distinct is None:
                     continue
-                expected = (row.row_count // GROUP_SIZE) * FIXED_GROUP_SUM
-                assert row.int_sum == expected, (
+                expected_sum = (row.row_count // GROUP_SIZE) * FIXED_GROUP_SUM
+                assert row.int_sum == expected_sum, (
                     f"[{result_table}] Group sum violation: "
                     f"filter=[{row.filter_lo},{row.filter_hi}], "
                     f"row_count={row.row_count}, int_sum={row.int_sum}, "
-                    f"expected={expected}"
+                    f"expected={expected_sum}"
                 )
+                if row.row_count > 0:
+                    assert row.count_distinct == GROUP_SIZE, (
+                        f"[{result_table}] count(distinct str_val) violation for pk_range: "
+                        f"filter=[{row.filter_lo},{row.filter_hi}], "
+                        f"count_distinct={row.count_distinct}, expected={GROUP_SIZE}"
+                    )
             elif filter_type in ('sec_idx', 'str_range'):
-                if row.out_of_range_count is None:
+                if row.count_distinct is None:
                     continue
-                assert row.out_of_range_count == 0, (
-                    f"[{result_table}] Out-of-range violation: "
-                    f"filter_type={filter_type}, filter=[{row.filter_lo},{row.filter_hi}], "
-                    f"out_of_range_count={row.out_of_range_count}"
+                expected_cd = row.filter_hi - row.filter_lo + 1
+                assert row.count_distinct == expected_cd, (
+                    f"[{result_table}] count(distinct str_val) violation for {filter_type}: "
+                    f"filter=[{row.filter_lo},{row.filter_hi}], "
+                    f"count_distinct={row.count_distinct}, expected={expected_cd}"
                 )
 
     # -------------------------------------------------------------------------
@@ -334,13 +379,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             start(f'ds_pk_{i}', self._pk_aggregator,
                   'datashard_table', 'datashard_results', i % N_PK_SLOTS)
 
-        self._wait_for_progress(exec_counters, lock, min_per_counter=5)
-        res1 = self._execute("select * from column_results")
-        logger.warn(f"FFF1 {[rs.rows for rs in res1]}")
-        res2 = self._execute("select * from datashard_results")
-        logger.warn(f"FFF2 {[rs.rows for rs in res2]}")
-        return
-
         # --- Secondary-index aggregators (2 threads share 1 slot → conflicts) ---
         for i in range(2):
             start(f'ds_sec_{i}', self._sec_idx_aggregator,
@@ -358,6 +396,13 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         # --- Column string-range aggregator ---
         start('col_str', self._str_aggregator,
               'column_table', 'column_results', N_PK_SLOTS)
+
+        self._wait_for_progress(exec_counters, lock, min_per_counter=5)
+        res1 = self._execute("select * from column_results")
+        logger.warn(f"FFF1 {[rs.rows for rs in res1]}")
+        res2 = self._execute("select * from datashard_results")
+        logger.warn(f"FFF2 {[rs.rows for rs in res2]}")
+        return
 
         try:
             for _ in self.roll():

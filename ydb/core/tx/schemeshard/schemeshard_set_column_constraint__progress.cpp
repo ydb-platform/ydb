@@ -337,7 +337,7 @@ public:
 
         LOG_I("TTxReplyValidateRowCondition: operationId# " << BuildId
             << ", tabletId# " << tabletId
-            << ", status# " << NKikimrSetColumnConstraint::EValidateStatus_Name(record.GetStatus())
+            << ", status# " << record.GetStatus()
             << ", isValid# " << record.GetIsValid());
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
@@ -398,7 +398,7 @@ public:
 
         } else if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST) {
             LOG_E("TTxReplyValidateRowCondition: error on shard# " << shardIdx
-                << ", status# " << NKikimrSetColumnConstraint::EValidateStatus_Name(record.GetStatus()));
+                << ", status# " << record.GetStatus());
 
             operationInfo.ValidationFailed = true;
 
@@ -417,7 +417,7 @@ public:
 
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
-                << " still in progress, status# " << NKikimrSetColumnConstraint::EValidateStatus_Name(record.GetStatus()));
+                << " still in progress, status# " << record.GetStatus());
             // todo: persist shard status
         }
 

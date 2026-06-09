@@ -343,10 +343,11 @@ void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> k
 }
 
 // Configures notification delivery pacing of the dispatcher via its own config kind.
-void SetDispatcherPacing(TTenantTestRuntime &runtime, ui32 batchSize)
+void SetDispatcherPacing(TTenantTestRuntime &runtime, ui32 batchSize, ui32 delayMs = 0)
 {
     NKikimrConfig::TAppConfig config;
     config.MutableConfigsDispatcherConfig()->SetNotificationsBatchSize(batchSize);
+    config.MutableConfigsDispatcherConfig()->SetNotificationsBatchDelayMs(delayMs);
     auto item = MakeConfigItem(NKikimrConsole::TConfigItem::ConfigsDispatcherConfigItem,
                                config, {}, {}, "", "", 1,
                                NKikimrConsole::TConfigItem::MERGE, "");
@@ -402,6 +403,52 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(notified.size(), subscriberCount);
+    }
+
+    Y_UNIT_TEST(TestPacedNotificationsHonorBatchDelay) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        // Batch size 1 with a non-zero delay drives the timed Schedule() drain path
+        // (rather than the immediate self-Send used when the delay is zero).
+        SetDispatcherPacing(runtime, /* batchSize = */ 1, /* delayMs = */ 50);
+
+        constexpr size_t subscriberCount = 4;
+        for (size_t i = 0; i < subscriberCount; ++i) {
+            AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+            runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        }
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-delayed");
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        // The runtime advances virtual time across the scheduled batch delays; every
+        // subscriber must still receive the update through the timed drain path.
+        THashSet<TActorId> notified;
+        while (notified.size() < subscriberCount) {
+            auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+            if (reply->Config.GetLogConfig().GetClusterName() == "cluster-delayed") {
+                notified.insert(handle->Sender);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(notified.size(), subscriberCount);
+    }
+
+    Y_UNIT_TEST(TestSharedConfigNotificationIsNotSerializable) {
+        // The shared payload is local-only and never serialized; serializing it would
+        // silently drop the config. Guard the contract: a shared-config notification
+        // must report itself as non-serializable, while an inline one stays serializable.
+        TEvConsole::TEvConfigNotificationRequest inlineNotification;
+        inlineNotification.Record.MutableConfig()->MutableLogConfig()->SetClusterName("inline");
+        UNIT_ASSERT(inlineNotification.IsSerializable());
+
+        TEvConsole::TEvConfigNotificationRequest sharedNotification;
+        auto shared = MakeIntrusive<TEvConsole::TSharedAppConfig>();
+        shared->MutableLogConfig()->SetClusterName("shared");
+        sharedNotification.SharedConfig = shared;
+        UNIT_ASSERT(!sharedNotification.IsSerializable());
+        UNIT_ASSERT_VALUES_EQUAL(sharedNotification.GetConfig().GetLogConfig().GetClusterName(), "shared");
     }
 
     Y_UNIT_TEST(TestPacedNotificationsSupersededByNewerConfig) {

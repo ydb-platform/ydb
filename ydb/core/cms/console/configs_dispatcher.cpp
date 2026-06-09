@@ -272,6 +272,9 @@ public:
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
             hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
+            // Paced notification delivery (a fan-out may begin in StateInit and must
+            // keep draining instead of stalling until the next StateWork activation).
+            hFuncTraced(TEvPrivate::TEvProcessSendQueue, Handle);
         default:
             EnqueueEvent(ev);
             break;
@@ -456,8 +459,13 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
         notification->Record.MutableConfig()->CopyFrom(*subscription->UpdateInProcessConfig);
     }
 
+    // Record.ShortDebugString() omits the config for shared deliveries (it lives in
+    // SharedConfig, not the record), so log the effective config explicitly there.
     BLOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
-                << ": " << notification->Record.ShortDebugString());
+                << ": " << notification->Record.ShortDebugString()
+                << (notification->SharedConfig
+                        ? " shared config: " + notification->GetConfig().ShortDebugString()
+                        : TString()));
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
 }

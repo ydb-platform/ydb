@@ -38,24 +38,25 @@ TExprBase KqpRewriteWriteConstraint(const TExprBase& node, TExprContext& ctx) {
         .Name("struct")
     .Done();
 
-    auto structToCheck = structArg.Ptr();
-    AFL_ENSURE(input->GetTypeAnn());
-    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
-        const auto* structType = input->GetTypeAnn()->Cast<TStructExprType>();
-        if (IsTwoRowStruct(structType)) {
-            structToCheck = Build<TCoMember>(ctx, node.Pos())
-                .Struct(structArg)
-                .Name().Build("new")
-                .Done().Ptr();
-        }
-    }
-
     TExprNode::TPtr chainEnsure;
     for (ui32 i = 0; i < pgNotNullColumns->ChildrenSize(); i++) {
+        auto structToCheck = chainEnsure ? chainEnsure : structArg.Ptr();
+        const auto structToCheckType = GetSeqItemType(input->GetTypeAnn());
+        AFL_ENSURE(structToCheckType);
+        if (structToCheckType->GetKind() == ETypeAnnotationKind::Struct) {
+            const auto* structType = structToCheckType->Cast<TStructExprType>();
+            if (IsTwoRowStruct(structType)) {
+                structToCheck = Build<TCoMember>(ctx, node.Pos())
+                    .Struct(structToCheck)
+                    .Name().Build("new")
+                    .Done().Ptr();
+            }
+        }
+
         auto column = pgNotNullColumns->ChildPtr(i)->Content();
         auto check = Build<TCoExists>(ctx, node.Pos())
             .Optional<TCoMember>()
-                .Struct(i ? chainEnsure : structToCheck)
+                .Struct(structToCheck)
                 .Name().Build(column)
             .Build()
         .Done();
@@ -65,7 +66,7 @@ TExprBase KqpRewriteWriteConstraint(const TExprBase& node, TExprContext& ctx) {
             << column;
 
         chainEnsure = Build<TKqpEnsure>(ctx, node.Pos())
-            .Value(structArg)
+            .Value(structArg.Ptr())
             .Predicate(check)
             .IssueCode().Build(ToString((ui32) TIssuesIds::KIKIMR_BAD_COLUMN_TYPE))
             .Message(MakeMessage(errorMessage, node.Pos(), ctx))

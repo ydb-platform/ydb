@@ -2510,7 +2510,8 @@ private:
         } else { // nextNewOutIndex > 1
             TVector<TExprBase> tupleTypes;
             for (auto out: joinedOutTables) {
-                auto itemType = out.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                // Use the extended type to take into account synthetic (aux) sort columns of sorted outputs
+                const TStructExprType* itemType = TYqlRowSpecInfo(out.RowSpec()).GetExtendedType(ctx);
                 tupleTypes.push_back(TExprBase(ExpandType(out.Pos(), *itemType, ctx)));
             }
             TExprBase varType = Build<TCoVariantType>(ctx, lambda->Pos())

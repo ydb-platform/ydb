@@ -80,6 +80,7 @@ GROUP_SIZE = 10
 N_GROUPS = N_ROWS // GROUP_SIZE  # 1000
 FIXED_GROUP_SUM = GROUP_SIZE * (GROUP_SIZE - 1) // 2  # 45 = 0+1+...+9
 
+
 class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -216,7 +217,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
-                            }) as results:
+                            },
+                        ) as results:
                             res = list(results)[0].rows[0]
 
                         time.sleep(random.uniform(0, 0.1))
@@ -232,7 +234,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
-                            commit_tx=True):
+                            commit_tx=True,
+                        ):
                             pass
 
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
@@ -268,7 +271,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
-                            }) as results:
+                            },
+                        ) as results:
                             res = list(results)[0].rows[0]
 
                         time.sleep(random.uniform(0, 0.1))
@@ -284,7 +288,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
-                            commit_tx=True):
+                            commit_tx=True,
+                        ):
                             pass
 
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
@@ -316,7 +321,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             parameters={
                                 '$str_lo': str_lo,
                                 '$str_hi': str_hi,
-                            }) as results:
+                            },
+                        ) as results:
                             res = list(results)[0].rows[0]
 
                         time.sleep(random.uniform(0, 0.1))
@@ -332,7 +338,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
-                            commit_tx=True):
+                            commit_tx=True,
+                        ):
                             pass
 
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
@@ -351,7 +358,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         for rs in self._execute(f"SELECT * FROM `{result_table}`"):
             rows += rs.rows
 
-        assert len(rows) == 3 # 3 filter types
+        assert len(rows) == 3  # 3 filter types
 
         for row in rows:
             logger.info(f"Result row from {result_table}: {row}")
@@ -428,20 +435,20 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         # --- Aggregators ---
         for i in range(2):
             start(f'ds_pk_{i}', self._pk_aggregator,
-                'datashard_table', 'datashard_results')
+                  'datashard_table', 'datashard_results')
             start(f'col_pk_{i}', self._pk_aggregator,
-                'column_table', 'column_results')
+                  'column_table', 'column_results')
 
         for i in range(2):
             start(f'ds_int_{i}', self._int_range_aggregator,
-                'datashard_table', 'datashard_results')
-        start(f'col_int', self._int_range_aggregator,
-            'column_table', 'column_results')
+                  'datashard_table', 'datashard_results')
+        start('col_int', self._int_range_aggregator,
+              'column_table', 'column_results')
 
-        start(f'ds_str', self._str_range_aggregator,
-            'datashard_table', 'datashard_results')
-        start(f'col_str', self._str_range_aggregator,
-            'column_table', 'column_results')
+        start('ds_str', self._str_range_aggregator,
+              'datashard_table', 'datashard_results')
+        start('col_str', self._str_range_aggregator,
+              'column_table', 'column_results')
 
         # --- Rolling upgrade and checks ---
         try:

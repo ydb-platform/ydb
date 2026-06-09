@@ -314,8 +314,8 @@ namespace NDiscoveryPrivate {
                 auto cookie = ++LastCookie;
                 BoardLookupStartTime[cookie] = TMonotonic::Now();
                 YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY_CACHE, "Lookup",
-                    {"path", database},
-                    {"cookie", cookie});
+                    {"Path", database},
+                    {"Cookie", cookie});
                 Register(CreateBoardLookupActor(database, SelfId(), mode, {}, cookie));
             }
 
@@ -334,7 +334,7 @@ namespace NDiscoveryPrivate {
 
         void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle",
-                {"event", ev->Get()->ToString()});
+                {"Event", ev->Get()->ToString()});
             if (!AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                 return;
             }
@@ -360,7 +360,7 @@ namespace NDiscoveryPrivate {
 
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle",
-                {"event", ev->Get()->ToString()});
+                {"Event", ev->Get()->ToString()});
 
             THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
 
@@ -428,7 +428,7 @@ namespace NDiscoveryPrivate {
 
         void HandleOnInitialization(TEvPrivate::TEvRequest::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on initialization",
-                {"event", ev->Get()->ToString()});
+                {"Event", ev->Get()->ToString()});
 
             const auto* msg = ev->Get();
 
@@ -437,7 +437,7 @@ namespace NDiscoveryPrivate {
 
         void HandleOnWork(TEvPrivate::TEvRequest::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on work",
-                {"event", ev->Get()->ToString()});
+                {"Event", ev->Get()->ToString()});
 
             const auto* msg = ev->Get();
 
@@ -466,14 +466,14 @@ namespace NDiscoveryPrivate {
 
         void HandleOnInitialization(TEvNodeWardenStorageConfig::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on initialization",
-                {"event", ev->Get()->ToString()});
+                {"Event", ev->Get()->ToString()});
             BridgeInfo = ev->Get()->BridgeInfo;
             TryFinishInitialization();
         }
 
         void HandleOnWork(TEvNodeWardenStorageConfig::TPtr& ev) {
             YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY_CACHE, "Handle on work",
-                {"event", ev->Get()->ToString()});
+                {"Event", ev->Get()->ToString()});
             BridgeInfo = ev->Get()->BridgeInfo;
         }
 
@@ -507,8 +507,8 @@ namespace NDiscoveryPrivate {
                 return;
             }
 
-            YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY_CACHE, "Finish initialization : awaiting requests",
-                {"count", AwaitingRequests.size()});
+            YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY_CACHE, "Finish initialization awaiting requests",
+                {"Count", AwaitingRequests.size()});
 
             Become(&TThis::StateWork);
 
@@ -594,13 +594,13 @@ public:
 
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
         YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY, "Handle",
-            {"ev", ev->ToString()},
-            {"cookie", ev->Cookie});
+            {"Ev", ev->ToString()},
+            {"Cookie", ev->Cookie});
 
         if (ev->Cookie != LookupCookie) {
             YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Stale lookup response",
-                {"got", ev->Cookie},
-                {"expected", LookupCookie});
+                {"Got", ev->Cookie},
+                {"Expected", LookupCookie});
             return;
         }
 
@@ -619,7 +619,7 @@ public:
 
         YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY, "Handle",
             {"SchemeCacheResponse", SchemeCacheResponse->ToString()},
-            {"entry", entry.ToString()});
+            {"Entry", entry.ToString()});
 
         if (response->ErrorCount > 0) {
             switch (entry.Status) {
@@ -629,7 +629,7 @@ public:
                     "Requested database does not exist"));
             default:
                 YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Unexpected status",
-                    {"entry", entry.ToString()});
+                    {"Entry", entry.ToString()});
                 return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                     "Database resolve failed with no certain result"));
             }
@@ -637,7 +637,7 @@ public:
 
         if (!entry.DomainInfo) {
             YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Empty domain info",
-                {"entry", entry.ToString()});
+                {"Entry", entry.ToString()});
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                 "Database resolve failed with no certain result"));
         }
@@ -655,15 +655,15 @@ public:
                     ->GetCounter("pathIsNotDatabase", true)->Inc();
 
                 YDB_LOG_COMP_ERROR(NKikimrServices::DISCOVERY, "Path is not database",
-                    {"database", path});
+                    {"Database", path});
             }
         }
 
         auto info = entry.DomainInfo;
         if (NeedResolveResources(info)) {
-            YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Resolve resources domain : domain, resources domain",
-                {"domain_key", info->DomainKey},
-                {"resources_domain_key", info->ResourcesDomainKey});
+            YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Resolve resources domain domain, resources domain",
+                {"DomainKey", info->DomainKey},
+                {"ResourcesDomainKey", info->ResourcesDomainKey});
 
             Navigate(info->ResourcesDomainKey);
             ResolveResources = true;
@@ -707,7 +707,7 @@ public:
 
             if (!isDomain && !isSubDomain) {
                 YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Path is not database",
-                    {"entry", entry.ToString()});
+                    {"Entry", entry.ToString()});
                 return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::ACCESS_DENIED,
                     "Requested path is not database name"));
             }
@@ -715,7 +715,7 @@ public:
 
         if (LookupResponse->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
             YDB_LOG_COMP_DEBUG(NKikimrServices::DISCOVERY, "Lookup error",
-                {"status", ui64(LookupResponse->Status)});
+                {"Status", ui64(LookupResponse->Status)});
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                 "Database nodes resolve failed with no certain result"));
         }
@@ -725,7 +725,7 @@ public:
 
     void Lookup(const TString& db) {
         YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY, "Lookup",
-            {"path", db});
+            {"Path", db});
 
         const auto path = NKikimr::SplitPath(db);
         const auto domainName = path ? path[0] : TString();
@@ -764,7 +764,7 @@ public:
     template <typename T>
     void Navigate(const T& id) {
         YDB_LOG_COMP_TRACE(NKikimrServices::DISCOVERY, "Navigate",
-            {"path", id});
+            {"Path", id});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         if (AppData()->FeatureFlags.GetForbidDiscoveryInnerDbPaths()) {

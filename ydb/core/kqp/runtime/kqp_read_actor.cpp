@@ -414,6 +414,7 @@ public:
                 hFunc(TEvRetryShard, HandleRetry);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
+                cFunc(TEvents::TEvPoison::EventType, PassAway);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);

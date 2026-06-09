@@ -321,8 +321,8 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    bool TDDiskActor::PersistentBufferPreprocessWrite(TEvWritePersistentBuffer::TPtr ev) {
-        const auto& record = ev->Get()->Record;
+    bool TDDiskActor::PreprocessPersistentBufferWrite(NActors::TEventHandle<TEvWritePersistentBuffer>& ev) {
+        const auto& record = ev.Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
@@ -330,9 +330,9 @@ namespace NKikimr::NDDisk {
         auto barrierRecord = PersistentBufferBarriersManager.GetBarrier(creds.TabletId);
         if (barrierRecord.Generation > creds.Generation
             || (barrierRecord.Generation == creds.Generation && lsn <= barrierRecord.Lsn)) {
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::PersistentBufferPreprocessWrite write before barrier",
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::PreprocessPersistentBufferWrite write before barrier",
                 (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn), (Barrier, barrierRecord.Lsn));
-            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+            SendReply(ev, std::make_unique<TEvWritePersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
                 TStringBuilder() << "write before barrier"
                     << " tabletId# " << creds.TabletId
@@ -347,7 +347,7 @@ namespace NKikimr::NDDisk {
             if (dataEqual) {
                 const TWriteInstruction instr(record.GetInstruction());
                 Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
-                TRope payload = ev->Get()->GetPayload(*instr.PayloadId);
+                TRope payload = ev.Get()->GetPayload(*instr.PayloadId);
                 for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
                     auto it = payload.Position(SectorSize * i);
                     if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
@@ -362,9 +362,9 @@ namespace NKikimr::NDDisk {
 
             if (!dataEqual || data.OffsetInBytes != selector.OffsetInBytes || data.Size != selector.Size
                 || data.VChunkIndex != selector.VChunkIndex) {
-                STLOG_D("TDDiskActor::PersistentBufferPreprocessWrite duplicate record with incorrect data",
+                STLOG_D("TDDiskActor::PreprocessPersistentBufferWrite duplicate record with incorrect data",
                     (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
-                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                SendReply(ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     TStringBuilder() << "duplicate record with incorrect data"));
                 return false;
@@ -377,17 +377,17 @@ namespace NKikimr::NDDisk {
                 if (!checkIsSameRequest(record)) {
                     return false;
                 }
-                STLOG_D("TDDiskActor::PersistentBufferPreprocessWrite duplicate record",
+                STLOG_D("TDDiskActor::PreprocessPersistentBufferWrite duplicate record",
                     (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
-                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+                SendReply(ev, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
                 return false;
             }
 
             if (selector.Size + it->second.Size > PersistentBufferFormat.PerTabletStorageLimit) {
-                STLOG_D("TDDiskActor::PersistentBufferPreprocessWrite tablet space occupation limit is reached",
+                STLOG_D("TDDiskActor::PreprocessPersistentBufferWrite tablet space occupation limit is reached",
                     (TabletId, creds.TabletId), (Generation, creds.Generation), (TabletSpaceOccupied, it->second.Size),
                     (WriteDataSize, selector.Size), (PerTabletStorageLimit, PersistentBufferFormat.PerTabletStorageLimit));
-                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                SendReply(ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
                     TStringBuilder() << "persistent buffer overfill "
                         << selector.Size << " bytes requested, current tablet space occupation " << it->second.Size << " bytes"));
@@ -405,7 +405,7 @@ namespace NKikimr::NDDisk {
                 return false;
             }
 
-            auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
+            auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev.TraceId), "DDisk.WritePersistentBuffer",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem());
             NPrivate::AddMessageWaitAttributes(span);
             span
@@ -418,9 +418,9 @@ namespace NKikimr::NDDisk {
             auto opCookie = NextCookie++;
             auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
             inflightRecord = {
-                .Sender = ev->Sender,
-                .Cookie = ev->Cookie,
-                .Session = ev->InterconnectSession,
+                .Sender = ev.Sender,
+                .Cookie = ev.Cookie,
+                .Session = ev.InterconnectSession,
                 .Span = std::move(span),
             };
             it->second.emplace_back(opCookie);
@@ -434,7 +434,7 @@ namespace NKikimr::NDDisk {
         std::vector<TEvWritePersistentBuffer::TPtr> evsToWrite;
         evsToWrite.reserve(evs.size());
         for (auto ev : evs) {
-            if (PersistentBufferPreprocessWrite(ev)) {
+            if (PreprocessPersistentBufferWrite(*ev)) {
                 evsToWrite.push_back(ev);
             }
         }
@@ -760,7 +760,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
-        if (!PersistentBufferPreprocessWrite(ev)) {
+        if (!PreprocessPersistentBufferWrite(*ev)) {
             return;
         }
 

@@ -49,6 +49,10 @@ struct TIndexBuildShardStatus {
     }
 };
 
+struct TValidateColumnConstraintShardStatus : TIndexBuildShardStatus {
+    NKikimrSetColumnConstraint::EValidateStatus ValidateStatus = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
+};
+
 // TODO(???) [thank you, mbkkt]
 // Separate it to 4 classes:
 // > TBuildColumnsInfo
@@ -884,7 +888,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
     bool UnlockNullWritesTxDone = false;
 
-    THashMap<TShardIdx, TIndexBuildShardStatus> ValidationShards;
+    THashMap<TShardIdx, TValidateColumnConstraintShardStatus> ValidationShards;
 
     TDeque<TShardIdx> ToValidateShards;
     THashSet<TShardIdx> InProgressValidationShards;

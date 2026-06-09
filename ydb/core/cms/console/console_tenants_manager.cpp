@@ -1301,7 +1301,6 @@ private:
     TTenantsManager::TTenant::TPtr Tenant;
     TTenantsManager::TStoragePool::TPtr Pool;
     TVector<ui32> Groups;
-    TVector<ui32> SuccessGroups;
     TActorId BSControllerPipe;
 
 public:
@@ -1319,7 +1318,6 @@ public:
         , Pool(pool)
         , Groups(std::move(groups))
     {
-        SuccessGroups.reserve(Groups.size());
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -1354,7 +1352,7 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        BLOG_D("TDcecommitGroups got config response: " << rec.ShortDebugString());
+        BLOG_D("TDecommitGroups got config response: " << rec.ShortDebugString());
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
@@ -1400,7 +1398,7 @@ public:
 
     void ReplyAndDie(const TActorContext &ctx)
     {
-        ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvGroupsDecommitted(Tenant, Pool, std::move(SuccessGroups)));
+        ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvGroupsDecommitted(Tenant, Pool, std::move(Groups)));
         Die(ctx);
     }
 
@@ -3123,7 +3121,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
     while (!decommitRowset.EndOfSet()) {
         // TODO: remove old entries after some time
         DecommittedGroups.insert(decommitRowset.GetValue<Schema::DecommittedGroups::GroupId>());
-        if (!decommitRowset.EndOfSet()) {
+        if (!decommitRowset.Next()) {
             return false;
         }
     }

@@ -313,6 +313,7 @@ public:
 
         void ChangeRequiredGroups(i64 count)
         {
+            Y_DEBUG_ABORT_UNLESS(Config.GetNumGroups() + count > 0);
             Config.SetNumGroups(Config.GetNumGroups() + count);
         }
 

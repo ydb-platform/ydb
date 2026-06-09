@@ -163,7 +163,7 @@ public:
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                             Sprintf("Pool '%s' is borrowed, cannot alter", kind.data()), ctx);
             }
-            if (poolIt->second->GetGroups() + PoolsToChange[kind] <= unit.count()) {
+            if (static_cast<i64>(poolIt->second->GetGroups()) + PoolsToChange[kind] <= static_cast<i64>(unit.count())) {
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Not enough units of kind '%s' to remove",
                                      kind.data()),

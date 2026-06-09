@@ -1024,6 +1024,9 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         // Wrong unit kind.
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"unknown", 1}});
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
+                              {{"unknown", 1, 5}});
         // Zero pool size.
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"hdd-3", 0}});
@@ -1032,9 +1035,9 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                               {{"hdd", 1, 3}, {"hdd", 1, 3}});
 
-        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 9);
+        CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 10);
         CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 6);
-        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 3);
+        CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 4);
     }
 
     Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForRunning) {
@@ -1087,6 +1090,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         // trying to extend pool
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST, {{"hdd", 1}}, {});
+        // ...or to shrink it
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST, {{"hdd", 1, 2}}, {});
     }
 
     Y_UNIT_TEST(TestRemoveTenantWithBorrowedStorageUnits) {

@@ -1564,7 +1564,7 @@ public:
         const TDqHashCombineTestParams& testParams
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
+            memInfo, ctx, logger, logComponent, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
             keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, true, testParams
         )
         , OutputRowCounter(outputRowCounter)

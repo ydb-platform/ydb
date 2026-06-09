@@ -174,7 +174,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
 
         YDB_LOG_CTX_DEBUG(ctx, "Marker# BSQ25 sending",
             {"LogPrefix", LogPrefix},
-            {"func", __func__},
+            {"Func", __func__},
             {"T", getTypeName()},
             {"SequenceId", item.SequenceId},
             {"MsgId", item.MsgId},
@@ -189,9 +189,9 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
         // check if window has enough space for such item
         if (postpone) {
             // can't send more items now
-            YDB_LOG_CTX_DEBUG(ctx, "Marker# BSQ26 Queue overflow:",
+            YDB_LOG_CTX_DEBUG(ctx, "Marker# BSQ26 Queue overflow",
                 {"LogPrefix", LogPrefix},
-                {"func", __func__},
+                {"Func", __func__},
                 {"InFlightCost", InFlightCost},
                 {"WindowSize", WindowSize},
                 {"item.Cost", item.Cost},
@@ -246,11 +246,11 @@ void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus s
     const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed());
     YDB_LOG_CTX_INFO(ctx, "Marker# BSQ03 Reply error errorReason#",
         {"LogPrefix", LogPrefix},
-        {"func", __func__},
-        {"type", item.Event.GetType()},
-        {"status", NKikimrProto::EReplyStatus_Name(status)},
-        {"cookie", item.Event.GetCookie()},
-        {"processingTime", processingTime});
+        {"Func", __func__},
+        {"Type", item.Event.GetType()},
+        {"Status", NKikimrProto::EReplyStatus_Name(status)},
+        {"Cookie", item.Event.GetCookie()},
+        {"ProcessingTime", processingTime});
 
     if (item.Span) {
         item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);

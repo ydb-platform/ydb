@@ -38,7 +38,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, "Bootstrap",
-            {"client_id", ClientId.ToString()});
+            {"ClientId", ClientId.ToString()});
         TVector<TActorId> vdiskIds;
         vdiskIds.push_back(VDiskActorId);
         auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
@@ -54,8 +54,8 @@ public:
         if (InFlightRemain && Ready) {
             const TLogoBlobID blobId(0x0123456789abcdefUL, 1, BlobIdx++, 0, 1, Buffer.size());
             YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, "",
-                {"client_id", ClientId.ToString().data()},
-                {"blob_id", blobId.ToString().data()});
+                {"ClientId", ClientId.ToString().data()},
+                {"BlobId", blobId.ToString().data()});
             Send(QueueId, new TEvBlobStorage::TEvVPut(blobId, TRope(Buffer), VDiskId, false, nullptr, TInstant::Max(),
                 NKikimrBlobStorage::EPutHandleClass::TabletLog, false));
             RequestQ.push_back(blobId);
@@ -77,10 +77,10 @@ public:
         UNIT_ASSERT(!RequestQ.empty());
         UNIT_ASSERT_VALUES_EQUAL(RequestQ.front(), blobId);
         RequestQ.pop_front();
-        YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, " ",
-            {"client_id", ClientId.ToString().data()},
-            {"blob_id", blobId.ToString().data()},
-            {"reply_status", NKikimrProto::EReplyStatus_Name(record.GetStatus()).data()});
+        YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, "",
+            {"ClientId", ClientId.ToString().data()},
+            {"BlobId", blobId.ToString().data()},
+            {"ReplyStatus", NKikimrProto::EReplyStatus_Name(record.GetStatus()).data()});
     }
 
     void Handle(TEvProxyQueueState::TPtr ev) {

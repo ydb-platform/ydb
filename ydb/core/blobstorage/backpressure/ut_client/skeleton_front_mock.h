@@ -107,7 +107,7 @@ public:
 
         auto *qos = reply->Record.MutableMsgQoS();
         YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "Received",
-            {"qos", SingleLineProto(*qos)});
+            {"Qos", SingleLineProto(*qos)});
 
         if (qos->GetSendMeCostSettings()) {
             FillInCostSettings(qos->MutableCostSettings());
@@ -130,7 +130,7 @@ public:
                 ? NKikimrProto::TRYLATER : NKikimrProto::TRYLATER_SIZE);
 
             YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "Sending bad",
-                {"reply", SingleLineProto(reply->Record)});
+                {"Reply", SingleLineProto(reply->Record)});
 
             Reply(*ev, reply.release());
         }
@@ -140,7 +140,7 @@ public:
         TOperation& op = Operations.front();
 
         YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "Sending",
-            {"op", SingleLineProto(op.Result->Get<TEvBlobStorage::TEvVPutResult>()->Record)});
+            {"Op", SingleLineProto(op.Result->Get<TEvBlobStorage::TEvVPutResult>()->Record)});
 
         TActivationContext::Send(op.Result.release());
 

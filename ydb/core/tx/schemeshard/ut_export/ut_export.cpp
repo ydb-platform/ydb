@@ -20,6 +20,10 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <arrow/api.h>
+#include <arrow/io/memory.h>
+#include <parquet/arrow/reader.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -253,6 +257,26 @@ namespace {
         fieldChecker(proto);
     }
 
+    // Parses Parquet file content (as stored in S3) into a single-chunk arrow::Table.
+    std::shared_ptr<arrow::Table> ReadParquet(const TString& data) {
+        auto input = std::make_shared<arrow::io::BufferReader>(
+            reinterpret_cast<const uint8_t*>(data.data()), static_cast<int64_t>(data.size()));
+
+        parquet::arrow::FileReaderBuilder builder;
+        UNIT_ASSERT_C(builder.Open(input).ok(), "Failed to open Parquet file");
+
+        std::unique_ptr<parquet::arrow::FileReader> reader;
+        UNIT_ASSERT_C(builder.Build(&reader).ok(), "Failed to build Parquet reader");
+
+        std::shared_ptr<arrow::Table> table;
+        const auto status = reader->ReadTable(&table);
+        UNIT_ASSERT_C(status.ok(), status.message());
+
+        auto combined = table->CombineChunks();
+        UNIT_ASSERT_C(combined.ok(), combined.status().message());
+        return combined.ValueOrDie();
+    }
+
     class TExportFixture : public NUnitTest::TBaseFixture {
     public:
         void RunS3(const TVector<TString>& tables, const TString& requestTpl, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS, bool checkS3FilesExistence = true) {
@@ -320,7 +344,7 @@ namespace {
             return {};
         }
 
-        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1) {
+        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1, const TString& formatBlock = "") {
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
             if (encryptionBlock) {
@@ -375,8 +399,8 @@ namespace {
             }
 
             TString extraSettings;
-            if (compressionLine || encryptionBlock) {
-                extraSettings = compressionLine + "\n" + encryptionBlock;
+            if (compressionLine || encryptionBlock || formatBlock) {
+                extraSettings = compressionLine + "\n" + encryptionBlock + "\n" + formatBlock;
             }
 
             const auto exportId = ++txId;
@@ -4666,6 +4690,103 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         Env().TestWaitNotification(Runtime(), importId);
 
         TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldNotCorruptParquetBufferOnRetry) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        // Use a small row group size so that each row is flushed as a separate part,
+        // forcing multipart uploads and exercising the upload retry path.
+        txId = ExportWithRetryInjection(txId, "", "", 1, R"(parquet { row_group_size: 1 })");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.parquet");
+        UNIT_ASSERT(data);
+
+        const auto table = ReadParquet(*data);
+        UNIT_ASSERT_VALUES_EQUAL_C(table->num_rows(), 2, "Buffer corruption detected");
+        UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
+
+        const auto keyColumn = table->GetColumnByName("key");
+        const auto valueColumn = table->GetColumnByName("value");
+        UNIT_ASSERT(keyColumn);
+        UNIT_ASSERT(valueColumn);
+
+        const auto keys = std::static_pointer_cast<arrow::Int64Array>(keyColumn->chunk(0));
+        const auto values = std::static_pointer_cast<arrow::StringArray>(valueColumn->chunk(0));
+
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(0), "valueA");
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(1), "valueB");
+    }
+
+    Y_UNIT_TEST(ShouldNotCorruptCompressedParquetBufferOnRetry) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto generateValue = [](size_t size, ui32 seed) {
+            TString result;
+            result.reserve(size);
+            for (size_t i = 0; i < size; ++i) {
+                seed = seed * 1103515245 + 12345;
+                result.push_back('a' + (seed >> 16) % 26);
+            }
+            return result;
+        };
+        const TString value1 = generateValue(256'000, 1);
+        const TString value2 = generateValue(256'000, 2);
+        WriteRow(Runtime(), ++txId, "/MyRoot/Table", 0, 1, value1);
+        Env().TestWaitNotification(Runtime(), txId);
+        WriteRow(Runtime(), ++txId, "/MyRoot/Table", 0, 2, value2);
+        Env().TestWaitNotification(Runtime(), txId);
+
+        // Use a small row group size so that each row is flushed as a separate part,
+        // forcing multipart uploads and exercising the upload retry path.
+        // For Parquet the "zstd" codec is applied internally to the file, so it can be
+        // read back directly with arrow without external decompression.
+        txId = ExportWithRetryInjection(txId, "zstd", "", 1, R"(parquet { row_group_size: 1 })");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.parquet");
+        UNIT_ASSERT(data);
+
+        const auto table = ReadParquet(*data);
+        UNIT_ASSERT_VALUES_EQUAL_C(table->num_rows(), 2, "Compressed buffer corruption detected");
+        UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 2);
+
+        const auto keyColumn = table->GetColumnByName("key");
+        const auto valueColumn = table->GetColumnByName("value");
+        UNIT_ASSERT(keyColumn);
+        UNIT_ASSERT(valueColumn);
+
+        const auto keys = std::static_pointer_cast<arrow::Int64Array>(keyColumn->chunk(0));
+        const auto values = std::static_pointer_cast<arrow::StringArray>(valueColumn->chunk(0));
+
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys->Value(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(0), value1);
+        UNIT_ASSERT_VALUES_EQUAL(values->GetString(1), value2);
     }
 
     Y_UNIT_TEST(ShouldNotCorruptEncryptedBufferOnRetry) {

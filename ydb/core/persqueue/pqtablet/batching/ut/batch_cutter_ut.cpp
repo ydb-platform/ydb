@@ -1,6 +1,8 @@
 #include <ydb/core/persqueue/pqtablet/batching/batch_cutter.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/library/kafka/kafka_records.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
@@ -16,79 +18,38 @@ namespace {
 
 using TReadResult = NKikimrClient::TCmdReadResult::TResult;
 
-void WriteInt8(TString& out, i8 value) {
-    out.push_back(static_cast<char>(value));
-}
-
-void WriteInt16(TString& out, i16 value) {
-    out.push_back(static_cast<char>((value >> 8) & 0xff));
-    out.push_back(static_cast<char>(value & 0xff));
-}
-
-void WriteInt32(TString& out, i32 value) {
-    for (int shift = 24; shift >= 0; shift -= 8) {
-        out.push_back(static_cast<char>((value >> shift) & 0xff));
-    }
-}
-
-void WriteInt64(TString& out, i64 value) {
-    for (int shift = 56; shift >= 0; shift -= 8) {
-        out.push_back(static_cast<char>((value >> shift) & 0xff));
-    }
-}
-
-template <typename S, typename U = std::make_unsigned_t<S>>
-void WriteVarInt(TString& out, S signedValue) {
-    U value = (static_cast<U>(signedValue) << 1) ^ static_cast<U>(signedValue >> (sizeof(S) * 8 - 1));
-    while ((value & ~static_cast<U>(0x7f)) != 0) {
-        out.push_back(static_cast<char>((value & 0x7f) | 0x80));
-        value >>= 7;
-    }
-    out.push_back(static_cast<char>(value));
-}
-
-void WriteVarBytes(TString& out, TStringBuf value) {
-    WriteVarInt<i32>(out, value.size());
-    out.append(value.data(), value.size());
-}
-
-void WriteRecord(TString& out, i64 timestampDelta, i64 offsetDelta, TStringBuf key, TStringBuf value) {
-    TString body;
-    WriteInt8(body, 0);
-    WriteVarInt<i64>(body, timestampDelta);
-    WriteVarInt<i64>(body, offsetDelta);
-    WriteVarBytes(body, key);
-    WriteVarBytes(body, value);
-    WriteVarInt<i32>(body, 0);
-
-    WriteVarInt<i32>(out, body.size());
-    out += body;
+NKafka::TKafkaRecord MakeKafkaRecord(
+    i64 timestampDelta,
+    i64 offsetDelta,
+    TStringBuf key,
+    TStringBuf value)
+{
+    NKafka::TKafkaRecord record;
+    record.TimestampDelta = timestampDelta;
+    record.OffsetDelta = offsetDelta;
+    record.SetKey(TString{key});
+    record.SetValue(TString{value});
+    record.Length = record.Size(2)
+        - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
+    return record;
 }
 
 TString MakeKafkaBatchPayload() {
-    TString records;
-    WriteInt32(records, 2);
-    WriteRecord(records, 5, 0, "k0", "value0");
-    WriteRecord(records, 7, 1, "k1", "value1");
-
-    TString body;
-    WriteInt32(body, -1);
-    WriteInt8(body, 2);
-    WriteInt32(body, 0);
-    WriteInt16(body, 0);
-    WriteInt32(body, 1);
-    WriteInt64(body, 1000);
-    WriteInt64(body, 1007);
-    WriteInt64(body, 42);
-    WriteInt16(body, 3);
-    WriteInt32(body, 10);
-    body += records;
-
-    TString batch;
-    WriteInt64(batch, 100);
-    WriteInt32(batch, body.size());
-    batch += body;
-    return batch;
+    NKafka::TKafkaRecordBatch batch;
+    batch.BaseOffset = 100;
+    batch.Magic = 2;
+    batch.LastOffsetDelta = 1;
+    batch.BaseTimestamp = 1000;
+    batch.MaxTimestamp = 1007;
+    batch.ProducerId = 42;
+    batch.ProducerEpoch = 3;
+    batch.BaseSequence = 10;
+    batch.Records.push_back(MakeKafkaRecord(5, 0, "k0", "value0"));
+    batch.Records.push_back(MakeKafkaRecord(7, 1, "k1", "value1"));
+    batch.BatchLength = batch.Size(2)
+        - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
+        - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+    return NKafka::WriteKafkaRecordBatch(batch);
 }
 
 TString CompressGzip(TStringBuf data) {

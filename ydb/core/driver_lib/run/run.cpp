@@ -2261,7 +2261,7 @@ void TKikimrRunner::KikimrStart() {
     if (ActorSystem) {
         ActorSystem->Start();
         YDB_LOG_CTX_NOTICE(*ActorSystem, "GetProgramSvnVersion",
-            {"version", GetProgramSvnVersion()});
+            {"Version", GetProgramSvnVersion()});
     }
 
     if (!!Monitoring) {

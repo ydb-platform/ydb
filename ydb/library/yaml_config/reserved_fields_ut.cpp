@@ -1,6 +1,6 @@
 #include "yaml_config.h"
 
-#include <ydb/library/yaml_config/ut/reserved_fields_ut.pb.h>
+#include <ydb/library/yaml_config/reserved_fields_ut.pb.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/testing/unittest/registar.h>

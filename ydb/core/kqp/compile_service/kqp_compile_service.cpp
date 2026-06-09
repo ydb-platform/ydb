@@ -1397,17 +1397,14 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
 
     auto uid = AstIndex.FindPtr(GetQueryIdWithAst(query, ast));
     if (!uid) {
-        AccountWarmupMissImpl(warmupAttribution, counters);
         return nullptr;
     }
 
     auto compileResult = FindByUidImpl(*uid, promote);
-    const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
+    RejectOnTempTableClash(compileResult, tempTablesState);
 
     if (compileResult) {
         AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
-    } else if (!hadEntry) {
-        AccountWarmupMissImpl(warmupAttribution, counters);
     }
     return compileResult;
 }

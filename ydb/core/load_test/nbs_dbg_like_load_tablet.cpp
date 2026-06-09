@@ -108,8 +108,6 @@ struct TWriteInfo {
     EPBufferState State = EPBufferState::PBufferIncompleteWrite;
 
     NActors::TMonotonic WriteStart;
-    NActors::TMonotonic WrittenAt;
-    NActors::TMonotonic FlushedAt;
 
     TPeerBitset WriteRequested;
     TPeerBitset WriteConfirmed;
@@ -2505,7 +2503,6 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
     const ui32 writeQuorum = TabletConfig.GetDisableReplication() ? 1u : kPrimaryHostsPerDbg;
     if (info.WriteConfirmed.count() >= writeQuorum) {
         EnterState(dbg, EPBufferState::PBufferIncompleteWrite, /*delta=*/-1);
-        info.WrittenAt = now;
         if (TabletConfig.GetDisableReplication()) {
             // Skip flush: jump directly to PBufferFlushed so DoErase can
             // reclaim PB space without sending TEvSyncWithPersistentBuffer.
@@ -2738,7 +2735,6 @@ void TNbsDbgLikeActor::HandleSyncResult(
                 && info.State == EPBufferState::PBufferFlushing) {
                 EnterState(dbg, EPBufferState::PBufferFlushing, /*delta=*/-1);
                 info.State = EPBufferState::PBufferFlushed;
-                info.FlushedAt = now;
                 EnterState(dbg, EPBufferState::PBufferFlushed, /*delta=*/+1);
                 if (info.VChunkIndex < dbg.FlushedSlots.size() && info.Size != 0) {
                     dbg.FlushedSlots[info.VChunkIndex].Set(info.OffsetInVChunk / info.Size);
@@ -2980,8 +2976,18 @@ void TNbsDbgLikeActor::HandleEraseResult(
             }
         } else {
             info.EraseRequested.reset(k);
-            // Reopen erase work for this host; re-queue so DoErase retries it
-            // (the LSN was popped from PendingErase once fully requested).
+            // Reopen erase work for this host and re-queue so DoErase retries
+            // it (the LSN was popped from PendingErase once fully requested).
+            // The LSN was moved to PBufferErasing and decremented out of the
+            // PBufferFlushed gate count when fully requested; move it back to
+            // PBufferFlushed so the DoErase gate (StateCount[PBufferFlushed])
+            // sees the retry even when no new flushes are arriving. Mirrors the
+            // flush retry path; the guard makes repeated failures idempotent.
+            if (info.State == EPBufferState::PBufferErasing) {
+                EnterState(dbg, EPBufferState::PBufferErasing, /*delta=*/-1);
+                info.State = EPBufferState::PBufferFlushed;
+                EnterState(dbg, EPBufferState::PBufferFlushed, /*delta=*/+1);
+            }
             dbg.PendingErase.push_back(lsn);
             if (auto& c = RootCnt.Op[static_cast<size_t>(EOp::Erase)]; c.SubReplyErr) {
                 c.SubReplyErr->Inc();

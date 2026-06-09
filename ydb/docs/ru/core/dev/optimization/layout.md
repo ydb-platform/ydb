@@ -38,7 +38,7 @@ SELECT count(*) FROM lineitem
 
 [Стадия](../../concepts/glossary.md#processing-stage) состоит из одного или нескольких [операторов](../../concepts/glossary.md#operator). Если хотя бы один [физический оператор](../../concepts/glossary.md#physical-operator) отдаёт статистику, колонка `Operators` заполнена; у стадий без отчётности по [операторам](../../concepts/glossary.md#operator) ячейка пуста. Содержимое колонки дополняет картину по [структуре стадии](structure.md) и агрегированным метрикам в `Stages`.
 
-## Число [задач](../../concepts/glossary.md#task) стадии и прогресс их выполнения {#progress}
+## Число задач стадии и прогресс их выполнения {#progress}
 
 В {{ ydb-short-name }} запрос выполняется распределённо: одна и та же [стадия](../../concepts/glossary.md#processing-stage) может параллельно обрабатываться несколькими [задачами](../../concepts/glossary.md#task) на одном или нескольких [узлах](../../concepts/glossary.md#node) [кластера](../../concepts/glossary.md#cluster).
 

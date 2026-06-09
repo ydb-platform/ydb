@@ -26,12 +26,6 @@ enum ECompressionType : ui8 {
     ZSTD = 4
 };
 
-struct TKafkaCompression {
-    ECompressionType Type = ECompressionType::NONE;
-    bool AllowCompressed = false;
-    bool SkipDecompression = false;
-};
-
 /*
  * There are four versions of each field:
  * - present version   - field serialized and deserialized for this version of protocol.
@@ -432,12 +426,12 @@ public:
 
     size_t position() const;
 
-    void SetCompression(const TKafkaCompression& compression) {
-        Compression_ = compression;
+    void SetAllowCompressed(bool allowCompressed) {
+        AllowCompressed_ = allowCompressed;
     }
 
-    const TKafkaCompression& GetCompression() const {
-        return Compression_;
+    bool GetAllowCompressed() const {
+        return AllowCompressed_;
     }
 
 private:
@@ -445,7 +439,8 @@ private:
 
     const TBuffer& Is;
     size_t Position;
-    TKafkaCompression Compression_;
+    // Temporary switch until server-side Kafka record batch support is implemented.
+    bool AllowCompressed_ = false;
 };
 
 struct TReadDemand {

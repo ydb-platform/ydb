@@ -116,25 +116,6 @@ void AssertUnsupportedCompressionType(ECompressionType compressionType) {
     }
 }
 
-void AssertSkipDecompressionRead(ECompressionType compressionType) {
-    const TKafkaRecordBatch batch = MakeRecordBatch(compressionType);
-    const TString serialized = WriteKafkaRecordBatch(batch);
-
-    TBuffer buffer(serialized.data(), serialized.size());
-    TKafkaReadable readable(buffer);
-    readable.SetCompression({.AllowCompressed = true, .SkipDecompression = true});
-
-    TKafkaRecordBatch parsed;
-    parsed.Read(readable, 2);
-
-    UNIT_ASSERT(parsed.Records.empty());
-    UNIT_ASSERT(parsed.PackedRecords);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(parsed.CompressionType()), static_cast<int>(compressionType));
-
-    const TString roundTrip = WriteKafkaRecordBatch(parsed);
-    UNIT_ASSERT_VALUES_EQUAL(roundTrip, serialized);
-}
-
 TString Bytes(std::initializer_list<ui8> bytes) {
     TString result;
     result.reserve(bytes.size());
@@ -336,20 +317,21 @@ void AssertKafkaProducerBatchSerialized(ECompressionType compressionType) {
     TKafkaRecordBatch parsed = ReadKafkaRecordBatch(
         serialized,
         2,
-        {.AllowCompressed = true, .SkipDecompression = compressionType != ECompressionType::NONE});
+        true);
 
-    if (compressionType != ECompressionType::NONE) {
-        UNIT_ASSERT(parsed.Records.empty());
-        UNIT_ASSERT(parsed.PackedRecords);
+    if (compressionType == ECompressionType::NONE) {
+        UNIT_ASSERT_VALUES_EQUAL(WriteKafkaRecordBatch(parsed), serialized);
+    } else {
+        const TString roundTrip = WriteKafkaRecordBatch(parsed);
+        TKafkaRecordBatch reparsed = ReadKafkaRecordBatch(roundTrip);
+        UNIT_ASSERT_VALUES_EQUAL(reparsed.Records.size(), parsed.Records.size());
     }
-
-    UNIT_ASSERT_VALUES_EQUAL(WriteKafkaRecordBatch(parsed), serialized);
 }
 
 TKafkaRecordBatch ReadKafkaLegacyProducerBatch(TStringBuf data, TKafkaVersion magic) {
     TBuffer buffer(data.data(), data.size());
     TKafkaReadable readable(buffer);
-    readable.SetCompression({.AllowCompressed = true});
+    readable.SetAllowCompressed(true);
 
     TKafkaRecordBatch parsed;
     NPrivate::ReadLegacyRecordBatch(readable, magic, data.size(), parsed);
@@ -453,14 +435,6 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
 
     Y_UNIT_TEST(RecordBatchZstdRoundTrip) {
         AssertRecordBatchRoundTrip(ECompressionType::ZSTD);
-    }
-
-    Y_UNIT_TEST(RecordBatchGzipSkipDecompression) {
-        AssertSkipDecompressionRead(ECompressionType::GZIP);
-    }
-
-    Y_UNIT_TEST(RecordBatchZstdSkipDecompression) {
-        AssertSkipDecompressionRead(ECompressionType::ZSTD);
     }
 
     Y_UNIT_TEST(KafkaProducerRecordBatchDeserialize) {

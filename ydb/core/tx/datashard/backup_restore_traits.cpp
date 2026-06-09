@@ -69,15 +69,14 @@ TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     auto fit = formats.find(format);
     Y_ENSURE(fit != formats.end(), "Unexpected format: " << format);
 
-    auto cit = codecs.begin();
-    if (fit->first == EDataFormat::Parquet) {
-        // Do not use additional suffixes
-    } else {
-        cit = codecs.find(codec);
+    TString codecExt;
+    if (fit->first != EDataFormat::Parquet) {
+        auto cit = codecs.find(codec);
         Y_ENSURE(cit != codecs.end(), "Unexpected codec: " << codec);
+        codecExt = cit->second;
     }
 
-    return Sprintf("%s%s", fit->second.c_str(), cit->second.c_str());
+    return Sprintf("%s%s", fit->second.c_str(), codecExt.c_str());
 }
 
 static TString AddEncryptedSuffix(TString name, bool encryptedBackup) {

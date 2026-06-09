@@ -29,4 +29,4 @@
 
 ## Перечень поддерживаемых внешних источников данных {#supported-datasources}
 
-{{ ydb-full-name }} имеет встроенную в `ydbd` поддержку доступа к [S3-совместимым объектным хранилищам](s3/external_table.md). Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) дополнительно поддерживается доступ к ряду внешних СУБД. Подробности см. в разделе [Источники данных на основе внешних коннекторов](experimental_external_connectors/index.md).
+{{ ydb-full-name }} имеет встроенную в `ydbd` поддержку доступа к [S3-совместимым объектным хранилищам](s3/external_table.md). Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) дополнительно поддерживается доступ к ряду внешних СУБД. Подробности см. в разделе [Федеративные запросы](index.md).

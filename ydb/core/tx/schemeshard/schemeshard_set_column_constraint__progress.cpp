@@ -361,7 +361,6 @@ public:
             return true;
         }
 
-
         // There is a scenario where, even when using a pipe,
         // we may send a TEvValidateRowConditionRequest to a DataShard twice.
         // As a result, we may receive two responses.

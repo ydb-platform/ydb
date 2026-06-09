@@ -2,7 +2,6 @@
 #include "probes.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
@@ -26,6 +25,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
@@ -89,7 +89,9 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_GET_QUOTA";
 
     void Bootstrap() {
-        CPP_LOG_T("Get quotas bootstrap. Cloud id: " << Event->Get()->CloudId << " Actor id: " << SelfId());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Get quotas bootstrap. Cloud Actor",
+            {"Id", Event->Get()->CloudId},
+            {"#_id", SelfId()});
         Become(&TGetQuotaActor::StateFunc, TDuration::Seconds(10), new NActors::TEvents::TEvWakeup());
         Counters->InFly->Inc();
         Send(MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, Event->Get()->CloudId));
@@ -105,13 +107,17 @@ public:
         Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         Counters->Ok->Inc();
         Event->Get()->Quotas = std::move(ev->Get()->Quotas);
-        CPP_LOG_T("Cloud id: " << Event->Get()->CloudId << " Quota count: " << (Event->Get()->Quotas ? TMaybe<size_t>(Event->Get()->Quotas->size()) : Nothing()));
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Cloud Quota",
+            {"Id", Event->Get()->CloudId},
+            {"Count", (Event->Get()->Quotas ? TMaybe<size_t>(Event->Get()->Quotas->size()) : Nothing())});
         TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
         PassAway();
     }
 
     void HandleTimeout() {
-        CPP_LOG_W("Quota request timeout. Cloud id: " << Event->Get()->CloudId << " Actor id: " << SelfId());
+        YDB_LOG_COMP_WARN(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Quota request timeout. Cloud Actor",
+            {"Id", Event->Get()->CloudId},
+            {"#_id", SelfId()});
         Counters->Error->Inc();
         Counters->Timeout->Inc();
         Send(MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, Event->Get()->CloudId, true));
@@ -173,7 +179,9 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_RESOLVE_SUBJECT_TYPE";
 
     void Bootstrap() {
-        CPP_LOG_T("Resolve subject type bootstrap. Token: " << MaskTicket(Token) << " Actor id: " << SelfId());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Resolve subject type bootstrap. Actor",
+            {"Token", MaskTicket(Token)},
+            {"Id", SelfId()});
         Become(&TResolveSubjectTypeActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
         Counters->InFly->Inc();
         Send(AccessService, CreateRequest().release(), 0, 0);
@@ -191,7 +199,9 @@ public:
     )
 
     void HandleTimeout() {
-        CPP_LOG_W("Resolve subject type timeout. Token: " << MaskTicket(Token) << " Actor id: " << SelfId());
+        YDB_LOG_COMP_WARN(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Resolve subject type timeout. Actor",
+            {"Token", MaskTicket(Token)},
+            {"Id", SelfId()});
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Request (resolve subject type) timeout. Try repeating the request later");
         issues.AddIssue(issue);
@@ -211,7 +221,9 @@ public:
             auto delay = RetryState->GetNextRetryDelay(ev);
             if (delay) {
                 Counters->Retry->Inc();
-                CPP_LOG_E("Resolve subject type error. Retry with delay " << *delay << ", " << errorMessage);
+                YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Resolve subject type error. Retry with delay",
+                    {"Delay", *delay},
+                    {"ErrorMessage", errorMessage});
                 TActivationContext::Schedule(*delay, new IEventHandle(AccessService, static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
                 return;
             }
@@ -219,7 +231,8 @@ public:
             Counters->InFly->Dec();
             Counters->LatencyMs->Collect((delta).MilliSeconds());
             Counters->Error->Inc();
-            CPP_LOG_E(errorMessage);
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+                {"ErrorMessage", errorMessage});
             NYql::TIssues issues;
             NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve subject type error");
             issues.AddIssue(issue);
@@ -234,7 +247,9 @@ public:
         Counters->Ok->Inc();
         TString subjectType = GetSubjectType(response.subject());
         Event->Get()->SubjectType = subjectType;
-        CPP_LOG_T("Subject Type: " << subjectType << " Token: " << MaskTicket(Token));
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Subject",
+            {"Type", subjectType},
+            {"Token", MaskTicket(Token)});
 
         TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
         PassAway();
@@ -310,7 +325,9 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_RESOLVE_FOLDER";
 
     void Bootstrap() {
-        CPP_LOG_T("Resolve folder bootstrap. Folder id: " << FolderId << " Actor id: " << SelfId());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Resolve folder bootstrap. Folder Actor",
+            {"Id", FolderId},
+            {"#_id", SelfId()});
         Become(&TResolveFolderActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
         Counters->InFly->Inc();
         Send(NKikimr::NFolderService::FolderServiceActorId(), CreateRequest().release(), 0, 0);
@@ -329,7 +346,9 @@ public:
     )
 
     void HandleTimeout() {
-        CPP_LOG_W("Resolve folder timeout. Folder id: " << FolderId << " Actor id: " << SelfId());
+        YDB_LOG_COMP_WARN(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Resolve folder timeout. Folder Actor",
+            {"Id", FolderId},
+            {"#_id", SelfId()});
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Request timeout. Try repeating the request later");
         issues.AddIssue(issue);
@@ -349,7 +368,9 @@ public:
             auto delay = RetryState->GetNextRetryDelay(ev);
             if (delay) {
                 Counters->Retry->Inc();
-                CPP_LOG_E("Folder resolve error. Retry with delay " << *delay << ", " << errorMessage);
+                YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Folder resolve error. Retry with delay",
+                    {"Delay", *delay},
+                    {"ErrorMessage", errorMessage});
                 TActivationContext::Schedule(*delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
                 return;
             }
@@ -357,7 +378,8 @@ public:
             Counters->InFly->Dec();
             Counters->LatencyMs->Collect((delta).MilliSeconds());
             Counters->Error->Inc();
-            CPP_LOG_E(errorMessage);
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+                {"ErrorMessage", errorMessage});
             NYql::TIssues issues;
             NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve folder error");
             issues.AddIssue(issue);
@@ -372,7 +394,9 @@ public:
         Counters->Ok->Inc();
         TString cloudId = ev->Get()->CloudId;
         Event->Get()->CloudId = cloudId;
-        CPP_LOG_T("Cloud id: " << cloudId << " Folder id: " << FolderId);
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Cloud Folder",
+            {"Id", cloudId},
+            {"#_id", FolderId});
 
         if (RequestQuotas) {
             Register(new TGetQuotaActor<TEventRequest, TResponseProxy>(QuotasCounters, Sender, Event, Cookie));
@@ -441,7 +465,10 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_CREATE_DATABASE";
 
     void Bootstrap() {
-        CPP_LOG_T("Create database bootstrap. CloudId: " << CloudId << " Scope: " << Scope << " Actor id: " << SelfId());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Create database bootstrap. Actor",
+            {"CloudId", CloudId},
+            {"Scope", Scope},
+            {"Id", SelfId()});
         if (!ComputeConfig.YdbComputeControlPlaneEnabled(Scope, QueryType)) {
             Event->Get()->ComputeDatabase = FederatedQuery::Internal::ComputeDatabaseInternal{};
             TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
@@ -464,7 +491,10 @@ public:
 
     void HandleTimeout() {
         Counters->InFly->Dec();
-        CPP_LOG_W("Create database timeout. CloudId: " << CloudId << " Scope: " << Scope << " Actor id: " << SelfId());
+        YDB_LOG_COMP_WARN(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Create database timeout. Actor",
+            {"CloudId", CloudId},
+            {"Scope", Scope},
+            {"Id", SelfId()});
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Create database: request timeout. Try repeating the request later");
         issues.AddIssue(issue);
@@ -481,7 +511,8 @@ public:
         Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev->Get()->Issues) {
             Counters->Error->Inc();
-            CPP_LOG_E(ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+                {"Issues", ev->Get()->Issues.ToOneLineString()});
             const TDuration delta = TInstant::Now() - StartTime;
             Probe(delta, false, false);
             Send(Sender, new TResponseProxy(ev->Get()->Issues, {}), 0, Cookie);
@@ -529,7 +560,8 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY";
 
     void Bootstrap() {
-        CPP_LOG_D("Starting yandex query control plane proxy. Actor id: " << SelfId());
+        YDB_LOG_COMP_DEBUG(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Starting yandex query control plane proxy. Actor",
+            {"Id", SelfId()});
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_PROXY_PROVIDER));
 
@@ -605,11 +637,13 @@ private:
                                  const TInstant& startTime,
                                  const TProbe& probe,
                                  const TString& requestName) {
-        CPS_LOG_E(requestName << ", validation failed: " << ev->Get()->Scope << " "
-                              << ev->Get()->User << " "
-                              << NKikimr::MaskTicket(ev->Get()->Token) << " "
-                              << SecureDebugString(ev->Get()->Request)
-                              << " error: " << issues.ToString());
+        YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "validation",
+            {"RequestName", requestName},
+            {"Failed", ev->Get()->Scope},
+            {"User", ev->Get()->User},
+            {"Token", NKikimr::MaskTicket(ev->Get()->Token)},
+            {"Request", SecureDebugString(ev->Get()->Request)},
+            {"Error", issues.ToString()});
         Send(ev->Sender, new TProxyResponse(issues, ev->Get()->SubjectType), 0, ev->Cookie);
         requestCounters.IncError();
         TDuration delta = TInstant::Now() - startTime;
@@ -652,7 +686,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::CreateQueryRequest request = ev->Get()->Request;
-        CPP_LOG_T("CreateQueryRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"CreateQueryRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -679,7 +714,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_QUERY, RTC_CREATE_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.create@as"});
         if (issues) {
-            CPS_LOG_E("CreateQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "CreateQueryRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateQueryResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -723,7 +763,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvListQueriesRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ListQueriesRequest request = ev->Get()->Request;
-        CPP_LOG_T("ListQueriesRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ListQueriesRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -749,7 +790,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_QUERIES, RTC_LIST_QUERIES);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.get@as"});
         if (issues) {
-            CPS_LOG_E("ListQueriesRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ListQueriesRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListQueriesResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -787,7 +833,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvDescribeQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::DescribeQueryRequest request = ev->Get()->Request;
-        CPP_LOG_T("DescribeQueryRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"DescribeQueryRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -814,7 +861,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_QUERY, RTC_DESCRIBE_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.get@as"});
         if (issues) {
-            CPS_LOG_E("DescribeQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "DescribeQueryRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeQueryResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -854,7 +906,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvGetQueryStatusRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::GetQueryStatusRequest request = ev->Get()->Request;
-        CPP_LOG_T("GetStatusRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"GetStatusRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -881,7 +934,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_GET_QUERY_STATUS, RTC_GET_QUERY_STATUS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.getStatus@as"});
         if (issues) {
-            CPS_LOG_E("GetQueryStatusRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "GetQueryStatusRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvGetQueryStatusResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -919,7 +977,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvModifyQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ModifyQueryRequest request = ev->Get()->Request;
-        CPP_LOG_T("ModifyQueryRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ModifyQueryRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -947,7 +1006,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_QUERY, RTC_MODIFY_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.update@as"});
         if (issues) {
-            CPS_LOG_E("ModifyQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ModifyQueryRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyQueryResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -995,7 +1059,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvDeleteQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::DeleteQueryRequest request = ev->Get()->Request;
-        CPP_LOG_T("DeleteQueryRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"DeleteQueryRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1022,7 +1087,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_QUERY, RTC_DELETE_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.delete@as"});
         if (issues) {
-            CPS_LOG_E("DeleteQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "DeleteQueryRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteQueryResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1060,7 +1130,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvControlQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ControlQueryRequest request = ev->Get()->Request;
-        CPP_LOG_T("ControlQueryRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ControlQueryRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1087,7 +1158,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CONTROL_QUERY, RTC_CONTROL_QUERY);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.control@as"});
         if (issues) {
-            CPS_LOG_E("ControlQueryRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ControlQueryRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvControlQueryResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1125,7 +1201,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvGetResultDataRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::GetResultDataRequest request = ev->Get()->Request;
-        CPP_LOG_T("GetResultDataRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"GetResultDataRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1155,7 +1232,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_GET_RESULT_DATA, RTC_GET_RESULT_DATA);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.queries.getData@as"});
         if (issues) {
-            CPS_LOG_E("GetResultDataRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "GetResultDataRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvGetResultDataResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1193,7 +1275,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvListJobsRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ListJobsRequest request = ev->Get()->Request;
-        CPP_LOG_T("ListJobsRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ListJobsRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1220,7 +1303,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_JOBS, RTC_LIST_JOBS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.jobs.get@as"});
         if (issues) {
-            CPS_LOG_E("ListJobsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ListJobsRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListJobsResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1258,7 +1346,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvDescribeJobRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::DescribeJobRequest request = ev->Get()->Request;
-        CPP_LOG_T("DescribeJobRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"DescribeJobRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1285,7 +1374,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_JOB, RTC_DESCRIBE_JOB);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.jobs.get@as"});
         if (issues) {
-            CPS_LOG_E("DescribeJobRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "DescribeJobRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeJobResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1325,7 +1419,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::CreateConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("CreateConnectionRequest: " << SecureDebugString(request));
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"CreateConnectionRequest", SecureDebugString(request)});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1356,7 +1451,12 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("CreateConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "CreateConnectionRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", SecureDebugString(request)},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1394,10 +1494,12 @@ private:
                                           Config.StorageConfig.Proto.GetDisableCurrentIam(),
                                           false);
             if (requestValidationIssues) {
-                CPS_LOG_E("CreateConnectionRequest, validation failed: "
-                          << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << SecureDebugString(request)
-                          << " error: " << requestValidationIssues.ToString());
+                YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "CreateConnectionRequest, validation",
+                    {"Failed", scope},
+                    {"User", user},
+                    {"Ticket", NKikimr::MaskTicket(token)},
+                    {"Request", SecureDebugString(request)},
+                    {"Error", requestValidationIssues.ToString()});
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvCreateConnectionResponse(
                          requestValidationIssues, subjectType),
@@ -1478,7 +1580,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvListConnectionsRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ListConnectionsRequest request = ev->Get()->Request;
-        CPP_LOG_T("ListConnectionsRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ListConnectionsRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1504,7 +1607,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_CONNECTIONS, RTC_LIST_CONNECTIONS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.connections.get@as"});
         if (issues) {
-            CPS_LOG_E("ListConnectionsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ListConnectionsRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListConnectionsResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1542,7 +1650,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvDescribeConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::DescribeConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("DescribeConnectionRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"DescribeConnectionRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1569,7 +1678,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_CONNECTION, RTC_DESCRIBE_CONNECTION);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.connections.get@as"});
         if (issues) {
-            CPS_LOG_E("DescribeConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "DescribeConnectionRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1607,7 +1721,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ModifyConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("ModifyConnectionRequest: " << SecureDebugString(request));
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ModifyConnectionRequest", SecureDebugString(request)});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1639,7 +1754,12 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("ModifyConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ModifyConnectionRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", SecureDebugString(request)},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1677,10 +1797,12 @@ private:
                                           Config.StorageConfig.Proto.GetDisableCurrentIam(),
                                           false);
             if (requestValidationIssues) {
-                CPS_LOG_E("ModifyConnectionRequest, validation failed: "
-                          << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << SecureDebugString(request)
-                          << " error: " << requestValidationIssues.ToString());
+                YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ModifyConnectionRequest, validation",
+                    {"Failed", scope},
+                    {"User", user},
+                    {"Ticket", NKikimr::MaskTicket(token)},
+                    {"Request", SecureDebugString(request)},
+                    {"Error", requestValidationIssues.ToString()});
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvModifyConnectionResponse(
                          requestValidationIssues, subjectType),
@@ -1763,7 +1885,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::DeleteConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("DeleteConnectionRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"DeleteConnectionRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1790,7 +1913,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_CONNECTION, RTC_DELETE_CONNECTION);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.connections.delete@as"});
         if (issues) {
-            CPS_LOG_E("DeleteConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "DeleteConnectionRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1879,7 +2007,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvTestConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::TestConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("TestConnectionRequest: " << SecureDebugString(request));
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"TestConnectionRequest", SecureDebugString(request)});
         const TString cloudId = ev->Get()->CloudId;
 
         const TString subjectType = ev->Get()->SubjectType;
@@ -1911,7 +2040,12 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("TestConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "TestConnectionRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", SecureDebugString(request)},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvTestConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1939,7 +2073,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::CreateBindingRequest request = ev->Get()->Request;
-        CPP_LOG_T("CreateBindingRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"CreateBindingRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const bool ydbOperationWasPerformed = ev->Get()->ComputeYDBOperationWasPerformed;
@@ -1969,7 +2104,12 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredParams);
         if (issues) {
-            CPS_LOG_E("CreateBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "CreateBindingRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateBindingResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -2004,10 +2144,12 @@ private:
                                        Config.StorageConfig.AvailableBindings,
                                        Config.StorageConfig.GeneratorPathsLimit);
             if (requestValidationIssues) {
-                CPS_LOG_E("CreateBindingRequest, validation failed: "
-                          << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << request.DebugString()
-                          << " error: " << requestValidationIssues.ToString());
+                YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "CreateBindingRequest, validation",
+                    {"Failed", scope},
+                    {"User", user},
+                    {"Ticket", NKikimr::MaskTicket(token)},
+                    {"Request", request.DebugString()},
+                    {"Error", requestValidationIssues.ToString()});
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvCreateBindingResponse(
                          requestValidationIssues, subjectType),
@@ -2097,7 +2239,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvListBindingsRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ListBindingsRequest request = ev->Get()->Request;
-        CPP_LOG_T("ListBindingsRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ListBindingsRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -2123,7 +2266,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_LIST_BINDINGS, RTC_LIST_BINDINGS);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.get@as"});
         if (issues) {
-            CPS_LOG_E("ListBindingsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ListBindingsRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvListBindingsResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -2161,7 +2309,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvDescribeBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::DescribeBindingRequest request = ev->Get()->Request;
-        CPP_LOG_T("DescribeBindingRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"DescribeBindingRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -2188,7 +2337,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DESCRIBE_BINDING, RTC_DESCRIBE_BINDING);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.get@as"});
         if (issues) {
-            CPS_LOG_E("DescribeBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "DescribeBindingRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDescribeBindingResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -2226,7 +2380,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ModifyBindingRequest request = ev->Get()->Request;
-        CPP_LOG_T("ModifyBindingRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"ModifyBindingRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -2253,7 +2408,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_BINDING, RTC_MODIFY_BINDING);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.update@as"});
         if (issues) {
-            CPS_LOG_E("ModifyBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ModifyBindingRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyBindingResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -2288,10 +2448,12 @@ private:
                                        Config.StorageConfig.AvailableBindings,
                                        Config.StorageConfig.GeneratorPathsLimit);
             if (requestValidationIssues) {
-                CPS_LOG_E("ModifyBindingRequest, validation failed: "
-                          << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << request.DebugString()
-                          << " error: " << requestValidationIssues.ToString());
+                YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "ModifyBindingRequest, validation",
+                    {"Failed", scope},
+                    {"User", user},
+                    {"Ticket", NKikimr::MaskTicket(token)},
+                    {"Request", request.DebugString()},
+                    {"Error", requestValidationIssues.ToString()});
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvModifyBindingResponse(
                          requestValidationIssues, subjectType),
@@ -2372,7 +2534,8 @@ private:
     void Handle(TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::DeleteBindingRequest request = ev->Get()->Request;
-        CPP_LOG_T("DeleteBindingRequest: " << request.DebugString());
+        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"DeleteBindingRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -2399,7 +2562,12 @@ private:
         TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_BINDING, RTC_DELETE_BINDING);
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.delete@as"});
         if (issues) {
-            CPS_LOG_E("DeleteBindingRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "DeleteBindingRequest, validation",
+                {"Failed", scope},
+                {"User", user},
+                {"Ticket", NKikimr::MaskTicket(token)},
+                {"Request", request.DebugString()},
+                {"Error", issues.ToString()});
             Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteBindingResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -2484,7 +2652,8 @@ private:
 
     void Handle(TEvControlPlaneProxy::TEvDeleteFolderResourcesRequest::TPtr& ev){
         TInstant startTime = TInstant::Now();
-        // CPP_LOG_T("DeleteFolderResourcesRequest: " << request.DebugString());
+        // YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+        //       {"DeleteFolderResourcesRequest", request.DebugString()});
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;

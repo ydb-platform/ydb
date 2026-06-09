@@ -26,6 +26,8 @@
 
 #include <util/digest/multi.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest::TPtr& ev){
     TInstant startTime = TInstant::Now();
     const TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest& event = *ev->Get();
@@ -110,7 +112,9 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*NActors::TActivationContext::ActorSystem(), name << ": {" << TrimForLogs(SecureDebugString(result)) << "} SUCCESS");
+                YDB_LOG_CTX_TRACE(*NActors::TActivationContext::ActorSystem(), "SUCCESS",
+                    {"Name", name},
+                    {"Result", TrimForLogs(SecureDebugString(result))});
                 std::unique_ptr<TEvControlPlaneStorage::TEvDeleteFolderResourcesResponse> event;
                 event = std::make_unique<TEvControlPlaneStorage::TEvDeleteFolderResourcesResponse>(result);
                 event->DebugInfo = debugInfo;

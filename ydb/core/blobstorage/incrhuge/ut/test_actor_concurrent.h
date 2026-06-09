@@ -150,8 +150,8 @@ public:
             str << Sprintf("%016" PRIx64, item.first);
         }
         str << "]";
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Init ",
-            {"items", str.Str().data()});
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "finished Init",
+            {"Items", str.Str().data()});
 
         auto refIt = referenceItems.begin();
         auto it = msg->Items.begin();
@@ -207,7 +207,7 @@ public:
         const bool timeToDie = ActionsTaken >= NumActions;
         ui32 numRequests = timeToDie ? 50 : 8;
 
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "ActionsTaken# ",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "",
             {"ActionsTaken", ActionsTaken});
 
         while (GetNumRequestsInFlight() < numRequests) {
@@ -326,7 +326,7 @@ public:
         YDB_LOG_CTX_COMP_INFO(ctx, NActorsServices::TEST, "",
             {"BytesWritten", (State.BytesWritten + 512 * 1024) / 1048576},
             {"ElapsedTime", delta.ToString().data()},
-            {"speed", speed});
+            {"Speed", speed});
 
         // insert new entry into confirmed state
         Y_ABORT_UNLESS(!State.ConfirmedState.count(msg->Id));

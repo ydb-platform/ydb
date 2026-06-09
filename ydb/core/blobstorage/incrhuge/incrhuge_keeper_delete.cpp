@@ -262,7 +262,7 @@ namespace NKikimr {
                 for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
                     YDB_LOG_CTX_DEBUG((ctx), "",
                         {"LogPrefix", LogPrefix},
-                        {"deletingId", deleteLocator.Id});
+                        {"DeletingId", deleteLocator.Id});
                     TBlobLocator locator;
                     bool status = Keeper.State.BlobLookup.Delete(deleteLocator.Id, &locator);
                     Y_ABORT_UNLESS(status);

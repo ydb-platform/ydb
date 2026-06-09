@@ -176,7 +176,7 @@ public:
             ctx.Send(KeeperId, new TEvIncrHugeWrite(Owner, blob.Lsn, meta, std::move(data),
                     std::make_unique<TPayload>(blob.Lsn, blob.LogoBlobId)));
             State.WriteRequest = blob;
-            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Write Lsn# LogoBlobId# ",
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NActorsServices::TEST, "sent Write",
                 {"Lsn", blob.Lsn},
                 {"LogoBlobId", blob.LogoBlobId.ToString().data()});
             return;

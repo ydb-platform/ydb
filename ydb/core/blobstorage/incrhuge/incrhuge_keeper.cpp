@@ -68,7 +68,7 @@ namespace NKikimr {
                 }
             }
 
-            YDB_LOG_CTX_DEBUG(ctx, "BlockSize# BlocksInChunk# BlocksInMinBlob# MaxBlobsPerChunk# BlocksInDataSection# BlocksInIndexSection# ",
+            YDB_LOG_CTX_DEBUG(ctx, "",
                 {"BlockSize", State.BlockSize},
                 {"BlocksInChunk", State.BlocksInChunk},
                 {"BlocksInMinBlob", State.BlocksInMinBlob},

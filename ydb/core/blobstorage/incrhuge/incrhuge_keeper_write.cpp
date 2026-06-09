@@ -428,7 +428,7 @@ namespace NKikimr {
                         YDB_LOG_CTX_DEBUG((ctx), "",
                             {"LogPrefix", LogPrefix},
                             {"QueryId", item.QueryId},
-                            {"obsolete", true});
+                            {"Obsolete", true});
                     }
                 }
             }
@@ -562,10 +562,10 @@ namespace NKikimr {
 
             YDB_LOG_CTX_DEBUG((ctx), "IndexWrite",
                 {"LogPrefix", LogPrefix},
-                {"chunkIdx", item.ChunkIdx},
-                {"offset", offset},
-                {"size", totalSize},
-                {"end", offset + totalSize});
+                {"ChunkIdx", item.ChunkIdx},
+                {"Offset", offset},
+                {"Size", totalSize},
+                {"End", offset + totalSize});
 
             // send write message to yard
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvChunkWrite(Keeper.State.PDiskParams->Owner,

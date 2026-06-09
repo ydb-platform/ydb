@@ -47,7 +47,7 @@ namespace NKikimr {
             double efficiency = (double)numUsedBlocks / (Keeper.State.Chunks.size() * Keeper.State.BlocksInDataSection);
             YDB_LOG_CTX_DEBUG((ctx), "",
                 {"LogPrefix", LogPrefix},
-                {"efficiency", efficiency});
+                {"Efficiency", efficiency});
             if (efficiency >= Threshold) {
                 return;
             }
@@ -171,7 +171,7 @@ namespace NKikimr {
                         {"LogPrefix", LogPrefix},
                         {"ChunkIdx", ChunkInProgress},
                         {"OffsetInBlocks", OffsetInBlocks},
-                        {"sizeInBlocks", sizeInBlocks});
+                        {"SizeInBlocks", sizeInBlocks});
 
                     ++InFlightReads;
                     InFlightReadBytes += size;
@@ -200,8 +200,8 @@ namespace NKikimr {
 
             YDB_LOG_CTX_DEBUG((ctx), "",
                 {"LogPrefix", LogPrefix},
-                {"offsetInBlocks", offsetInBlocks},
-                {"index", index},
+                {"OffsetInBlocks", offsetInBlocks},
+                {"Index", index},
                 {"Status", NKikimrProto::EReplyStatus_Name(status).data()});
 
             // adjust number of in-flight requests
@@ -263,8 +263,8 @@ namespace NKikimr {
                     // of queue item and after writing it
                     YDB_LOG_CTX_DEBUG((ctx), "EnqueueDefragWrite",
                         {"LogPrefix", LogPrefix},
-                        {"chunkIdx", chunkIdx},
-                        {"index", index},
+                        {"ChunkIdx", chunkIdx},
+                        {"Index", index},
                         {"Id", header.IndexRecord.Id});
                     Keeper.Writer.EnqueueDefragWrite(header, chunkIdx, chunk.ChunkSerNum, index, std::move(data),
                             MakeSimpleCallback(std::move(callback)), ctx);
@@ -284,7 +284,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(status == NKikimrProto::OK);
                 YDB_LOG_CTX_DEBUG((ctx), "generating virtual log record",
                     {"LogPrefix", LogPrefix},
-                    {"deleteLocator", deleteLocator.ToString().data()});
+                    {"DeleteLocator", deleteLocator.ToString().data()});
 
                 // delete this locator right now; we do not log it, because on recovery it's easy to find
                 // duplicate items by their id

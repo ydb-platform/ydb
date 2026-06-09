@@ -249,8 +249,8 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
             env.Setup(true, counter, &event);
             env.Start();
-            YDB_LOG_CTX_DEBUG(*env.ActorSystem, "=== starting Counter# ",
-                {"counter", counter});
+            YDB_LOG_CTX_DEBUG(*env.ActorSystem, "=== starting",
+                {"Counter", counter});
             actor = new TTestActorSeq(env.KeeperId, state, 1, nullptr);
             env.ActorSystem->Register(actor);
             event.WaitI();

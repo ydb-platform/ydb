@@ -506,7 +506,7 @@ private:
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
-        const bool ok = ev->Get()->Record.GetStatus() == 0;
+        const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
         LOG_T("HandleWriteResult Cookie# " << cookie << " Status# " << ev->Get()->Record.GetStatus() << " LatencyUs# " << latencyUs << " WriteInFlight# " << WriteInFlight);
 
@@ -537,6 +537,12 @@ private:
                 Schedule(kDrainTimeout, new TEvents::TEvWakeup(kWakeupDrainTimeoutTag));
             }
         } else {
+            const auto& record = ev->Get()->Record;
+            LOG_D("HandleWriteResult error Tag# " << Tag
+                << " Cookie# " << cookie
+                << " LatencyUs# " << latencyUs
+                << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
+                << " Reason# " << record.GetReason());
             if (Writes.ReplyErr) {
                 Writes.ReplyErr->Inc();
             }
@@ -569,12 +575,9 @@ private:
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
-        const bool ok = ev->Get()->Record.GetStatus() == 0;
+        const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
         LOG_T("HandleReadResult Cookie# " << cookie << " Status# " << ev->Get()->Record.GetStatus() << " LatencyUs# " << latencyUs << " ReadInFlight# " << ReadInFlight);
-        // Payload is on the actor event as a TRope; we don't validate it
-        // beyond observing the status — the worker already checked sizes.
-        (void)ev->Get()->Record.HasPayloadId();
 
         if (ReadInFlight > 0) {
             --ReadInFlight;
@@ -597,6 +600,13 @@ private:
                 MeasuredReadLatencyUs.RecordValue(static_cast<i64>(latencyUs));
             }
         } else {
+            const auto& record = ev->Get()->Record;
+            LOG_D("HandleReadResult error Tag# " << Tag
+                << " Cookie# " << cookie
+                << " LatencyUs# " << latencyUs
+                << " PayloadCount# " << ev->Get()->GetPayloadCount()
+                << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
+                << " Reason# " << record.GetReason());
             if (Reads.ReplyErr) {
                 Reads.ReplyErr->Inc();
             }

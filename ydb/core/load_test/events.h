@@ -246,8 +246,11 @@ struct TEvLoad {
         NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWriteResult, EvNbsWriteResult>
     {
         TEvNbsWriteResult() = default;
-        explicit TEvNbsWriteResult(ui32 status) {
+        explicit TEvNbsWriteResult(NKikimr::ENbsIoResultStatus status, TString reason = {}) {
             Record.SetStatus(status);
+            if (!reason.empty()) {
+                Record.SetReason(std::move(reason));
+            }
         }
     };
 
@@ -267,8 +270,11 @@ struct TEvLoad {
         // Read payload is attached separately via AddPayload(TRope) and
         // recovered on the receiver via GetPayload(0).
         TEvNbsReadResult() = default;
-        explicit TEvNbsReadResult(ui32 status) {
+        explicit TEvNbsReadResult(NKikimr::ENbsIoResultStatus status, TString reason = {}) {
             Record.SetStatus(status);
+            if (!reason.empty()) {
+                Record.SetReason(std::move(reason));
+            }
         }
     };
 

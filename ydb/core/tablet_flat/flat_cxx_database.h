@@ -724,11 +724,12 @@ struct Schema {
         using Precharge = AutoPrecharge;
         using BackupPolicy = InBackup;
 
-        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false, bool _IsSensitive = false>
+        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false, bool _IsSetNotNullInProgress = false, bool _IsSensitive = false>
         struct Column {
             constexpr static TColumnId ColumnId = _ColumnId;
             constexpr static NScheme::TTypeId ColumnType = _ColumnType;
             constexpr static bool IsNotNull = _IsNotNull;
+            constexpr static bool IsSetNotNullInProgress = _IsSetNotNullInProgress;
             constexpr static bool IsSensitive = _IsSensitive;
             using Type = typename NSchemeTypeMapper<_ColumnType>::Type;
             using BackupPolicy = InBackup;
@@ -756,7 +757,7 @@ struct Schema {
             }
 
             static void Materialize(TToughDb& database) {
-                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive);
+                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSetNotNullInProgress, T::IsSensitive);
             }
 
             static constexpr bool HaveColumn(ui32 columnId) {

@@ -1591,16 +1591,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TDirectReadTestSetup setup{server};
 
         {
-            // 1. Write 20 messages.
-            Cerr << (TStringBuilder() << "XXXXX Write 20 messages" << Endl);
-            setup.DoWrite(pqClient->GetDriver(), topicPath, 10_KB, 20);
+            // 1. Write 10 messages.
+            Cerr << (TStringBuilder() << "XXXXX Write 10 messages" << Endl);
+            setup.DoWrite(pqClient->GetDriver(), topicPath, 10_KB, 10);
         }
 
         Cerr << (TStringBuilder() << "XXXXX InitControlSession" << Endl);
-        setup.InitControlSession(topicPath, 100_KB);
+        setup.InitControlSession(topicPath, 1_MB);
 
         Cerr << "XXXXX GetNextAssign\n";
-        auto assignRes = setup.GetNextAssign(topicPath, 0, /*read_offset*/5, /*commit_offset*/2, /*max_offset*/25);
+        auto assignRes = setup.GetNextAssign(topicPath, 0, /*read_offset*/5, /*commit_offset*/2, /*max_offset*/8);
         UNIT_ASSERT_VALUES_EQUAL(assignRes.PartitionId, 0);
         auto assignId = assignRes.AssignId;
 
@@ -1610,15 +1610,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         // Send StartDirectReadPartitionSessionRequest, get StartDirectReadPartitionSessionResponse
         setup.SendReadSessionAssign(assignId, assignRes.Generation);
 
-        // 2. Read the message back. It should contain only one offset.
+        // 2. Read the message back. It should contain 4 messages from 5 to 8 (inclusive).
         Cerr << "XXXXX ReadDataNoAck\n";
         auto resp = setup.ReadDataNoAck(assignId, 1);
         auto startOffset = resp.Range.first;
         auto endOffset = resp.Range.second;
         Cerr << (TStringBuilder() << "XXXXX startOffset = " << startOffset << " endOffset = " << endOffset << Endl);
-
-        Cerr << "XXXXX Write 20 more messages\n";
-        setup.DoWrite(pqClient->GetDriver(), topicPath, 10_KB, 20);
+        UNIT_ASSERT_VALUES_EQUAL(5, startOffset);
+        UNIT_ASSERT_VALUES_EQUAL(8 + 1, endOffset);
 
         Cerr << "XXXXX Kill tablet\n";
         auto pathDescr = server.Server->AnnoyingClient->Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
@@ -1649,29 +1648,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                                   << " startOffset = " << resp.Range.first << " endOffset = " << resp.Range.second << Endl);
         UNIT_ASSERT_VALUES_EQUAL(startOffset, resp.Range.first);
         UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.second);
-
-        startOffset = resp.Range.first;
-        endOffset = resp.Range.second;
-
-        setup.SendReadRequest(2_MB);
-
-        Cerr << "XXXXX Sleep 3 seconds\n";
-        Sleep(TDuration::Seconds(3));
-
-        Cerr << "XXXXX ReadDataNoAck direct_read_id = 2\n";
-        resp = setup.ReadDataNoAck(assignId, 2);
-        Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << resp.Response.ByteSize() << " bytes_size = " << resp.Response.direct_read_response().bytes_size()
-                                  << " startOffset = " << resp.Range.first << " endOffset = " << resp.Range.second << Endl);
-        UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.first);
-        // UNIT_ASSERT_VALUES_EQUAL(resp.Range.second, 20); // don't check since it's non-deterministic
-        endOffset = resp.Range.second;
-
-        Cerr << "XXXXX ReadDataNoAck direct_read_id = 3\n";
-        resp = setup.ReadDataNoAck(assignId, 3);
-        Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << resp.Response.ByteSize() << " bytes_size = " << resp.Response.direct_read_response().bytes_size()
-                                  << " startOffset = " << resp.Range.first << " endOffset = " << resp.Range.second << Endl);
-        UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.first);
-        UNIT_ASSERT_VALUES_EQUAL(resp.Range.second, 25);
 
 
     }
@@ -8833,7 +8809,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         {
             std::optional<ui64> readOffset = 4;
             std::optional<ui64> commitOffset = 3;
-            std::optional<ui64> maxOffset = 6;
+            std::optional<ui64> maxOffset = 6; //inclusive
             NYdb::NTopic::TReadSessionSettings rSettings;
             rSettings.ConsumerName("debug").AppendTopics({topicFullName});
             auto readSession = topicClient.CreateReadSession(rSettings);
@@ -8847,9 +8823,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
             UNIT_ASSERT(dataEv);
             const auto& messages = dataEv->GetMessages();
-            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_5");
             UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_6");
+            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_7");
 
             UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
         }

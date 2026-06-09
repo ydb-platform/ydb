@@ -230,7 +230,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
 
                 const ui64 readOffset = req.read_offset();
                 TMaybe<ui64> commitOffset = req.has_commit_offset() ? req.commit_offset() : TMaybe<ui64>{};
-                TMaybe<ui64> maxOffset =  req.has_max_offset() ? req.max_offset() : TMaybe<ui64>{};
+                TMaybe<ui64> maxOffset =  req.has_max_offset() ? req.max_offset() + 1 : TMaybe<ui64>{}; // input max_offset is inclusive, maxOffset is exclusive
                 if (ReadWithoutConsumer && req.has_commit_offset()) {
                     return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "can't commit when reading without a consumer", ctx);
                 }

@@ -376,8 +376,6 @@ message StreamingReadClientMessage {
         // If client is not setting read_offset, sanity check will fail so do not set verify_read_offset if you not setting correct read_offset.
         bool verify_read_offset = 4;
 
-        // If set to non-zero server will return messages up to this offset (inclusive).
-        int64 max_offset = 5;
     }
 
     // Signal for server that client finished working with this partition. Must be sent only after corresponding Release request from server.

@@ -210,6 +210,16 @@ private:
     void RebindStorage();
 };
 
+namespace NPrivate {
+
+void ReadLegacyRecordBatch(
+    TKafkaReadable& readable,
+    TKafkaVersion magic,
+    size_t length,
+    TKafkaRecordBatch& batch);
+
+} // namespace NPrivate
+
 class TKafkaRecordBatch: public TMessage {
 public:
     struct MessageMeta {
@@ -218,6 +228,10 @@ public:
     };
 
     TKafkaRecordBatch();
+    TKafkaRecordBatch(const TKafkaRecordBatch& other);
+    TKafkaRecordBatch(TKafkaRecordBatch&& other) noexcept;
+    TKafkaRecordBatch& operator=(const TKafkaRecordBatch& other);
+    TKafkaRecordBatch& operator=(TKafkaRecordBatch&& other) noexcept;
     ~TKafkaRecordBatch() = default;
 
     struct BaseOffsetMeta {
@@ -416,7 +430,7 @@ public:
     };
     RecordsMeta::Type Records;
     mutable TKafkaInt32 RecordsCount;
-    mutable TString PackedRecords;
+    mutable TKafkaBytes PackedRecords;
 
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
@@ -434,7 +448,23 @@ public:
     void Decompress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
 
 private:
+    struct TStorage {
+        std::optional<TString> PackedRecords;
+    };
+
+    mutable TStorage Storage_;
+
+    void RebindStorage();
+    void ResetPackedRecords();
+    void SetPackedRecordsView(TArrayRef<const char> data);
+    void SetPackedRecordsOwned(TString data);
     void EnsurePackedRecords(TKafkaVersion version) const;
+
+    friend void NPrivate::ReadLegacyRecordBatch(
+        TKafkaReadable& readable,
+        TKafkaVersion magic,
+        size_t length,
+        TKafkaRecordBatch& batch);
 };
 
 
@@ -612,15 +642,5 @@ TKafkaRecordBatch ReadKafkaRecordBatch(
     TKafkaVersion version = 2,
     TKafkaCompression compression = {.AllowCompressed = true});
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
-
-namespace NPrivate {
-
-void ReadLegacyRecordBatch(
-    TKafkaReadable& readable,
-    TKafkaVersion magic,
-    size_t length,
-    TKafkaRecordBatch& batch);
-
-} // namespace NPrivate
 
 } // namespace NKafka

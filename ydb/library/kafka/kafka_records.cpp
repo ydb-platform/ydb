@@ -420,7 +420,116 @@ TKafkaRecordBatch::TKafkaRecordBatch()
     , ProducerEpoch(ProducerEpochMeta::Default)
     , BaseSequence(BaseSequenceMeta::Default)
     , RecordsCount(0) {
+}
+
+TKafkaRecordBatch::TKafkaRecordBatch(const TKafkaRecordBatch& other)
+    : BaseOffset(other.BaseOffset)
+    , BatchLength(other.BatchLength)
+    , PartitionLeaderEpoch(other.PartitionLeaderEpoch)
+    , Magic(other.Magic)
+    , Crc(other.Crc)
+    , Attributes(other.Attributes)
+    , LastOffsetDelta(other.LastOffsetDelta)
+    , BaseTimestamp(other.BaseTimestamp)
+    , MaxTimestamp(other.MaxTimestamp)
+    , ProducerId(other.ProducerId)
+    , ProducerEpoch(other.ProducerEpoch)
+    , BaseSequence(other.BaseSequence)
+    , Records(other.Records)
+    , RecordsCount(other.RecordsCount)
+    , PackedRecords(other.PackedRecords)
+    , Storage_(other.Storage_) {
+    RebindStorage();
+}
+
+TKafkaRecordBatch::TKafkaRecordBatch(TKafkaRecordBatch&& other) noexcept
+    : BaseOffset(other.BaseOffset)
+    , BatchLength(other.BatchLength)
+    , PartitionLeaderEpoch(other.PartitionLeaderEpoch)
+    , Magic(other.Magic)
+    , Crc(other.Crc)
+    , Attributes(other.Attributes)
+    , LastOffsetDelta(other.LastOffsetDelta)
+    , BaseTimestamp(other.BaseTimestamp)
+    , MaxTimestamp(other.MaxTimestamp)
+    , ProducerId(other.ProducerId)
+    , ProducerEpoch(other.ProducerEpoch)
+    , BaseSequence(other.BaseSequence)
+    , Records(std::move(other.Records))
+    , RecordsCount(other.RecordsCount)
+    , PackedRecords(other.PackedRecords)
+    , Storage_(std::move(other.Storage_)) {
+    RebindStorage();
+    other.PackedRecords.reset();
+}
+
+TKafkaRecordBatch& TKafkaRecordBatch::operator=(const TKafkaRecordBatch& other) {
+    if (this != &other) {
+        BaseOffset = other.BaseOffset;
+        BatchLength = other.BatchLength;
+        PartitionLeaderEpoch = other.PartitionLeaderEpoch;
+        Magic = other.Magic;
+        Crc = other.Crc;
+        Attributes = other.Attributes;
+        LastOffsetDelta = other.LastOffsetDelta;
+        BaseTimestamp = other.BaseTimestamp;
+        MaxTimestamp = other.MaxTimestamp;
+        ProducerId = other.ProducerId;
+        ProducerEpoch = other.ProducerEpoch;
+        BaseSequence = other.BaseSequence;
+        Records = other.Records;
+        RecordsCount = other.RecordsCount;
+        PackedRecords = other.PackedRecords;
+        Storage_ = other.Storage_;
+        RebindStorage();
     }
+    return *this;
+}
+
+TKafkaRecordBatch& TKafkaRecordBatch::operator=(TKafkaRecordBatch&& other) noexcept {
+    if (this != &other) {
+        BaseOffset = other.BaseOffset;
+        BatchLength = other.BatchLength;
+        PartitionLeaderEpoch = other.PartitionLeaderEpoch;
+        Magic = other.Magic;
+        Crc = other.Crc;
+        Attributes = other.Attributes;
+        LastOffsetDelta = other.LastOffsetDelta;
+        BaseTimestamp = other.BaseTimestamp;
+        MaxTimestamp = other.MaxTimestamp;
+        ProducerId = other.ProducerId;
+        ProducerEpoch = other.ProducerEpoch;
+        BaseSequence = other.BaseSequence;
+        Records = std::move(other.Records);
+        RecordsCount = other.RecordsCount;
+        PackedRecords = other.PackedRecords;
+        Storage_ = std::move(other.Storage_);
+        RebindStorage();
+        other.PackedRecords.reset();
+    }
+    return *this;
+}
+
+void TKafkaRecordBatch::RebindStorage() {
+    if (Storage_.PackedRecords) {
+        PackedRecords = TArrayRef<const char>(Storage_.PackedRecords->data(), Storage_.PackedRecords->size());
+    }
+}
+
+void TKafkaRecordBatch::ResetPackedRecords() {
+    PackedRecords.reset();
+    Storage_.PackedRecords.reset();
+}
+
+void TKafkaRecordBatch::SetPackedRecordsView(TArrayRef<const char> data) {
+    Storage_.PackedRecords.reset();
+    PackedRecords = data;
+}
+
+void TKafkaRecordBatch::SetPackedRecordsOwned(TString data) {
+    Storage_.PackedRecords = std::move(data);
+    RebindStorage();
+}
 
 ECompressionType TKafkaRecordBatch::CompressionType() const {
     return static_cast<ECompressionType>(Attributes & 0x07);
@@ -446,30 +555,32 @@ void TKafkaRecordBatch::Compress(TKafkaVersion version) {
     const auto compressionType = CompressionType();
     EnsureSupportedCompressionType(compressionType);
     if (compressionType == ECompressionType::NONE) {
-        TString().swap(PackedRecords);
+        ResetPackedRecords();
         return;
     }
     EnsurePackedRecords(version);
 }
 
 void TKafkaRecordBatch::EnsurePackedRecords(TKafkaVersion version) const {
-    if (CompressionType() == ECompressionType::NONE || !PackedRecords.empty()) {
+    if (CompressionType() == ECompressionType::NONE || PackedRecords) {
         return;
     }
 
     RecordsCount = static_cast<TKafkaInt32>(Records.size());
-    PackedRecords = CompressRecordBatchPayload(
-        SerializeRecordBatchRecords(Records, version, false), CompressionType());
+    const_cast<TKafkaRecordBatch*>(this)->SetPackedRecordsOwned(
+        CompressRecordBatchPayload(
+            SerializeRecordBatchRecords(Records, version, false), CompressionType()));
 }
 
 void TKafkaRecordBatch::Decompress(TKafkaVersion version) {
     const auto compressionType = CompressionType();
-    if (compressionType == ECompressionType::NONE || PackedRecords.empty()) {
+    if (compressionType == ECompressionType::NONE || !PackedRecords) {
         return;
     }
 
     EnsureSupportedCompressionType(compressionType);
-    const TString decompressed = DecompressRecordBatchPayload(PackedRecords, compressionType);
+    const TString decompressed = DecompressRecordBatchPayload(
+        TStringBuf(PackedRecords->data(), PackedRecords->size()), compressionType);
     TBuffer buffer(decompressed.data(), decompressed.size());
     TKafkaReadable recordsReadable(buffer);
     Records.clear();
@@ -485,7 +596,7 @@ void TKafkaRecordBatch::Decompress(TKafkaVersion version) {
     for (auto& record : Records) {
         record.OwnPayload();
     }
-    TString().swap(PackedRecords);
+    ResetPackedRecords();
 }
 
 void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
@@ -514,8 +625,8 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
     NPrivate::Read<ProducerIdMeta>(_readable, _version, ProducerId);
     NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
     NPrivate::Read<BaseSequenceMeta>(_readable, _version, BaseSequence);
-    TString().swap(PackedRecords);
-    Records.clear();
+    ResetPackedRecords();
+    RecordsMeta::Type().swap(Records);
 
     if (CompressionType() == ECompressionType::NONE) {
         NPrivate::Read<RecordsMeta>(_readable, _version, Records);
@@ -523,13 +634,11 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
     } else if (compression.SkipDecompression) {
         RecordsCount = NPrivate::ReadArraySize<RecordsMeta>(_readable, _version);
         EnsureValidRecordBatchRecordsCount(RecordsCount);
-        const auto compressed = _readable.Bytes(_readable.left());
-        PackedRecords.assign(compressed.data(), compressed.size());
+        SetPackedRecordsView(_readable.Bytes(_readable.left()));
     } else {
         RecordsCount = NPrivate::ReadArraySize<RecordsMeta>(_readable, _version);
         EnsureValidRecordBatchRecordsCount(RecordsCount);
-        const auto compressed = _readable.Bytes(_readable.left());
-        PackedRecords.assign(compressed.data(), compressed.size());
+        SetPackedRecordsView(_readable.Bytes(_readable.left()));
         Decompress(_version);
     }
 }
@@ -557,7 +666,7 @@ void TKafkaRecordBatch::Write(TKafkaWritable& _writable, TKafkaVersion _version)
     } else {
         EnsurePackedRecords(_version);
         NPrivate::WriteArraySize<RecordsMeta>(_writable, _version, RecordsCount);
-        _writable.write(PackedRecords.data(), PackedRecords.size());
+        _writable.write(PackedRecords->data(), PackedRecords->size());
     }
 }
 
@@ -580,7 +689,7 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
         NPrivate::Size<RecordsMeta>(_collector, _version, Records);
     } else {
         EnsurePackedRecords(_version);
-        _collector.Size += NPrivate::ArraySize<RecordsMeta>(_version, RecordsCount) + PackedRecords.size();
+        _collector.Size += NPrivate::ArraySize<RecordsMeta>(_version, RecordsCount) + PackedRecords->size();
     }
 
     return _collector.Size;
@@ -720,7 +829,8 @@ void NPrivate::ReadLegacyRecordBatch(
 
         batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
         if (readable.GetCompression().SkipDecompression) {
-            batch.PackedRecords.assign(entry.Record.Value->data(), entry.Record.Value->size());
+            batch.SetPackedRecordsView(TArrayRef<const char>(
+                entry.Record.Value->data(), entry.Record.Value->size()));
             continue;
         }
 

@@ -128,7 +128,7 @@ void AssertSkipDecompressionRead(ECompressionType compressionType) {
     parsed.Read(readable, 2);
 
     UNIT_ASSERT(parsed.Records.empty());
-    UNIT_ASSERT(!parsed.PackedRecords.empty());
+    UNIT_ASSERT(parsed.PackedRecords);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(parsed.CompressionType()), static_cast<int>(compressionType));
 
     const TString roundTrip = WriteKafkaRecordBatch(parsed);
@@ -340,7 +340,7 @@ void AssertKafkaProducerBatchSerialized(ECompressionType compressionType) {
 
     if (compressionType != ECompressionType::NONE) {
         UNIT_ASSERT(parsed.Records.empty());
-        UNIT_ASSERT(!parsed.PackedRecords.empty());
+        UNIT_ASSERT(parsed.PackedRecords);
     }
 
     UNIT_ASSERT_VALUES_EQUAL(WriteKafkaRecordBatch(parsed), serialized);

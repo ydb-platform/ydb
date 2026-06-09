@@ -3,8 +3,6 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxConfigure : public TTransactionBase<TConfigsManager> {
@@ -20,8 +18,7 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot modify",
-            {"Config", error});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Cannot modify config: " << error);
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -103,8 +100,8 @@ public:
             newItem->Kind = field->number();
             newItems.push_back(newItem);
 
-            YDB_LOG_CTX_DEBUG(ctx, "Split config",
-                {"Item", copy.ShortDebugString()});
+            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                        "Split config item: " << copy.ShortDebugString());
         }
     }
 
@@ -459,8 +456,7 @@ public:
     {
         TString error;
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "",
-            {"TTxConfigure", rec.ShortDebugString()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxConfigure: " << rec.ShortDebugString());
 
         Y_ABORT_UNLESS(Self->PendingConfigModifications.IsEmpty());
 
@@ -500,8 +496,8 @@ public:
                                                 Self->PendingConfigModifications,
                                                 config);
         auto affected = affectedChecker.ComputeAffectedConfigs(GetAffectedKinds(rec.GetActions()), false);
-        YDB_LOG_CTX_DEBUG(ctx, "affected.size()",
-            {"Size", affected.size()});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "affected.size() = " << affected.size());
         for (auto &item : affected) {
             auto &entry = *Response->Record.AddAffectedConfigs();
             entry.SetTenant(item.Tenant);
@@ -593,7 +589,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxConfigure Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxConfigure Complete");
 
         Y_ABORT_UNLESS(Response);
 
@@ -604,8 +600,8 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingConfigModifications(ctx, ev);
         } else {
-            YDB_LOG_CTX_TRACE(ctx, "Send",
-                {"TEvConfigureResponse", Response->Record.ShortDebugString()});
+            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
+                        "Send TEvConfigureResponse: " << Response->Record.ShortDebugString());
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

@@ -1,7 +1,5 @@
 #include "console_configs_manager.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
-
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxLogCleanup : public TTransactionBase<TConfigsManager> {
@@ -13,7 +11,8 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Execute");
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "TTxLogCleanup Execute");
 
         const ui32 maxConsoleLogEntries = 25000;
 
@@ -22,7 +21,8 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS,
+                  "TTxLogCleanup Complete");
 
         Self->ScheduleLogCleanup(ctx);
 

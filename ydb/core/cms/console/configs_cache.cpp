@@ -11,7 +11,13 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <google/protobuf/text_format.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_CACHE
+#if defined BLOG_DEBUG || defined BLOG_ERROR || defined BLOG_WARN
+#error log macro definition clash
+#endif
+
+#define BLOG_DEBUG(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE, stream)
+#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE, stream)
+#define BLOG_WARN(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE, stream)
 
 namespace NKikimr::NConsole {
 
@@ -45,8 +51,7 @@ namespace {
                 if (!NFs::Rename(cfgFilePath, PathToConfigCacheFile))
                     ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
             } catch (const yexception &ex) {
-                YDB_LOG_WARN("An exception occurred while saving",
-                    {"Config", ex.what()});
+                BLOG_WARN("An exception occurred while saving config: " << ex.what());
             }
         }
     };
@@ -67,8 +72,7 @@ namespace {
                 if (!google::protobuf::TextFormat::ParseFromString(configFile.ReadAll(), &config))
                     ythrow yexception() << "Failed to parse config protobuf from string";
             } catch (const yexception &ex) {
-                YDB_LOG_WARN("An exception occurred while getting config from cache",
-                    {"File", ex.what()});
+                BLOG_WARN("An exception occurred while getting config from cache file: " << ex.what());
             }
         };
     };
@@ -80,8 +84,7 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
 
     Load(CurrentConfig);
 
-    YDB_LOG_DEBUG("Restored",
-        {"Configuration", CurrentConfig.ShortDebugString()});
+    BLOG_DEBUG("Restored configuration: " << CurrentConfig.ShortDebugString());
 
     const auto minKind = NKikimrConsole::TConfigItem::EKind_MIN;
     const auto maxKind = NKikimrConsole::TConfigItem::EKind_MAX;
@@ -108,8 +111,7 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
 
     CurrentConfig.Swap(rec.MutableConfig());
 
-    YDB_LOG_DEBUG("Saving",
-        {"Configuration", CurrentConfig.ShortDebugString()});
+    BLOG_DEBUG("Saving configuration: " << CurrentConfig.ShortDebugString());
 
     Save(CurrentConfig);
 
@@ -128,15 +130,13 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
 void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
     auto &rec = ev->Get()->Record;
 
-    YDB_LOG_ERROR("Failed to create subscription will die",
-        {"Code", rec.GetCode()},
-        {"Reason", rec.GetReason()});
+    BLOG_ERROR("Failed to create subscription " << rec.GetCode() << " " << rec.GetReason() << " will die");
 
     Die(ctx);
 }
 
 void TConfigsCache::Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx) {
-    YDB_LOG_DEBUG("Received poison pill, will die");
+    BLOG_DEBUG("Received poison pill, will die");
 
     Die(ctx);
 }

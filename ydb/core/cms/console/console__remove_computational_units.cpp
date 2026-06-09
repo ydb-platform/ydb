@@ -1,7 +1,5 @@
 #include "console_tenants_manager.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
-
 namespace NKikimr::NConsole {
 
 using namespace NOperationId;
@@ -18,8 +16,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveComputationalUnits Execute",
-            {"TenantPath", Tenant->Path});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
+                    "TTxRemoveComputationalUnits Execute " << Tenant->Path);
 
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
@@ -32,8 +30,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveComputationalUnits Complete",
-            {"TenantPath", Tenant->Path});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
+                    "TTxRemoveComputationalUnits Complete " << Tenant->Path);
 
         Self->SlotStats.DeallocateSlots(Tenant->Slots);
         Self->Counters.RemoveUnits(Tenant->ComputationalUnits);

@@ -1,7 +1,5 @@
 #include "console_tenants_manager.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
-
 namespace NKikimr::NConsole {
 
 using namespace NOperationId;
@@ -24,9 +22,9 @@ public:
         // (subdomain removal) fails.
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantFailed for tenant",
-            {"TenantPath", Tenant->Path},
-            {"Txid", Tenant->TxId});
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
+                    "TTxRemoveTenantFailed for tenant " << Tenant->Path
+                    << " txid=" << Tenant->TxId);
 
         Self->DbUpdateTenantState(Tenant, TTenant::RUNNING, txc, ctx);
         Self->DbUpdateRemovedTenant(Tenant, Code, txc, ctx);
@@ -37,7 +35,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantFailed Complete");
+        LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxRemoveTenantFailed Complete");
 
         Self->SendTenantNotifications(Tenant, TTenant::REMOVE, Code, ctx);
         Self->Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_REMOVE_RESPONSES);

@@ -216,30 +216,32 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
     )
 
 
-_SCHEMESHARD_PUBLIC_PAGES = (
-    ('Main', ''),
-    ('TxList', 'Page=TxList'),
-    ('TxInfo', 'Page=TxInfo&TxId=0'),
-    ('PathInfo', 'Page=PathInfo&OwnerPathId=0&LocalPathId=0'),
-    ('ShardInfoByTabletId', 'Page=ShardInfoByTabletId&ShardID=0'),
-    ('ShardInfoByShardIdx', 'Page=ShardInfoByShardIdx&OwnerShardIdx=0&LocalShardIdx=0'),
-    ('BuildIndexInfo', 'Page=BuildIndexInfo&BuildIndexId=0'),
-)
-
-_SCHEMESHARD_ADMIN_ONLY_PAGES = (
-    ('Admin', 'Page=Admin'),
-    ('AdminRequest', 'Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1'),
-)
-
-
-def _schemeshard_page_access_matrix(tablet_id):
+def _schemeshard_page_access_matrix(
+    tablet_id,
+    _pages=(
+        (
+            ('Main', ''),
+            ('TxList', 'Page=TxList'),
+            ('TxInfo', 'Page=TxInfo&TxId=0'),
+            ('PathInfo', 'Page=PathInfo&OwnerPathId=0&LocalPathId=0'),
+            ('ShardInfoByTabletId', 'Page=ShardInfoByTabletId&ShardID=0'),
+            ('ShardInfoByShardIdx', 'Page=ShardInfoByShardIdx&OwnerShardIdx=0&LocalShardIdx=0'),
+            ('BuildIndexInfo', 'Page=BuildIndexInfo&BuildIndexId=0'),
+        ),
+        (
+            ('Admin', 'Page=Admin'),
+            ('AdminRequest', 'Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1'),
+        ),
+    ),
+):
+    public_pages, admin_only_pages = _pages
     q_base = f'TabletID={tablet_id}'
     all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
     expected = {}
-    for _, query_suffix in _SCHEMESHARD_PUBLIC_PAGES:
+    for _, query_suffix in public_pages:
         q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
         expected[f'/tablets/app?{q}'] = monitoring_allowed_sids_ok
-    for _, query_suffix in _SCHEMESHARD_ADMIN_ONLY_PAGES:
+    for _, query_suffix in admin_only_pages:
         q = f'{q_base}&{query_suffix}'
         expected[f'/tablets/app?{q}'] = all_forbidden
         expected[f'/tablets/app/secure?{q}'] = admin_allowed_sids_ok

@@ -223,6 +223,8 @@ bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi) {
     if (page == TCgi::TPages::BuildIndexInfo) {
         return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::BuildIndexId});
     }
+    ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
     return false;
 }
 

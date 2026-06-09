@@ -508,7 +508,9 @@ private:
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
-        LOG_T("HandleWriteResult Cookie# " << cookie << " Status# " << ev->Get()->Record.GetStatus() << " LatencyUs# " << latencyUs << " WriteInFlight# " << WriteInFlight);
+        LOG_T("HandleWriteResult Cookie# " << cookie << " Status# "
+            << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# "
+            << latencyUs << " WriteInFlight# " << WriteInFlight);
 
         if (WriteInFlight > 0) {
             --WriteInFlight;
@@ -577,7 +579,9 @@ private:
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
-        LOG_T("HandleReadResult Cookie# " << cookie << " Status# " << ev->Get()->Record.GetStatus() << " LatencyUs# " << latencyUs << " ReadInFlight# " << ReadInFlight);
+        LOG_T("HandleReadResult Cookie# " << cookie << " Status# "
+            << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# " << latencyUs
+            << " ReadInFlight# " << ReadInFlight);
 
         if (ReadInFlight > 0) {
             --ReadInFlight;

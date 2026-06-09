@@ -1495,9 +1495,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
                 if (rollupResultExpr) {
                     // clang-format off
-                    rollupResultExpr = Build<TKqpOpUnionAll>(ctx, node->Pos())
+                    rollupResultExpr = Build<TKqpOpSetOp>(ctx, node->Pos())
                         .LeftInput(rollupResultExpr)
                         .RightInput(aggregationForGroupSetResultExpr)
+                        .SetOp()
+                            .Value("union_all")
+                        .Build()
                     .Done().Ptr();
                     // clang-format on
                 } else {
@@ -1698,7 +1701,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             ++opsInputCount;
             continue;
         }
-        Y_ENSURE(setOpsList->ChildPtr(i)->Content() == "union_all");
+        //Y_ENSURE(setOpsList->ChildPtr(i)->Content() == "union_all");
         Y_ENSURE(opsInputCount <= 2);
 
         TExprNode::TPtr leftInput;
@@ -1714,9 +1717,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         }
 
         // clang-format off
-        opResult = Build<TKqpOpUnionAll>(ctx, node->Pos())
+        opResult = Build<TKqpOpSetOp>(ctx, node->Pos())
             .LeftInput(leftInput)
             .RightInput(rightInput)
+            .SetOp(setOpsList->ChildPtr(i))
         .Done().Ptr();
         // clang-format on
 

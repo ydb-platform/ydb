@@ -9,7 +9,7 @@ void TNodeWardenMockActor::Connect() {
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
     YDB_LOG_INFO("pipe connected",
-        {"marker", "NWM02"},
+        {"Marker", "NWM02"},
         {"Sender", ev->Sender},
         {"PipeId", PipeId},
         {"Status", ev->Get()->Status});
@@ -27,7 +27,7 @@ void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
     YDB_LOG_INFO("pipe disconnected",
-        {"marker", "NWM03"},
+        {"Marker", "NWM03"},
         {"Sender", ev->Sender},
         {"PipeId", PipeId});
     if (ev->Sender == PipeId) {

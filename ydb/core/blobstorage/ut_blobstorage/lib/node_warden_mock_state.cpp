@@ -16,7 +16,7 @@ TNodeWardenMockActor::TNodeWardenMockActor(TSetup::TPtr setup)
 void TNodeWardenMockActor::Bootstrap() {
     Become(&TThis::StateFunc);
     YDB_LOG_INFO("starting",
-        {"marker", "NWM01"});
+        {"Marker", "NWM01"});
     Connect();
 }
 
@@ -45,7 +45,7 @@ void TNodeWardenMockActor::TGroupState::UpdateGroup(TIntrusivePtr<TBlobStorageGr
             vdisk->Generation = info->GroupGeneration; // just update generation
         } else {
             YDB_LOG_INFO("UpdateGroup",
-                {"marker", "NWM11"},
+                {"Marker", "NWM11"},
                 {"VDiskId", vdisk->VDiskId},
                 {"PrevActorId", Info->GetActorId(vdisk->VDiskId)},
                 {"CurActorId", info->GetActorId(vdisk->VDiskId)});

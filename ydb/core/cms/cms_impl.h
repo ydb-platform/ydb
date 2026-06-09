@@ -189,8 +189,8 @@ private:
 
     STFUNC(StateInit) {
         YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateInit event",
-            {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString().data()});
+            {"Type", ev->GetTypeRewrite()},
+            {"Event", ev->ToString().data()});
         StateInitImpl(ev, SelfId());
     }
 
@@ -224,9 +224,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event event: ",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString().data()});
+                YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event event",
+                    {"Type", ev->GetTypeRewrite()},
+                    {"Event", ev->ToString().data()});
             }
         }
     }
@@ -295,8 +295,8 @@ private:
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString().data()});
+                    {"Type", ev->GetTypeRewrite()},
+                    {"Event", ev->ToString().data()});
             }
         }
     }

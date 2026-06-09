@@ -99,8 +99,8 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateCreateTask ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString().data()});
         }
     }
 
@@ -143,8 +143,8 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateListTasks ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString().data()});
         }
     }
 
@@ -191,8 +191,8 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateCheckTask ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString().data()});
         }
     }
 
@@ -236,8 +236,8 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateRemoveTask ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString().data()});
         }
     }
 

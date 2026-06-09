@@ -38,7 +38,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::CMS, "TJsonProxyProto::Bootstrap",
-            {"url", RequestEvent->Get()->Request.GetPathInfo()});
+            {"Url", RequestEvent->Get()->Request.GetPathInfo()});
         ProcessRequest(ctx);
         Die(ctx);
     }
@@ -172,8 +172,8 @@ protected:
     }
 
     void Reply(const TString &json, const TActorContext &ctx) {
-        YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::CMS, "TJsonProxyProto reply with json ' '",
-            {"json", json});
+        YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::CMS, "TJsonProxyProto reply with json",
+            {"Json", json});
 
         ctx.Send(RequestEvent->Sender, new NMon::TEvHttpInfoRes(TString(NMonitoring::HTTPOKJSON) + json, 0,
                                                                 NMon::IEvHttpInfoRes::EContentType::Custom));

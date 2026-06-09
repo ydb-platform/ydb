@@ -34,7 +34,7 @@ public:
             Self->AuditLog(ctx, TStringBuilder() << "Remove task"
                 << ": id# " << Id);
         } else {
-            YDB_LOG_CTX_ERROR(ctx, "Can't find task ",
+            YDB_LOG_CTX_ERROR(ctx, "Can't find task",
                 {"Id", Id.data()});
         }
 

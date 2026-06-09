@@ -26,7 +26,7 @@ public:
         auto &rec = RequestEvent->Get()->Record;
 
         YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
-            {"request", rec.ShortDebugString().data()});
+            {"Request", rec.ShortDebugString().data()});
 
         TAutoPtr<TEvCms::TEvWalleListTasksResponse> response = new TEvCms::TEvWalleListTasksResponse;
 

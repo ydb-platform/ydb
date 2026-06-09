@@ -29,7 +29,7 @@ public:
         auto &rec = RequestEvent->Get()->Record;
 
         YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
-            {"request", rec.ShortDebugString().data()});
+            {"Request", rec.ShortDebugString().data()});
 
         if (!Actions.contains(rec.GetAction())) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unsupported action", ctx);
@@ -55,8 +55,8 @@ private:
             HFunc(TEvCms::TEvStoreWalleTaskFailed, Handle);
         default:
             YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleCreateTaskAdapter::StateWork ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString().data()});
         }
     }
 

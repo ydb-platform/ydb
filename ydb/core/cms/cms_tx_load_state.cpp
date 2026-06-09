@@ -71,7 +71,7 @@ public:
             config = paramRow.GetValueOrDefault<Schema::Param::Config>(NKikimrCms::TCmsConfig());
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-                {"config", config.ShortDebugString()});
+                {"Config", config.ShortDebugString()});
         } else {
             FirstBoot = true;
 
@@ -112,9 +112,9 @@ public:
             ParseFromStringSafe(requestStr, &request.Request);
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded request owned by",
-                {"id", id.data()},
-                {"owner", owner.data()},
-                {"request", requestStr.data()});
+                {"Id", id.data()},
+                {"Owner", owner.data()},
+                {"Request", requestStr.data()});
 
             state->ScheduledRequests.emplace(id, request);
 
@@ -132,9 +132,9 @@ public:
             state->WalleRequests.emplace(requestId, taskId);
             state->WalleTasks.emplace(taskId, task);
 
-            YDB_LOG_CTX_DEBUG(ctx, "Loaded Wall-E task mapped to request ",
-                {"taskId", taskId.data()},
-                {"requestId", requestId.data()});
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded Wall-E task mapped to request",
+                {"TaskId", taskId.data()},
+                {"RequestId", requestId.data()});
 
             if (!walleTaskRowset.Next())
                 return false;
@@ -159,8 +159,8 @@ public:
             });
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded maintenance task mapped to request",
-                {"taskId", taskId.data()},
-                {"requestId", requestId.data()});
+                {"TaskId", taskId.data()},
+                {"RequestId", requestId.data()});
 
             if (!maintenanceTasksRowset.Next())
                 return false;
@@ -183,10 +183,10 @@ public:
             permission.Priority = priority;
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded permission owned by valid until",
-                {"id", id.data()},
-                {"owner", owner.data()},
-                {"until", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data()},
-                {"action", actionStr.data()});
+                {"Id", id.data()},
+                {"Owner", owner.data()},
+                {"Until", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data()},
+                {"Action", actionStr.data()});
 
             state->Permissions.emplace(id, permission);
 
@@ -195,8 +195,8 @@ public:
                 state->WalleTasks[taskId].Permissions.insert(id);
 
                 YDB_LOG_CTX_DEBUG(ctx, "Added permission to Wall-E task",
-                    {"id", id.data()},
-                    {"taskId", taskId.data()});
+                    {"Id", id.data()},
+                    {"TaskId", taskId.data()});
             }
 
             if (state->MaintenanceRequests.contains(requestId)) {
@@ -204,8 +204,8 @@ public:
                 state->MaintenanceTasks[taskId].Permissions.insert(id);
 
                 YDB_LOG_CTX_DEBUG(ctx, "Added permission to maintenance task",
-                    {"id", id.data()},
-                    {"taskId", taskId.data()});
+                    {"Id", id.data()},
+                    {"TaskId", taskId.data()});
             }
 
             if (!permissionRowset.Next())
@@ -222,10 +222,10 @@ public:
             notification.Owner = owner;
             ParseFromStringSafe(notificationStr, &notification.Notification);
 
-            YDB_LOG_CTX_DEBUG(ctx, "Loaded notification owned by : ",
-                {"id", id.data()},
-                {"owner", owner.data()},
-                {"notification", notificationStr.data()});
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded notification owned by",
+                {"Id", id.data()},
+                {"Owner", owner.data()},
+                {"Notification", notificationStr.data()});
 
             state->Notifications.emplace(id, notification);
 
@@ -238,8 +238,8 @@ public:
             TString tenant = nodeTenantRowset.GetValue<Schema::NodeTenant::Tenant>();
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded node tenant for node",
-                {"tenant", tenant.data()},
-                {"nodeId", nodeId});
+                {"Tenant", tenant.data()},
+                {"NodeId", nodeId});
             state->InitialNodeTenants[nodeId] = tenant;
 
             if (!nodeTenantRowset.Next())

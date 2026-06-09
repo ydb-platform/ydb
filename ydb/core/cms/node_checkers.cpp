@@ -114,11 +114,11 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, const TNodeLockContext&
 
     YDB_LOG_DEBUG("[Nodes Counter] Checking",
         {"Node", nodeId},
-        {"state", nodeState},
-        {"limitNodes", DisabledNodesLimit},
-        {"limitRatio", DisabledNodesRatioLimit},
-        {"lockedNodes", LockedNodesCount},
-        {"downNodes", DownNodesCount});
+        {"State", nodeState},
+        {"LimitNodes", DisabledNodesLimit},
+        {"LimitRatio", DisabledNodesRatioLimit},
+        {"LockedNodes", LockedNodesCount},
+        {"DownNodes", DownNodesCount});
 
     switch (nodeState) {
         case NODE_STATE_UP:
@@ -204,11 +204,11 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext&
     auto nodeState = Nodes.at(nodeId).State;
 
     YDB_LOG_DEBUG("[Nodes Counter] Checking limits for sys, with, locked, down",
-        {"tablet", NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)},
-        {"on_node", nodeId},
-        {"state", nodeState},
-        {"lockedNodes", LockedNodesCount},
-        {"downNodes", DownNodesCount});
+        {"Tablet", NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)},
+        {"OnNode", nodeId},
+        {"State", nodeState},
+        {"LockedNodes", LockedNodesCount},
+        {"DownNodes", DownNodesCount});
 
     switch (nodeState) {
         case NODE_STATE_UP:

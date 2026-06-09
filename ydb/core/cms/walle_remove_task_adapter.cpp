@@ -28,7 +28,7 @@ public:
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
         YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
-            {"request", RequestEvent->Get()->Record.ShortDebugString().data()});
+            {"Request", RequestEvent->Get()->Record.ShortDebugString().data()});
 
         if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);
@@ -49,8 +49,8 @@ private:
             CFunc(TEvCms::EvWalleTaskRemoved, Finish);
         default:
             YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleRemoveTaskAdapter::StateWork ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString().data()});
         }
     }
 

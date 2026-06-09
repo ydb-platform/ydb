@@ -445,18 +445,18 @@ void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THash
         TString tenant = pr.second;
 
         if (!HasNode(nodeId)) {
-            YDB_LOG_CTX_ERROR(ctx, "Forgoten node tenant at node. Node is unknown.",
-                {"tenant", tenant.data()},
-                {"nodeId", nodeId});
+            YDB_LOG_CTX_ERROR(ctx, "Forgoten node tenant at node. Node is unknown",
+                {"Tenant", tenant.data()},
+                {"NodeId", nodeId});
             continue;
         }
 
         TNodeInfo& node = NodeRef(nodeId);
         node.PreviousTenant = tenant;
 
-        YDB_LOG_CTX_DEBUG(ctx, "Initial node tenant at node ",
-            {"tenant", tenant.data()},
-            {"nodeId", nodeId});
+        YDB_LOG_CTX_DEBUG(ctx, "Initial node tenant at node",
+            {"Tenant", tenant.data()},
+            {"NodeId", nodeId});
     }
 }
 
@@ -505,7 +505,7 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
 {
     if (!HasPDisk(id)) {
         YDB_LOG_ERROR("Cannot update state for unknown PDisk",
-            {"pdiskId", id.ToString()});
+            {"PdiskId", id.ToString()});
         return;
     }
 
@@ -518,7 +518,7 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
     ui32 nodeId = info.GetVSlotId().GetNodeId();
     if (!HasNode(nodeId)) {
         YDB_LOG_ERROR("Got VDisk info from BSC base config for unknown node",
-            {"nodeId", nodeId});
+            {"NodeId", nodeId});
         return;
     }
 
@@ -586,7 +586,7 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         if (!HasPDisk(pdiskId)) {
             YDB_LOG_ERROR("Group refers unknown pdisk",
                 {"GroupId", bsgroup.GroupId},
-                {"pdiskId", pdiskId.ToString()});
+                {"PdiskId", pdiskId.ToString()});
             return;
         }
 
@@ -731,8 +731,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
 
     if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
         if (ctx)
-            YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown host ",
-                {"host", action.GetHost().data()});
+            YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown host",
+                {"Host", action.GetHost().data()});
         return res;
     }
 
@@ -746,7 +746,7 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
             }
         } else if (ctx) {
             YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown host",
-                {"host", action.GetHost()});
+                {"Host", action.GetHost()});
         }
         break;
 
@@ -764,15 +764,15 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
             if (item)
                 res.insert(item);
             else if (ctx)
-                YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown device ",
-                    {"device", device.data()});
+                YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown device",
+                    {"Device", device.data()});
         }
         break;
 
     default:
         if (ctx) {
             YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: action is not supported",
-                {"action", TAction::EType_Name(action.GetType()).data()});
+                {"Action", TAction::EType_Name(action.GetType()).data()});
         }
         break;
     }
@@ -806,9 +806,9 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
         if (lock) {
             if (ctx)
                 YDB_LOG_CTX_INFO(*ctx, "Adding lock",
-                    {"item", item->PrettyItemName().data()},
+                    {"Item", item->PrettyItemName().data()},
                     {"PermissionId", permission.PermissionId.data()},
-                    {"until", permission.Deadline.ToStringLocalUpToSeconds().data()});
+                    {"Until", permission.Deadline.ToStringLocalUpToSeconds().data()});
             item->AddLock(permission);
             ++locks;
         }
@@ -829,7 +829,7 @@ ui64 TClusterInfo::AddExternalLocks(const TNotificationInfo &notification, const
         for (auto item : items) {
             if (ctx)
                 YDB_LOG_CTX_INFO(*ctx, "Adding external lock for",
-                    {"item", item->PrettyItemName().data()});
+                    {"Item", item->PrettyItemName().data()});
 
             item->AddExternalLock(notification, action);
         }
@@ -965,10 +965,10 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                 const ui32 nodeId = replica.NodeId();
                 if (!HasNode(nodeId)) {
                     // we do not want to abort here constantly, so we just add down stub replica
-                    YDB_LOG_ERROR("Node referenced by state storage ring in ring group does not exist in cluster. State storage is probably not reconfigured yet. Treating the replica as down.",
-                        {"nodeId", nodeId},
-                        {"ringId", ringId},
-                        {"rGroupId", rGroupId});
+                    YDB_LOG_ERROR("Node referenced by state storage ring in ring group does not exist in cluster. State storage is probably not reconfigured yet. Treating the replica as down",
+                        {"NodeId", nodeId},
+                        {"RingId", ringId},
+                        {"RGroupId", rGroupId});
                     TNodeInfoPtr stub = MakeIntrusive<TNodeInfo>();
                     stub->NodeId = nodeId;
                     ringInfo->AddNode(stub);
@@ -1001,7 +1001,7 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
         for (auto nodeId : tablet.GetNode()) {
             if (!HasNode(nodeId)) {
                 YDB_LOG_ERROR("Got node",
-                    {"nodeId", nodeId});
+                    {"NodeId", nodeId});
                 continue;
             }
             const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;

@@ -45,7 +45,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::CMS, "TJsonProxyBase::Bootstrap",
-            {"url", RequestEvent->Get()->Request.GetPathInfo()});
+            {"Url", RequestEvent->Get()->Request.GetPathInfo()});
 
         TAutoPtr<TRequestEvent> request = PrepareRequest(ctx);
         if (!request) {
@@ -66,9 +66,9 @@ public:
 
         std::optional<ui32> followerId = GetFollowerId(ctx);
         YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::CMS, "TJsonProxyBase send request to tablet, followerId",
-            {"tabletName", GetTabletName()},
-            {"tid", tid},
-            {"follower", ((followerId) ? ToString(*followerId) : TString("(undefined)"))});
+            {"TabletName", GetTabletName()},
+            {"Tid", tid},
+            {"Follower", ((followerId) ? ToString(*followerId) : TString("(undefined)"))});
 
         NTabletPipe::TClientConfig pipeConfig;
 
@@ -99,8 +99,8 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default:
             YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "HTTP::StateWork ignored event",
-                {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString().data()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Event", ev->ToString().data()});
         }
     }
 

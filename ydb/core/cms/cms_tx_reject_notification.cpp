@@ -44,9 +44,9 @@ public:
             Response->Record.MutableStatus()->SetReason(error.Reason);
         }
 
-        YDB_LOG_CTX_INFO(ctx, "Response status: ",
-            {"status", ToString(Response->Record.GetStatus().GetCode()).data()},
-            {"reason", Response->Record.GetStatus().GetReason().data()});
+        YDB_LOG_CTX_INFO(ctx, "Response status",
+            {"Status", ToString(Response->Record.GetStatus().GetCode()).data()},
+            {"Reason", Response->Record.GetStatus().GetReason().data()});
 
         return true;
     }

@@ -113,11 +113,11 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ui64 msgGeneration = msg->Record.GetClusterStateGeneration();
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
-            YDB_LOG_DEBUG("LookupReplica TEvNodeWardenNotifyConfigMismatch:",
+            YDB_LOG_DEBUG("LookupReplica TEvNodeWardenNotifyConfigMismatch",
                 {"ClusterStateGeneration", ClusterStateGeneration},
-                {"msgGeneration", msgGeneration},
+                {"MsgGeneration", msgGeneration},
                 {"ClusterStateGuid", ClusterStateGuid},
-                {"msgGuid", msgGuid});
+                {"MsgGuid", msgGuid});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
             NotAvailable();
@@ -266,9 +266,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             default:
                 Y_ABORT("unsupported mode");
             }
-            YDB_LOG_DEBUG("Handle TEvResolveReplicasList:",
+            YDB_LOG_DEBUG("Handle TEvResolveReplicasList",
                 {"Mode", (ui32)Mode},
-                {"groupIdx", replicaGroupIdx},
+                {"GroupIdx", replicaGroupIdx},
                 {"Group", replicaGroups.ToString()},
                 {"Path", Path});
         }
@@ -345,10 +345,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
-        YDB_LOG_DEBUG("Handle TEvReplicaBoardInfo:",
-            {"groupIdx", groupIdx},
-            {"idx", idx},
-            {"reconnectNumber", reconnectNumber},
+        YDB_LOG_DEBUG("Handle TEvReplicaBoardInfo",
+            {"GroupIdx", groupIdx},
+            {"Idx", idx},
+            {"ReconnectNumber", reconnectNumber},
             {"replica.ReconnectNumber", replica.ReconnectNumber});
         if (reconnectNumber != replica.ReconnectNumber) {
             return;

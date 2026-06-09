@@ -239,11 +239,11 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         Y_ABORT_UNLESS(Info);
         if (Info->ClusterStateGeneration < msgGeneration || (Info->ClusterStateGeneration == msgGeneration && Info->ClusterStateGuid != msgGuid)) {
-            YDB_LOG_DEBUG("BoardReplica TEvNodeWardenNotifyConfigMismatch:",
+            YDB_LOG_DEBUG("BoardReplica TEvNodeWardenNotifyConfigMismatch",
                 {"Info->ClusterStateGeneration", Info->ClusterStateGeneration},
-                {"msgGeneration", msgGeneration},
+                {"MsgGeneration", msgGeneration},
                 {"Info->ClusterStateGuid", Info->ClusterStateGuid},
-                {"msgGuid", msgGuid});
+                {"MsgGuid", msgGuid});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }

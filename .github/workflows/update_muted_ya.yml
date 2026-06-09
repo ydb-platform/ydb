@@ -50,7 +50,7 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-    
+
       - name: Collect testowners
         run: python3 .github/scripts/analytics/upload_testowners.py
 
@@ -81,13 +81,13 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-    
+
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
-      
+
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} 
-      
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
@@ -96,7 +96,7 @@ jobs:
           # Устанавливаем имя ветки PR без суффикса build_type
           PR_BRANCH="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}"
           echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
-          
+
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
 
@@ -115,7 +115,7 @@ jobs:
           echo "Resetting ${PR_BRANCH} to match ${{ env.BASE_BRANCH }}..."
           git reset --hard origin/${{ env.BASE_BRANCH }}
           echo "✓ Branch ${PR_BRANCH} now exactly matches ${{ env.BASE_BRANCH }}"
-                  
+
       - name: Run create_new_muted_ya.py
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}
@@ -141,7 +141,7 @@ jobs:
         run: |
           PR_BODY=''
           PR_BODY_FILE="pr_body_content.txt"
-          
+
           PR_BODY+=$'# Muted tests update for ${{ env.BASE_BRANCH }}\n\n'
 
           if [ -s mute_update/to_delete_debug.txt ]; then
@@ -231,7 +231,7 @@ jobs:
             --branch_for_pr="${{ env.PR_BRANCH }}" \
             --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" \
             --body="${{ env.PR_BODY_PATH }}"
-        
+
       - name: Comment PR
         uses: actions/github-script@v7
         if: env.changes == 'true'
@@ -240,19 +240,19 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            
+
             const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body_content.txt');
             const bodyText = fs.readFileSync(filePath, 'utf8');
             const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl}) for ${{ env.BASE_BRANCH }}\n\n${bodyText}`;
-      
+
             github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: completeBody
             });
-            
+
             const labelsToAdd = process.env.LABELS.split(',');
             github.rest.issues.addLabels({
               ...context.repo,
@@ -270,7 +270,7 @@ jobs:
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
           team_reviewers: ${{ env.REVIEWERS }}
           token: ${{ secrets.YDBOT_TOKEN }}
-          
+
       - name: Enable auto-merge (squash)
         if: env.changes == 'true'
         uses: actions/github-script@v7
@@ -278,14 +278,14 @@ jobs:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
-            
+
             // Получаем ID PR для использования в GraphQL API
             const { data: pullRequest } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr
             });
-            
+
             // Используем GraphQL API для включения auto-merge со squash
             const mutation = `
               mutation EnableAutoMerge {
@@ -297,7 +297,7 @@ jobs:
                 }
               }
             `;
-            
+
             try {
               await github.graphql(mutation);
               console.log("Auto-merge with squash successfully enabled");

@@ -25,7 +25,7 @@ public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* item, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         if (true /*|| TODO: !Writer.GenAddRow(item, ctx, block)*/) {
-            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TYtOutputWrapper::AddRowImpl));
+            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TYtOutputWrapper::AddRowImpl>());
             const auto selfArg = ConstantInt::get(Type::getInt64Ty(context), ui64(this));
             const auto arg = item;
             const auto addType = FunctionType::get(Type::getVoidTy(context), {selfArg->getType(), arg->getType()}, false);
@@ -75,7 +75,7 @@ public:
 
         block = work;
 
-        const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TYtFlowOutputWrapper::AddRowImpl));
+        const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TYtFlowOutputWrapper::AddRowImpl>());
         const auto selfArg = ConstantInt::get(Type::getInt64Ty(context), ui64(this));
         const auto arg = item;
         const auto addType = FunctionType::get(Type::getVoidTy(context), {selfArg->getType(), arg->getType()}, false);
@@ -161,7 +161,7 @@ public:
             new StoreInst(fields.back(), pointer, block);
         }
 
-        const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TYtWideOutputWrapper::AddRowImpl));
+        const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TYtWideOutputWrapper::AddRowImpl>());
         const auto selfArg = ConstantInt::get(Type::getInt64Ty(context), ui64(this));
         const auto addType = FunctionType::get(Type::getVoidTy(context), {selfArg->getType(), values->getType()}, false);
         const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "write", block);

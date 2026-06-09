@@ -72,12 +72,15 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
     FEATURE_FLAG_SETTER(EnableFollowerStats)
     FEATURE_FLAG_SETTER(EnableChecksumsExport)
+    FEATURE_FLAG_SETTER(EnableReplication)
     FEATURE_FLAG_SETTER(EnableTopicTransfer)
     FEATURE_FLAG_SETTER(EnableStrictUserManagement)
     FEATURE_FLAG_SETTER(EnableDatabaseAdmin)
     FEATURE_FLAG_SETTER(EnablePermissionsExport)
     FEATURE_FLAG_SETTER(EnableLocalDBBtreeIndex)
     FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
+    FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
+    FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
 
     #undef FEATURE_FLAG_SETTER
 };

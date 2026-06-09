@@ -30,6 +30,7 @@ SRCS(
     nodes_manager.cpp
     private_events.cpp
     replication.cpp
+    resource_id_resolver.cpp
     secret_resolver.cpp
     session_info.cpp
     stream_consumer_remover.cpp
@@ -57,6 +58,7 @@ SRCS(
     tx_heartbeat.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
     tx_worker_error.cpp
 )

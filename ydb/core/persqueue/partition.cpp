@@ -171,13 +171,11 @@ bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const 
 }
 
 struct TMirrorerInfo {
-    TMirrorerInfo(const TActorId& actor, const TTabletCountersBase& baseline)
+    TMirrorerInfo(const TActorId& actor)
     : Actor(actor) {
-        Baseline.Populate(baseline);
     }
 
     TActorId Actor;
-    TTabletCountersBase Baseline;
 };
 
 const TString& TPartition::TopicName() const {
@@ -339,9 +337,10 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
-    , SamplingControl(samplingControl) {
-
+    , SamplingControl(samplingControl)
+{
     TabletCounters.Populate(Counters);
+    TabletCounters.ResetCounters();
 }
 
 void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
@@ -437,6 +436,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
+    TabletCounters.Cumulative().ResetCounters();
+    TabletCounters.Percentile().ResetCounters();
 
     ui64 usedStorage = GetUsedStorage(now);
     if (usedStorage > 0) {
@@ -592,9 +593,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
 void TPartition::Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContext& /*ctx*/) {
     if (Mirrorer) {
-        auto diff = ev->Get()->Counters.MakeDiffForAggr(Mirrorer->Baseline);
-        TabletCounters.Populate(*diff.Get());
-        ev->Get()->Counters.RememberCurrentStateAsBaseline(Mirrorer->Baseline);
+        TabletCounters.Populate(ev->Get()->Counters);
     }
 }
 
@@ -1336,6 +1335,10 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
 
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
+    PQ_LOG_D("Handle TEvPQ::TEvTxRollback" <<
+             " Step " << ev->Get()->Step <<
+             ", TxId " << ev->Get()->TxId);
+
     ProcessPendingEvent(ev, ctx);
 }
 
@@ -1458,7 +1461,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
                 break;
             }
             txSourceIds.push_back(s.first);
-            PQ_LOG_D("Tx " << tx.GetTxId() << " affect SourceId " << s.first);
+            PQ_LOG_D("TxId " << tx.GetTxId() << " affect SourceId " << s.first);
         }
 
         if (auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first); !inFlightIter.IsEnd()) {
@@ -2564,13 +2567,13 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
 
     auto result = EProcessResult::Continue;
     if (t->SupportivePartitionActor && !t->WriteInfo && !t->WriteInfoApplied) { // Pending for write info
-        PQ_LOG_TX_D("The Tx " << t->GetTxId() << " is waiting for TEvGetWriteInfoResponse");
+        PQ_LOG_TX_D("The TxId " << t->GetTxId() << " is waiting for TEvGetWriteInfoResponse");
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
         result = ApplyWriteInfoResponse(*t, affectedSourceIdsAndConsumers);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
-            PQ_LOG_TX_D("The Tx " << t->GetTxId() << " must be blocked");
+            PQ_LOG_TX_D("The TxId " << t->GetTxId() << " must be blocked");
             Y_ABORT_UNLESS(result != EProcessResult::Continue);
             return result;
         }
@@ -2769,7 +2772,7 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                 break;
             }
             consumers.push_back(consumer);
-            PQ_LOG_TX_D("Tx " << tx.TxId << " affect consumer " << consumer);
+            PQ_LOG_TX_D("TxId " << tx.TxId << " affect consumer " << consumer);
         }
     }
 
@@ -4080,8 +4083,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
-        TabletCounters
+        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
 }
 

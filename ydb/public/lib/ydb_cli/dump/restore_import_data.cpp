@@ -140,11 +140,11 @@ class TValueConverter {
         case EPrimitiveType::Timestamp:
             return TValue(Parser.GetTimestamp().GetValue());
         case EPrimitiveType::Date32:
-            return TValue(Parser.GetDate32());
+            return TValue(Parser.GetDate32().time_since_epoch().count());
         case EPrimitiveType::Datetime64:
-            return TValue(Parser.GetDatetime64());
+            return TValue(Parser.GetDatetime64().time_since_epoch().count());
         case EPrimitiveType::Timestamp64:
-            return TValue(Parser.GetTimestamp64());
+            return TValue(Parser.GetTimestamp64().time_since_epoch().count());
         case EPrimitiveType::String:
             return TValue(Parser.GetString());
         case EPrimitiveType::Utf8:
@@ -270,16 +270,16 @@ public:
         return TInstant::ParseIso8601(Value);
     }
 
-    i32 GetDate32() const {
-        return FromString<i32>(Value);
+    std::chrono::sys_time<TWideDays> GetDate32() const {
+        return std::chrono::sys_time<TWideDays>(TWideDays(FromString<int32_t>(Value)));
     }
 
-    i64 GetDatetime64() const {
-        return FromString<i64>(Value);
+    std::chrono::sys_time<TWideSeconds> GetDatetime64() const {
+        return std::chrono::sys_time<TWideSeconds>(TWideSeconds(FromString<int64_t>(Value)));
     }
 
-    i64 GetTimestamp64() const {
-        return FromString<i64>(Value);
+    std::chrono::sys_time<TWideMicroseconds> GetTimestamp64() const {
+        return std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(FromString<int64_t>(Value)));
     }
 
     TString GetString() const {

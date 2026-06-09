@@ -209,6 +209,7 @@ protected:
         limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
         limits.ChunkSizeLimit = this->MemoryLimits.ChunkSizeLimit;
         limits.ArrayBufferMinFillPercentage = this->MemoryLimits.ArrayBufferMinFillPercentage;
+        limits.BufferPageAllocSize = this->MemoryLimits.BufferPageAllocSize;
 
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;

@@ -440,13 +440,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
-
+    Y_UNIT_TEST(OutOfSpaceYQLUpsertFail) {
         auto settings = TKikimrSettings()
-            .SetAppConfig(app)
             .SetWithSampleTables(false)
             .SetStorage(NFake::TStorage{
                 .UseDisk = false,
@@ -454,6 +449,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 .ChunkSize = 32_MB,
                 .DiskSize = 8_GB
             });
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
         TKikimrRunner kikimr(settings);
 
@@ -505,7 +502,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 continue;
             case EStatus::OVERLOADED:
                 if (result.GetIssues().ToString().contains("out of disk space")) {
-                    UNIT_ASSERT(useSink);
                     Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
                     return;
                 } else {
@@ -513,7 +509,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 }
             case EStatus::UNAVAILABLE:
                 if (result.GetIssues().ToString().contains("out of disk space")) {
-                    UNIT_ASSERT(!useSink);
                     //TODO Should be also EStatus::OVERLOADED
                     Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
                     return;

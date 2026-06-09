@@ -437,7 +437,8 @@ private:
     void InternalError(const TString message) {
         ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Internal error"
             << ", self: " << SelfId()
-            << ", message: " << message);
+            << ", message: " << message
+            << ", query text: " << QueryId.Text);
 
 
         NYql::TIssue issue(NYql::TPosition(), "Internal error while compiling query.");
@@ -639,6 +640,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
     kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
     kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
+    kqpConfig.EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
     kqpConfig.AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
     kqpConfig.EnableOlapSink = serviceConfig.GetEnableOlapSink();
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
@@ -657,6 +659,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
     kqpConfig.EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
     kqpConfig.EnableTempTablesForUser = serviceConfig.GetEnableTempTablesForUser();
+    kqpConfig.EnableOlapPushdownAggregate = serviceConfig.GetEnableOlapPushdownAggregate();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

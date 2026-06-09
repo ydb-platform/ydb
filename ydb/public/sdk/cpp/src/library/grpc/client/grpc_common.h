@@ -3,8 +3,8 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/resource_quota.h>
 
-#include <ydb-cpp-sdk/type_switcher.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/common/constants.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 
 #include <util/datetime/base.h>
 #include <unordered_map>
@@ -15,7 +15,7 @@ namespace NYdbGrpc {
 struct TGRpcClientConfig {
     std::string Locator; // format host:port
     TDuration Timeout = TDuration::Max(); // request timeout
-    ui64 MaxMessageSize = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT; // Max request and response size
+    ui64 MaxMessageSize = NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT; // Max request and response size
     ui64 MaxInboundMessageSize = 0; // overrides MaxMessageSize for incoming requests
     ui64 MaxOutboundMessageSize = 0; // overrides MaxMessageSize for outgoing requests
     ui32 MaxInFlight = 0;
@@ -35,7 +35,7 @@ struct TGRpcClientConfig {
     TGRpcClientConfig& operator=(TGRpcClientConfig&&) = default;
 
     TGRpcClientConfig(const std::string& locator, TDuration timeout = TDuration::Max(),
-            ui64 maxMessageSize = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, ui32 maxInFlight = 0, const std::string& caCert = "", const std::string& clientCert = "",
+            ui64 maxMessageSize = NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, ui32 maxInFlight = 0, const std::string& caCert = "", const std::string& clientCert = "",
             const std::string& clientPrivateKey = "", grpc_compression_algorithm compressionAlgorithm = GRPC_COMPRESS_NONE, bool enableSsl = false)
         : Locator(locator)
         , Timeout(timeout)

@@ -123,7 +123,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateDirectArrayHolder));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateDirectArrayHolder>());
         const auto size = ConstantInt::get(Type::getInt64Ty(context), sz);
 
         const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
@@ -178,7 +178,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainerLazy));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::GetEmptyContainerLazy>());
 
         const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);

@@ -6,6 +6,7 @@ SRCS(
     distconf.cpp
     distconf.h
     distconf_binding.cpp
+    distconf_cache.cpp
     distconf_console.cpp
     distconf_dynamic.cpp
     distconf_generate.cpp
@@ -51,7 +52,6 @@ PEERDIR(
     ydb/core/control
     ydb/library/pdisk_io
     ydb/library/yaml_config
-    ydb/core/util/actorsys_test
 )
 
 END()

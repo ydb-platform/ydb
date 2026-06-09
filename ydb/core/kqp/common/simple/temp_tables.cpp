@@ -10,7 +10,7 @@ TKqpTempTablesState::FindInfo(const std::string_view& path, bool withSessionId) 
         return TempTables.find(path);
     }
 
-    const auto temporaryStoragePrefix = CanonizePath(GetSessionDirPath(Database, SessionId)) + "/";
+    const auto temporaryStoragePrefix = CanonizePath(GetSessionDirPath(Database, TempDirName)) + "/";
 
     if (path.size() < temporaryStoragePrefix.size()) {
         return TempTables.end();
@@ -40,16 +40,16 @@ TString GetSessionDirsBasePath(const TString& database) {
     return CanonizePath(JoinPath({database, TmpDirectoryName, SessionsDirectoryName}));
 }
 
-TString GetSessionDirPath(const TString& database, const TString& sessionId) {
-    return CanonizePath(JoinPath({database, TmpDirectoryName, SessionsDirectoryName, sessionId}));
+TString GetSessionDirPath(const TString& database, const TString& tmpDirName) {
+    return CanonizePath(JoinPath({database, TmpDirectoryName, SessionsDirectoryName, tmpDirName}));
 }
 
-TString GetTempTablePath(const TString& database, const TString& sessionId, const TString tablePath) {
-    return CanonizePath(JoinPath({database, TmpDirectoryName, SessionsDirectoryName, sessionId, tablePath}));
+TString GetTempTablePath(const TString& database, const TString& tmpDirName, const TString tablePath) {
+    return CanonizePath(JoinPath({database, TmpDirectoryName, SessionsDirectoryName, tmpDirName, tablePath}));
 }
 
-TString GetCreateTempTablePath(const TString& database, const TString& sessionId, const TString tablePath) {
-    return CanonizePath(JoinPath({TmpDirectoryName, SessionsDirectoryName, sessionId, database, tablePath}));
+TString GetCreateTempTablePath(const TString& database, const TString& tmpDirName, const TString tablePath) {
+    return CanonizePath(JoinPath({TmpDirectoryName, SessionsDirectoryName, tmpDirName, database, tablePath}));
 }
 
 bool IsSessionsDirPath(const TStringBuf database, const TStringBuf path) {

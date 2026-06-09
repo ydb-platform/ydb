@@ -963,8 +963,8 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
 
     --reqInfo.LoadAnswersLeft;
     if (success) {
-        bool deleted = true;
-        bool deadlineChanged = true;
+        bool deleted = false;
+        bool deadlineChanged = false;
         const bool exists = (*messageRecord)["Exists"];
         const auto wasDeadLetterValue = (*messageRecord)["IsDeadLetter"];
         const bool wasDeadLetter = wasDeadLetterValue.HaveValue() ? bool(wasDeadLetterValue) : false;
@@ -1019,7 +1019,9 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
                     RLOG_SQS_REQ_WARN(requestId, "Attempted to receive message that was deleted. Shard: " << reqInfo.GetCurrentShard() << ". Offset: " << offset);
                     deleted = true;
                 }
-            } // else there was concurrent delete (purge) by this leader, => OK
+            } else { // else there was concurrent delete (purge) by this leader, => OK
+                deleted = true;
+            }
         }
         const bool invalidated = deleted || deadlineChanged;
         if (invalidated) {
@@ -1028,7 +1030,7 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
             const TString& reason = deleted ? INFLY_INVALIDATION_REASON_DELETED : INFLY_INVALIDATION_REASON_DEADLINE_CHANGED;
             MarkInflyReloading(reqInfo.GetCurrentShard(), 1, reason);
         }
-    } else {
+    } else { // if (success)
         reqInfo.LoadError = !ignoreMessageLoadingErrors;
         // there may be other successful loads
     }

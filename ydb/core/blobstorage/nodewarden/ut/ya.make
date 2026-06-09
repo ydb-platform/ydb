@@ -11,6 +11,7 @@ ENDIF()
 
 PEERDIR(
     ydb/core/testlib/default
+    ydb/core/util/actorsys_test
 )
 
 SRCS(

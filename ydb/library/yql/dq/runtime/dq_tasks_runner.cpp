@@ -671,6 +671,7 @@ public:
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
                     settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
+                    settings.BufferPageAllocSize = memoryLimits.BufferPageAllocSize;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 

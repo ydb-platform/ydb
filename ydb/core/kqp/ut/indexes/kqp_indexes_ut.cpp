@@ -1612,8 +1612,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            // KIKIMR-7997
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
         {
@@ -4047,8 +4046,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4060,8 +4059,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4073,8 +4072,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4086,8 +4085,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
     }
@@ -5997,7 +5996,121 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 result.GetIssues().ToString()
             );
         }
-    }    
+    }
+
+    Y_UNIT_TEST_TWIN(IndexUpsert, Uniq) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query(Q_(std::format(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    a Int32,
+                    b Int32,
+                    PRIMARY KEY(a,b),
+                    INDEX ix_b GLOBAL {} SYNC ON (b)
+                );
+            )", Uniq ? "UNIQUE" : "")));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:10,b:20|>,<|a:30,b:20|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            if (Uniq) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    result.GetIssues().ToString(),
+                    "Duplicated keys found.",
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:10,b:20|>,<|a:10,b:20|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            if (Uniq) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    result.GetIssues().ToString(),
+                    "Duplicated keys found.",
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:10,b:10|>,<|a:30,b:30|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:20,b:10|>,<|a:20,b:30|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            if (Uniq) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    result.GetIssues().ToString(),
+                    "Conflict with existing key.",
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:20,b:40|>,<|a:20,b:50|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
 }
 
 }

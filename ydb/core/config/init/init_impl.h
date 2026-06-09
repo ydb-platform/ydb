@@ -4,10 +4,12 @@
 
 #include <ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/config/config.h>
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
@@ -340,6 +342,9 @@ struct TCommonAppOptions {
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
     EWorkload Workload = EWorkload::Hybrid;
+    TString SeedNodesFile;
+    TVector<TString> SeedNodes;
+    bool ForceDatabaseLabels = false;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -432,12 +437,14 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
         opts.AddLongOption("config-dir", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigDirPath);
-
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
-
         opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
             .RequiredArgument("NAME").StoreResult(&Workload);
+        opts.AddLongOption("seed-nodes", "Path to seed nodes configuration file")
+            .RequiredArgument("PATH").StoreResult(&SeedNodesFile);
+        opts.AddLongOption("force-database-labels", "Forced reporting of a label with the name of the database (tenant/domain)")
+            .NoArgument().SetFlag(&ForceDatabaseLabels);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -614,7 +621,7 @@ struct TCommonAppOptions {
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
-	if (KafkaPort) {
+	    if (KafkaPort) {
             auto& conf = *appConfig.MutableKafkaProxyConfig();
             conf.SetEnableKafkaProxy(true);
             conf.SetListeningPort(KafkaPort);
@@ -690,6 +697,11 @@ struct TCommonAppOptions {
                     // default, do nothing
                     break;
             }
+        }
+
+        if (ForceDatabaseLabels) {
+            appConfig.MutableMonitoringConfig()->SetForceDatabaseLabels(ForceDatabaseLabels);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
     }
 
@@ -876,8 +888,9 @@ struct TCommonAppOptions {
     };
 
     void FillClusterEndpoints(const NKikimrConfig::TAppConfig& appConfig, TVector<TString> &addrs) const {
-        if (!NodeBrokerAddresses.empty()) {
-            for (auto addr: NodeBrokerAddresses) {
+        const TVector<TString>& seedAddresses = NodeBrokerAddresses.empty() ? SeedNodes : NodeBrokerAddresses;
+        if (!seedAddresses.empty()) {
+            for (auto addr: seedAddresses) {
                 addrs.push_back(addr);
             }
         } else {
@@ -1021,6 +1034,8 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer);
 
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::optional<TString>& authToken = std::nullopt);
+
 // =====
 
 struct TAppInitDebugInfo {
@@ -1085,6 +1100,19 @@ public:
                 loadedFromStore = true;
             } else {
                 storageYamlConfigFile.clear();
+            }
+        }
+
+        if (CommonAppOptions.SeedNodesFile) {
+            ParseSeedNodes(CommonAppOptions);
+        }
+
+        if (CommonAppOptions.IsStaticNode()) {
+            if (yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
+                InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
+            }
+            if (!CommonAppOptions.ConfigDirPath.empty() && yamlConfigFile.empty()) {
+                ythrow yexception() << "YAML config is not provided for static node";
             }
         }
 
@@ -1392,6 +1420,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
@@ -1400,6 +1429,7 @@ public:
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
+        tinyMode = CommonAppOptions.TinyMode;
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
@@ -1436,6 +1466,103 @@ public:
         ensureFileExists(CommonAppOptions.MonitoringCertificateFile, "mon-cert");
         ensureFileExists(CommonAppOptions.MonitoringPrivateKeyFile, "mon-key");
     }
+
+    void ParseSeedNodes(TCommonAppOptions& cf) {
+        if (auto path = fs::path(cf.SeedNodesFile.c_str()); fs::is_regular_file(path)) {
+            try {
+                TFileInput file(cf.SeedNodesFile);
+                TString fileContent = file.ReadAll();
+                auto doc = NFyaml::TDocument::Parse(fileContent);
+                if (doc.Root().Type() == NFyaml::ENodeType::Sequence) {
+                    for (const auto& item : doc.Root().Sequence()) {
+                        if (item.Type() == NFyaml::ENodeType::Scalar) {
+                            cf.SeedNodes.push_back(item.Scalar());
+                        } else {
+                            ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at " << item.Path();
+                        }
+                    }
+                } else {
+                    ythrow yexception() << "Invalid format in seed nodes file: expected a list of strings at root";
+                }
+            } catch (const std::exception& e) {
+                ythrow yexception() << "Failed to read or parse seed nodes file: " << e.what();
+            }
+        } else {
+            ythrow yexception() << "Seed nodes file not found: " << cf.SeedNodesFile;
+        }
+    }
+
+    void InitConfigFromSeedNodes(TString& yamlConfigFile, TString& storageYamlConfigFile) {
+        if (AppConfig.GetConfigDirPath().empty()) {
+            ythrow yexception() << "Seed nodes file provided, but config dir path is not set";
+        }
+
+        if (CommonAppOptions.SeedNodes.empty()) {
+            ythrow yexception() << "No seed nodes provided";
+        }
+
+        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
+        if (!result) {
+            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+            return;
+        }
+
+        const TString& clusterConfig = result->GetMainYamlConfig();
+        const TString& storageConfig = result->GetStorageYamlConfig();
+        const TString configDirPath = AppConfig.GetConfigDirPath();
+
+        auto saveConfig = [&](const TString& config, const TString& configName) {
+            try {
+                TString tempPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/temp_" << configName;
+                TString configPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/" << configName;
+            {
+                TFileOutput tempFile(tempPath);
+                tempFile << config;
+                tempFile.Flush();
+
+                if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+                    return false;
+                }
+            }
+
+            return NFs::Rename(tempPath, configPath);
+            } catch (const std::exception& e) {
+                return false;
+            }
+        };
+
+        bool clusterSaved = !clusterConfig.empty() && saveConfig(clusterConfig, CONFIG_NAME);
+        bool storageSaved = !storageConfig.empty() && saveConfig(storageConfig, STORAGE_CONFIG_NAME);
+
+        if (clusterSaved) {
+            yamlConfigFile = configDirPath + "/" + CONFIG_NAME;
+        }
+        if (storageSaved) {
+            storageYamlConfigFile = configDirPath + "/" + STORAGE_CONFIG_NAME;
+        }
+
+        if (clusterSaved && storageSaved) {
+            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
+                         << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
+        } else if (clusterSaved) {
+            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
+        } else if (!clusterConfig.empty() || !storageConfig.empty()) {
+            TStringBuilder errorMsg;
+            errorMsg << "Failed to save configs: ";
+            if (!clusterConfig.empty() && !clusterSaved) {
+                errorMsg << "main config";
+            }
+            if (!storageConfig.empty() && !storageSaved) {
+                if (!clusterConfig.empty() && !clusterSaved) {
+                    errorMsg << ", ";
+                }
+                errorMsg << "storage config";
+            }
+            ythrow yexception() << errorMsg;
+        } else {
+            Logger.Out() << "No configs received from seed nodes" << Endl;
+        }
+    }
 };
 
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
@@ -1445,6 +1572,7 @@ std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
         NConfig::IMemLogInitializer& memLogInit,
         NConfig::INodeBrokerClient& nodeBrokerClient,
         NConfig::IDynConfigClient& dynConfigClient,
+        NConfig::IConfigClient& configClient,
         NConfig::IEnv& env);
 
 } // namespace NKikimr::NConfig

@@ -16,6 +16,12 @@
 
 #include <format>
 
+#if defined LOG_W
+#error log macro redefinition
+#endif
+
+#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, stream)
+
 namespace std {
 
 // Inherit TString* formatters from std::string* ones.
@@ -223,8 +229,7 @@ bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi, const TActorCont
     if (page == TCgi::TPages::BuildIndexInfo) {
         return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::BuildIndexId});
     }
-    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
+    LOG_W("SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
     return false;
 }
 

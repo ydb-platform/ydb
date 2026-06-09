@@ -9,6 +9,7 @@ Y_UNIT_TEST_SUITE(MetaCapabilities) {
 
         auto capabilitiesRegistry = std::make_shared<NMVP::TMetaCapabilities>();
         capabilitiesRegistry->AddCapability("/meta/support_links");
+        capabilitiesRegistry->AddCapability("/meta/support_links/config");
         capabilitiesRegistry->AddCapability("/meta/cloud", 7);
         capabilitiesRegistry->AddCapability("/capabilities");
 
@@ -30,7 +31,8 @@ Y_UNIT_TEST_SUITE(MetaCapabilities) {
   "Capabilities": {
     "/capabilities": 1,
     "/meta/cloud": 7,
-    "/meta/support_links": 1
+    "/meta/support_links": 1,
+    "/meta/support_links/config": 1
   }
 }
 )";

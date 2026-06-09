@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/mvp/meta/support_links/entities.h>
 #include <ydb/mvp/meta/support_links/types.h>
 #include <ydb/mvp/meta/meta_settings.h>
 
@@ -10,13 +11,6 @@
 #include <memory>
 
 namespace NMVP {
-
-enum class ESupportLinksEntityType {
-    Cluster,
-    Database,
-    Node,
-    Host,
-};
 
 class ILinkSource {
 public:

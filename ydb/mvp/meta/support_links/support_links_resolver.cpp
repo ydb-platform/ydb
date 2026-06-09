@@ -15,30 +15,13 @@ struct TBuiltSource {
     TSupportLinksResolver::EEntityType EntityType = TSupportLinksResolver::EEntityType::Cluster;
 };
 
-const TVector<TSupportLinkEntryConfig>& GetLinkConfigs(
-    const TSupportLinksSettings& settings,
-    TSupportLinksResolver::EEntityType entityType)
-{
-    switch (entityType) {
-        case TSupportLinksResolver::EEntityType::Cluster:
-            return settings.ClusterLinks;
-        case TSupportLinksResolver::EEntityType::Database:
-            return settings.DatabaseLinks;
-        case TSupportLinksResolver::EEntityType::Node:
-            return settings.NodeLinks;
-        case TSupportLinksResolver::EEntityType::Host:
-            return settings.HostLinks;
-    }
-    ythrow yexception() << "unsupported support links entity type";
-}
-
 TVector<TBuiltSource> BuildSources(const TSupportLinksResolver::TParams& params) {
     if (!params.Settings) {
         ythrow yexception() << "support links settings are required";
     }
     TVector<TBuiltSource> linkSources;
     for (const auto entityType : params.EntityTypes) {
-        const auto& linkConfigs = GetLinkConfigs(params.Settings->SupportLinks, entityType);
+        const auto& linkConfigs = GetSupportLinksEntityConfigs(params.Settings->SupportLinks, entityType);
         for (const auto& linkConfig : linkConfigs) {
             linkSources.push_back(TBuiltSource{
                 .Source = params.LinkSourceFactory(linkConfig, *params.Settings),

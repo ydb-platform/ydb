@@ -690,13 +690,14 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
     TString setOpKind = opSetOp.SetOp().StringValue();
     TIntrusivePtr<IOperator> result;
 
+    if (setOpKind == "intersect_all" || setOpKind == "except_all") {
+        Y_ENSURE(false, TStringBuilder() << "Set operation " << setOpKind << " is not currently supported");
+    }
+
     if (setOpKind == "union_all" || setOpKind == "union") {
         result =  MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos());
     }  
-    else if (setOpKind == "intersect" || 
-            setOpKind == "intersect_all" || 
-            setOpKind == "except" ||
-            setOpKind == "except_all" ) {
+    else if (setOpKind == "intersect" || setOpKind == "except" ) {
 
         TOpIterator end(nullptr);
 
@@ -717,7 +718,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         }
 
         TString joinKind = "LeftSemi";
-        if (setOpKind == "except" || setOpKind == "except_all") {
+        if (setOpKind == "except") {
             joinKind = "LeftOnly";
         }
 

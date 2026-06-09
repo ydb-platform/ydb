@@ -88,6 +88,11 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` SET (KEY_BLOOM_FILTER = DISABLED);"), "SUCCESS");
         UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{}));
+
+        // Re-adding a bloom index after disable should correctly re-establish bloom state.
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` ADD INDEX idx3 LOCAL USING bloom_filter ON (Key1);"), "SUCCESS");
+        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1}));
     }
 
     // The EnableFilterByKey (whole-key KEY_BLOOM_FILTER) branch: the whole-key filter is unified
@@ -119,6 +124,16 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` SET (KEY_BLOOM_FILTER = DISABLED);"), "SUCCESS");
         UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{}));
+
+        // Re-enabling KEY_BLOOM_FILTER should correctly re-establish the whole-key filter.
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` SET (KEY_BLOOM_FILTER = ENABLED);"), "SUCCESS");
+        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{2}));
+
+        // Adding a new prefix bloom index after disable should also work correctly.
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, "ALTER TABLE `/Root/T` ADD INDEX idx3 LOCAL USING bloom_filter ON (Key1);"), "SUCCESS");
+        UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1, 2}));
     }
 
     // The per-prefix false-positive probability resolved by ApplyConfig

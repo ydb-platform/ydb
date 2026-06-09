@@ -18,8 +18,9 @@ namespace NHive {
 static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
 static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 
-static void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, bool enableSecurePath) {
+static void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, const TAppData* appData) {
     const TStringBuf monRoot = IsTabletDevUiSecurePath(pathInfo) ? TStringBuf("../..") : TStringBuf("..");
+    const bool enableSecurePath = UsesTabletDevUiSecurePath(appData, TTabletTypes::Hive);
     out << "<script src=\"" << monRoot << "/cms/hive.js\"></script>";
     out << "<script>EnableTabletDevUiSecurePath=" << (enableSecurePath ? "true" : "false") << ";</script>";
 }
@@ -504,10 +505,7 @@ public:
 
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
-        AppendTabletDevUiMonScript(
-            out,
-            Event.Get()->PathInfo(),
-            AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath());
+        AppendTabletDevUiMonScript(out, Event.Get()->PathInfo(), AppData());
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr>";
@@ -1587,10 +1585,7 @@ public:
         }
 
         out << "<head>";
-        AppendTabletDevUiMonScript(
-            out,
-            Event.Get()->PathInfo(),
-            AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath());
+        AppendTabletDevUiMonScript(out, Event.Get()->PathInfo(), AppData());
         out << "<style>";
         out << "table.simple-table1 th { text-align: center; }";
         out << "table.simple-table1 td { padding: 1px 3px; }";
@@ -4971,10 +4966,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         TStringStream out;
-        AppendTabletDevUiMonScript(
-            out,
-            Event.Get()->PathInfo(),
-            AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath());
+        AppendTabletDevUiMonScript(out, Event.Get()->PathInfo(), AppData());
         out << "<div>";
         out << "<form id='dynamicForm' method='POST'>";
         out << R"(

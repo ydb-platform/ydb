@@ -1,6 +1,5 @@
 #include "hive_impl.h"
 #include "hive_log.h"
-#include <ydb/core/base/auth.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -184,12 +183,15 @@ bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorCo
     if (!ev)
         return true;
 
-    const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (securePathMode) {
-        if (!(IsTabletDevUiSecurePath(ev->Get()->PathInfo()) && IsAdministrator(AppData(ctx), ev->Get()->GetUserToken()))) {
-            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-            return true;
-        }
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(ctx),
+            AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath(),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            /*isPublicRequest=*/false))
+    {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
     }
 
     CreateEvMonitoring(ev, ctx);

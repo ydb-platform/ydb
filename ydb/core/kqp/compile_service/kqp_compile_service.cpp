@@ -786,9 +786,10 @@ private:
             compileRequest.CompileSettings.IsWarmupCompilation
                 ? EWarmupAttributionMode::Warmup
                 : EWarmupAttributionMode::Client,
-            Counters);
+            Counters,
+            compileRequest.TempTablesState);
 
-        if (!compileRequest.FindInCache || HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
+        if (!compileRequest.FindInCache) {
             compileResult = nullptr;
         }
 
@@ -1377,7 +1378,8 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     const NYql::TAstParseResult& ast,
     bool promote,
     EWarmupAttributionMode warmupAttribution,
-    TIntrusivePtr<TKqpCounters> counters)
+    TIntrusivePtr<TKqpCounters> counters,
+    TKqpTempTablesState::TConstPtr tempTablesState)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1388,9 +1390,14 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     }
 
     auto compileResult = FindByUidImpl(*uid, promote);
+    const bool hadEntry = static_cast<bool>(compileResult);
+    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
+        compileResult = nullptr;
+    }
+
     if (compileResult) {
         AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
-    } else {
+    } else if (!hadEntry) {
         AccountWarmupMissImpl(warmupAttribution, counters);
     }
     return compileResult;

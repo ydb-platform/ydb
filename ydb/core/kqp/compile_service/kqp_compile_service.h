@@ -121,7 +121,8 @@ public:
         const NYql::TAstParseResult& ast,
         bool promote,
         EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None,
-        TIntrusivePtr<TKqpCounters> counters = nullptr);
+        TIntrusivePtr<TKqpCounters> counters = nullptr,
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
 
     bool EraseByUid(const TString& uid) {
         TGuard<TAdaptiveLock> guard(Lock);

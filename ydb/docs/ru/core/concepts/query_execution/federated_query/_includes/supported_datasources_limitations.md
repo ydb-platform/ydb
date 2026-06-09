@@ -1,0 +1,6 @@
+- [ClickHouse](../experimental_external_connectors/clickhouse.md#limitations)
+- [Greenplum](../experimental_external_connectors/greenplum.md#limitations)
+- [Microsoft SQL Server](../experimental_external_connectors/ms_sql_server.md#limitations)
+- [MySQL](../experimental_external_connectors/mysql.md#limitations)
+- [PostgreSQL](../experimental_external_connectors/postgresql.md#limitations)
+- [{{ ydb-short-name }}](../experimental_external_connectors/ydb.md#limitations)

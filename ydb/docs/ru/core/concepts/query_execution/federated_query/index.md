@@ -6,17 +6,4 @@
 
 Вы сможете узнать о внутреннем устройстве системы обработки федеративных запросов в разделе об [архитектуре](./architecture.md). Подробная информация про работу с различными источниками данных приведена в соответствующих разделах:
 
-**Стабильные источники данных** (нативная поддержка, не требуют дополнительных сервисов):
-
-- [S3-совместимые объектные хранилища](s3/external_table.md)
-- {{ monitoring-full-name }} (метрики)
-- YDB Topics (нативная потоковая обработка)
-
-**Экспериментальные источники данных** (требуют развёртывания коннектора [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go)):
-
-- [ClickHouse](experimental_external_connectors/clickhouse.md)
-- [Greenplum](experimental_external_connectors/greenplum.md)
-- [Microsoft SQL Server](experimental_external_connectors/ms_sql_server.md)
-- [MySQL](experimental_external_connectors/mysql.md)
-- [PostgreSQL](experimental_external_connectors/postgresql.md)
-- [{{ ydb-short-name }}](experimental_external_connectors/ydb.md) (федеративные запросы YDB-to-YDB)
+{% include [!](_includes/supported_datasources.md) %}

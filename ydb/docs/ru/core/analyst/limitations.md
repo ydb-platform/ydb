@@ -242,12 +242,7 @@ WHERE e.user_id = p.user_id
 
 {% include [!](../concepts/query_execution/federated_query/_includes/experimental_connectors_warning.md) %}
 
-- [ClickHouse](../concepts/query_execution/federated_query/experimental_external_connectors/clickhouse.md#limitations)
-- [Greenplum](../concepts/query_execution/federated_query/experimental_external_connectors/greenplum.md#limitations)
-- [Microsoft SQL Server](../concepts/query_execution/federated_query/experimental_external_connectors/ms_sql_server.md#limitations)
-- [MySQL](../concepts/query_execution/federated_query/experimental_external_connectors/mysql.md#limitations)
-- [PostgreSQL](../concepts/query_execution/federated_query/experimental_external_connectors/postgresql.md#limitations)
-- [YDB](../concepts/query_execution/federated_query/experimental_external_connectors/ydb.md#limitations)
+{% include [!](../concepts/query_execution/federated_query/_includes/supported_datasources_limitations.md) %}
 
 ```sql
 -- Параметры (для примера — как переменные)

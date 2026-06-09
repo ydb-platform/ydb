@@ -93,7 +93,7 @@ public:
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
                 if (!operationInfo.LockNullWritesTxId) {
                     operationInfo.LockNullWritesTxId = txId;
                     Self->PersistSetColumnConstraintLockNullWritesTxId(db, operationInfo);
@@ -102,7 +102,7 @@ public:
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Finishing: {
                 if (!operationInfo.UnlockNullWritesTxId) {
                     operationInfo.UnlockNullWritesTxId = txId;
                     Self->PersistSetColumnConstraintUnlockNullWritesTxId(db, operationInfo);
@@ -122,7 +122,7 @@ public:
             }
 
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
-            case TSetColumnConstraintOperationInfo::EOperationState::Validate:
+            case TSetColumnConstraintOperationInfo::EOperationState::Validating:
             case TSetColumnConstraintOperationInfo::EOperationState::Done: {
                 // We dont need to get TxId on these states
                 Y_UNREACHABLE();
@@ -221,11 +221,11 @@ public:
             if (!replyOnCreation()) {
                 return false;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites) {
             Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
             operationInfo.LockNullWritesTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Finishing) {
             Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
             operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
@@ -286,11 +286,11 @@ public:
             Y_ENSURE(txId == operationInfo.LockTxId);
             operationInfo.LockTxDone = true;
             Self->PersistSetColumnConstraintLockTxDone(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites) {
             Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
             operationInfo.LockNullWritesTxDone = true;
             Self->PersistSetColumnConstraintLockNullWritesTxDone(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Finishing) {
             Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
             operationInfo.UnlockNullWritesTxDone = true;
             Self->PersistSetColumnConstraintUnlockNullWritesTxDone(db, operationInfo);
@@ -561,13 +561,13 @@ public:
                 } else if (!operationInfo.LockTxDone) {
                     Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockTxId)));
                 } else {
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites);
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites);
                     Progress(BuildId);
                 }
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
                 if (operationInfo.LockNullWritesTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.LockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
@@ -575,16 +575,16 @@ public:
                 } else if (!operationInfo.LockNullWritesTxDone) {
                     Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockNullWritesTxId)));
                 } else {
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validate);
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validating);
                     Progress(BuildId);
                 }
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::Validate: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
                 if (DriveToSendMessageToPartOfShards(txc, operationInfo)) {
                     if (operationInfo.ValidationFailed) {
-                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites);
+                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     } else {
                         ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Unlocking);
                     }
@@ -593,7 +593,7 @@ public:
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Finishing: {
                 if (operationInfo.UnlockNullWritesTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.UnlockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {

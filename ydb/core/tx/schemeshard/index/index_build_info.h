@@ -853,9 +853,9 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     enum class EOperationState: ui32 {
         Invalid = 0,
         Locking = 10,
-        LockNullWrites = 20,
-        Validate = 30,
-        UnlockNullWrites = 40,
+        LockingNullWrites = 20,
+        Validating = 30,
+        Finishing = 40,
         Unlocking = 60,
         Done = 200
     };

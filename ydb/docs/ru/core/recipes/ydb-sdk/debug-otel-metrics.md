@@ -45,7 +45,7 @@
   go get github.com/ydb-platform/ydb-go-sdk-otel
   ```
 
-  Настройте `MeterProvider` и передайте адаптер в `ydb.Open`:
+  Настройте `MeterProvider`, получите из него `Meter` и передайте его в адаптер `ydbOtel.WithMetrics`, который подключается к драйверу через опцию `ydb.Open`. Детализацию собираемых метрик можно настроить через `ydbOtel.WithDetailer`:
 
   ```go
   package main

@@ -261,7 +261,7 @@ public:
     void RestartDisk(TTestActorSystem& runtime, TDiskRecord& disk) {
         YDB_LOG_CTX_NOTICE(runtime, "Restarting",
             {"VDiskId", disk.VDiskId},
-            {"over_NodeId", disk.NodeId},
+            {"OverNodeId", disk.NodeId},
             {"PDiskId", disk.PDiskId});
         runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, disk.VDiskActorId, TActorId(), nullptr, 0), disk.NodeId);
         StartVDisk(runtime, disk);
@@ -270,7 +270,7 @@ public:
     void FormatDisk(TTestActorSystem& runtime, TDiskRecord& disk) {
         YDB_LOG_CTX_NOTICE(runtime, "Formatting",
             {"VDiskId", disk.VDiskId},
-            {"over_NodeId", disk.NodeId},
+            {"OverNodeId", disk.NodeId},
             {"PDiskId", disk.PDiskId},
             {"DiskStatus", GetDiskStatusMap()});
         runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, disk.VDiskActorId, TActorId(), nullptr, 0), disk.NodeId);
@@ -298,10 +298,10 @@ public:
 
         YDB_LOG_CTX_NOTICE(runtime, "Reassigning",
             {"VDiskId", disk.VDiskId},
-            {"from_NodeId", disk.NodeId},
+            {"FromNodeId", disk.NodeId},
             {"PDiskId", disk.PDiskId},
-            {"to_NodeId", nodeId},
-            {"new_PDiskId", pdiskId},
+            {"ToNodeId", nodeId},
+            {"NewPDiskId", pdiskId},
             {"PDiskGuid", pdiskGuid});
 
         // slay it over PDisk
@@ -474,7 +474,7 @@ public:
             Prefix = TStringBuilder() << "[" << TabletId << ":" << generation << "@" << GroupId << "]";
             YDB_LOG_CTX_INFO(GetActorContext(), "running",
                 {"Prefix", Prefix},
-                {"generation", generation});
+                {"Generation", generation});
             RunCycle(generation);
         }
         YDB_LOG_CTX_INFO(GetActorContext(), "done",
@@ -491,16 +491,16 @@ public:
         auto q = std::make_unique<TEvent>(std::forward<TArgs>(args)...);
         YDB_LOG_CTX_DEBUG(GetActorContext(), "sending",
             {"Prefix", Prefix},
-            {"event_type", TypeName<TEvent>()},
-            {"request", q->Print(false)});
+            {"EventType", TypeName<TEvent>()},
+            {"Request", q->Print(false)});
         GetActorSystem()->Schedule(TDuration::MicroSeconds(TAppData::RandomProvider->Uniform(10, 100)),
             new IEventHandle(ProxyId, SelfActorId, q.release()));
         ++*Counter;
         auto ev = WaitForSpecificEvent<TResultFor<TEvent>>(&TActivityActorImpl::ProcessUnexpectedEvent);
         YDB_LOG_CTX_DEBUG(GetActorContext(), "received",
             {"Prefix", Prefix},
-            {"result_type", TypeName<TResultFor<TEvent>>()},
-            {"response", ev->Get()->Print(false)});
+            {"ResultType", TypeName<TResultFor<TEvent>>()},
+            {"Response", ev->Get()->Print(false)});
         return ev;
     }
 

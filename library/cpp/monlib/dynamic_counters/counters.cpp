@@ -141,6 +141,18 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& nam
     return res;
 }
 
+TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name) const {
+    TReadGuard g(Lock);
+    const auto it = Counters.lower_bound({name, TString()});
+    if (it != Counters.end() && it->first.LabelName == name) {
+        const auto it2 = std::next(it);
+        if (it2 == Counters.end() || it2->first.LabelName != name) {
+            return AsDynamicCounters(it->second);
+        }
+    }
+    return nullptr;
+}
+
 TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name, const TString& value) const {
     TReadGuard g(Lock);
     const auto it = Counters.find({name, value});

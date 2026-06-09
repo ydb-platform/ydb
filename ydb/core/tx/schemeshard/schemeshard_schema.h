@@ -1392,6 +1392,10 @@ struct Schema : NIceDb::Schema {
         struct CpuTimeUsBilled : Column<44, NScheme::NTypeIds::Uint64> {};
         struct CpuTimeUsProcessed : Column<45, NScheme::NTypeIds::Uint64> {};
 
+        struct DropColumnsTxId : Column<46, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct DropColumnsTxStatus : Column<47, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
+        struct DropColumnsTxDone : Column<48, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1439,6 +1443,9 @@ struct Schema : NIceDb::Schema {
             UserSID,
             CpuTimeUsBilled,
             CpuTimeUsProcessed,
+            DropColumnsTxId,
+            DropColumnsTxStatus,
+            DropColumnsTxDone,
             SubState
         >;
     };

@@ -29,11 +29,9 @@ PEERDIR(
     ydb/core/base
     ydb/core/fq/libs/events
     ydb/library/yql/dq/actors/compute
-    yql/essentials/minikql/computation
     ydb/library/yql/providers/common/arrow
     ydb/library/yql/providers/common/arrow/interface
     ydb/library/yql/providers/common/http_gateway
-    yql/essentials/providers/common/schema/mkql
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/generic/pushdown
     ydb/library/yql/providers/s3/actors_factory
@@ -44,9 +42,12 @@ PEERDIR(
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/range_helpers
+    ydb/library/yql/udfs/common/clickhouse/client
+    yql/essentials/minikql
+    yql/essentials/minikql/computation
+    yql/essentials/providers/common/schema/mkql
     yql/essentials/public/issue
     yql/essentials/public/types
-    ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/utils
 )
 

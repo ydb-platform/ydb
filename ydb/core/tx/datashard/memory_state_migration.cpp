@@ -91,6 +91,9 @@ private:
             Buffer.Insert(Buffer.End(), std::move(payload));
         }
 
+        // We must not have any checkpoints in the buffer yet
+        Y_ENSURE(Checkpoints.empty());
+
         size_t lastOffset = 0;
         for (size_t offset : msg->Record.GetSerializedStateCheckpoints()) {
             // These offsets are relative to the start of the new chunk, we make
@@ -207,6 +210,8 @@ private:
 
             Arena.Reset();
         }
+
+        Checkpoints.clear();
 
         if (msg->Record.HasContinuationToken()) {
             // Request the next data chunk

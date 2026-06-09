@@ -3065,10 +3065,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         Cancellation_Applying = 350,
         Cancellation_Unlocking = 360,
+        Cancellation_DroppingColumns = 370,
         Cancelled = 400,
 
         Rejection_Applying = 500,
         Rejection_Unlocking = 510,
+        Rejection_DroppingColumns = 520,
         Rejected = 550
     };
 
@@ -3224,6 +3226,7 @@ public:
     bool InitiateTxDone = false;
     bool ApplyTxDone = false;
     bool UnlockTxDone = false;
+    bool DropColumnsTxDone = false;
 
     bool BillingEventIsScheduled = false;
 
@@ -3232,12 +3235,14 @@ public:
     TTxId InitiateTxId = TTxId();
     TTxId ApplyTxId = TTxId();
     TTxId UnlockTxId = TTxId();
+    TTxId DropColumnsTxId = TTxId();
 
     NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
@@ -3393,6 +3398,9 @@ public:
         return result;
     }
 
+    static bool IsValidState(EState value);
+    static bool IsValidBuildKind(EBuildKind value);
+
     struct TClusterShards {
         NTableIndex::TClusterId From = std::numeric_limits<NTableIndex::TClusterId>::max();
         std::vector<TShardIdx> Shards;
@@ -3450,18 +3458,30 @@ public:
         indexInfo->Id = id;
         indexInfo->Uid = uid;
 
-        indexInfo->State = TIndexBuildInfo::EState(
-            row.template GetValue<Schema::IndexBuild::State>());
-        indexInfo->SubState = TIndexBuildInfo::ESubState(
-            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
+
+        indexInfo->State = TIndexBuildInfo::EState(
+            row.template GetValue<Schema::IndexBuild::State>());
+        if (!IsValidState(indexInfo->State)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build state: " << ui32(indexInfo->State));
+            indexInfo->State = TIndexBuildInfo::EState::Invalid;
+        }
+
+        indexInfo->SubState = TIndexBuildInfo::ESubState(
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
 
         // note: please note that here we specify BuildSecondaryIndex as operation default,
         // because previously this table was dedicated for build secondary index operations only.
         indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
             row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
                 ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
+        if (!IsValidBuildKind(indexInfo->BuildKind)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build kind: " << ui32(indexInfo->BuildKind));
+            indexInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildKindUnspecified;
+        }
 
         indexInfo->DomainPathId =
             TPathId(row.template GetValue<Schema::IndexBuild::DomainOwnerId>(),
@@ -3541,6 +3561,16 @@ public:
         indexInfo->AlterMainTableTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
+
+        indexInfo->DropColumnsTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxId>(
+                indexInfo->DropColumnsTxId);
+        indexInfo->DropColumnsTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxStatus>(
+                indexInfo->DropColumnsTxStatus);
+        indexInfo->DropColumnsTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxDone>(
+                indexInfo->DropColumnsTxDone);
 
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
@@ -3864,6 +3894,10 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     o << ", ApplyTxId: " << info.ApplyTxId;
     o << ", ApplyTxStatus: " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus);
     o << ", ApplyTxDone: " << info.ApplyTxDone;
+
+    o << ", DropColumnsTxId: " << info.DropColumnsTxId;
+    o << ", DropColumnsTxStatus: " << NKikimrScheme::EStatus_Name(info.DropColumnsTxStatus);
+    o << ", DropColumnsTxDone: " << info.DropColumnsTxDone;
 
     o << ", UnlockTxId: " << info.UnlockTxId;
     o << ", UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus);

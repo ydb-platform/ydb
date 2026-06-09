@@ -1146,8 +1146,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         {
             auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8/Value_index/indexImplTable", 1, 2);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(res.GetIssues().ToString(), "Error: Bulk upsert to table '/Root/ui8/Value_index/indexImplTable' unknown table", res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(res.GetIssues().ToString(), "Writing to index implementation tables is not allowed", res.GetIssues().ToString());
         }
     }
 

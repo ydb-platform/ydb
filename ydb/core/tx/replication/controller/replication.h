@@ -155,6 +155,8 @@ public:
     void UpdateSecret(const TString& secretValue);
     ui64 GetExpectedSecretResolverCookie() const;
 
+    void UpdateResourceId(const TString& value);
+
     void SetTenant(const TString& value);
     const TString& GetTenant() const;
 

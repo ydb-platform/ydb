@@ -407,6 +407,7 @@ private:
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
+        THashSet<TString> defaultColumnsLeft;
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
@@ -425,6 +426,10 @@ private:
                 keyColumnIds.resize(Max<size_t>(keyColumnIds.size(), keyOrder + 1));
                 keyColumnIds[keyOrder] = id;
                 keyColumnsLeft.insert(name);
+            }
+
+            if (colInfo.IsDefaultFromLiteral()) {
+                defaultColumnsLeft.insert(name);
             }
         }
 
@@ -463,14 +468,14 @@ private:
             if (!cp) {
                 return TConclusionStatus::Fail(Sprintf("Unknown column: %s", name.c_str()));
             }
-            i32 pgTypeMod = -1;            
+            i32 pgTypeMod = -1;
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
-            
+
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
             if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
@@ -522,6 +527,10 @@ private:
             if (notNull) {
                 notNullColumnsLeft.erase(ci.Name);
                 NotNullColumns.emplace(ci.Name);
+            }
+
+            if (defaultColumnsLeft.contains(ci.Name)) {
+                defaultColumnsLeft.erase(ci.Name);
             }
 
             if (ci.KeyOrder != -1) {
@@ -606,6 +615,21 @@ private:
 
         if (!notNullColumnsLeft.empty()) {
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
+        }
+
+        if (!defaultColumnsLeft.empty() && UpsertIfExists) {
+            // some default columns are not specified in the request, but upsert will only update existing rows
+            // and only the columns specified in the request will be updated; unspecified default columns will not be changed.
+            defaultColumnsLeft.clear();
+        }
+
+        if (!defaultColumnsLeft.empty()) {
+            if (AppData(ctx)->FeatureFlags.GetDisableMissingDefaultColumnsInBulkUpsert()) {
+                return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
+            }
+
+            UploadCounters.OnMissingDefaultColumns();
+            LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
         }
 
         TConclusionStatus res = TConclusionStatus::Success();

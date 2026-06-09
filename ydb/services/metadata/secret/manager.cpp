@@ -21,6 +21,7 @@ private:
 
         Ydb::Table::ExecuteDataQueryRequest request;
         TStringBuilder sb;
+        sb << "--!syntax_v1\n";
         sb << "SELECT " + TSecret::TDecoder::SecretId + ", " + TSecret::TDecoder::OwnerUserId + ", " + TSecret::TDecoder::Value << Endl;
         sb << "FROM `" + TSecret::GetBehaviour()->GetStorageTablePath() + "`" << Endl;
         sb << "VIEW index_by_secret_id" << Endl;

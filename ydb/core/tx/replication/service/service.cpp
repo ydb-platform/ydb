@@ -296,7 +296,7 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
     bool EnableSsl() const {
         return std::get<2>(*this);
     }
- 
+
     const TString& CaCert() const {
         return std::get<3>(*this);
     }
@@ -312,6 +312,8 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
             return TConnectionParams(endpoint, database, ssl, caCert, params.GetStaticCredentials().GetUser());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             return TConnectionParams(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken());
+        case NKikimrReplication::TConnectionParams::kIamCredentials:
+            return TConnectionParams(endpoint, database, ssl, caCert, params.GetIamCredentials().GetServiceAccountId());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -400,6 +402,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
+            break;
+        case NKikimrReplication::TConnectionParams::kIamCredentials:
+            ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetIamCredentials());
             break;
         default:
             Y_ABORT("Unexpected credentials");

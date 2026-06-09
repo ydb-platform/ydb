@@ -7,6 +7,8 @@
 #include <ydb/core/wrappers/events/common.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/events/object_exists.h>
+#include <ydb/core/wrappers/retry_policy.h>
+#include <ydb/core/util/backoff.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
@@ -52,6 +54,25 @@ struct TEvExternalStorage {
 
 namespace NExternalStorage {
 
+class TThreadSafeBackoff {
+private:
+    mutable TMutex Mutex;
+    NKikimr::TBackoff Policy;
+public:
+    TThreadSafeBackoff(size_t maxRetries = 100, TDuration initial = TDuration::Seconds(3), TDuration max = TDuration::Seconds(10))
+        : Policy(maxRetries, initial, max) {}
+    void Reset() {
+        with_lock(Mutex) {
+            Policy.Reset();
+        }
+    }
+    TDuration Next() {
+        with_lock(Mutex) {
+            return Policy.Next();
+        }
+    }
+};
+
 class IReplyAdapter {
 private:
     std::optional<NActors::TActorId> CustomRecipient;
@@ -80,10 +101,12 @@ public:
 class TReplyAdapterContainer {
 private:
     IReplyAdapter::TPtr Adapter;
+    std::shared_ptr<TThreadSafeBackoff> Backoff;
 public:
     TReplyAdapterContainer() = default;
-    TReplyAdapterContainer(IReplyAdapter::TPtr adapter)
-        : Adapter(adapter) {
+    TReplyAdapterContainer(IReplyAdapter::TPtr adapter, std::shared_ptr<TThreadSafeBackoff> backoff = {})
+        : Adapter(adapter)
+        , Backoff(std::move(backoff)) {
 
     }
 
@@ -106,10 +129,31 @@ public:
 
     template <class TBaseEventObject>
     void Reply(const NActors::TActorId& recipientId, std::unique_ptr<TBaseEventObject>&& ev) const {
+        bool doBackoff = false;
+        TDuration delay = TDuration::Zero();
+
+        if (ev->IsSuccess()) {
+
+            Backoff->Reset();
+        } else if (NWrappers::ShouldBackoff(ev->GetError())) {
+            AFL_VERIFY(Backoff);
+            delay = Backoff->Next();
+            doBackoff = delay > TDuration::Zero();
+        }
+
+        std::unique_ptr<NActors::IEventBase> finalEvent;
         if (Adapter) {
-            TlsActivationContext->ActorSystem()->Send(Adapter->GetRecipient(recipientId), Adapter->RebuildReplyEvent(std::move(ev)).release());
+            finalEvent = Adapter->RebuildReplyEvent(std::move(ev));
         } else {
-            TlsActivationContext->ActorSystem()->Send(recipientId, ev.release());
+            finalEvent.reset(ev.release());
+        }
+
+        const NActors::TActorId recipient = Adapter ? Adapter->GetRecipient(recipientId) : recipientId;
+        if (doBackoff) {
+            auto* handle = new NActors::IEventHandle(recipient, NActors::TActorId(), finalEvent.release());
+            TlsActivationContext->ActorSystem()->Schedule(delay, handle);
+        } else {
+            TlsActivationContext->ActorSystem()->Send(recipient, finalEvent.release());
         }
 
     }
@@ -119,6 +163,7 @@ public:
 class IExternalStorageOperator {
 protected:
     TReplyAdapterContainer ReplyAdapter;
+    std::shared_ptr<TThreadSafeBackoff> BackoffPolicy = std::make_shared<TThreadSafeBackoff>();
     virtual TString DoDebugString() const {
         return "";
     }
@@ -126,7 +171,7 @@ public:
     using TPtr = std::shared_ptr<IExternalStorageOperator>;
     void InitReplyAdapter(IReplyAdapter::TPtr adapter) {
         Y_ABORT_UNLESS(!ReplyAdapter);
-        ReplyAdapter = TReplyAdapterContainer(adapter);
+        ReplyAdapter = TReplyAdapterContainer(adapter, BackoffPolicy);
     }
 
 

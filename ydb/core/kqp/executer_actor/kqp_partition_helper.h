@@ -51,6 +51,8 @@ public:
 
     THashMap<ui64, TShardInfo> PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
 
+    std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo);
+
 private:
     const NMiniKQL::THolderFactory* HolderFactory;
     const NMiniKQL::TTypeEnvironment* TypeEnv;

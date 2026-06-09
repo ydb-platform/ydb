@@ -154,7 +154,7 @@ class KiKiMRClusterInterface(object):
             self,
             database_name,
             expected_computational_units=None,
-            timeout_seconds=120,
+            timeout_seconds=240,
             token=None
     ):
         def predicate():

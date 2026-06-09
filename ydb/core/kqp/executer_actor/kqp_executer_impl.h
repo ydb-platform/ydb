@@ -167,6 +167,8 @@ public:
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
         }
 
+        BufferPageAllocSize = tableServiceConfig.GetBufferPageAllocSize();
+
         EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -1095,7 +1097,7 @@ protected:
             } else {
                 settings = *stageInfo.Meta.ResolvedSinkSettings;
             }
-        
+
             auto& lockTxId = TasksGraph.GetMeta().LockTxId;
             if (lockTxId) {
                 settings.SetLockTxId(*lockTxId);
@@ -1488,7 +1490,7 @@ protected:
         }
 
         if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
-            auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
+            auto [startShard, shardInfo] = PartitionPruner.MakeVirtualTablePartition(source, stageInfo);
 
             YQL_ENSURE(Stats);
 
@@ -1796,6 +1798,7 @@ protected:
             .CaFactory_ = Request.CaFactory_,
             .BlockTrackingMode = BlockTrackingMode,
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
+            .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
         });
 
@@ -2293,10 +2296,7 @@ protected:
             if (!BatchOperationSettings.Empty() && !Stats->TableStats.empty()) {
                 auto [_, tableStats] = *Stats->TableStats.begin();
                 Counters->Counters->BatchOperationUpdateRows->Add(tableStats->GetWriteRows());
-                Counters->Counters->BatchOperationUpdateBytes->Add(tableStats->GetWriteBytes());
-
                 Counters->Counters->BatchOperationDeleteRows->Add(tableStats->GetEraseRows());
-                Counters->Counters->BatchOperationDeleteBytes->Add(tableStats->GetEraseBytes());
             }
 
             auto finishSize = Stats->EstimateFinishMem();
@@ -2460,6 +2460,7 @@ protected:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const bool VerboseMemoryLimitException;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMaybe<ui64> BufferPageAllocSize;
 
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;

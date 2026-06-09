@@ -48,12 +48,14 @@ public:
         return EStage::Fetching;
     }
     virtual ui64 GetReserveMemorySize(
-        const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const override {
-        if (limit) {
-            return std::max<ui64>(blobsSize, rawSize * (1.0 * *limit) / recordsCount);
-        } else {
-            return std::max<ui64>(blobsSize, rawSize);
-        }
+        const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> /*limit*/, const ui32 /*recordsCount*/) const override {
+        return std::max<ui64>(blobsSize, rawSize);
+        // FIXME after futher memory usage investagiation
+        // if (limit) {
+        //     return std::max<ui64>(blobsSize, rawSize * (1.0 * *limit) / recordsCount);
+        // } else {
+        //     return std::max<ui64>(blobsSize, rawSize);
+        // }
     }
 };
 

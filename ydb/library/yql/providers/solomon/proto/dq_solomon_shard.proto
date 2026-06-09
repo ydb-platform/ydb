@@ -3,6 +3,8 @@ option cc_enable_arenas = true;
 
 package NYql.NSo.NProto;
 
+import "ydb/library/yql/providers/solomon/proto/metrics_queue.proto";
+
 enum ESolomonClusterType {
     CT_UNSPECIFIED = 0;
     CT_SOLOMON = 1;
@@ -55,7 +57,7 @@ message TDqSolomonSource {
     TToken Token = 5;
 
     string Project = 6;
-    map<string, string> Selectors = 7;
+    optional NYql.NSo.MetricQueue.TSelectors Selectors = 7;
     optional string Program = 8;
     // seconds since Epoch
     int64 From = 9;

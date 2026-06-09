@@ -31,7 +31,6 @@ private:
 
     STATEFN(StateWork);
 
-
 private:
     const TString Database;
     TString LogPrefix;

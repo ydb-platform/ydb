@@ -3,10 +3,13 @@ LIBRARY()
 SRCS(
     json_index.cpp
     json_corpus.cpp
+    json_predicate.cpp
 )
 
 PEERDIR(
+    contrib/libs/fmt
     library/cpp/json
+    ydb/public/sdk/cpp/src/client/params
     yql/essentials/public/issue
     yql/essentials/public/udf
     yql/essentials/minikql/jsonpath/parser

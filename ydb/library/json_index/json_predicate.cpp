@@ -1,9 +1,14 @@
-#include "kqp_indexes_json_predicate.h"
+#include "json_predicate.h"
 
 #include <fmt/format.h>
 #include <util/random/mersenne.h>
 
-namespace NKikimr::NKqp {
+#include <array>
+#include <functional>
+#include <numeric>
+#include <vector>
+
+namespace NKikimr::NJsonIndex {
 
 namespace {
 
@@ -177,6 +182,26 @@ private:
 
                 case EJsonShape::FullLiteralMix:
                     KeysWithFullMix.push_back(row.Key);
+                    break;
+
+                case EJsonShape::LongKeys:
+                    KeysWithLongKeys.push_back(row.Key);
+                    break;
+
+                case EJsonShape::SpecialKeys:
+                    KeysWithSpecialKeys.push_back(row.Key);
+                    break;
+
+                case EJsonShape::WideObject:
+                    KeysWithWideObject.push_back(row.Key);
+                    break;
+
+                case EJsonShape::LongArray:
+                    KeysWithLongArray.push_back(row.Key);
+                    break;
+
+                case EJsonShape::VeryDeepNested:
+                    KeysWithVeryDeepNested.push_back(row.Key);
                     break;
 
                 default:
@@ -476,6 +501,81 @@ private:
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.shared_b ? (@ == true)')", Mode));
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.shared_b ? (@ == false)')", Mode));
             }
+        }
+
+        // Long keys straddling the LEB128 length boundary + a long (>128 byte) string value.
+        if (!KeysWithLongKeys.empty()) {
+            // Lengths must match the set produced by EJsonShape::LongKeys in json_corpus.cpp.
+            for (size_t len : {size_t(64), size_t(126), size_t(127), size_t(128), size_t(200), size_t(1000)}) {
+                const ui64 k = PickFrom(KeysWithLongKeys);
+                const auto lk = TJsonCorpus::MakeLongKey(k, len);
+                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."{1}"'))", Mode, lk));
+                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."{1}" ? (@ == {2})'))", Mode, lk, k));
+            }
+
+            const ui64 k = PickFrom(KeysWithLongKeys);
+            const auto ls = TJsonCorpus::MakeLongString(k, 300);
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.lstr ? (@ == "{1}")'))", Mode, ls));
+        }
+
+        // Keys that force quoted / bracket JsonPath notation, plus Unicode keys and values.
+        if (!KeysWithSpecialKeys.empty()) {
+            // Must match the keys produced by EJsonShape::SpecialKeys in json_corpus.cpp.
+            for (const std::string& sk : {"dotted.key", "with space", "star*key", "brack[0]", "@id", "$ref", "q?", "a.b.c"}) {
+                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."{1}"'))", Mode, sk));
+            }
+
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."dotted.key" ? (@ == {1})'))", Mode, PickFrom(KeysWithSpecialKeys)));
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."a.b.c" ? (@ == {1})'))", Mode, PickFrom(KeysWithSpecialKeys)));
+
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."ключ"'))", Mode));
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."ключ" ? (@ == "значение")'))", Mode));
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."鍵" ? (@ == "値")'))", Mode));
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $."emoji😀" ? (@ == "v😀")'))", Mode));
+        }
+
+        // Wide object: numbered members ($.* coverage) and numeric / look-alike literals.
+        if (!KeysWithWideObject.empty()) {
+            // f_<i> values equal <i> (independent of the row key), so a fixed literal matches.
+            for (int idx : {0, 1, 64, 129}) {
+                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.f_{1}')", Mode, idx));
+                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.f_{1} ? (@ == {1})')", Mode, idx));
+            }
+
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.big ? (@ == 1000000000000000)')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.zero ? (@ == 0)')", Mode));
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.s_num ? (@ == "123")'))", Mode));
+            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.s_empty ? (@ == "")'))", Mode));
+        }
+
+        // Long array: [*], [last], large index and ranges (arr[i] == i).
+        if (!KeysWithLongArray.empty()) {
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[*]')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[0]')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[129]')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[last]')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[0 to 5]')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[0] ? (@ == 0)')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[129] ? (@ == 129)')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[last] ? (@ == 129)')", Mode));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr[*] ? (@ == 100)')", Mode));
+        }
+
+        // Deeply nested chain $.n.n.…(16).leaf.
+        if (!KeysWithVeryDeepNested.empty()) {
+            // Depth must match EJsonShape::VeryDeepNested in json_corpus.cpp.
+            std::string deep = "$";
+            for (int i = 0; i < 16; ++i) {
+                deep += ".n";
+            }
+
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} {1}')", Mode, deep));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} {1}.leaf')", Mode, deep));
+
+            const ui64 k = PickFrom(KeysWithVeryDeepNested);
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} {1}.leaf ? (@ == {2})')", Mode, deep, k));
+            AddJ(fmt::format("JSON_EXISTS(Text, '{0} {1}.u_{2} ? (@ == {2})')", Mode, deep, k));
         }
 
         // Negation
@@ -791,6 +891,59 @@ private:
             }
         }
 
+        // Long keys straddling the LEB128 length boundary + a long (>128 byte) string value.
+        if (!KeysWithLongKeys.empty()) {
+            for (size_t len : {size_t(127), size_t(128), size_t(1000)}) {
+                const ui64 k = PickFrom(KeysWithLongKeys);
+                const auto lk = TJsonCorpus::MakeLongKey(k, len);
+                AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $."{1}"' RETURNING Int64) = {2})", Mode, lk, k));
+            }
+
+            const ui64 k = PickFrom(KeysWithLongKeys);
+            const auto ls = TJsonCorpus::MakeLongString(k, 300);
+            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.lstr' RETURNING Utf8) = "{1}"u)", Mode, ls));
+        }
+
+        // Keys that force quoted / bracket JsonPath notation, plus Unicode keys and values.
+        if (!KeysWithSpecialKeys.empty()) {
+            for (const std::string& sk : {"dotted.key", "with space", "star*key", "brack[0]", "@id", "$ref", "q?", "a.b.c"}) {
+                const ui64 k = PickFrom(KeysWithSpecialKeys);
+                AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $."{1}"' RETURNING Int64) = {2})", Mode, sk, k));
+            }
+
+            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $."ключ"' RETURNING Utf8) = "значение"u)", Mode));
+            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $."鍵"' RETURNING Utf8) = "値"u)", Mode));
+        }
+
+        // Wide object: numbered members and numeric / look-alike literals.
+        if (!KeysWithWideObject.empty()) {
+            for (int idx : {0, 64, 129}) {
+                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.f_{1}' RETURNING Int64) = {1}", Mode, idx));
+            }
+
+            AddJ(fmt::format("JSON_VALUE(Text, '{0} $.big' RETURNING Int64) = 1000000000000000", Mode));
+            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.s_num' RETURNING Utf8) = "123"u)", Mode));
+        }
+
+        // Long array: indexed and [last] access (arr[i] == i).
+        if (!KeysWithLongArray.empty()) {
+            AddJ(fmt::format("JSON_VALUE(Text, '{0} $.arr[0]' RETURNING Int64) = 0", Mode));
+            AddJ(fmt::format("JSON_VALUE(Text, '{0} $.arr[129]' RETURNING Int64) = 129", Mode));
+            AddJ(fmt::format("JSON_VALUE(Text, '{0} $.arr[last]' RETURNING Int64) = 129", Mode));
+        }
+
+        // Deeply nested chain $.n.n.…(16).leaf.
+        if (!KeysWithVeryDeepNested.empty()) {
+            std::string deep = "$";
+            for (int i = 0; i < 16; ++i) {
+                deep += ".n";
+            }
+
+            const ui64 k = PickFrom(KeysWithVeryDeepNested);
+            AddJ(fmt::format("JSON_VALUE(Text, '{0} {1}.leaf' RETURNING Int64) = {2}", Mode, deep, k));
+            AddJ(fmt::format("JSON_VALUE(Text, '{0} {1}.u_{2}' RETURNING Int64) = {2}", Mode, deep, k));
+        }
+
         // Bool negation
         {
             for (int j = 0; j < 2; ++j) {
@@ -853,6 +1006,10 @@ private:
             if (!KeysWithItems.empty()) {
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.items.size() ? (@ == 2)')", Mode));
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.items.size().abs() ? (@ == 2)')", Mode));
+            }
+
+            if (!KeysWithLongArray.empty()) {
+                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.arr.size() ? (@ == 130)')", Mode));
             }
 
             if (!KeysWithFullMix.empty()) {
@@ -996,6 +1153,10 @@ private:
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}.size()' RETURNING Int64) = 3", Mode, PickFrom(KeysWithUArr)));
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*.size()' RETURNING Int64) = 3", Mode, PickFrom(KeysWithUArr)));
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}.size().abs()' RETURNING Int64) = 3", Mode, PickFrom(KeysWithUArr)));
+            }
+
+            if (!KeysWithLongArray.empty()) {
+                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.arr.size()' RETURNING Int64) = 130", Mode));
             }
 
             if (Opts.EnableRangeComparisons) {
@@ -2051,6 +2212,12 @@ private:
 
             AddJErr(fmt::format("NOT JSON_VALUE(Text, '{0} $.rank > {1}' RETURNING Bool)", Mode, PickFrom(KeysWithFlatObj) % 50 - 1));
             AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.rank > {1}' RETURNING Bool) = Just(false)", Mode, PickFrom(KeysWithFlatObj) % 50 - 1));
+
+            // Wide object: negative integer and high-precision double edge values.
+            if (!KeysWithWideObject.empty()) {
+                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.neg' RETURNING Int64) < 0", Mode));
+                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.prec' RETURNING Double) > 3.0", Mode));
+            }
         }
     }
 
@@ -3844,6 +4011,11 @@ private:
     std::vector<ui64> KeysWithScalarInt;
     std::vector<ui64> KeysWithScalarDouble;
     std::vector<ui64> KeysWithScalarString;
+    std::vector<ui64> KeysWithLongKeys;
+    std::vector<ui64> KeysWithSpecialKeys;
+    std::vector<ui64> KeysWithWideObject;
+    std::vector<ui64> KeysWithLongArray;
+    std::vector<ui64> KeysWithVeryDeepNested;
     std::array<std::vector<ui64>, 50> FlatObjByRank;
 };
 
@@ -3855,4 +4027,4 @@ std::vector<TBuiltPredicate> TPredicateBuilder::BuildBatch(
     return TPredicateBatchGenerator(corpus, isStrict, seed, opts).Build(maxCount);
 }
 
-} // namespace NKikimr::NKqp
+} // namespace NKikimr::NJsonIndex

@@ -560,6 +560,100 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
     }
 
+    Y_UNIT_TEST(ShouldReportSafeBarrierForErase)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+        const auto range1 = TBlockRange64::WithLength(10, 10);
+        const auto range2 = TBlockRange64::WithLength(20, 10);
+
+        // No inflight writes mean no safe barrier.
+        UNIT_ASSERT(!dirtyMap.GetSafeBarrierForErase().has_value());
+
+        // A write counts towards the barrier from the moment it is registered
+        // (pending), before any PBuffer acknowledges it.
+        dirtyMap.RegisterInflightWrite(123, range1);
+        UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap.GetSafeBarrierForErase());
+
+        // The barrier tracks the minimum inflight lsn.
+        dirtyMap.RegisterInflightWrite(124, range2);
+        UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap.GetSafeBarrierForErase());
+
+        // The lsn stays inflight through the written and flushed states, so the
+        // barrier does not advance past a not-yet-erased write.
+        dirtyMap.WriteFinished(123, range1, requested, confirmed);
+        dirtyMap.WriteFinished(124, range2, requested, confirmed);
+        UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap.GetSafeBarrierForErase());
+
+        auto flushHint = dirtyMap.MakeFlushHint(2);
+        UNIT_ASSERT(!flushHint.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap.GetSafeBarrierForErase());
+        dirtyMap.FlushFinished(
+            THostRoute{.SourceHostIndex = 0, .DestinationHostIndex = 0},
+            {123, 124},
+            {});
+        dirtyMap.FlushFinished(
+            THostRoute{.SourceHostIndex = 1, .DestinationHostIndex = 1},
+            {123, 124},
+            {});
+        dirtyMap.FlushFinished(
+            THostRoute{.SourceHostIndex = 2, .DestinationHostIndex = 2},
+            {123, 124},
+            {});
+        UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap.GetSafeBarrierForErase());
+
+        // Erasing lsn 123 from only a sub-quorum of hosts keeps it inflight, so
+        // the barrier is still held at 123.
+        auto eraseHint = dirtyMap.MakeEraseHint(2);
+        UNIT_ASSERT(!eraseHint.Empty());
+        dirtyMap.EraseFinished(THostIndex{0}, {123}, {});
+        dirtyMap.EraseFinished(THostIndex{1}, {123}, {});
+        UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap.GetSafeBarrierForErase());
+
+        // Once 123 is erased everywhere it leaves the inflight map and the
+        // barrier advances to 124.
+        dirtyMap.EraseFinished(THostIndex{2}, {123}, {});
+        UNIT_ASSERT_VALUES_EQUAL(124, *dirtyMap.GetSafeBarrierForErase());
+
+        // Erasing 124 everywhere drains the map -> no barrier.
+        dirtyMap.EraseFinished(THostIndex{0}, {124}, {});
+        dirtyMap.EraseFinished(THostIndex{1}, {124}, {});
+        dirtyMap.EraseFinished(THostIndex{2}, {124}, {});
+        UNIT_ASSERT(!dirtyMap.GetSafeBarrierForErase().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
+    Y_UNIT_TEST(ShouldNotHoldSafeBarrierForSubQuorumWrite)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const auto range = TBlockRange64::WithLength(10, 10);
+
+        // A registered (pending) write holds the barrier.
+        dirtyMap.RegisterInflightWrite(123, range);
+        UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap.GetSafeBarrierForErase());
+
+        // A write that fails to reach a quorum of PBuffers drops its pending
+        // entry and stops holding the barrier.
+        dirtyMap.WriteFinished(
+            123,
+            range,
+            MakePrimaryHosts(),
+            MakeHostMask(true, true, false, false, false));   // 2 < quorum 3
+        UNIT_ASSERT(!dirtyMap.GetSafeBarrierForErase().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
         auto vchunkConfig = MakeTestVChunkConfig();

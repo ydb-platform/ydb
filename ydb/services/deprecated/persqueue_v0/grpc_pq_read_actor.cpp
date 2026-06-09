@@ -2698,8 +2698,8 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     }
     if (req.GetMaxSize()) {
         read->SetBytes(req.GetMaxSize());
-        read->SetReadToBlobEnd(true);
     }
+    read->SetReadToBlobEnd(true);
     if (req.GetMaxTimeLagMs()) {
         read->SetMaxTimeLagMs(req.GetMaxTimeLagMs());
     }

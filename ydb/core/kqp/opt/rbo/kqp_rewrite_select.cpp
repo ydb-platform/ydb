@@ -1701,7 +1701,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             ++opsInputCount;
             continue;
         }
-        //Y_ENSURE(setOpsList->ChildPtr(i)->Content() == "union_all");
         Y_ENSURE(opsInputCount <= 2);
 
         TExprNode::TPtr leftInput;

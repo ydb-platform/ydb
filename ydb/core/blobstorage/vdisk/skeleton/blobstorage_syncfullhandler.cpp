@@ -99,7 +99,7 @@ namespace NKikimr {
 
             YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "TVSyncFullHandler: Marker# BSVSFH90",
                 {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
-                {"syncedLsn", evInfo.ClientSyncState.SyncedLsn},
+                {"SyncedLsn", evInfo.ClientSyncState.SyncedLsn},
                 {"SourceVDisk", evInfo.SourceVDisk},
                 {"TargetVDisk", evInfo.TargetVDisk});
             return true;
@@ -221,7 +221,7 @@ namespace NKikimr {
             TEventInfo evInfo(ev, HullCtx->VCfg->EnablePhantomFlagStorage);
             YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "TVSyncFullHandler: Handle TEvVSyncFull, From Marker# BSVSFH04",
                 {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
-                {"ev", ev->ToString()},
+                {"Ev", ev->ToString()},
                 {"SyncState", evInfo.ClientSyncState.ToString()});
 
             IFaceMonGroup->SyncFullMsgs()++;

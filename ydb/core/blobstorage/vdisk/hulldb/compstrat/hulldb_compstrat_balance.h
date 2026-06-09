@@ -78,7 +78,7 @@ namespace NKikimr {
                         if (HullCtx->VCtx->ActorSystem) {
                             YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalanceBase::FindNeighborhoods decided to compact",
                                 {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                                {"to_level", level},
+                                {"ToLevel", level},
                                 {"Task", CompactSsts.ToString()});
                         }
                     } else {
@@ -372,8 +372,8 @@ namespace NKikimr {
                         YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalancePartiallySortedLevels decided to compact,",
                             {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                             {"Task", CompactSsts.ToString()},
-                            {"firstKeyToCover", (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")},
-                            {"lastKeyToCover", (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")});
+                            {"FirstKeyToCover", (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")},
+                            {"LastKeyToCover", (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")});
                     }
                     return;
                 }
@@ -400,8 +400,8 @@ namespace NKikimr {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalancePartiallySortedLevels decided to compact,",
                         {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                         {"Task", CompactSsts.ToString()},
-                        {"firstKeyToCover", (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")},
-                        {"lastKeyToCover", (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")});
+                        {"FirstKeyToCover", (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")},
+                        {"LastKeyToCover", (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")});
                 }
             }
 
@@ -520,7 +520,7 @@ namespace NKikimr {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalanceLevelX decided to compact,",
                         {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                         {"Task", CompactSsts.ToString()},
-                        {"lastCompactedKey", lastCompactedKey.ToString()});
+                        {"LastCompactedKey", lastCompactedKey.ToString()});
                 }
             }
 
@@ -533,8 +533,8 @@ namespace NKikimr {
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalanceLevelX: take sst with",
                         {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                        {"firstKeyToCover", firstKeyToCover.ToString()},
-                        {"lastKeyToCover", lastKeyToCover.ToString()});
+                        {"FirstKeyToCover", firstKeyToCover.ToString()},
+                        {"LastKeyToCover", lastKeyToCover.ToString()});
                 }
 
                 // put this sst to the vector
@@ -665,7 +665,7 @@ namespace NKikimr {
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    YDB_LOG_CTX_COMP(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Balance: action# %s timeSpent# %s RankThreshold# %e ranks# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data(), RankThreshold, ranks.ToString().data()));
+                    YDB_LOG_CTX_COMP(action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, *HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Balance: action# %s timeSpent# %s RankThreshold# %e ranks# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data(), RankThreshold, ranks.ToString().data()));
                 }
 
                 return action;
@@ -760,7 +760,7 @@ namespace NKikimr {
                     if (HullCtx->VCtx->ActorSystem) {
                         YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyBalance decided to compact,",
                             {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                            {"ranks", ranks.ToString()});
+                            {"Ranks", ranks.ToString()});
                     }
                     switch (ranks.VirtualLevelToCompact) {
                         case 0:     BalanceLevel0.Compact(); break;

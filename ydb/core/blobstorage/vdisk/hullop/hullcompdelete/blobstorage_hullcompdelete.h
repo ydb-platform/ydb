@@ -99,7 +99,7 @@ namespace NKikimr {
             LastDeletionLsn = recordLsn;
             YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "TDelayedCompactionDeleter: Update",
                 {"VDiskLogPrefix", vctx->VDiskLogPrefix},
-                {"recordLsn", recordLsn},
+                {"RecordLsn", recordLsn},
                 {"removedHugeBlobs.size", removedHugeBlobs.Size()},
                 {"allocatedHugeBlobs.size", allocatedHugeBlobs.Size()},
                 {"CurrentSnapshots.size", CurrentSnapshots.size()},

@@ -59,8 +59,8 @@ namespace NKikimr {
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: reply; Marker# BSVSLR01",
             {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
-            {"id", Id},
-            {"msg", Result->ToString()});
+            {"Id", Id},
+            {"Msg", Result->ToString()});
 
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
@@ -114,8 +114,8 @@ namespace NKikimr {
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVMultiPut: item reply; Marker# BSVSLR02",
             {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
-            {"id", Id},
-            {"msg", Result->ToString()});
+            {"Id", Id},
+            {"Msg", Result->ToString()});
 
         Span.EndOk();
         ctx.Send(Recipient, Result.release(), 0, RecipientCookie);
@@ -161,9 +161,9 @@ namespace NKikimr {
             ctx.Send(HugeKeeperId, new TEvHullHugeBlobLogged(msg->WriteId, msg->HugeBlob, Seg.Point(), true));
         }
 
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: realtime# false Marker# BSVSLR03",
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: false Marker# BSVSLR03",
             {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
-            {"result", msg->Result->ToString()});
+            {"Result", msg->Result->ToString()});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, vCtx, msg->HandleClass);
@@ -200,7 +200,7 @@ namespace NKikimr {
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_BLOCK, "TEvVBlock: Marker# BSVSLR04",
             {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
-            {"result", Result->ToString()});
+            {"Result", Result->ToString()});
         SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
     }
 
@@ -226,7 +226,7 @@ namespace NKikimr {
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_GC, "TEvVCollectGarbage: Marker# BSVSLR05",
             {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
-            {"result", Result->ToString()});
+            {"Result", Result->ToString()});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});

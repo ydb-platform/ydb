@@ -118,7 +118,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev, const TActorContext &ctx) {
-                YDB_LOG_CTX_DEBUG(ctx, "Receive Get ub TEvVMovedPatch:",
+                YDB_LOG_CTX_DEBUG(ctx, "Receive Get ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"OriginalBlobId", OriginalId},
                     {"PatchedBlobId", PatchedId});
@@ -160,7 +160,7 @@ namespace NKikimr {
                         NKikimrBlobStorage::UserData, TEvBlobStorage::TEvPut::TacticDefault);
                 put->Orbit = std::move(Orbit);
 
-                YDB_LOG_CTX_DEBUG(ctx, "Send Put ub TEvVMovedPatch:",
+                YDB_LOG_CTX_DEBUG(ctx, "Send Put ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"OriginalBlobId", OriginalId},
                     {"PatchedBlobId", PatchedId});
@@ -173,7 +173,7 @@ namespace NKikimr {
 
                 ui32 originalIdHash = OriginalId.Hash();
 
-                YDB_LOG_CTX_DEBUG(ctx, "Receive Put ub TEvVMovedPatch:",
+                YDB_LOG_CTX_DEBUG(ctx, "Receive Put ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"OriginalBlobId", OriginalId},
                     {"PatchedBlobId", PatchedId});
@@ -204,7 +204,7 @@ namespace NKikimr {
                         OriginalId.BlobSize(), Deadline, NKikimrBlobStorage::AsyncRead);
                 get->Orbit = std::move(Event->Get()->Orbit);
 
-                YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Send Get ub TEvVMovedPatch:",
+                YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Send Get ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"OriginalBlobId", OriginalId},
                     {"PatchedBlobId", PatchedId});

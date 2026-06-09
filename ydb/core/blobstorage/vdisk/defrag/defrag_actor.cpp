@@ -121,18 +121,18 @@ namespace NKikimr {
             void StartFullCompaction() {
                 if (CompInProgress) {
                     YDB_LOG_COMP_DEBUG(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager can't start new compaction because previous compaction is still in progress"),
-                        {"marker", "BSVDD10"});
+                        {"Marker", "BSVDD10"});
                     return;
                 }
                 YDB_LOG_COMP_INFO(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager starts new compaction"),
-                    {"marker", "BSVDD10"});
+                    {"Marker", "BSVDD10"});
                 CompInProgress = true;
                 Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL, false));
             }
 
             void Handle(TEvCompactVDiskResult::TPtr&) {
                 YDB_LOG_COMP_INFO(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager full compaction has finished"),
-                    {"marker", "BSVDD10"});
+                    {"Marker", "BSVDD10"});
                 CompInProgress = false;
             }
 
@@ -172,7 +172,7 @@ namespace NKikimr {
 
             void Bootstrap(const TActorId parentId) {
                 YDB_LOG_COMP_DEBUG(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "Bootstrap"),
-                    {"marker", "BSVDD01"});
+                    {"Marker", "BSVDD01"});
                 ParentId = parentId;
                 Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
                 Become(&TThis::StateFunc);
@@ -183,7 +183,7 @@ namespace NKikimr {
                 std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     YDB_LOG_COMP_ERROR(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"),
-                        {"marker", "BSVDD05"});
+                        {"Marker", "BSVDD05"});
                 } else {
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
@@ -204,7 +204,7 @@ namespace NKikimr {
                     // check if we need to run compaction
                     if (garbageThresholdToRunCompaction > 0 && spaceCouldBeFreedViaCompaction > garbageThresholdToRunCompaction) {
                         YDB_LOG_COMP_INFO(BS_HULLCOMP, VDISKP(DCtx->VCtx->VDiskLogPrefix, "DefragPlannerActor finished scan and trying to run a full compaction"),
-                            {"marker", "BSVDD10"},
+                            {"Marker", "BSVDD10"},
                             {"SpaceCouldBeFreedViaCompaction", spaceCouldBeFreedViaCompaction},
                             {"GarbageThresholdToRunCompaction", garbageThresholdToRunCompaction});
                         Send(CompactionManagerId, new TEvStartCompactionFromDefrag());
@@ -217,7 +217,7 @@ namespace NKikimr {
                     }
 
                     YDB_LOG_COMP_INFO(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
-                        {"marker", "BSVDD03"},
+                        {"Marker", "BSVDD03"},
                         {"TotalChunks", totalChunks},
                         {"UsefulChunks", usefulChunks},
                         {"FreedChunks", freedChunks},
@@ -235,7 +235,7 @@ namespace NKikimr {
 
             void PassAway() override {
                 YDB_LOG_COMP_DEBUG(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "PassAway"),
-                    {"marker", "BSVDD02"});
+                    {"Marker", "BSVDD02"});
                 TActorBootstrapped::PassAway();
             }
 

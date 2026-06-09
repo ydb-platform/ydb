@@ -413,7 +413,7 @@ namespace NKikimr {
             return {NKikimrProto::ERROR, "", false}; // record has duplicates
 
         if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
-            YDB_LOG_CTX_ERROR(ctx, "Db# Barriers ValidateGCCmd: empty garbage collection command",
+            YDB_LOG_CTX_ERROR(ctx, "Barriers ValidateGCCmd: empty garbage collection command",
                 {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                 {"TabletId", tabletID});
             return {NKikimrProto::ERROR, "empty garbage collection command"};

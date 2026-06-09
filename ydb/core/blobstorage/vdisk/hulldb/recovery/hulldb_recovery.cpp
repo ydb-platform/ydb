@@ -340,10 +340,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Db# LogoBlobs action# sync_data_batch",
+        YDB_LOG_CTX_DEBUG(ctx, "LogoBlobs sync_data_batch",
             {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
-            {"mode", OpMode2Str(mode)},
-            {"lsn", seg});
+            {"Mode", OpMode2Str(mode)},
+            {"Lsn", seg});
 
         Y_VERIFY_S(logoBlobs && (seg.Last - seg.First + 1 == logoBlobs->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -356,10 +356,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Db# Blocks action# sync_data_batch",
+        YDB_LOG_CTX_DEBUG(ctx, "Blocks sync_data_batch",
             {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
-            {"mode", OpMode2Str(mode)},
-            {"lsn", seg});
+            {"Mode", OpMode2Str(mode)},
+            {"Lsn", seg});
 
         Y_VERIFY_S(blocks && (seg.Last - seg.First + 1 == blocks->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -373,10 +373,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Db# Barriers action# sync_data_batch",
+        YDB_LOG_CTX_DEBUG(ctx, "Barriers sync_data_batch",
             {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
-            {"mode", OpMode2Str(mode)},
-            {"lsn", seg});
+            {"Mode", OpMode2Str(mode)},
+            {"Lsn", seg});
 
         Y_VERIFY_S(barriers && (seg.Last - seg.First + 1 == barriers->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);

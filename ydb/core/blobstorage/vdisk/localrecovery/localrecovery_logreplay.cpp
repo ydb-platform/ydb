@@ -401,14 +401,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipLogoBlobsBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) SKIPPED:",
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) SKIPPED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"lsn", seg});
+                    {"Lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyLogoBlobsBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) ADDED:",
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) ADDED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"lsn", seg});
+                    {"Lsn", seg});
 
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_LogoBlobsBatch(ctx, std::move(logoBlobs),
                         seg, THullDbRecovery::RECOVERY);
@@ -423,14 +423,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBlocksBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) SKIPPED:",
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) SKIPPED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"lsn", seg});
+                    {"Lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBlocksBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) ADDED:",
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) ADDED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"lsn", seg});
+                    {"Lsn", seg});
 
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BlocksBatch(ctx, std::move(blocks),
                         seg, THullDbRecovery::RECOVERY);
@@ -445,14 +445,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBarriersBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) SKIPPED:",
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) SKIPPED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"lsn", seg});
+                    {"Lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBarriersBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) ADDED:",
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) ADDED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"lsn", seg});
+                    {"Lsn", seg});
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BarriersBatch(ctx, std::move(barriers),
                         seg, THullDbRecovery::RECOVERY);
             }

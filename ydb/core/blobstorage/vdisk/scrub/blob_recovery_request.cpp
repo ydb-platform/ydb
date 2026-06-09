@@ -8,7 +8,7 @@ namespace NKikimr {
         auto *msg = ev->Get();
         const ui64 requestId = NextRequestId++;
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvRecoverBlob"),
-            {"marker", "VDS31"},
+            {"Marker", "VDS31"},
             {"SelfId", SelfId()},
             {"Msg", ev->Get()->ToString()},
             {"IsConnected", IsConnected},

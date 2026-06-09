@@ -9,7 +9,7 @@ namespace NKikimr {
     void TBlobRecoveryActor::AddBlobQuery(const TLogoBlobID& id, NMatrix::TVectorType needed,
             const std::shared_ptr<TInFlightContext>& context, TEvRecoverBlobResult::TItem *item) {
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "AddBlobQuery"),
-            {"marker", "VDS32"},
+            {"Marker", "VDS32"},
             {"SelfId", SelfId()},
             {"Id", id},
             {"Needed", needed},
@@ -57,7 +57,7 @@ namespace NKikimr {
         }
 
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "AddExtremeQuery"),
-            {"marker", "VDS33"},
+            {"Marker", "VDS33"},
             {"SelfId", SelfId()},
             {"VDiskId", vdiskId},
             {"Id", id},
@@ -92,7 +92,7 @@ namespace NKikimr {
             Y_VERIFY_S(queueIt != Queues.end(), LogPrefix);
             for (auto& vget : query.Pending) {
                 YDB_LOG_DEBUG(VDISKP(LogPrefix, "sending TEvVGet"),
-                    {"marker", "VDS34"},
+                    {"Marker", "VDS34"},
                     {"SelfId", SelfId()},
                     {"Msg", vget->ToString()});
                 Send(queueIt->second.QueueActorId, vget.release());
@@ -102,7 +102,7 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvVGetResult"),
-            {"marker", "VDS35"},
+            {"Marker", "VDS35"},
             {"SelfId", SelfId()},
             {"Msg", ev->Get()->ToString()});
 
@@ -139,7 +139,7 @@ namespace NKikimr {
                                 item.Status = NKikimrProto::NODATA;
                             }
                             YDB_LOG_DEBUG(VDISKP(LogPrefix, "processing item"),
-                                {"marker", "VDS36"},
+                                {"Marker", "VDS36"},
                                 {"SelfId", SelfId()},
                                 {"RequestId", context->RequestId},
                                 {"Id", id},

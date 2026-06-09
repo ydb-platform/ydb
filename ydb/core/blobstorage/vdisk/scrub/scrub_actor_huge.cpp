@@ -13,7 +13,7 @@ namespace NKikimr {
         if (State->HasBlobId()) {
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(State->GetBlobId());
             YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "resuming huge blob scrubbing"),
-                {"marker", "VDS19"},
+                {"Marker", "VDS19"},
                 {"Id", id});
             heapIt.Seek(id);
             if (heapIt.Valid() && heapIt.GetCurKey() == id) {
@@ -21,7 +21,7 @@ namespace NKikimr {
             }
         } else {
             YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "starting huge blob scrubbing"),
-                {"marker", "VDS20"});
+                {"Marker", "VDS20"});
             heapIt.SeekToLast();
         }
 

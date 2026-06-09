@@ -77,8 +77,8 @@ namespace NKikimr {
             if (action) {
                 YDB_LOG_COMP_DEBUG(NKikimrServices::BS_VDISK_GET, "sending to",
                     {"SelfId", SelfId()},
-                    {"query", query->ToString()},
-                    {"queueActorId", queueActorId});
+                    {"Query", query->ToString()},
+                    {"QueueActorId", queueActorId});
                 Send(queueActorId, query.release(), IEventHandle::FlagTrackDelivery);
             } else {
                 PassAway();
@@ -88,7 +88,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
             YDB_LOG_COMP_DEBUG(NKikimrServices::BS_VDISK_GET, "received",
                 {"SelfId", SelfId()},
-                {"event", ev->Get()->ToString()});
+                {"Event", ev->Get()->ToString()});
             auto& result = Result->Record;
             for (const auto& item : ev->Get()->Record.GetResult()) {
                 const ui64 index = item.GetCookie();

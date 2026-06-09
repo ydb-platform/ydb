@@ -973,7 +973,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             const ui64 wId = State.LsnFifo.Push(HugeKeeperCtx->VCtx->VDiskLogPrefix, lsnInfimum);
             YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLHUGE, "THullHugeKeeper: requested PreCompact",
                 {"VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
-                {"wId", wId},
+                {"WId", wId},
                 {"LsnInfimum", lsnInfimum});
             ctx.Send(ev->Sender, new TEvHugePreCompactResult(wId), 0, ev->Cookie);
         }

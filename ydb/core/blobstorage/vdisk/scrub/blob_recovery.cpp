@@ -6,7 +6,7 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::Bootstrap() {
         YDB_LOG_INFO(VDISKP(LogPrefix, "bootstrapping blob recovery actor"),
-            {"marker", "VDS27"},
+            {"Marker", "VDS27"},
             {"SelfId", SelfId()});
         StartQueues();
         Become(&TThis::StateFunc);
@@ -14,7 +14,7 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::PassAway() {
         YDB_LOG_INFO(VDISKP(LogPrefix, "blob recovery actor terminating"),
-            {"marker", "VDS30"},
+            {"Marker", "VDS30"},
             {"SelfId", SelfId()});
         StopQueues();
     }

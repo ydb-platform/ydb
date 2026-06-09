@@ -158,11 +158,11 @@ namespace NKikimr {
             auto startTime = TAppData::TimeProvider->Now();
             Ev->UnpackData(VCtx);
             auto finishTime = TAppData::TimeProvider->Now();
-            YDB_LOG_CTX_DEBUG(ctx, "TLocalSyncDataExtractorActor: duration# %s",
+            YDB_LOG_CTX_DEBUG(ctx, "TLocalSyncDataExtractorActor: %s",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"VDiskId", Ev->VDiskID.ToString()},
-                {"dataSize", Ev->Data.size()},
-                {"duration", (finishTime - startTime)});
+                {"DataSize", Ev->Data.size()},
+                {"Duration", (finishTime - startTime)});
 
             ctx.Send(new IEventHandle(TargetId, ParentId, Ev.release()));
             PassAway();
@@ -237,11 +237,11 @@ namespace NKikimr {
             }
             addChunk();
 
-            YDB_LOG_DEBUG("TLocalSyncDataCutterActor:",
+            YDB_LOG_DEBUG("TLocalSyncDataCutterActor",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"VDiskId", Ev->VDiskID.ToString()},
-                {"dataSize", Ev->Data.size()},
-                {"duration", TDuration::Seconds(timer.Passed())});
+                {"DataSize", Ev->Data.size()},
+                {"Duration", TDuration::Seconds(timer.Passed())});
 
             Become(&TThis::StateFunc);
             SendChunks();

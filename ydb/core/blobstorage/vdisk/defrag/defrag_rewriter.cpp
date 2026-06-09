@@ -169,7 +169,7 @@ namespace NKikimr {
             YDB_LOG_CTX_DEBUG(ctx, "rewriting",
                 {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
                 {"BlobId", rec.LogoBlobId},
-                {"from_Location", rec.OldDiskPart});
+                {"FromLocation", rec.OldDiskPart});
 
             auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
@@ -193,7 +193,7 @@ namespace NKikimr {
                 YDB_LOG_CTX_DEBUG(ctx, "rewritten",
                     {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
                     {"BlobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
-                    {"to_Location", ev->Get()->WrittenLocation});
+                    {"ToLocation", ev->Get()->WrittenLocation});
 
                 ++RewrittenRecsCounter;
             }

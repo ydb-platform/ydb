@@ -372,8 +372,8 @@ namespace NKikimr {
                     if (passedTime > TDuration::Minutes(5)) {
                         hasError = true;
                         YDB_LOG_COMP_ERROR(NKikimrServices::BS_SKELETON, "passed more than 5 munites for message in the internal queue",
-                            {"marker", "BSVSF04"},
-                            {"vDiskLogPrefix", vDiskLogPrefix},
+                            {"Marker", "BSVSF04"},
+                            {"VDiskLogPrefix", vDiskLogPrefix},
                             {"MsgId", msgInfo.MsgId},
                             {"QueueName", Name},
                             {"PassedTimeSeconds", passedTime.Seconds()},
@@ -1450,9 +1450,9 @@ namespace NKikimr {
                 name = "TEvVPatchXorDiff";
             }
 
-            YDB_LOG_CTX_COMP_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::BS_SKELETON, ": received;",
+            YDB_LOG_CTX_COMP_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::BS_SKELETON, "received;",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                {"name", name},
+                {"Name", name},
                 {"OriginalBlobId", blob},
                 {"PatchedBlobId", patchedBlob});
             HandleRequestWithQoS(TActivationContext::AsActorContext(), ev, name, cost, *queue);
@@ -1572,8 +1572,8 @@ namespace NKikimr {
                     if (!SelfVDiskId.SameExceptGeneration(vdiskId)) {
                         YDB_LOG_CTX_COMP_CRIT(ctx, NKikimrServices::BS_SKELETON, "VDiskId mismatch Marker# BSVSF05",
                             {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                            {"expected", SelfVDiskId},
-                            {"provided", vdiskId});
+                            {"Expected", SelfVDiskId},
+                            {"Provided", vdiskId});
                         Y_DEBUG_ABORT_S(VCtx->VDiskLogPrefix << "VDiskId mismatch");
                         return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());
                     }
@@ -2112,8 +2112,8 @@ namespace NKikimr {
                 if (!vdiskId.SameExceptGeneration(SelfVDiskId)) {
                     YDB_LOG_CTX_COMP_CRIT(ctx, NKikimrServices::BS_SKELETON, "VDiskId mismatch Marker# BSVSF06",
                         {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                        {"expected", SelfVDiskId},
-                        {"provided", vdiskId},
+                        {"Expected", SelfVDiskId},
+                        {"Provided", vdiskId},
                         {"Type", TypeName<TEventType>()});
                     Y_DEBUG_ABORT_S(VCtx->VDiskLogPrefix << "VDiskId mismatch");
                     return Reply(ev, ctx, NKikimrProto::ERROR, "VDiskId mismatch", TAppData::TimeProvider->Now());

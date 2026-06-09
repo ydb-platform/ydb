@@ -354,12 +354,12 @@ namespace NKikimr {
 
         void TryToStartNewCompactions(const TActorContext &ctx) {
             YDB_LOG_CTX_DEBUG(ctx, "Compactions queue",
-                {"state", CompactionsPerPDisk.ToString()});
+                {"State", CompactionsPerPDisk.ToString()});
 
             auto maxCompactions = MaxActiveCompactionsPerPDisk.Update(ctx.Now());
             while (auto compactionInfo = CompactionsPerPDisk.StartNewCompaction(maxCompactions, Token)) {
                 YDB_LOG_CTX_DEBUG(ctx, "Start new",
-                    {"compaction", compactionInfo->ToString()});
+                    {"Compaction", compactionInfo->ToString()});
                 Mon->CompBrokerTokenGrants->Inc();
                 Send(compactionInfo->ActorId, new TEvCompactionTokenResult(compactionInfo->Token, compactionInfo->GroupId, compactionInfo->VDiskId));
                 Token++;
@@ -406,15 +406,15 @@ namespace NKikimr {
             }
 
             if (!longWaitingCompactions.empty()) {
-                YDB_LOG_CTX_WARN(ctx, "Long waiting compactions detected: Compactions# [",
+                YDB_LOG_CTX_WARN(ctx, "Long waiting compactions detected:",
                     {"Count", longWaitingCompactions.size()},
-                    {"longWaitingCompactions", JoinSeq(", ", longWaitingCompactions)});
+                    {"LongWaitingCompactions", JoinSeq(", ", longWaitingCompactions)});
             }
 
             if (!longWorkingCompactions.empty()) {
                 YDB_LOG_CTX_WARN(ctx, "Long working compactions detected",
                     {"Count", longWorkingCompactions.size()},
-                    {"longWaitingCompactions", JoinSeq(", ", longWorkingCompactions)});
+                    {"LongWaitingCompactions", JoinSeq(", ", longWorkingCompactions)});
             }
         }
 

@@ -27,7 +27,7 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::Handle(TEvVGenerationChange::TPtr ev) {
         YDB_LOG_INFO(VDISKP(LogPrefix, "received group generation change notification"),
-            {"marker", "VDS28"},
+            {"Marker", "VDS28"},
             {"SelfId", SelfId()},
             {"Msg", ev->Get()->ToString()});
         for (const auto& [vdiskId, queue] : Queues) {
@@ -41,7 +41,7 @@ namespace NKikimr {
         Y_VERIFY_S(it != Queues.end(), LogPrefix);
         it->second.IsConnected = ev->Get()->IsConnected;
         YDB_LOG_INFO(VDISKP(LogPrefix, "BS_QUEUE state update"),
-            {"marker", "VDS29"},
+            {"Marker", "VDS29"},
             {"SelfId", SelfId()},
             {"VDiskId", it->first},
             {"IsConnected", it->second.IsConnected});

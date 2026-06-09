@@ -141,6 +141,11 @@ void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
 
     stats.SetRequestUnits(requestUnits);
 
+    if constexpr (std::is_same_v<T, TKqpQueryStats>) {
+        stats.SetLocksBrokenAsBreaker(queryStats->LocksBrokenAsBreaker);
+        stats.SetLocksBrokenAsVictim(queryStats->LocksBrokenAsVictim);
+    }
+
     ctx.Send(NSysView::MakeSysViewServiceID(nodeId), std::move(collectEv));
 }
 

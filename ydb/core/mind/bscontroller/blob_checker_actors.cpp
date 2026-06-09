@@ -53,6 +53,7 @@ private:
             // Unable to collect blobs to check from group
             // We terminate worker and try again later
             FinishQuantum(EBlobCheckerWorkerQuantumStatus::Error);
+            return;
         }
         BlobsToCheck.swap(ev->Get()->Blobs);
         // assure that BlobsToCheck queue is sorted
@@ -122,6 +123,7 @@ private:
         if (now - QuantumStart > QuantumDuration) {
             // Report intermediate status and write MaxCheckedBlob on disk to save checker progress
             FinishQuantum(EBlobCheckerWorkerQuantumStatus::IntermediateOk);
+            return;
         }
 
         TLogoBlobID blobId = BlobsToCheck.front().Id;
@@ -187,6 +189,7 @@ public:
             TDuration periodicity, ::NMonitoring::TDynamicCounterPtr counters)
         : BSCActorId(bscActorId)
         , CheckPeriodicity(periodicity)
+        , ParentCounters(counters)
         , Counters(counters->GetSubgroup("subsystem", "blob_checker"))
         , DataIssues(Counters->GetCounter("DataIssues", false))
         , PlacementIssues(Counters->GetCounter("PlacementIssues", false))
@@ -194,11 +197,11 @@ public:
         , WorkersTerminated(Counters->GetCounter("WorkersTerminated", false))
         , ChecksCompleted(Counters->GetCounter("ChecksCompleted", false))
     {
-        AddGroups(std::forward<std::unordered_map<TGroupId, TString>>(serializedGroups));
+        AddGroups(std::move(serializedGroups));
     }
 
     ~TBlobCheckerOrchestrator() {
-        Counters->RemoveSubgroup("subsystem", "blob_checker");
+        ParentCounters->RemoveSubgroup("subsystem", "blob_checker");
     }
 
     void Bootstrap() {
@@ -236,16 +239,9 @@ private:
 
     void Handle(const TEvBlobCheckerUpdateGroupSet::TPtr& ev) {
         AddGroups(std::move(ev->Get()->NewGroups));
-        for (const TGroupId groupId : ev->Get()->DeletedGroups) {
-            const auto it = Groups.find(groupId);
-            if (it != Groups.end()) {
-                TGroupCheckInfo& info = it->second;
-                if (info.WorkerId) {
-                    Send(*info.WorkerId, new TEvents::TEvPoisonPill);
-                }
-                Groups.erase(it);
-            }
-        }
+        std::unordered_set<TGroupId> deletedGroups(ev->Get()->DeletedGroups.begin(),
+                ev->Get()->DeletedGroups.end());
+        DeleteGroups(std::move(deletedGroups));
     }
 
     void Handle(const TEvBlobCheckerDecision::TPtr& ev) {
@@ -265,6 +261,9 @@ private:
         TMonotonic now = TActivationContext::Monotonic();
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
+            if (info.WorkerId) {
+                break;
+            }
             info.Status.ShortStatus = 0;
             info.WorkerId.emplace(Register(CreateBlobCheckerWorkerActor(groupId, SelfId())));
             ++*WorkersCreated;
@@ -297,10 +296,11 @@ private:
 
         TGroupCheckInfo& info = it->second;
         bool finishScan = false;
+        TMonotonic now = TActivationContext::Monotonic();
 
         switch (res->QuantumStatus) {
         case EBlobCheckerWorkerQuantumStatus::FinishOk:
-            info.Status.LastScanFinishedTimestamp = TActivationContext::Monotonic();
+            info.Status.LastScanFinishedTimestamp = now;
             ++*ChecksCompleted;
             [[fallthrough]];
         case EBlobCheckerWorkerQuantumStatus::Error:
@@ -310,7 +310,10 @@ private:
             ++*WorkersTerminated;
             [[fallthrough]];
         case EBlobCheckerWorkerQuantumStatus::IntermediateOk:
-            info.Status.MaxCheckedBlob = res->MaxCheckedBlob;
+            if (res->QuantumStatus != EBlobCheckerWorkerQuantumStatus::Error) {
+                // don't update on fallthrough from Error case
+                info.Status.MaxCheckedBlob = res->MaxCheckedBlob;
+            }
             if (res->PlacementIssuesCount) {
                 *PlacementIssues += res->PlacementIssuesCount;
                 info.Status.ShortStatus |= EBlobCheckerResultStatusFlags::PlacementIssues;
@@ -332,6 +335,10 @@ private:
             }
         }
 
+        if (finishScan) {
+            info.WorkerId.reset();
+        }
+
         Send(BSCActorId, new TEvBlobCheckerUpdateGroupStatus(groupId,
                 info.Status.SerializeProto(), finishScan));
     }
@@ -344,8 +351,9 @@ private:
     }
 
     void HandleWakeup() {
-        if (!OutgoingRequests.empty()) {
-            TGroupId groupId = OutgoingRequests.begin()->second;
+        const TMonotonic now = TActivationContext::Monotonic();
+        while (!OutgoingRequests.empty() && OutgoingRequests.begin()->first <= now) {
+            const TGroupId groupId = OutgoingRequests.begin()->second;
             OutgoingRequests.erase(OutgoingRequests.begin());
             SendRequest(groupId);
         }
@@ -364,6 +372,29 @@ private:
         }
     }
 
+    void DeleteGroups(std::unordered_map<TGroupId>&& deletedGroups) {
+        for (const TGroupId groupId : deletedGroups) { 
+            const auto it = Groups.find(groupId);
+            if (it != Groups.end()) {
+                TGroupCheckInfo& info = it->second;
+                if (info.WorkerId) {
+                    Send(*info.WorkerId, new TEvents::TEvPoisonPill);
+                }
+                Groups.erase(it);
+            }
+        }
+
+        for (auto& scheduled : { CheckOrder, OutgoingRequests }) {
+            for (auto it = scheduled.begin(); it != scheduled.end(); ) {
+                if (deletedGroups.contains(it->second)) {
+                    it = scheduled.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
     void SendRequest(TGroupId groupId) {
         STLOG(PRI_NOTICE, BLOB_CHECKER_ORCHESTRATOR, BSO22, "Sending request to BSC",
                 (GroupId, groupId));
@@ -371,14 +402,17 @@ private:
     }
 
     void CheckGroups() {
-        TMonotonic now = TActivationContext::Monotonic();
-        for (auto it = CheckOrder.begin(); it != CheckOrder.end();) {
+        const TMonotonic now = TActivationContext::Monotonic();
+        for (auto it = CheckOrder.begin(); it != CheckOrder.end(); ) {
             const auto [ts, groupId] = *it;
-            if (ts + CheckPeriodicity < now && !Groups[groupId].WorkerId) {
-                SendRequest(groupId);
+            if (ts + CheckPeriodicity >= now) {
+                break;
             }
 
-            CheckOrder.erase(it++);
+            it = CheckOrder.erase(it);
+            if (!Groups[groupId].WorkerId) {
+                SendRequest(groupId);
+            }
         }
     }
 
@@ -404,6 +438,7 @@ private:
 
     // counters
     ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr ParentCounters;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataIssues;
     ::NMonitoring::TDynamicCounters::TCounterPtr PlacementIssues;
     ::NMonitoring::TDynamicCounters::TCounterPtr WorkersCreated;

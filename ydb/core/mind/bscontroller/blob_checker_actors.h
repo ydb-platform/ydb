@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <unordered_map>
+
 namespace NKikimr {
 namespace NBsController {
 

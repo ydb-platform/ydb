@@ -60,13 +60,6 @@ bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     return false;
 }
 
-bool IsTabletDevUiLegacyAppPath(TStringBuf pathInfo) {
-    if (pathInfo == "/app") {
-        return true;
-    }
-    return pathInfo.StartsWith("/app/") && !NKikimr::IsTabletDevUiSecurePath(pathInfo);
-}
-
 TString GetDatabase(NHttp::THttpIncomingRequest* request) {
     NHttp::TUrlParameters urlParams(request->URL);
     TString database = urlParams["database"];
@@ -522,12 +515,6 @@ public:
     TString GetSecureTabletDevUiForbiddenReason(
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) const
     {
-        if (AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
-            && IsTabletDevUiLegacyAppPath(Container.GetPathInfo())) {
-            return TStringBuilder()
-                << "Tablet DevUI at /tablets/app is disabled when enable_tablet_dev_ui_secure_path is enabled; "
-                << "use /tablets/app/secure";
-        }
         if (NKikimr::IsTabletDevUiSecurePath(Container.GetPathInfo())) {
             const NACLib::TUserToken* userToken = result ? result->UserToken.Get() : nullptr;
             if (!NKikimr::IsAdministrator(AppData(), userToken)) {

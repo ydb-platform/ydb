@@ -323,6 +323,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -371,12 +372,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(124, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             124,
             TBlockRange64::WithLength(10, 10),
@@ -446,6 +449,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Flush commands should be generated after completing the required
         // number of write operations.
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -458,6 +462,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         flushHint = dirtyMap.MakeFlushHint(2);
         UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
+        dirtyMap.RegisterInflightWrite(124, TBlockRange64::WithLength(20, 10));
         dirtyMap.WriteFinished(
             124,
             TBlockRange64::WithLength(20, 10),
@@ -580,6 +585,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeHostMask(false, true, true, true, false);
         const THostMask confirmed = requested;
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -634,6 +640,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeHostMask(false, true, true, true, false);
         const THostMask confirmed = requested;
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -696,6 +703,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeHostMask(false, false, true, true, true);
         const THostMask confirmed = requested;
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -753,6 +761,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeHostMask(true, true, true, false, false);
         const THostMask confirmed = requested;
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -806,18 +815,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const THostMask confirmed = requested;
 
         // Range below write watermark. Should be flushed to 4 ddisks.
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
             requested,
             confirmed);
         // Range cross write watermark. Should be flushed to 4 ddisks.
+        dirtyMap.RegisterInflightWrite(124, TBlockRange64::WithLength(95, 10));
         dirtyMap.WriteFinished(
             124,
             TBlockRange64::WithLength(95, 10),
             requested,
             confirmed);
         // Range over write watermark. Should be flushed to 3 ddisks.
+        dirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(100, 10));
         dirtyMap.WriteFinished(
             125,
             TBlockRange64::WithLength(100, 10),
@@ -850,18 +862,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const THostMask confirmed = requested;
 
         // Range below write watermark. Should be flushed.
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
             requested,
             confirmed);
         // Range cross write watermark. Should be flushed.
+        dirtyMap.RegisterInflightWrite(124, TBlockRange64::WithLength(95, 10));
         dirtyMap.WriteFinished(
             124,
             TBlockRange64::WithLength(95, 10),
             requested,
             confirmed);
         // Range over write watermark. Should not be flushed.
+        dirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(100, 10));
         dirtyMap.WriteFinished(
             125,
             TBlockRange64::WithLength(100, 10),
@@ -884,6 +899,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -925,6 +941,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10), mask);
 
         // User write to overlapped with locked range.
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
@@ -1075,6 +1092,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(0, 100));
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(0, 100),
@@ -1110,6 +1128,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap.EraseFinished(THostIndex{0}, {123}, {});
 
+        dirtyMap.RegisterInflightWrite(124, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             124,
             TBlockRange64::WithLength(10, 10),
@@ -1178,12 +1197,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(30, 10));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(30, 10),
@@ -1210,12 +1231,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 41));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 41),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(20, 11));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(20, 11),
@@ -1232,6 +1255,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "100{[H0,H1,H2][31..50][21..40]};",
             readHint.DebugPrint());
 
+        dirtyMap.RegisterInflightWrite(300, TBlockRange64::WithLength(0, 50));
         dirtyMap.WriteFinished(
             300,
             TBlockRange64::WithLength(0, 50),
@@ -1253,12 +1277,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 21));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(25, 21));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(25, 21),
@@ -1283,18 +1309,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 41));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 41),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(150, TBlockRange64::WithLength(20, 21));
         dirtyMap.WriteFinished(
             150,
             TBlockRange64::WithLength(20, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(30, 6));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(30, 6),
@@ -1322,6 +1351,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 10),
@@ -1345,12 +1375,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 100));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 100),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(10, 40));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(10, 40),
@@ -1378,6 +1410,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         const int lsnsCount = 100;
         for (int i = 1; i <= lsnsCount; ++i) {
+            dirtyMap.RegisterInflightWrite(i, TBlockRange64::WithLength(i, 1));
             dirtyMap.WriteFinished(
                 i,
                 TBlockRange64::WithLength(i, 1),
@@ -1413,18 +1446,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 21));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(25, 21));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(25, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(300, TBlockRange64::WithLength(40, 21));
         dirtyMap.WriteFinished(
             300,
             TBlockRange64::WithLength(40, 21),
@@ -1450,18 +1486,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 6));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(25, 6));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(25, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(300, TBlockRange64::WithLength(45, 6));
         dirtyMap.WriteFinished(
             300,
             TBlockRange64::WithLength(45, 6),
@@ -1490,24 +1529,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 91));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 91),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(20, 6));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(20, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(300, TBlockRange64::WithLength(40, 6));
         dirtyMap.WriteFinished(
             300,
             TBlockRange64::WithLength(40, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
+        dirtyMap.RegisterInflightWrite(400, TBlockRange64::WithLength(70, 6));
         dirtyMap.WriteFinished(
             400,
             TBlockRange64::WithLength(70, 6),
@@ -1538,6 +1581,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultVChunkSize / DefaultBlockSize);
 
         auto inflightCounterBeforeWrite = dirtyMap.GetInflightCount();
+        dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 41));
         dirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(10, 41),
@@ -1557,6 +1601,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "0{[H0,H1,H2][10..50][0..40]};",
             readHint.DebugPrint());
 
+        dirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(10, 41));
         dirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(10, 41),

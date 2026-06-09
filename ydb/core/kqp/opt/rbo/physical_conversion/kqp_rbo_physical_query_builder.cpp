@@ -107,11 +107,16 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 
-    const auto maybeFinalStage = phyStages.back();
+    // The root stage is last in the topologically sorted StageIds. It is usually also phyStages.back(),
+    // but a lone row-source stage is built into Stages without being appended to phyStages (see above),
+    // so deriving the final stage from finalizedStages is correct even when phyStages is empty.
+    Y_ENSURE(!stageIds.empty());
+    const auto maybeFinalStage = finalizedStages.at(stageIds.back());
     const auto finalStage = GetFinalStage(maybeFinalStage);
     if (finalStage.Get() != maybeFinalStage.Get()) {
         phyStages.push_back(finalStage);
     }
+    phyStages.push_back(BuildFinalNarrowStage(finalStage));
 
     return phyStages;
 }
@@ -212,6 +217,56 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
         finalStage = stage;
     }
     return finalStage;
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(const TExprNode::TPtr& stage) const {
+    auto& ctx = RBOCtx.ExprCtx;
+    const auto pos = Root.Pos;
+
+    // clang-format off
+    auto input = Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+        .Build()
+    .Done().Ptr();
+
+    auto programArg = Build<TCoArgument>(ctx, pos)
+        .Name("final_result_arg")
+    .Done().Ptr();
+
+    auto rowArg = Build<TCoArgument>(ctx, pos)
+        .Name("final_result_row")
+    .Done().Ptr();
+    // clang-format on
+
+    TVector<TExprBase> items;
+    for (const auto& column : Root.ColumnOrder) {
+        // clang-format off
+        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(column)
+            .Value<TCoMember>()
+                .Struct(rowArg)
+                .Name().Build(column)
+            .Build()
+        .Done();
+        // clang-format on
+        items.push_back(tuple);
+    }
+
+    // clang-format off
+    auto narrowBody = Build<TCoMap>(ctx, pos)
+        .Input(programArg)
+        .Lambda<TCoLambda>()
+            .Args({rowArg})
+            .Body<TCoAsStruct>()
+                .Add(items)
+            .Build()
+        .Build()
+    .Done().Ptr();
+
+    return BuildDqPhyStage({input}, {programArg}, narrowBody, NYql::NDq::TDqStageSettings().BuildNode(ctx, pos), ctx, pos);
+    // clang-format on
 }
 
 TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages) {

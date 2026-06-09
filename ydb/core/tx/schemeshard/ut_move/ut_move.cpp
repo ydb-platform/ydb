@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -1917,4 +1918,252 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         }
     }
 
-}
+
+    Y_UNIT_TEST(MoveColumnTableWithLocalBloomIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTable"));
+        env.TestWaitNotification(runtime, txId);
+
+        // Both local indexes are visible as scheme-object children before the move.
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTable");
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        // Source is gone; destination has both index children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"), {NLs::PathNotExist});
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableMoved");
+    }
+
+    Y_UNIT_TEST(MoveIndexWithReplaceDestination) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        // Create a table with multiple indexes
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index1"
+              KeyColumnNames: ["value0"]
+            }
+            IndexDescription {
+              Name: "Index2"
+              KeyColumnNames: ["value1"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 5;
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::ChildrenCount(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(3)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "value0", "value1"}, {}, {"key"}),
+                            NLs::IndexesCount(2)});
+
+        // Try to move Index1 to Index2 without replace_destination - should fail
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Index1", "Index2", false, {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify both original indexes still exist
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(3),
+                            NLs::IndexesCount(2)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Index1", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Index2", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                            NLs::IndexKeys({"value1"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        // Now move Index1 to Index2 with replace_destination - should succeed
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Index1", "Index2", true);
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify Index1 is gone and Index2 now has Index1's configuration
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(5),  // Version increased by 2: drop (4) + move (5)
+                            NLs::IndexesCount(1)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Index1", true, true, true),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Index2", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                            NLs::IndexKeys({"value0"}),  // Index2 now has Index1's key columns
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+     }
+
+    Y_UNIT_TEST(LocalIndexConflictDropAndMoveSameIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key0" Type: "Uint64" NotNull: true }
+                Columns { Name: "value0" Type: "Utf8" }
+                KeyColumnNames: "key0"
+                Indexes {
+                    Id: 1
+                    Name: "Index1"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        FalsePositiveProbability: 0.01
+                        ColumnIds: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to drop and move the same index in one ALTER - should fail
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            AlterSchema {
+                DropIndexes: ["Index1"]
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index2"
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+    }
+
+    Y_UNIT_TEST(LocalIndexConflictMultipleMovesSameSource) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key0" Type: "Uint64" NotNull: true }
+                Columns { Name: "value0" Type: "Utf8" }
+                KeyColumnNames: "key0"
+                Indexes {
+                    Id: 1
+                    Name: "Index1"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        FalsePositiveProbability: 0.01
+                        ColumnIds: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to move the same index to multiple destinations - should fail
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            AlterSchema {
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index2"
+                }
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index3"
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // Try to move the same index to the same destination twice - should fail
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            AlterSchema {
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index2"
+                }
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index2"
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+    }
+
+    Y_UNIT_TEST(LocalIndexConflictMoveDestinationConflictsWithUpsert) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key0" Type: "Uint64" NotNull: true }
+                Columns { Name: "value0" Type: "Utf8" }
+                KeyColumnNames: "key0"
+                Indexes {
+                    Id: 1
+                    Name: "Index1"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        FalsePositiveProbability: 0.01
+                        ColumnIds: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to move an index to a destination that's being upserted - should fail
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "Index2"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: ["value0"]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                MoveIndex {
+                    SourceName: "Index1"
+                    DestinationName: "Index2"
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+    }
+
+ }

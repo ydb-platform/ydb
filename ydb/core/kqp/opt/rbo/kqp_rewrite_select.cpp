@@ -19,7 +19,7 @@ struct TAggregationTraits {
     TVector<TInfoUnit> KeyColumns;
 };
 
-const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg"};
+const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg", "variance_1_1"};
 
 TString GetColumnNameFromGroupRef(TExprNode::TPtr groupRef,
                                   const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap) {

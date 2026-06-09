@@ -473,7 +473,11 @@ public:
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
                 YQL_ENSURE(resultRow.size() <= Settings.Columns.size(), "Result columns mismatch");
 
-                const i64 storageRowSize = EstimateSize(resultRow);
+                const i64 storageRowSize = std::max(
+                    (i64)8,
+                    std::accumulate(resultRow.begin(), resultRow.end(), (i64)0, [](i64 sum, const TCell& cell) {
+                        return sum + cell.Size(); // Looks like it's better to use EstimateSize?
+                    }));
 
                 reader(resultRow);
 

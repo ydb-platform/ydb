@@ -262,7 +262,7 @@
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/slide_limiter/service/service.h>
@@ -315,6 +315,7 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
     , NodeId(runConfig.NodeId)
     , ScopeId(runConfig.ScopeId)
     , TinyMode(runConfig.TinyMode)
+    , ServicesMask(runConfig.ServicesMask)
 {}
 
 // TBasicServicesInitializer
@@ -2003,9 +2004,22 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             }
         }
 
+
+        const auto& kqpConfig = Config.GetKQPConfig();
+        const bool kqpEnabled = ServicesMask.EnableKqp
+            && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
+
+        TDuration publishWarmupTimeout = TDuration::Zero();
+        if (kqpEnabled && Config.GetTableServiceConfig().GetEnableCompileCacheWarmup()
+                && !appData->TenantName.empty()) {
+            publishWarmupTimeout = NKqp::ImportWarmupConfigFromProto(
+                Config.GetTableServiceConfig().GetCompileCacheWarmupConfig()).HardDeadline;
+        }
+
         setup->LocalServices.emplace_back(
            NGRpcService::CreateGrpcPublisherServiceActorId(),
-           TActorSetupCmd(CreateGrpcPublisherServiceActor(std::move(endpoints)), TMailboxType::ReadAsFilled, appData->UserPoolId)
+           TActorSetupCmd(CreateGrpcPublisherServiceActor(std::move(endpoints), publishWarmupTimeout),
+               TMailboxType::ReadAsFilled, appData->UserPoolId)
         );
     }
 }
@@ -2403,12 +2417,18 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
             auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
 
+            const ui32 cacheSize = Config.GetTableServiceConfig().GetCompileQueryCacheSize();
+            if (cacheSize > 0 && warmupConfig.MaxQueriesToLoad > cacheSize) {
+                warmupConfig.MaxQueriesToLoad = cacheSize;
+            }
+
             TString database = appData->TenantName;
             TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
 
             TVector<NActors::TActorId> notifyActorIds = {
                 NKqp::MakeKqpRmServiceID(NodeId),
                 MakeGRpcServersManagerId(NodeId),
+                NGRpcService::CreateGrpcPublisherServiceActorId(),
             };
             auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, std::move(notifyActorIds));
             setup->LocalServices.push_back(std::make_pair(

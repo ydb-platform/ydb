@@ -11,7 +11,7 @@
 #include "actors/actors.h"
 #include "kafka_connection.h"
 #include "kafka_events.h"
-#include "kafka_log_impl.h"
+#include <ydb/library/kafka/kafka_log_impl.h>
 #include "kafka_metrics.h"
 
 namespace NKafka {

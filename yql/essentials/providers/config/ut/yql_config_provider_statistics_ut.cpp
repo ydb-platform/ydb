@@ -42,7 +42,7 @@ Y_UNIT_TEST(RuntimeSettingWithoutActivationProducesNoStatistics) {
     TGatewaysConfig config;
     auto* setting = config.MutableRuntimeSettings()->AddHostSettings();
     setting->SetName("DatumValidation");
-    setting->SetValue("true");
+    setting->SetValue("Cheap");
 
     auto provider = CreateConfigProvider(typesCtx, &config, "testuser", {}, false);
     UNIT_ASSERT(provider->Initialize(exprCtx));
@@ -99,7 +99,7 @@ Y_UNIT_TEST(OnlyActivatedRuntimeSettingsAppearInStatistics) {
     {
         auto* setting = runtimeSettings->AddHostSettings();
         setting->SetName("DatumValidation");
-        setting->SetValue("true");
+        setting->SetValue("Cheap");
         // no activation — never recorded in statistics
     }
     {

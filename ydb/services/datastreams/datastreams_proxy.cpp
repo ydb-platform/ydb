@@ -154,7 +154,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     private:
         void CreateTopic(const TActorContext& ctx);
-        void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev, const TActorContext& ctx);
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev, const TActorContext& ctx);
         TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const;
     };
 
@@ -263,7 +263,7 @@ namespace NKikimr::NDataStreams::V1 {
         }));
     }
 
-    void TCreateStreamActor::Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev, const TActorContext& ctx) {
+    void TCreateStreamActor::Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev, const TActorContext& ctx) {
         const auto* result = ev->Get();
 
         switch(result->Status) {
@@ -287,7 +287,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+            HFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default: TBase::TBase::StateWork(ev);
         }
     }

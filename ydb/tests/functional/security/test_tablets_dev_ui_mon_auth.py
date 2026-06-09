@@ -4,7 +4,12 @@ import time
 import pytest
 import requests
 
-from security_test_helpers import _test_endpoints
+from security_test_helpers import (
+    _test_endpoints,
+    tablet_devui_expected_on_app,
+    tablet_devui_new_action_paths,
+    tablet_devui_sid_matrix,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -136,31 +141,8 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
     q = f'TabletID={datashard_tablet_id}'
     q_mutating_page = f'{q}&page=volatile-txs'
     q_mutating_action = f'{q}&action=key-access-sample'
-    all_forbidden = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 403,
-    }
-    monitoring_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    }
-    admin_allowed_sids_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 200,
-    }
-    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
     return {
         # New secure path for DataShard DevUI. Should be admin-only in both modes.
         f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
@@ -195,3 +177,76 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
         ydb_cluster_with_enforce_user_token_secure_devui_flag_and_datashard_tablet,
         _data_shard_devui_mon_paths_with_enforce(tid, secure_path_mode=True),
     )
+
+
+def _graph_shard_devui_mon_paths(graph_shard_tablet_id, secure_path_mode):
+    q = f'TabletID={graph_shard_tablet_id}'
+    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
+    paths = {
+        f'/tablets/app?{q}': monitoring_allowed_sids_ok,
+        f'/tablets?{q}': monitoring_allowed_sids_ok,
+        f'/tablets/app?{q}&action=get_settings': monitoring_allowed_sids_ok,
+        f'/tablets/app?{q}&action=change_backend&backend=1': expected_on_app,
+    }
+    if secure_path_mode:
+        paths[f'/tablets/app/secure?{q}'] = admin_allowed_sids_ok
+        paths[f'/tablets/app/secure?{q}&action=change_backend&backend=1'] = admin_allowed_sids_ok
+    return paths
+
+
+def test_graph_shard_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_graph_shard,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_graph_shard.graph_shard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_graph_shard,
+        _graph_shard_devui_mon_paths(tid, secure_path_mode=False),
+    )
+
+
+def test_graph_shard_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
+):
+    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard.graph_shard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
+        _graph_shard_devui_mon_paths(tid, secure_path_mode=True),
+    )
+
+
+def test_graph_shard_new_action_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_graph_shard,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_graph_shard.graph_shard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_graph_shard,
+        tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=False),
+    )
+
+
+def test_graph_shard_new_action_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
+):
+    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard.graph_shard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
+        tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=True),
+    )
+
+
+def test_graph_shard_change_backend_links_use_secure_path(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard
+    tid = cluster.graph_shard_tablet_id
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    url = f'https://{host}:{mon_port}/tablets/app?TabletID={tid}'
+    response = requests.get(url, headers={'Authorization': 'monitoring@builtin'}, verify=False)
+    assert response.status_code == 200, response.text
+    assert 'app/secure?' in response.text
+    assert 'action=change_backend&backend=0' in response.text
+    assert 'action=change_backend&backend=1' in response.text
+    assert 'action=change_backend&backend=2' in response.text
+    assert f'app?TabletID={tid}&action=change_backend' not in response.text

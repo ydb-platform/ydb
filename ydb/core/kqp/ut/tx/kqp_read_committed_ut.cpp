@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
     }
 
     Y_UNIT_TEST(TDeleteWhereTakesLocksWithUniqueIndex) {
-        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test2` WHERE Name == "Paul")", 2, 4, 2);
+        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test2` WHERE Name == "Paul")", 1, 4, 2);
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

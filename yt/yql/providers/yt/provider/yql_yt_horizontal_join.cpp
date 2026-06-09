@@ -8,6 +8,8 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <library/cpp/yt/misc/compare.h>
+
 #include <util/generic/xrange.h>
 #include <util/generic/algorithm.h>
 #include <util/string/cast.h>
@@ -30,9 +32,86 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
-    THashSet<TStringBuf> UDF_HORIZONTAL_JOIN_WHITE_LIST = {
-        "Streaming",
-    };
+
+THashSet<TStringBuf> UDF_HORIZONTAL_JOIN_WHITE_LIST = {
+    "Streaming",
+};
+
+int CompareYtPathsSingleMode(const TExprNode* left, const TExprNode* right) {
+    if (left == right) {
+        return 0;
+    }
+    // Different Columns and other fields can be joined and intentionally ignored.
+    if (const auto c = NYT::TernaryCompare(left->Child(TYtPath::idx_Table), right->Child(TYtPath::idx_Table))) {
+        return c;
+    }
+    if (const auto c = NYT::TernaryCompare(left->Child(TYtPath::idx_Ranges), right->Child(TYtPath::idx_Ranges))) {
+        return c;
+    }
+    return NYT::TernaryCompare(left->Child(TYtPath::idx_QLFilter), right->Child(TYtPath::idx_QLFilter));
+}
+
+int CompareYtPathsMultipleMode(const TExprNode* left, const TExprNode* right) {
+    if (left == right) {
+        return 0;
+    }
+    for (size_t i = 0; i < Min(left->ChildrenSize(), right->ChildrenSize()); ++i) {
+        if (const auto c = NYT::TernaryCompare(left->Child(i), right->Child(i))) {
+            return c;
+        }
+    }
+    return NYT::TernaryCompare(left->ChildrenSize(), right->ChildrenSize());
+}
+
+int CompareGroupedInputPathLists(const TExprNode* left, const TExprNode* right) {
+    if (left == right) {
+        return 0;
+    }
+
+    // Never compare single path mode vs multiple path mode, always treat as single < multiple.
+    const bool leftMultipleMode = left->ChildrenSize() > 1;
+    const bool rightMultipleMode = right->ChildrenSize() > 1;
+    if (const auto c = NYT::TernaryCompare(leftMultipleMode, rightMultipleMode)) {
+        return c;
+    }
+
+    if (left->ChildrenSize() == 1 && right->ChildrenSize() == 1) {
+        return CompareYtPathsSingleMode(&left->Head(), &right->Head());
+    }
+
+    for (size_t i = 0; i < Min(left->ChildrenSize(), right->ChildrenSize()); ++i) {
+        if (const auto c = CompareYtPathsMultipleMode(left->Child(i), right->Child(i))) {
+            return c;
+        }
+    }
+    return NYT::TernaryCompare(left->ChildrenSize(), right->ChildrenSize());
+}
+
+int CompareGroupedInputSections(const TExprNode* left, const TExprNode* right) {
+    if (left == right) {
+        return 0;
+    }
+    for (size_t i = 0; i < Min(left->ChildrenSize(), right->ChildrenSize()); ++i) {
+        if (i == TYtSection::idx_Paths) {
+            if (const auto c = CompareGroupedInputPathLists(left->Child(i), right->Child(i))) {
+                return c;
+            }
+        } else {
+            if (const auto c = NYT::TernaryCompare(left->Child(i), right->Child(i))) {
+                return c;
+            }
+        }
+    }
+    return NYT::TernaryCompare(left->ChildrenSize(), right->ChildrenSize());
+}
+
+}
+
+bool TGroupedInputKey::operator<(const TGroupedInputKey& other) const {
+    if (const auto c = CompareGroupedInputSections(Section, other.Section)) {
+        return c < 0;
+    }
+    return WeakFields < other.WeakFields;
 }
 
 bool THorizontalJoinBase::IsGoodForHorizontalJoin(TYtMap map) const {
@@ -723,23 +802,10 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
             }
             UniqMaps.emplace(map.Raw(), outNdx);
 
-            auto section = map.Input().Item(0);
-            if (section.Paths().Size() == 1) {
-                auto path = section.Paths().Item(0);
-                GroupedInputs.emplace(
-                    path.Table().Raw(),
-                    path.Ranges().Raw(),
-                    path.QLFilter().Raw(),
-                    section.Settings().Raw(),
-                    NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
-            } else {
-                GroupedInputs.emplace(
-                    section.Raw(),
-                    nullptr,
-                    nullptr,
-                    nullptr,
-                    NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
-            }
+            GroupedInputs.insert(TGroupedInputKey{
+                .Section=map.Input().Item(0).Raw(),
+                .WeakFields=NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields),
+            });
 
             AddToJoinGroup(map);
         }
@@ -901,7 +967,7 @@ bool THorizontalJoinOptimizer::MakeJoinedMap(TPositionHandle pos, TExprContext& 
                 for (auto itemType: map.Input().Item(0).Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
                     usedFields.insert(itemType->GetName());
                 }
-                if (std::get<4>(*GroupedInputs.begin())) {
+                if (GroupedInputs.begin()->WeakFields) {
                     for (auto path: map.Input().Item(0).Paths()) {
                         if (auto columns = path.Columns().Maybe<TExprList>()) {
                             for (auto child: columns.Cast()) {
@@ -1404,23 +1470,10 @@ bool TMultiHorizontalJoinOptimizer::HandleGroup(const TVector<TYtMap>& maps, TEx
             Worlds.emplace(map.World().Ptr(), Worlds.size());
         }
 
-        auto section = map.Input().Item(0);
-        if (section.Paths().Size() == 1) {
-            auto path = section.Paths().Item(0);
-            GroupedInputs.emplace(
-                path.Table().Raw(),
-                path.Ranges().Raw(),
-                path.QLFilter().Raw(),
-                section.Settings().Raw(),
-                NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
-        } else {
-            GroupedInputs.emplace(
-                section.Raw(),
-                nullptr,
-                nullptr,
-                nullptr,
-                NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
-        }
+        GroupedInputs.insert(TGroupedInputKey{
+            .Section=map.Input().Item(0).Raw(),
+            .WeakFields=NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields),
+        });
 
         AddToJoinGroup(map);
     }
@@ -1458,7 +1511,7 @@ bool TMultiHorizontalJoinOptimizer::MakeJoinedMap(TExprContext& ctx) {
                 for (auto itemType: map.Input().Item(0).Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
                     usedFields.insert(itemType->GetName());
                 }
-                if (std::get<4>(*GroupedInputs.begin())) {
+                if (GroupedInputs.begin()->WeakFields) {
                     for (auto path: map.Input().Item(0).Paths()) {
                         if (auto columns = path.Columns().Maybe<TExprList>()) {
                             for (auto child: columns.Cast()) {

@@ -3,12 +3,13 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/format.h>
 
-#include <util/system/thread.h>
+#include <library/cpp/yt/system/process_id.h>
+#include <library/cpp/yt/system/thread_id.h>
+#include <library/cpp/yt/system/thread_name.h>
 
 namespace NYT {
 
@@ -65,8 +66,8 @@ void TOriginAttributes::Capture()
     }
 
     Datetime = TInstant::Now();
-    Pid = GetPID();
-    Tid = TThread::CurrentThreadId();
+    Pid = GetProcessId();
+    Tid = GetSystemThreadId();
     ThreadName = GetCurrentThreadName();
     ExtensionData = NDetail::GetExtensionData();
 }
@@ -87,7 +88,7 @@ std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData()
 
 std::string FormatOrigin(const TOriginAttributes& attributes)
 {
-    using TFunctor = TString(*)(const TOriginAttributes&);
+    using TFunctor = std::string(*)(const TOriginAttributes&);
 
     if (auto strong = NGlobal::GetErasedVariable(FormatOriginTag)) {
         return strong->AsConcrete<TFunctor>()(attributes);

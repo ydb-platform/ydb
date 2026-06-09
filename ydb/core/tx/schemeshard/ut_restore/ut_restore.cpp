@@ -2831,7 +2831,7 @@ value {
             result << hex[i];
             result << hex[i + 1];
         }
-        return std::move(result);
+        return result;
     }
 
     // Test that checks different combinations of:
@@ -3536,7 +3536,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ShouldSucceedOnIndexedTable(1, "");
     }
 
-    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalBloomIndexes) {
+    Y_UNIT_TEST_FLAG(ImportStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -3549,6 +3549,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(EnableLocalIndexAsSchemeObject);
 
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);

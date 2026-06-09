@@ -2,6 +2,8 @@
 
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxAddConfigSubscription : public TTransactionBase<TConfigsManager> {
@@ -17,7 +19,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Cannot add subscription: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot add",
+            {"Subscription", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -32,7 +35,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxAddConfigSubscription Execute: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxAddConfigSubscription",
+            {"Execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -47,9 +51,8 @@ public:
         // Check if existing subscription should be returned.
         for (auto existingSubscription : Self->SubscriptionIndex.GetSubscriptions(subscription->Subscriber)) {
             if (subscription->IsEqual(*existingSubscription)) {
-                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                            "Added subscription is similar to existing one, "
-                            "return existing subscription id=: " << existingSubscription->Id);
+                YDB_LOG_CTX_DEBUG(ctx, "",
+                    {"Id", existingSubscription->Id});
 
                 Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
                 Response->Record.SetSubscriptionId(existingSubscription->Id);
@@ -74,7 +77,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxAddConfigSubscription Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxAddConfigSubscription Complete");
 
         Y_ABORT_UNLESS(Response);
         if (!Self->PendingSubscriptionModifications.IsEmpty()) {
@@ -84,8 +87,8 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Send TEvAddConfigSubscriptionResponse: " << Response->Record.ShortDebugString());
+            YDB_LOG_CTX_TRACE(ctx, "Send",
+                {"TEvAddConfigSubscriptionResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

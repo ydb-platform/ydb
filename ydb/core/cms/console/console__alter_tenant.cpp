@@ -1,6 +1,8 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxAlterTenant : public TTransactionBase<TTenantsManager> {
@@ -16,7 +18,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot alter tenant: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot alter",
+            {"Tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -38,8 +41,8 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxAlterTenant: "
-                    << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"TTxAlterTenant", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvAlterTenantResponse;
 
@@ -58,7 +61,7 @@ public:
 
         // Check idempotency key
         if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Returning success due to idempotency key match");
+            YDB_LOG_CTX_DEBUG(ctx, "Returning success due to idempotency key match");
             auto &operation = *Response->Record.MutableResponse()->mutable_operation();
             operation.set_ready(true);
             operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -364,13 +367,14 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxAlterTenant Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxAlterTenant Complete");
 
         Y_ABORT_UNLESS(Response);
         Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                            COUNTER_ALTER_RESPONSES);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
+        YDB_LOG_CTX_TRACE(ctx, "",
+            {"Send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

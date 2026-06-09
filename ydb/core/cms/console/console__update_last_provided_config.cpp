@@ -1,5 +1,7 @@
 #include "console_configs_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 class TConfigsManager::TTxUpdateLastProvidedConfig : public TTransactionBase<TConfigsManager> {
@@ -16,21 +18,20 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxUpdateLastProvidedConfig Execute: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateLastProvidedConfig",
+            {"Execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
         auto subscription = Self->SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
         if (!subscription) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Config notification response for missing subscription id="
-                        << rec.GetSubscriptionId());
+            YDB_LOG_CTX_DEBUG(ctx, "Config notification response for missing subscription",
+                {"Id", rec.GetSubscriptionId()});
             return true;
         }
         if (Request->Cookie != subscription->Cookie) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Config notification response cookie mismatch for"
-                        << " subscription id=" << rec.GetSubscriptionId());
+            YDB_LOG_CTX_DEBUG(ctx, "Config notification response cookie mismatch for subscription",
+                {"Id", rec.GetSubscriptionId()});
             Y_ABORT_UNLESS(subscription->Subscriber.ServiceId,
                      "%s  ==>  %s",
                      rec.ShortDebugString().c_str(),
@@ -50,7 +51,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxUpdateLastProvidedConfig Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateLastProvidedConfig Complete");
 
         if (!Self->PendingSubscriptionModifications.IsEmpty())
             Self->ApplyPendingSubscriptionModifications(ctx);

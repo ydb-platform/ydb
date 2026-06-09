@@ -1,5 +1,7 @@
 #include "console_tenants_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 using namespace NOperationId;
@@ -17,9 +19,9 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_POOLS);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxRemoveTenantDone for tenant " << Tenant->Path
-                    << " txid=" << Tenant->TxId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantDone for tenant",
+            {"TenantPath", Tenant->Path},
+            {"Txid", Tenant->TxId});
 
         Self->DbRemoveComputationalUnits(Tenant, txc, ctx);
         Self->DbRemoveTenantAndPools(Tenant, txc, ctx);
@@ -31,7 +33,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxRemoveTenantDone Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantDone Complete");
 
         Self->SendTenantNotifications(Tenant, TTenant::REMOVE, Ydb::StatusIds::SUCCESS, ctx);
         Self->Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_REMOVE_RESPONSES);

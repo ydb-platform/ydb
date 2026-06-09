@@ -2,6 +2,8 @@
 #include "console_impl.h"
 #include "console_tenants_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NConsole {
 
 class TConsole::TTxLoadState : public TTransactionBase<TConsole> {
@@ -25,7 +27,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TConsole::TTxLoadState Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxLoadState Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         auto configRow = db.Table<Schema::Config>().Key(ConfigKeyConfig).Select<Schema::Config::Value>();
@@ -44,10 +46,10 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                        "Loaded config:" << Endl << config.DebugString());
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded",
+                {"Config", config.DebugString()});
         } else {
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "Using default config.");
+            YDB_LOG_CTX_DEBUG(ctx, "Using default config");
 
             Self->LoadConfigFromProto(NKikimrConsole::TConfig());
         }
@@ -63,7 +65,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TConsole::TTxLoadState Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxLoadState Complete");
 
         Self->Become(&TConsole::StateWork);
         Self->SignalTabletActive(ctx);

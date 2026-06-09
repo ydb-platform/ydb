@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/core/formats/arrow/common/adapter.h>
-#include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>

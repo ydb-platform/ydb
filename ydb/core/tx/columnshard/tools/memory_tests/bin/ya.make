@@ -4,7 +4,8 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
-    ydb/core/formats/arrow
+    ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/rows
 )
 
 SRCDIR(

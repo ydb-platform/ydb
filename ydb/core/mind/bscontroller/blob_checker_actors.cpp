@@ -4,6 +4,8 @@
 
 #include <ydb/core/util/stlog.h>
 
+#include <unordered_set>
+
 namespace NKikimr {
 namespace NBsController {
 
@@ -372,7 +374,7 @@ private:
         }
     }
 
-    void DeleteGroups(std::unordered_map<TGroupId>&& deletedGroups) {
+    void DeleteGroups(std::unordered_set<TGroupId>&& deletedGroups) {
         for (const TGroupId groupId : deletedGroups) { 
             const auto it = Groups.find(groupId);
             if (it != Groups.end()) {
@@ -437,8 +439,8 @@ private:
     constexpr static TDuration RetryDelay = TDuration::Hours(1);
 
     // counters
-    ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr ParentCounters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataIssues;
     ::NMonitoring::TDynamicCounters::TCounterPtr PlacementIssues;
     ::NMonitoring::TDynamicCounters::TCounterPtr WorkersCreated;

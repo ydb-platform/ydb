@@ -315,10 +315,10 @@ TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr
     , EndOffset(endOffset) {
 }
 
-void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
+void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) {
     if (PartitionSession) {
         static_cast<TPartitionSessionControl*>(PartitionSession.Get())
-            ->ConfirmCreate(readOffset, commitOffset);
+            ->ConfirmCreate(readOffset, commitOffset, maxOffset);
     }
 }
 

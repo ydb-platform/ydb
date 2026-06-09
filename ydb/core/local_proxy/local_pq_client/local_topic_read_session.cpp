@@ -60,15 +60,17 @@ class TLocalTopicReadSessionActor final
         };
 
         struct TEvConfirmCreate : public TEventLocal<TEvConfirmCreate, EvConfirmCreate> {
-            TEvConfirmCreate(i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset)
+            TEvConfirmCreate(i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset)
                 : PartitionSessionId(partitionSessionId)
                 , ReadOffset(readOffset)
                 , CommitOffset(commitOffset)
+                , MaxOffset(maxOffset)
             {}
 
             const i64 PartitionSessionId;
             const std::optional<ui64> ReadOffset;
             const std::optional<ui64> CommitOffset;
+            const std::optional<ui64> MaxOffset;
         };
 
         struct TEvConfirmDestroy : public TEventLocal<TEvConfirmDestroy, EvConfirmDestroy> {
@@ -114,8 +116,8 @@ class TLocalTopicReadSessionActor final
             ActorSystem->Send(SelfId, new TEvPartition::TEvOffsetsCommitRequest(PartitionSessionId, startOffset, endOffset));
         }
 
-        void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) final {
-            ActorSystem->Send(SelfId, new TEvPartition::TEvConfirmCreate(PartitionSessionId, readOffset, commitOffset));
+        void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) final {
+            ActorSystem->Send(SelfId, new TEvPartition::TEvConfirmCreate(PartitionSessionId, readOffset, commitOffset, maxOffset));
         }
 
         void ConfirmDestroy() final {
@@ -304,9 +306,11 @@ private:
         const auto partitionSessionId = ev->Get()->PartitionSessionId;
         const auto readOffset = ev->Get()->ReadOffset;
         const auto commitOffset = ev->Get()->CommitOffset;
+        const auto maxOffset = ev->Get()->MaxOffset;
         LOG_D("Partition session #" << partitionSessionId << " confirmed"
             << ", read offset: " << (readOffset ? ToString(*readOffset) : "null")
-            << ", commit offset: " << (commitOffset ? ToString(*commitOffset) : "null"));
+            << ", commit offset: " << (commitOffset ? ToString(*commitOffset) : "null")
+            << ", max offset: " << (maxOffset ? ToString(*maxOffset) : "null"));
 
         TRpcIn message;
 
@@ -317,6 +321,9 @@ private:
         }
         if (commitOffset) {
             startResponse.set_commit_offset(*commitOffset);
+        }
+        if (maxOffset) {
+            startResponse.set_max_offset(*maxOffset);
         }
 
         AddSessionEvent(std::move(message));

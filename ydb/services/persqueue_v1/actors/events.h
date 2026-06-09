@@ -337,17 +337,19 @@ struct TEvPQProxy {
     };
 
     struct TEvStartRead : public NActors::TEventLocal<TEvStartRead, EvStartRead> {
-        TEvStartRead(ui64 id, ui64 readOffset, const TMaybe<ui64>& commitOffset, bool verifyReadOffset)
+        TEvStartRead(ui64 id, ui64 readOffset, const TMaybe<ui64>& commitOffset, bool verifyReadOffset, const TMaybe<ui64>& maxOffset)
             : AssignId(id)
             , ReadOffset(readOffset)
             , CommitOffset(commitOffset)
             , VerifyReadOffset(verifyReadOffset)
+            , MaxOffset(maxOffset)
         { }
 
         const ui64 AssignId;
         ui64 ReadOffset;
         TMaybe<ui64> CommitOffset;
         bool VerifyReadOffset;
+        TMaybe<ui64> MaxOffset;
     };
 
     struct TEvReleased : public NActors::TEventLocal<TEvReleased, EvReleased> {
@@ -410,17 +412,19 @@ struct TEvPQProxy {
 
     struct TEvLockPartition : public NActors::TEventLocal<TEvLockPartition, EvLockPartition> {
         explicit TEvLockPartition(const ui64 readOffset, const TMaybe<ui64>& commitOffset, bool verifyReadOffset,
-                                   bool startReading)
+                                   bool startReading, const TMaybe<ui64>& maxOffset)
             : ReadOffset(readOffset)
             , CommitOffset(commitOffset)
             , VerifyReadOffset(verifyReadOffset)
             , StartReading(startReading)
+            , MaxOffset(maxOffset)
         { }
 
         ui64 ReadOffset;
         TMaybe<ui64> CommitOffset;
         bool VerifyReadOffset;
         bool StartReading;
+        TMaybe<ui64> MaxOffset;
     };
 
 

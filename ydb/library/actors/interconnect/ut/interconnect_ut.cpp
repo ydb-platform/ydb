@@ -500,12 +500,20 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
         settings.PingPeriod = TDuration::MilliSeconds(200);
     };
 
-    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+    TTestICCluster::TTrafficInterrupterSettings interrupterSettings{
+        .RejectingTrafficTimeout = TDuration::Zero(),
+        .BandWidth = 0.0,
+        .Disconnect = false,
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr, GetKernelLivenessFlags(withRdma),
         {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
 
     auto* recipientPtr = new TRecipientActor;
     const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
     cluster.RegisterActor(new TSenderActor(recipient), 2);
+    const TActorId dropRecipientOnNode1 = cluster.RegisterActor(new TDropRecipientActor, 1);
+    const TActorId dropRecipientOnNode2 = cluster.RegisterActor(new TDropRecipientActor, 2);
 
     WaitForCondition(TDuration::Seconds(10), [&] {
         return recipientPtr->GetReceived() >= 1;
@@ -521,25 +529,36 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
         }, description);
     };
 
-    auto reconnectFromNode2 = [&](TStringBuf description) {
-        const TString handshakeBefore = GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone");
-        auto sessionStaysAliveOnEof = [&](ui32 fromNode, ui32 toNode) {
-            const ui64 numEventsInQueue = GetSessionCounter(cluster, fromNode, toNode, "NumEventsInQueue");
-            const ui64 outputCounter = GetSessionCounter(cluster, fromNode, toNode, "OutputCounter");
-            const ui64 lastConfirmed = GetSessionCounter(cluster, fromNode, toNode, "LastConfirmed");
-            return numEventsInQueue > 0 || outputCounter != lastConfirmed;
-        };
+    auto sessionStaysAliveOnEof = [&](ui32 fromNode, ui32 toNode) {
+        const ui64 numEventsInQueue = GetSessionCounter(cluster, fromNode, toNode, "NumEventsInQueue");
+        const ui64 outputCounter = GetSessionCounter(cluster, fromNode, toNode, "OutputCounter");
+        const ui64 lastConfirmed = GetSessionCounter(cluster, fromNode, toNode, "LastConfirmed");
+        return numEventsInQueue > 0 || outputCounter != lastConfirmed;
+    };
 
-        // Keep both session instances alive after the socket is closed. This matches the session lifetime predicate
-        // used on EOF; otherwise the peer may destroy its idle session before accepting the continuation request.
+    auto sendPendingTraffic = [&] {
+        cluster.RegisterActor(new TBurstSenderActor(dropRecipientOnNode1, 4096, 4096), 2);
+        cluster.RegisterActor(new TBurstSenderActor(dropRecipientOnNode2, 4096, 4096), 1);
         WaitForCondition(TDuration::Seconds(10), [&] {
             try {
                 return sessionStaysAliveOnEof(2, 1) && sessionStaysAliveOnEof(1, 2);
             } catch (const TPatternNotFound&) {
                 return false;
             }
-        }, "both sessions stay alive on EOF before forced reconnect");
+        }, "both sessions have pending traffic while proxy forwarding is frozen");
+    };
+
+    auto reconnectFromNode2 = [&](TStringBuf description) {
+        const TString handshakeBefore = GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone");
+        // TEvClosePeerSocket is meant to exercise same-session continuation. Freeze proxy forwarding before the
+        // close so the peer cannot observe EOF and destroy an idle session before node2 has requested reconnect.
+        // Pending traffic keeps both session instances alive; after unfreezing, continuation has a peer session to resume.
+        cluster.StartBlackhole(1);
+        cluster.StartBlackhole(2);
+        sendPendingTraffic();
         cluster.GetNode(2)->Send(cluster.InterconnectProxy(1, 2), new TEvInterconnect::TEvClosePeerSocket);
+        cluster.StopBlackhole(1);
+        cluster.StopBlackhole(2);
         WaitForCondition(TDuration::Seconds(20), [&] {
             try {
                 return GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone") != handshakeBefore &&

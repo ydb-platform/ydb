@@ -112,7 +112,6 @@ ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YDB_PERF
 ydb/core/kqp/ut/scheme KqpOlapScheme.DropColumnAfterAdd
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal
 ydb/core/kqp/ut/scheme KqpOlapTypes.PgFloat4Column
-ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite

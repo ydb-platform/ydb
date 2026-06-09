@@ -26,7 +26,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWrites
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.NotNullColumns) {
+    for (const auto& columnName : operationInfo.SetNotNullColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         col->SetName(TString(columnName));
         col->SetSetNotNullInProgress(true);
@@ -47,7 +47,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.NotNullColumns) {
+    for (const auto& columnName : operationInfo.SetNotNullColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         col->SetName(TString(columnName));
         col->SetSetNotNullInProgress(false);
@@ -567,7 +567,7 @@ private:
         record.SetSeqNoGeneration(Self->Generation());
         record.SetSeqNoRound(++shardStatus.SeqNoRound);
 
-        for (const auto& columnName : operationInfo.NotNullColumns) {
+        for (const auto& columnName : operationInfo.SetNotNullColumns) {
             record.AddNotNullColumns(TString(columnName));
         }
 

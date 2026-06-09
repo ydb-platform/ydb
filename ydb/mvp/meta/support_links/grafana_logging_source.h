@@ -17,33 +17,47 @@ namespace NMVP::NSupportLinks {
 
 inline constexpr TStringBuf GRAFANA_LOGGING_DEFAULT_URL = "/explore";
 
+struct TGrafanaLoggingLabels {
+    TString Database;
+    TString Node;
+    TString Host;
+    TString Cluster;
+};
+
 inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(
     ESupportLinksEntityType entityType,
+    const TGrafanaLoggingLabels& labels,
     const NHttp::TUrlParameters& requestQueryParameters)
 {
     TVector<std::pair<TString, TString>> bindings;
 
     switch (entityType) {
         case ESupportLinksEntityType::Cluster:
+            if (!labels.Cluster.empty()) {
+                const TString cluster = requestQueryParameters["cluster"];
+                if (!cluster.empty()) {
+                    bindings.emplace_back(labels.Cluster, cluster);
+                }
+            }
             break;
         case ESupportLinksEntityType::Database: {
             const TString database = requestQueryParameters["database"];
             if (!database.empty()) {
-                bindings.emplace_back("database", database);
+                bindings.emplace_back(labels.Database, database);
             }
             break;
         }
         case ESupportLinksEntityType::Node: {
             const TString node = requestQueryParameters["node"];
             if (!node.empty()) {
-                bindings.emplace_back("node_id", node);
+                bindings.emplace_back(labels.Node, node);
             }
             break;
         }
         case ESupportLinksEntityType::Host: {
             const TString host = requestQueryParameters["host"];
             if (!host.empty()) {
-                bindings.emplace_back("k8s_node_name", host);
+                bindings.emplace_back(labels.Host, host);
             }
             break;
         }
@@ -91,6 +105,7 @@ inline bool TryBuildGrafanaLoggingUrl(
     TStringBuf grafanaEndpoint,
     TStringBuf url,
     TStringBuf bucket,
+    const TGrafanaLoggingLabels& labels,
     ESupportLinksEntityType entityType,
     const THashMap<TString, TString>& clusterInfo,
     const NHttp::TUrlParameters& requestQueryParameters,
@@ -117,7 +132,7 @@ inline bool TryBuildGrafanaLoggingUrl(
         return false;
     }
 
-    TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(entityType, requestQueryParameters);
+    TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(entityType, labels, requestQueryParameters);
     bindings.emplace_back("__workspace__", workspaceIt->second);
     bindings.emplace_back("__bucket__", bucket);
 
@@ -138,11 +153,18 @@ namespace NMVP {
 
 class TGrafanaLoggingSource : public ILinkSource {
 public:
-    TGrafanaLoggingSource(TString sourceName, TString title, TString url, TString bucket, TString grafanaEndpoint)
+    TGrafanaLoggingSource(
+        TString sourceName,
+        TString title,
+        TString url,
+        TString bucket,
+        NSupportLinks::TGrafanaLoggingLabels loggingLabels,
+        TString grafanaEndpoint)
         : SourceName(std::move(sourceName))
         , Title(std::move(title))
         , Url(std::move(url))
         , Bucket(std::move(bucket))
+        , LoggingLabels(std::move(loggingLabels))
         , GrafanaEndpoint(std::move(grafanaEndpoint))
     {}
 
@@ -157,6 +179,7 @@ public:
                 GrafanaEndpoint,
                 Url,
                 Bucket,
+                LoggingLabels,
                 context.EntityType,
                 input.ClusterInfo,
                 input.UrlParameters,
@@ -182,6 +205,7 @@ private:
     TString Title;
     TString Url;
     TString Bucket;
+    NSupportLinks::TGrafanaLoggingLabels LoggingLabels;
     TString GrafanaEndpoint;
 };
 
@@ -204,6 +228,12 @@ inline std::shared_ptr<ILinkSource> MakeGrafanaLoggingSource(TSupportLinkEntryCo
         config.GetTitle(),
         config.GetUrl(),
         config.GetBucket(),
+        NSupportLinks::TGrafanaLoggingLabels{
+            .Database = metaSettings.SupportLinks.GrafanaLogging.DatabaseLabel,
+            .Node = metaSettings.SupportLinks.GrafanaLogging.NodeLabel,
+            .Host = metaSettings.SupportLinks.GrafanaLogging.HostLabel,
+            .Cluster = metaSettings.SupportLinks.GrafanaLogging.ClusterLabel,
+        },
         metaSettings.SupportLinks.GrafanaEndpoint
     );
 }

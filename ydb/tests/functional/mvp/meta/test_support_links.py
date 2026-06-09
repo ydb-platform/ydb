@@ -180,7 +180,7 @@ def test_meta_support_links_returns_logging_link_for_node_id(meta_support_links_
     assert_logging_support_links_response(
         meta_support_links_env.get_ok_support_links_payload(CLUSTER_NAME, node=NODE_ID),
         "Node Logs",
-        f'{{node_id="{NODE_ID}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}',
+        f'{{node="{NODE_ID}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}',
     )
 
 
@@ -188,7 +188,7 @@ def test_meta_support_links_returns_logging_link_for_host(meta_support_links_env
     assert_logging_support_links_response(
         meta_support_links_env.get_ok_support_links_payload(CLUSTER_NAME, host=HOST_NAME),
         "Host Logs",
-        f'{{k8s_node_name="{HOST_NAME}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}',
+        f'{{host="{HOST_NAME}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}',
     )
 
 
@@ -200,8 +200,8 @@ def test_meta_support_links_combines_node_and_host_groups(meta_support_links_env
             host=HOST_NAME,
         ),
         [
-            ("Node Logs", f'{{node_id="{NODE_ID}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
-            ("Host Logs", f'{{k8s_node_name="{HOST_NAME}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
+            ("Node Logs", f'{{node="{NODE_ID}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
+            ("Host Logs", f'{{host="{HOST_NAME}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
         ],
     )
 

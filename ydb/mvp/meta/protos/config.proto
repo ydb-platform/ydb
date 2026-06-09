@@ -6,8 +6,20 @@ import "ydb/mvp/core/protos/mvp.proto";
 
 message TMetaConfig {
     message TGrafanaConfig {
+        message TLoggingConfig {
+            message TLabelsConfig {
+                optional string Cluster = 1;
+                optional string Database = 2 [default = "database"];
+                optional string Node = 3 [default = "node"];
+                optional string Host = 4 [default = "host"];
+            }
+
+            optional TLabelsConfig Labels = 1;
+        }
+
         // Grafana base URL used to resolve relative Grafana links.
         optional string Endpoint = 1;
+        optional TLoggingConfig Logging = 2;
     }
 
     message TSupportLinksConfig {
@@ -22,7 +34,7 @@ message TMetaConfig {
             repeated string Tag = 4;
             // Grafana folder UID filters (for source=grafana/dashboard/search).
             repeated string Folder = 5;
-            // Loki bucket override for source=grafana/logging.
+            // Bucket override for source=grafana/logging.
             optional string Bucket = 6 [default = "ydb"];
         }
         // Support links resolved for cluster entity.

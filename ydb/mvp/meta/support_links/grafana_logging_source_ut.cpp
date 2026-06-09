@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         );
     }
 
-    Y_UNIT_TEST(ResolveUsesOnlyNodeIdRequestParameterForNodeEntity) {
+    Y_UNIT_TEST(ResolveUsesOnlyNodeRequestParameterForNodeEntity) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["k8s_namespace"] = "ydb-common";
         context.ClusterInfo["datasource_logging"] = "ds-42";
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{node_id=\"static-node-1\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{node=\"static-node-1\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
             "ds-42"
         );
     }
@@ -213,7 +213,67 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{k8s_node_name=\"host-1.example.net\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{host=\"host-1.example.net\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "ds-42"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveUsesLabelOverridesFromConfig) {
+        TGrafanaLoggingTestContext context;
+        context.Settings.SupportLinks.GrafanaLogging.DatabaseLabel = "db_path";
+        context.Settings.SupportLinks.GrafanaLogging.NodeLabel = "instance_id";
+        context.Settings.SupportLinks.GrafanaLogging.HostLabel = "node_name";
+        context.ClusterInfo["k8s_namespace"] = "ydb-common";
+        context.ClusterInfo["datasource_logging"] = "ds-42";
+
+        context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Database;
+        auto databaseResult = context.Resolve();
+        UNIT_ASSERT_VALUES_EQUAL(databaseResult.Errors.size(), 0u);
+        AssertPanesQuery(
+            databaseResult.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{db_path=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "ds-42"
+        );
+
+        context.UrlParameters = MakeUrlParameters("node=static-node-1");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Node;
+        auto nodeResult = context.Resolve();
+        UNIT_ASSERT_VALUES_EQUAL(nodeResult.Errors.size(), 0u);
+        AssertPanesQuery(
+            nodeResult.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{instance_id=\"static-node-1\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "ds-42"
+        );
+
+        context.UrlParameters = MakeUrlParameters("host=host-1.example.net");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Host;
+        auto hostResult = context.Resolve();
+        UNIT_ASSERT_VALUES_EQUAL(hostResult.Errors.size(), 0u);
+        AssertPanesQuery(
+            hostResult.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{node_name=\"host-1.example.net\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "ds-42"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveUsesClusterLabelOverrideForClusterEntity) {
+        TGrafanaLoggingTestContext context;
+        context.Settings.SupportLinks.GrafanaLogging.ClusterLabel = "cluster_id";
+        context.ClusterInfo["k8s_namespace"] = "ydb-common";
+        context.ClusterInfo["datasource_logging"] = "ds-42";
+        context.UrlParameters = MakeUrlParameters("cluster=testing-global");
+        auto result = context.Resolve();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
+        AssertPanesQuery(
+            result.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{cluster_id=\"testing-global\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
             "ds-42"
         );
     }

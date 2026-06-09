@@ -218,4 +218,25 @@ meta:
         );
     }
 
+    Y_UNIT_TEST(GrafanaLoggingLabelsRejectEmptyNodeLabel) {
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  grafana:
+    logging:
+      labels:
+        node: ""
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        auto mvp = MakeTestMvp();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "meta.grafana.logging.labels.node must be non-empty"
+        );
+    }
+
 }

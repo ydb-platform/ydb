@@ -33,8 +33,8 @@ public:
                 Self->PendingSubscriptionModifications.RemovedSubscriptions.insert(pr.first);
 
                 YDB_LOG_CTX_DEBUG(ctx, "Subscription has subscriber from unknown node and will be removed",
-                    {"subscriber", pr.first},
-                    {"nodeId", nodeId});
+                    {"Subscriber", pr.first},
+                    {"NodeId", nodeId});
             }
         }
 

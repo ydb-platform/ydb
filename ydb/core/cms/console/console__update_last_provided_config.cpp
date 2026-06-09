@@ -26,12 +26,12 @@ public:
         auto subscription = Self->SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
         if (!subscription) {
             YDB_LOG_CTX_DEBUG(ctx, "Config notification response for missing subscription",
-                {"id", rec.GetSubscriptionId()});
+                {"Id", rec.GetSubscriptionId()});
             return true;
         }
         if (Request->Cookie != subscription->Cookie) {
             YDB_LOG_CTX_DEBUG(ctx, "Config notification response cookie mismatch for subscription",
-                {"id", rec.GetSubscriptionId()});
+                {"Id", rec.GetSubscriptionId()});
             Y_ABORT_UNLESS(subscription->Subscriber.ServiceId,
                      "%s  ==>  %s",
                      rec.ShortDebugString().c_str(),

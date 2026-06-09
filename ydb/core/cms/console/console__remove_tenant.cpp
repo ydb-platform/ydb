@@ -19,7 +19,7 @@ public:
                const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Cannot remove",
-            {"tenant", error});
+            {"Tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);

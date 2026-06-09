@@ -19,7 +19,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
 
         YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveComputationalUnits Execute",
-            {"tenantPath", Tenant->Path});
+            {"TenantPath", Tenant->Path});
 
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
@@ -33,7 +33,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveComputationalUnits Complete",
-            {"tenantPath", Tenant->Path});
+            {"TenantPath", Tenant->Path});
 
         Self->SlotStats.DeallocateSlots(Tenant->Slots);
         Self->Counters.RemoveUnits(Tenant->ComputationalUnits);

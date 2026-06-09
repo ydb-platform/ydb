@@ -34,7 +34,7 @@ TTxProcessor::TPtr TTxProcessor::GetSubProcessor(const TString &name,
 
     YDB_LOG_CTX_TRACE(ctx, "creating sub-processor",
         {"LogPrefix", LogPrefix},
-        {"name", name});
+        {"Name", name});
 
     TTxProcessor::TPtr subProcessor = new TTxProcessor(Executor,
                                                        name,
@@ -84,7 +84,7 @@ void TTxProcessor::RemoveSubProcessor(TTxProcessor::TPtr sub,
 {
     YDB_LOG_CTX_TRACE(ctx, "removing sub-processor",
         {"LogPrefix", LogPrefix},
-        {"subName", sub->Name});
+        {"SubName", sub->Name});
 
     Y_ABORT_UNLESS(SubProcessors.contains(sub->Name));
     SubProcessors.erase(sub->Name);

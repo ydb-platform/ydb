@@ -20,8 +20,8 @@ public:
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_POOLS);
 
         YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantDone for tenant",
-            {"tenantPath", Tenant->Path},
-            {"txid", Tenant->TxId});
+            {"TenantPath", Tenant->Path},
+            {"Txid", Tenant->TxId});
 
         Self->DbRemoveComputationalUnits(Tenant, txc, ctx);
         Self->DbRemoveTenantAndPools(Tenant, txc, ctx);

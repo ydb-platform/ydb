@@ -21,25 +21,25 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_CTX_DEBUG(ctx, "TTxRevertPoolState for pool of tenant",
-            {"poolName", Pool->Config.GetName()},
-            {"tenantPath", Tenant->Path});
+            {"PoolName", Pool->Config.GetName()},
+            {"TenantPath", Tenant->Path});
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
             YDB_LOG_CTX_ERROR(ctx, "TTxRevertPoolState tenant mismatch",
-                {"tenantPath", Tenant->Path});
+                {"TenantPath", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
             YDB_LOG_CTX_ERROR(ctx, "TTxRevertPoolState pool mismatch",
-                {"poolName", Pool->Config.GetName()});
+                {"PoolName", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
             YDB_LOG_CTX_NOTICE(ctx, "TTxRevertPoolState pool worker mismatch",
-                {"poolName", Pool->Config.GetName()});
+                {"PoolName", Pool->Config.GetName()});
             return true;
         }
 
@@ -54,7 +54,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_CTX_DEBUG(ctx, "TTxRevertPoolState complete for",
-            {"poolName", Pool->Config.GetName()});
+            {"PoolName", Pool->Config.GetName()});
 
         if (Update) {
             Tenant->Generation++;

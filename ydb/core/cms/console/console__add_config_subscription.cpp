@@ -20,7 +20,7 @@ public:
                const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Cannot add",
-            {"subscription", error});
+            {"Subscription", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -52,7 +52,7 @@ public:
         for (auto existingSubscription : Self->SubscriptionIndex.GetSubscriptions(subscription->Subscriber)) {
             if (subscription->IsEqual(*existingSubscription)) {
                 YDB_LOG_CTX_DEBUG(ctx, "",
-                    {"id", existingSubscription->Id});
+                    {"Id", existingSubscription->Id});
 
                 Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
                 Response->Record.SetSubscriptionId(existingSubscription->Id);

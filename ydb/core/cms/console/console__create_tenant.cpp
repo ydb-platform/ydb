@@ -30,7 +30,7 @@ public:
                const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Cannot create",
-            {"tenant", error});
+            {"Tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -365,8 +365,8 @@ public:
         Tenant->Generation = 1;
 
         YDB_LOG_CTX_DEBUG(ctx, "Add tenant",
-            {"path", path},
-            {"txId", Tenant->TxId});
+            {"Path", path},
+            {"TxId", Tenant->TxId});
 
         Self->DbAddTenant(Tenant, txc, ctx);
 

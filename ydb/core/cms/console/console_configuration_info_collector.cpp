@@ -71,8 +71,8 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
         } else {
             YDB_LOG_DEBUG("Received unknown configuration version",
                 {"Marker", "CIG3"},
-                {"version", record.GetVersion()},
-                {"fromNodeId", nodeId});
+                {"Version", record.GetVersion()},
+                {"FromNodeId", nodeId});
             UnknownNodes++;
             UnknownNodesList.push_back(nodeId);
         }
@@ -83,14 +83,14 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
     } else {
         YDB_LOG_WARN("Received unexpected TEvGetNodeConfigurationVersionResponse",
             {"Marker", "CIG4"},
-            {"fromNodeId", nodeId},
-            {"sender", ev->Sender});
+            {"FromNodeId", nodeId},
+            {"Sender", ev->Sender});
     }
 }
 
 void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
-    YDB_LOG_WARN("Collection timed out. Missing responses from nodes.",
+    YDB_LOG_WARN("Collection timed out. Missing responses from nodes",
         {"Marker", "CIG5"},
         {"PendingNodes", PendingNodes.size()});
     UnknownNodes += PendingNodes.size();
@@ -102,7 +102,7 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
 }
 
 void TConfigurationInfoCollector::ReplyAndDie() {
-    YDB_LOG_DEBUG("Replying with collected info:",
+    YDB_LOG_DEBUG("Replying with collected info",
         {"Marker", "CIG6"},
         {"V1", V1Nodes},
         {"V2", V2Nodes},
@@ -142,8 +142,8 @@ STFUNC(TConfigurationInfoCollector::StateWork) {
         default:
             YDB_LOG_DEBUG("Unhandled event",
                 {"Marker", "CIG7"},
-                {"type", ev->GetTypeRewrite()},
-                {"sender", ev->Sender});
+                {"Type", ev->GetTypeRewrite()},
+                {"Sender", ev->Sender});
             break;
     }
 }

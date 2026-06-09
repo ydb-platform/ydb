@@ -378,7 +378,7 @@ void TConfigsDispatcher::Bootstrap()
 void TConfigsDispatcher::EnqueueEvent(TAutoPtr<IEventHandle> &ev)
 {
     YDB_LOG_DEBUG("Enqueue event",
-        {"type", ev->GetTypeRewrite()});
+        {"Type", ev->GetTypeRewrite()});
     EventsQueue.push_back(ev);
 }
 
@@ -387,7 +387,7 @@ void TConfigsDispatcher::ProcessEnqueuedEvents()
     while (!EventsQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = EventsQueue.front();
         YDB_LOG_DEBUG("Dequeue event",
-            {"type", ev->GetTypeRewrite()});
+            {"Type", ev->GetTypeRewrite()});
         TlsActivationContext->Send(ev.Release());
         EventsQueue.pop_front();
     }
@@ -403,8 +403,8 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
 
     YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to",
-        {"subscriber", subscriber},
-        {"notification", notification->Record.ShortDebugString()});
+        {"Subscriber", subscriber},
+        {"Notification", notification->Record.ShortDebugString()});
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
 }
@@ -448,7 +448,7 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             &ResolvedJsonConfig);
     } catch (const yexception& ex) {
         YDB_LOG_ERROR("Got invalid config from console",
-            {"error", ex.what()});
+            {"Error", ex.what()});
     }
 
     return newYamlProtoConfig;
@@ -1202,7 +1202,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             for (auto &[subscriber, updates] : subscription->Subscribers) {
                 auto k = kinds;
                 YDB_LOG_TRACE("Sending for",
-                    {"kinds", KindsToString(k)});
+                    {"Kinds", KindsToString(k)});
                 SendUpdateToSubscriber(subscription, subscriber);
                 ++updates;
             }
@@ -1258,7 +1258,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
 
     YDB_LOG_TRACE("",
         {"Sender", ev->Sender},
-        {"response", resp->Config->ShortDebugString()});
+        {"Response", resp->Config->ShortDebugString()});
 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
 }
@@ -1342,7 +1342,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
         }
         YDB_LOG_TRACE("Sending for",
-            {"kinds", KindsToString(kinds)});
+            {"Kinds", KindsToString(kinds)});
         SendUpdateToSubscriber(subscription, subscriber->Subscriber);
         ++(subscriberIt->second);
     }
@@ -1457,8 +1457,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeConfigurationVersionReques
         if (versionLabel == "v1" || versionLabel == "v2") {
             versionString = versionLabel;
         } else {
-             YDB_LOG_WARN("Unexpected value for 'configuration_version'. Reporting 'unknown'.",
-                 {"label", versionLabel});
+             YDB_LOG_WARN("Unexpected value for 'configuration_version'. Reporting 'unknown'",
+                 {"Label", versionLabel});
         }
     }
 

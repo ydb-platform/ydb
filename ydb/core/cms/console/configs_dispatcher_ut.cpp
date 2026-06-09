@@ -243,7 +243,7 @@ public:
         while (!EventsQueue.empty()) {
             TAutoPtr<IEventHandle> &ev = EventsQueue.front();
             YDB_LOG_CTX_DEBUG(ctx, "Dequeue event",
-                {"type", ev->GetTypeRewrite()});
+                {"Type", ev->GetTypeRewrite()});
             ctx.Send(ev.Release());
             EventsQueue.pop_front();
         }

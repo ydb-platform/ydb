@@ -24,7 +24,7 @@ public:
                const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Cannot toggle",
-            {"validator", error});
+            {"Validator", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -57,7 +57,7 @@ public:
             db.Table<Schema::DisabledValidators>().Key(rec.GetName()).Update();
 
             YDB_LOG_CTX_DEBUG(ctx, "Add disabled validator to local database",
-                {"name", rec.GetName()});
+                {"Name", rec.GetName()});
         } else {
             if (!Self->DisabledValidators.contains(name))
                 return true;
@@ -66,7 +66,7 @@ public:
             db.Table<Schema::DisabledValidators>().Key(rec.GetName()).Delete();
 
             YDB_LOG_CTX_DEBUG(ctx, "Remove disabled validator from local database",
-                {"name", rec.GetName()});
+                {"Name", rec.GetName()});
         }
 
         Modify = true;
@@ -87,13 +87,13 @@ public:
                 Self->DisabledValidators.insert(rec.GetName());
 
                 YDB_LOG_CTX_DEBUG(ctx, "Disable validator",
-                    {"request", rec.GetName()});
+                    {"Request", rec.GetName()});
             } else {
                 registry->EnableValidator(rec.GetName());
                 Self->DisabledValidators.erase(rec.GetName());
 
                 YDB_LOG_CTX_DEBUG(ctx, "Enable validator",
-                    {"request", rec.GetName()});
+                    {"Request", rec.GetName()});
             }
         }
 

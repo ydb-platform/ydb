@@ -239,13 +239,13 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper Bootstrap",
-            {"tabletid", TabletId},
-            {"serviceid", ServiceId},
-            {"subscriptionid", SubscriptionId},
-            {"action", (ui32)Action},
-            {"tenant", Tenant},
-            {"detecttenant", DetectTenant},
-            {"kinds", JoinSeq(",", ConfigItemKinds)});
+            {"Tabletid", TabletId},
+            {"Serviceid", ServiceId},
+            {"Subscriptionid", SubscriptionId},
+            {"Action", (ui32)Action},
+            {"Tenant", Tenant},
+            {"Detecttenant", DetectTenant},
+            {"Kinds", JoinSeq(",", ConfigItemKinds)});
         Become(&TThis::StateWork);
         if (Action == EAction::REPLACE_SUBSCRIPTION
             || Action == EAction::ADD_SUBSCRIPTION
@@ -280,7 +280,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper connection",
-            {"status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
+            {"Status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
 
         if (ev->Get()->Status != NKikimrProto::OK) {
             OnPipeDestroyed(ctx);
@@ -299,7 +299,7 @@ public:
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
         YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper got status",
-            {"from_TenantPool", rec.ShortDebugString()});
+            {"FromTenantPool", rec.ShortDebugString()});
 
         NodeType = rec.GetNodeType();
         if (DetectTenant) {

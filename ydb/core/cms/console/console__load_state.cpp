@@ -47,9 +47,9 @@ public:
             Self->LoadConfigFromProto(config);
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-                {"config", config.DebugString()});
+                {"Config", config.DebugString()});
         } else {
-            YDB_LOG_CTX_DEBUG(ctx, "Using default config.");
+            YDB_LOG_CTX_DEBUG(ctx, "Using default config");
 
             Self->LoadConfigFromProto(NKikimrConsole::TConfig());
         }

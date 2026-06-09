@@ -18,7 +18,7 @@ public:
                const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Cannot remove",
-            {"subscription", error});
+            {"Subscription", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);

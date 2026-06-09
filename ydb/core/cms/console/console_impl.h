@@ -141,8 +141,8 @@ private:
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_COMP_CRIT(NKikimrServices::CMS, "TConsole::StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()});
+                    {"Type", ev->GetTypeRewrite()},
+                    {"Event", ev->ToString()});
             }
         }
     }

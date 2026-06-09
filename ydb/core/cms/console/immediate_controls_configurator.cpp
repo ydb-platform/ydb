@@ -59,7 +59,7 @@ void TImmediateControlsConfigurator::Bootstrap(const TActorContext &ctx)
 
     Become(&TThis::StateWork);
 
-    YDB_LOG_CTX_DEBUG(ctx, "TImmediateControlsConfigurator: subscribe for config updates.");
+    YDB_LOG_CTX_DEBUG(ctx, "TImmediateControlsConfigurator: subscribe for config updates");
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -72,7 +72,7 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
     auto &rec = ev->Get()->Record;
 
     YDB_LOG_CTX_INFO(ctx, "TImmediateControlsConfigurator: got new",
-        {"config", rec.GetConfig().ShortDebugString()});
+        {"Config", rec.GetConfig().ShortDebugString()});
 
     ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb);
 

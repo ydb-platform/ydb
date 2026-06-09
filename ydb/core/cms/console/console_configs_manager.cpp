@@ -278,20 +278,20 @@ void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
 
     for (auto &pr : PendingConfigModifications.RemovedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Remove",
-            {"item", ConfigIndex.GetItem(pr.first)->ToString()});
+            {"Item", ConfigIndex.GetItem(pr.first)->ToString()});
     for (auto &pr : PendingConfigModifications.ModifiedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Remove modified",
-            {"item", pr.second->ToString()});
+            {"Item", pr.second->ToString()});
     for (auto &pr : PendingConfigModifications.ModifiedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Add modified",
-            {"item", pr.second->ToString()});
+            {"Item", pr.second->ToString()});
     for (auto item : PendingConfigModifications.AddedItems)
         YDB_LOG_CTX_DEBUG(ctx, "Add new",
-            {"item", item->ToString()});
+            {"Item", item->ToString()});
 
     PendingConfigModifications.ApplyTo(ConfigIndex);
 
-    YDB_LOG_CTX_TRACE(ctx, "Send configs update to configs provider.");
+    YDB_LOG_CTX_TRACE(ctx, "Send configs update to configs provider");
     auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateConfigs>(PendingConfigModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
@@ -305,28 +305,28 @@ void TConfigsManager::ApplyPendingSubscriptionModifications(const TActorContext 
 
     for (auto &id : PendingSubscriptionModifications.RemovedSubscriptions) {
         YDB_LOG_CTX_DEBUG(ctx, "Remove subscription",
-            {"subscription", SubscriptionIndex.GetSubscription(id)->ToString()});
+            {"Subscription", SubscriptionIndex.GetSubscription(id)->ToString()});
         SubscriptionIndex.RemoveSubscription(id);
     }
     for (auto &subscription : PendingSubscriptionModifications.AddedSubscriptions) {
         YDB_LOG_CTX_DEBUG(ctx, "Add subscription",
-            {"subscription", subscription->ToString()});
+            {"Subscription", subscription->ToString()});
         SubscriptionIndex.AddSubscription(subscription);
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedLastProvided) {
         YDB_LOG_CTX_DEBUG(ctx, "Modify last provided config for subscription",
-            {"id", pr.first},
-            {"lastprovidedconfig", pr.second.ToString()});
+            {"Id", pr.first},
+            {"Lastprovidedconfig", pr.second.ToString()});
         SubscriptionIndex.GetSubscription(pr.first)->LastProvidedConfig = pr.second;
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedCookies) {
         YDB_LOG_CTX_DEBUG(ctx, "Modify cookie for subscription",
-            {"id", pr.first},
-            {"cookie", pr.second});
+            {"Id", pr.first},
+            {"Cookie", pr.second});
         SubscriptionIndex.GetSubscription(pr.first)->Cookie = pr.second;
     }
 
-    YDB_LOG_CTX_TRACE(ctx, "Send subscriptions update to configs provider.");
+    YDB_LOG_CTX_TRACE(ctx, "Send subscriptions update to configs provider");
     auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateSubscriptions>(PendingSubscriptionModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
@@ -603,7 +603,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         ConfigIndex.AddItem(item);
 
         YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-            {"item", item->ToString()});
+            {"Item", item->ToString()});
 
         if (!configItemRowset.Next())
             return false;
@@ -633,7 +633,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         subscription->Cookie = RandomNumber<ui64>();
 
         YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-            {"subscription", subscription->ToString()});
+            {"Subscription", subscription->ToString()});
 
         SubscriptionIndex.AddSubscription(subscription);
 
@@ -652,7 +652,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         registry->DisableValidator(name);
 
         YDB_LOG_CTX_DEBUG(ctx, "Disable validator",
-            {"name", name});
+            {"Name", name});
 
         if (!validatorsRowset.Next())
             return false;
@@ -666,7 +666,7 @@ void TConfigsManager::DbRemoveItem(ui64 id,
                                    const TActorContext &ctx) const
 {
     YDB_LOG_CTX_TRACE(ctx, "Database: removing config item",
-        {"id", id});
+        {"Id", id});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigItems>().Key(id).Delete();
@@ -677,7 +677,7 @@ void TConfigsManager::DbRemoveSubscription(ui64 id,
                                            const TActorContext &ctx) const
 {
     YDB_LOG_CTX_TRACE(ctx, "Database: removing subscription",
-        {"id", id});
+        {"Id", id});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id).Delete();
@@ -689,7 +689,7 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
 {
     YDB_LOG_CTX_TRACE(ctx, "",
         {"Database", (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ")},
-        {"item", item->ToString()});
+        {"Item", item->ToString()});
 
     TString config;
     Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.SerializeToString(&config);
@@ -734,7 +734,7 @@ void TConfigsManager::DbUpdateSubscription(TSubscription::TPtr subscription,
                                            const TActorContext &ctx) const
 {
     YDB_LOG_CTX_TRACE(ctx, "Database: update",
-        {"subscription", subscription->ToString()});
+        {"Subscription", subscription->ToString()});
 
     TVector<ui32> kinds(subscription->ItemKinds.begin(), subscription->ItemKinds.end());
     NIceDb::TNiceDb db(txc.DB);
@@ -755,8 +755,8 @@ void TConfigsManager::DbUpdateSubscriptionLastProvidedConfig(ui64 id,
                                                              const TActorContext &ctx) const
 {
     YDB_LOG_CTX_TRACE(ctx, "Database: update last provided config for subscription",
-        {"id", id},
-        {"lastprovidedconfig", configId.ToString()});
+        {"Id", id},
+        {"Lastprovidedconfig", configId.ToString()});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id)

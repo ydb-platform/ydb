@@ -21,7 +21,7 @@ public:
                const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Cannot modify",
-            {"config", error});
+            {"Config", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -104,7 +104,7 @@ public:
             newItems.push_back(newItem);
 
             YDB_LOG_CTX_DEBUG(ctx, "Split config",
-                {"item", copy.ShortDebugString()});
+                {"Item", copy.ShortDebugString()});
         }
     }
 
@@ -501,7 +501,7 @@ public:
                                                 config);
         auto affected = affectedChecker.ComputeAffectedConfigs(GetAffectedKinds(rec.GetActions()), false);
         YDB_LOG_CTX_DEBUG(ctx, "affected.size()",
-            {"size", affected.size()});
+            {"Size", affected.size()});
         for (auto &item : affected) {
             auto &entry = *Response->Record.AddAffectedConfigs();
             entry.SetTenant(item.Tenant);

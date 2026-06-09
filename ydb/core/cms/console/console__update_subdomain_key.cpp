@@ -25,8 +25,8 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateSubDomainKey for tenant",
             {"Path", Path},
-            {"schemeshardid", SchemeShardId},
-            {"pathid", PathId});
+            {"Schemeshardid", SchemeShardId},
+            {"Pathid", PathId});
 
         Tenant = Self->GetTenant(Path);
         if (!Tenant) {

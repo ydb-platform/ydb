@@ -26,26 +26,26 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_CTX_DEBUG(ctx, "TTxUpdatePoolState for pool of",
-            {"poolName", Pool->Config.GetName()},
-            {"tenantPath", Tenant->Path},
-            {"state", State});
+            {"PoolName", Pool->Config.GetName()},
+            {"TenantPath", Tenant->Path},
+            {"State", State});
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
             YDB_LOG_CTX_ERROR(ctx, "TTxUpdatePoolState tenant mismatch",
-                {"tenantPath", Tenant->Path});
+                {"TenantPath", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
             YDB_LOG_CTX_ERROR(ctx, "TTxUpdatePoolState pool mismatch",
-                {"poolName", Pool->Config.GetName()});
+                {"PoolName", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
             YDB_LOG_CTX_NOTICE(ctx, "TTxUpdatePoolState pool worker mismatch",
-                {"poolName", Pool->Config.GetName()});
+                {"PoolName", Pool->Config.GetName()});
             return true;
         }
 
@@ -73,7 +73,7 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         YDB_LOG_CTX_DEBUG(ctx, "TTxUpdatePoolState complete for",
-            {"poolName", Pool->Config.GetName()});
+            {"PoolName", Pool->Config.GetName()});
 
         if (Update) {
             Self->Counters.Inc(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,

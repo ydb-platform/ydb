@@ -16,7 +16,7 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error, const TActorContext &ctx)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Cannot update tenant pool",
-            {"config", error});
+            {"Config", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_status(code);

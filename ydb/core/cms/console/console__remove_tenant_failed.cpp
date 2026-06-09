@@ -25,8 +25,8 @@ public:
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
         YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantFailed for tenant",
-            {"tenantPath", Tenant->Path},
-            {"txid", Tenant->TxId});
+            {"TenantPath", Tenant->Path},
+            {"Txid", Tenant->TxId});
 
         Self->DbUpdateTenantState(Tenant, TTenant::RUNNING, txc, ctx);
         Self->DbUpdateRemovedTenant(Tenant, Code, txc, ctx);

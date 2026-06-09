@@ -280,38 +280,31 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # -------------------------------------------------------------------------
 
     def check_results(self, result_table):
-        result_sets = self._execute(f"SELECT * FROM `{result_table}`")
-        if not result_sets or not result_sets[0].rows:
-            return
-        for row in result_sets[0].rows:
+        rows = []
+        for rs in self._execute(f"SELECT * FROM `{result_table}`"):
+            rows += rs.rows
+
+        assert len(rows) == 3 # 3 filter types
+        for row in rows:
+            logger.info(f"Result row from {result_table}: {row}")
             filter_type = row.filter_type
             if isinstance(filter_type, bytes):
                 filter_type = filter_type.decode()
+
             if filter_type == 'pk_range':
-                if row.row_count is None or row.int_sum is None or row.count_distinct is None:
-                    continue
+                assert row.row_count == (row.filter_hi - row.filter_lo + 1)
                 expected_sum = (row.row_count // GROUP_SIZE) * FIXED_GROUP_SUM
-                assert row.int_sum == expected_sum, (
-                    f"[{result_table}] Group sum violation: "
-                    f"filter=[{row.filter_lo},{row.filter_hi}], "
-                    f"row_count={row.row_count}, int_sum={row.int_sum}, "
-                    f"expected={expected_sum}"
-                )
-                if row.row_count > 0:
-                    assert row.count_distinct == GROUP_SIZE, (
-                        f"[{result_table}] count(distinct str_val) violation for pk_range: "
-                        f"filter=[{row.filter_lo},{row.filter_hi}], "
-                        f"count_distinct={row.count_distinct}, expected={GROUP_SIZE}"
-                    )
+                assert row.int_sum == expected_sum
+                assert row.count_distinct == GROUP_SIZE
+
             elif filter_type in ('int_range', 'str_range'):
-                if row.count_distinct is None:
-                    continue
-                expected_cd = row.filter_hi - row.filter_lo + 1
-                assert row.count_distinct == expected_cd, (
-                    f"[{result_table}] count(distinct str_val) violation for {filter_type}: "
-                    f"filter=[{row.filter_lo},{row.filter_hi}], "
-                    f"count_distinct={row.count_distinct}, expected={expected_cd}"
-                )
+                range_len = row.filter_hi - row.filter_lo + 1
+                assert row.row_count == range_len * N_GROUPS
+                assert row.int_sum == (range_len * (row.filter_hi + row.filter_lo) / 2) * N_GROUPS
+                assert row.count_distinct == range_len
+            
+            else:
+                assert False, f"unknown filter type {filter_type}"
 
     # -------------------------------------------------------------------------
     # Progress tracking
@@ -381,10 +374,10 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 'column_table', 'column_results')
 
         self._wait_for_progress(exec_counters, lock, min_per_counter=5)
-        res1 = self._execute("select * from column_results")
-        logger.warn(f"FFF1 {[rs.rows for rs in res1]}")
-        res2 = self._execute("select * from datashard_results")
-        logger.warn(f"FFF2 {[rs.rows for rs in res2]}")
+
+        self.check_results('datashard_results')
+        self.check_results('column_results')
+
         return
 
         try:

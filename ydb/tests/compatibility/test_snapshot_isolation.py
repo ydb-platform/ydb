@@ -100,11 +100,13 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # -------------------------------------------------------------------------
 
     def _updater(self, table_name, stop_event, exec_counter, lock):
-        """Repeatedly picks a random group and redistributes its int_val values
-        while preserving the group sum invariant (SUM == FIXED_GROUP_SUM)."""
+        """
+        Repeatedly picks a random group and redistributes its int_val values
+        while preserving the group sum invariant (SUM == FIXED_GROUP_SUM).
+        """
 
         driver = self.create_driver()
-        with ydb.QuerySessionPool(self.driver) as pool:
+        with ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     group = random.randint(0, N_GROUPS - 1)
@@ -128,12 +130,14 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     logger.warning("Updater [%s] error: %s", table_name, e)
 
     def _pk_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
-        """Reads a group-aligned PK range under snapshot isolation, computes the
+        """
+        Reads a group-aligned PK range under snapshot isolation, computes the
         aggregate, and writes it to the result table (generating write conflicts
-        when multiple threads write with the same filter_type)."""
+        when multiple threads write with the same filter_type)
+        """
 
         driver = self.create_driver()
-        with ydb.QuerySessionPool(self.driver) as pool:
+        with ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     lo_group = random.randint(0, N_GROUPS - 2)
@@ -174,28 +178,29 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 except Exception as e:
                     logger.warning("PK aggregator [%s] error: %s", table_name, e)
 
-    def _int_filter_aggregator(self, result_table, stop_event, exec_counter, lock):
-        """Reads datashard_table via its secondary index under snapshot isolation.
-
-        Invariant 2: count(distinct str_val) must equal hi - lo + 1.
-        A snapshot violation would allow the index shard to return stale PKs whose
-        data rows have already been updated to a different int_val, introducing an
-        unexpected distinct str_val value (or missing an expected one)."""
+    def _int_range_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
+        """
+        Reads `table_name` with an int value filter under snapshot isolation. For the datashard
+        table uses a secondary index.
+        """
 
         driver = self.create_driver()
-        with ydb.QuerySessionPool(self.driver) as pool:
+        with ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     lo = random.randint(0, GROUP_SIZE - 2)
                     hi = random.randint(lo + 1, GROUP_SIZE - 1)
 
                     def callee(tx, lo=lo, hi=hi):
-                        tx.begin()
+                        view_clause = "VIEW int_val_index" if table_name == "datashard_table" else ""
+                        agg_query = f"""
+                        SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd
+                        FROM `{table_name}` {view_clause}
+                        WHERE int_val BETWEEN $lo AND $hi
+                        """
 
                         with tx.execute(
-                            "SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
-                            "FROM `datashard_table` VIEW int_val_index "
-                            "WHERE int_val BETWEEN $lo AND $hi",
+                            agg_query,
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
@@ -221,16 +226,16 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     with lock:
                         exec_counter[0] += 1
                 except Exception as e:
-                    logger.warning("Secondary index aggregator error: %s", e)
+                    logger.warning("Int range aggregator error: %s", e)
 
-    def _str_filter_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
+    def _str_range_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
         """Reads via a string-range filter under snapshot isolation.
         Invariant: count(distinct str_val) must equal hi - lo + 1.
         Since str_val is a zero-padded mirror of int_val, a snapshot-consistent
         read must see exactly the expected set of distinct values in the range."""
 
         driver = self.create_driver()
-        with ydb.QuerySessionPool(self.driver) as pool:
+        with ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     lo = random.randint(0, GROUP_SIZE - 2)
@@ -239,8 +244,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     str_hi = f"{hi:05d}"
 
                     def callee(tx, lo=lo, hi=hi, str_lo=str_lo, str_hi=str_hi):
-                        tx.begin()
-
                         with tx.execute(
                             f"SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
                             f"FROM `{table_name}` "
@@ -270,7 +273,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     with lock:
                         exec_counter[0] += 1
                 except Exception as e:
-                    logger.warning("String aggregator [%s] error: %s", table_name, e)
+                    logger.warning("String range aggregator [%s] error: %s", table_name, e)
 
     # -------------------------------------------------------------------------
     # Checker (runs in the main thread)
@@ -360,28 +363,22 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         start('ds_upd',  self._updater, 'datashard_table')
         start('col_upd', self._updater, 'column_table')
 
-        # --- Datashard PK-range aggregators (2 threads) ---
+        # --- Aggregators (2 threads each) ---
         for i in range(2):
             start(f'ds_pk_{i}', self._pk_aggregator,
-                  'datashard_table', 'datashard_results')
-
-        # --- Secondary-index aggregators (2 threads) ---
-        for i in range(2):
-            start(f'ds_int_{i}', self._int_filter_aggregator,
-                  'datashard_results')
-
-        # --- Datashard string-range aggregator ---
-        start('ds_str', self._str_filter_aggregator,
-              'datashard_table', 'datashard_results')
-
-        # --- Column PK-range aggregators (2 threads, N_PK_SLOTS slots) ---
-        for i in range(2):
+                'datashard_table', 'datashard_results')
             start(f'col_pk_{i}', self._pk_aggregator,
-                  'column_table', 'column_results')
+                'column_table', 'column_results')
 
-        # --- Column string-range aggregator ---
-        start('col_str', self._str_filter_aggregator,
-              'column_table', 'column_results')
+            start(f'ds_int_{i}', self._int_range_aggregator,
+                'datashard_table', 'datashard_results')
+            start(f'col_int_{i}', self._int_range_aggregator,
+                'column_table', 'column_results')
+
+            start(f'ds_str_{i}', self._str_range_aggregator,
+                'datashard_table', 'datashard_results')
+            start(f'col_str_{i}', self._str_range_aggregator,
+                'column_table', 'column_results')
 
         self._wait_for_progress(exec_counters, lock, min_per_counter=5)
         res1 = self._execute("select * from column_results")

@@ -52,7 +52,7 @@ Permissions on the NFS directory for **import** (reading files):
 
 Because files are created by the `ydbd` process during export, file permissions cannot be set in advance. In NFSv4, **ACE inheritance** is used — flags `f` (file-inherit) and `d` (directory-inherit) on the parent directory ACE. When a new file or subdirectory is created, ACEs with these flags are automatically copied to the new object.
 
-{% cut "Step-by-step NFS server and client setup" %}
+{% cut "Пошаговая настройка NFS-сервера и клиентов" %}
 
 Below are instructions for setting up an NFS server and {{ ydb-short-name }} client nodes for two permission management options: standard POSIX permissions and extended NFSv4 ACL.
 
@@ -62,103 +62,124 @@ Below are instructions for setting up an NFS server and {{ ydb-short-name }} cli
 
 1. Install the NFS server package:
 
-    ```bash
-    sudo apt install nfs-kernel-server
-    ```
+
+   ```bash
+   sudo apt install nfs-kernel-server
+   ```
 
 2. Create the export directory and set the owner:
 
-    ```bash
-    sudo mkdir -p /mnt/ydb-backup
-    sudo chown ydb:ydb /mnt/ydb-backup
-    sudo chmod 755 /mnt/ydb-backup
-    ```
 
-    `chmod` options:
-    - `7` (rwx) — the owner (`ydb`) can read, write, and enter the directory.
-    - `5` (r-x) — the group and others can read and enter, but not write.
+   ```bash
+   sudo mkdir -p /mnt/ydb-backup
+   sudo chown ydb:ydb /mnt/ydb-backup
+   sudo chmod 755 /mnt/ydb-backup
+   ```
 
+
+   `chmod` options:
+
+   - `7` (rwx) — the owner (`ydb`) can read, write, and enter the directory.
+   - `5` (r-x) — the group and others can read and enter, but not write.
 3. Add the directory to `/etc/exports`:
 
-    ```text
-    /mnt/ydb-backup ydb-node-*.example.com(rw,sync,root_squash)
-    ```
 
-    Export options:
-    - `rw` — allow read and write.
-    - `sync` — synchronous writes (data is written to disk before the client is acknowledged).
-    - `root_squash` — map client `root` to an anonymous user.
+   ```text
+   /mnt/ydb-backup ydb-node-*.example.com(rw,sync,root_squash)
+   ```
 
+
+   Export options:
+
+   - `rw` — allow read and write.
+   - `sync` — synchronous writes (data is written to disk before the client is acknowledged).
+   - `root_squash` — map client `root` to an anonymous user.
 4. Apply changes and start the NFS server:
 
-    ```bash
-    sudo exportfs -arv
-    sudo systemctl enable --now nfs-server
-    ```
 
-    `exportfs` options:
-    - `-a` — export all directories from `/etc/exports`.
-    - `-r` — re-export all directories (sync with `/etc/exports`).
-    - `-v` — verbose output.
+   ```bash
+   sudo exportfs -arv
+   sudo systemctl enable --now nfs-server
+   ```
+
+
+   `exportfs` options:
+
+   - `-a` — export all directories from `/etc/exports`.
+   - `-r` — re-export all directories (sync with `/etc/exports`).
+   - `-v` — verbose output.
 
 #### Client setup ({{ ydb-short-name }} nodes)
 
 1. Install the NFS client package:
 
-    ```bash
-    sudo apt install nfs-common
-    ```
+
+   ```bash
+   sudo apt install nfs-common
+   ```
 
 2. Create a mount point:
 
-    ```bash
-    sudo mkdir -p /mnt/ydb-backup
-    ```
+
+   ```bash
+   sudo mkdir -p /mnt/ydb-backup
+   ```
 
 3. Mount the NFS directory:
 
-    ```bash
-    sudo mount -t nfs4 -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
-    ```
 
-    Mount options:
-    - `-t nfs4` — NFSv4 filesystem type.
-    - `-o rw` — mount read-write.
+   ```bash
+   sudo mount -t nfs4 -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
+   ```
 
-    In this example the NFS server host is not part of the {{ ydb-short-name }} cluster; backup and recovery still work correctly if one of the cluster hosts acts as the NFS server.
 
+   Mount options:
+
+   - `-t nfs4` — NFSv4 filesystem type.
+   - `-o rw` — mount read-write.
+
+   In this example the NFS server host is not part of the {{ ydb-short-name }} cluster; backup and recovery still work correctly if one of the cluster hosts acts as the NFS server.
 4. For automatic mount at boot, add a line to `/etc/fstab`:
 
-    ```text
-    nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
-    ```
 
-    `fstab` options:
-    - `rw` — read and write.
-    - `hard` — if the server is unavailable, retry requests indefinitely (do not lose data).
-    - `timeo=600` — request timeout in tenths of a second (60 seconds).
-    - `retrans=2` — number of retransmissions before reporting an error.
-    - `_netdev` — mount only after the network is initialized.
+   ```text
+   nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
+   ```
+
+
+   `fstab` options:
+
+   - `rw` — read and write.
+   - `hard` — if the server is unavailable, retry requests indefinitely (do not lose data).
+   - `timeo=600` — request timeout in tenths of a second (60 seconds).
+   - `retrans=2` — number of retransmissions before reporting an error.
+   - `_netdev` — mount only after the network is initialized.
 
 #### Verification
 
 On the server (or any client), create a test file as user `ydb`:
 
+
 ```bash
 sudo -u ydb touch /mnt/ydb-backup/test-file
 ```
 
+
 On all client nodes, verify that the file is visible:
+
 
 ```bash
 sudo -u ydb ls /mnt/ydb-backup/test-file
 ```
 
+
 After verification, remove the test file:
+
 
 ```bash
 sudo -u ydb rm /mnt/ydb-backup/test-file
 ```
+
 
 ### Option 2: NFSv4 ACL
 
@@ -168,28 +189,32 @@ NFSv4 ACL allows more granular access control and inheritance for newly created 
 
 1. Install the NFS server package and NFSv4 ACL utilities:
 
-    ```bash
-    sudo apt install nfs-kernel-server nfs4-acl-tools
-    ```
+
+   ```bash
+   sudo apt install nfs-kernel-server nfs4-acl-tools
+   ```
 
 2. Create the export directory:
 
-    ```bash
-    sudo mkdir -p /mnt/ydb-backup-server
-    ```
+
+   ```bash
+   sudo mkdir -p /mnt/ydb-backup-server
+   ```
 
 3. Add the directory to `/etc/exports`:
 
-    ```text
-    /mnt/ydb-backup-server ydb-node-*.example.com(rw,sync,no_subtree_check,root_squash)
-    ```
+
+   ```text
+   /mnt/ydb-backup-server ydb-node-*.example.com(rw,sync,no_subtree_check,root_squash)
+   ```
 
 4. Apply changes:
 
-    ```bash
-    sudo exportfs -arv
-    sudo systemctl enable --now nfs-server
-    ```
+
+   ```bash
+   sudo exportfs -arv
+   sudo systemctl enable --now nfs-server
+   ```
 
 #### Client setup ({{ ydb-short-name }} nodes)
 
@@ -197,94 +222,116 @@ Unlike POSIX permissions, which are set on the NFS server, NFSv4 ACL are configu
 
 1. Install the NFS client package and NFSv4 ACL utilities:
 
-    ```bash
-    sudo apt install nfs-common nfs4-acl-tools
-    ```
+
+   ```bash
+   sudo apt install nfs-common nfs4-acl-tools
+   ```
 
 2. Create a mount point:
 
-    ```bash
-    sudo mkdir -p /mnt/ydb-backup
-    ```
+
+   ```bash
+   sudo mkdir -p /mnt/ydb-backup
+   ```
 
 3. Mount the NFS directory using NFSv4:
 
-    ```bash
-    sudo mount -t nfs4 -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
-    ```
 
-    Options:
-    - `-t nfs4` — explicitly specify NFSv4 (required for ACL to work correctly).
-    - `-o rw` — mount read-write.
+   ```bash
+   sudo mount -t nfs4 -o rw nfs-server.example.com:/mnt/ydb-backup /mnt/ydb-backup
+   ```
 
+
+   Options:
+
+   - `-t nfs4` — explicitly specify NFSv4 (required for ACL to work correctly).
+   - `-o rw` — mount read-write.
 4. For automatic mount, add a line to `/etc/fstab`:
 
-    ```text
-    nfs-server.example.com:/mnt/ydb-backup-server /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
-    ```
+
+   ```text
+   nfs-server.example.com:/mnt/ydb-backup-server /mnt/ydb-backup nfs4 rw,hard,timeo=600,retrans=2,_netdev 0 0
+   ```
 
 5. Determine the UID of user `ydb`:
 
-    ```bash
-    id -u ydb
-    ```
 
-    Example output: `1871`
+   ```bash
+   id -u ydb
+   ```
 
+
+   Example output: `1871`
 6. Configure NFSv4 ACL on the directory:
 
-    ```bash
-    sudo nfs4_setfacl -s A::<uid>:rwaxtD,A:fi:OWNER@:rwat,A:di:OWNER@:rwaxtD /mnt/ydb-backup
-    ```
 
-    ACE structure (`A:flags:who:permissions`):
-    - `A` — ACE type: Allow.
-    - Inheritance flags:
-        - `f` (file-inherit) — inherit to created files.
-        - `d` (directory-inherit) — inherit to created subdirectories.
-        - `i` (inherit-only) — apply only to descendants, not to the directory itself.
-    - `who` — who receives permissions:
-        - `1871` — UID of user `ydb`.
-        - `OWNER@` — object owner.
-    - Permissions:
-        - `r` — read-data / list-directory.
-        - `w` — write-data / create-file.
-        - `a` — append-data / create-subdirectory.
-        - `t` — read-attributes.
-        - `D` — delete-child.
+   ```bash
+   sudo nfs4_setfacl -s A::<uid>:rwaxtD,A:fi:OWNER@:rwat,A:di:OWNER@:rwaxtD /mnt/ydb-backup
+   ```
 
-    This command sets:
-    - Permissions for user `ydb` on the directory itself.
-    - Inherited permissions for files and subdirectories (`fi`, `di`) that apply only to descendants.
-    - Owner (`OWNER@`) permissions with inheritance on files and directories.
+
+   ACE structure (`A:flags:who:permissions`):
+
+   - `A` — ACE type: Allow.
+   - Inheritance flags:
+
+     - `f` (file-inherit) — inherit to created files.
+     - `d` (directory-inherit) — inherit to created subdirectories.
+     - `i` (inherit-only) — apply only to descendants, not to the directory itself.
+   - `who` — who receives permissions:
+
+     - `1871` — UID of user `ydb`.
+     - `OWNER@` — object owner.
+   - Permissions:
+
+     - `r` — read-data / list-directory.
+     - `w` — write-data / create-file.
+     - `a` — append-data / create-subdirectory.
+     - `t` — read-attributes.
+     - `D` — delete-child.
+
+   This command sets:
+
+   - Permissions for user `ydb` on the directory itself.
+   - Inherited permissions for files and subdirectories (`fi`, `di`) that apply only to descendants.
+   - Owner (`OWNER@`) permissions with inheritance on files and directories.
 
 #### Verification
 
 Check the configured ACL:
 
+
 ```bash
 nfs4_getfacl /mnt/ydb-backup
 ```
 
+
 Create a test file as user `ydb`:
+
 
 ```bash
 sudo -u ydb touch /mnt/ydb-backup/test-file
 ```
 
+
 Verify that the file inherited the ACL:
+
 
 ```bash
 nfs4_getfacl /mnt/ydb-backup/test-file
 ```
 
+
 On all client nodes, verify access:
+
 
 ```bash
 sudo -u ydb ls /mnt/ydb-backup/test-file
 ```
 
+
 After verification, remove the test file:
+
 
 ```bash
 sudo -u ydb rm /mnt/ydb-backup/test-file
@@ -294,7 +341,7 @@ sudo -u ydb rm /mnt/ydb-backup/test-file
 
 ## Feature flags {#nfs-feature-flags}
 
-To use export and import via NFS, enable the `enable_fs_backups` [feature flag](../../reference/configuration/feature_flags.md) in the cluster configuration. By default, this flag is **disabled**.
+To use export and import via NFS, enable the `enable_fs_backups` feature flag in the [cluster configuration](../../reference/configuration/feature_flags.md). By default, this flag is **disabled**.
 
 ## Performance configuration {#nfs-performance}
 
@@ -310,6 +357,7 @@ File operations (writes during export, reads during import) are performed by act
 
 To increase the number of threads in the IO pool, change the `threads` parameter in the [actor system configuration](../../reference/configuration/actor_system_config.md#tuneconfig):
 
+
 ```yaml
 actor_system_config:
   executor:
@@ -318,6 +366,7 @@ actor_system_config:
     time_per_mailbox_micro_secs: 100
     type: IO
 ```
+
 
 {% note tip %}
 

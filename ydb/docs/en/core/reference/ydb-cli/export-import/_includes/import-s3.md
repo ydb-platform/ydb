@@ -2,9 +2,11 @@
 
 The `import s3` command starts a server-side import from S3-compatible storage of data and schema object metadata in the format described in [File structure](../file-structure.md):
 
+
 ```bash
 {{ ydb-cli }} [connection options] import s3 [options]
 ```
+
 
 {% note info %}
 
@@ -14,7 +16,7 @@ To import tables from S3-compatible storage in other formats, use [external tabl
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-Unlike the [`tools restore` command](../tools-restore.md), the `import s3` command always creates objects in entirety, so none of the imported objects (directories or tables) must already exist for a successful run.
+Unlike the [`tools restore` command](../tools-restore.md), the `import s3` command always creates objects in entirety, so none of the imported objects (directories or tables) should already exist for a successful run.
 
 If you need to load more data into existing tables from S3, you can copy the S3 contents to the filesystem (for example, using [S3cmd](https://s3tools.org/s3cmd)) and use the [`tools restore`](../tools-restore.md) command.
 
@@ -26,20 +28,20 @@ If you need to load more data into existing tables from S3, you can copy the S3 
 
 The import from S3 command requires [S3 connection parameters](../auth-s3.md). Because import is performed asynchronously by the {{ ydb-short-name }} server, the specified endpoint must be reachable for connections from the server side.
 
-`--source-prefix PREFIX`: Source prefix for the export in the S3 bucket.
+`--source-prefix PREFIX`: Source prefix for the import in the S3 bucket.
 
 ### Imported schema objects {#objects}
 
-{% include [import-objects-params.md](import-objects-params.md) %}
+{% include [import-objects-params.md](./import-objects-params.md) %}
 
-{% cut "Alternate syntax" %}
+{% cut "Альтернативный способ" %}
 
-{% include [import-alternative-syntax.md](import-alternative-syntax.md) %}
+{% include [import-alternative-syntax.md](./import-alternative-syntax.md) %}
 
 - `source`, `src`, or `s`: Key prefix in S3 that contains the imported directory or table.
 - `destination`, `dst`, or `d`: Database path to host the imported directory or table. The final path element must not exist. All directories along the path are created if missing.
 
-{% include [import-alternative-syntax-warning.md](import-alternative-syntax-warning.md) %}
+{% include [import-alternative-syntax-warning.md](./import-alternative-syntax-warning.md) %}
 
 {% endcut %}
 
@@ -64,29 +66,35 @@ If successful, the `import s3` command prints summary information about the enqu
 
 {% include [import-operation-result-pretty-intro.md](import-operation-result-pretty-intro.md) %}
 
-  ```text
-  ┌───────────────────────────────────────────┬───────┬─────...
-  | id                                        | ready | stat...
-  ├───────────────────────────────────────────┼───────┼─────...
-  | ydb://import/8?id=281474976788395&kind=s3 | true  | SUCC...
-  ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
-  | Items:
-  ...
-  ```
+
+```text
+┌───────────────────────────────────────────┬───────┬─────...
+| id                                        | ready | stat...
+├───────────────────────────────────────────┼───────┼─────...
+| ydb://import/8?id=281474976788395&kind=s3 | true  | SUCC...
+├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
+| Items:
+...
+```
+
 
 {% include [import-operation-result-json-intro.md](import-operation-result-json-intro.md) %}
 
-  ```json
-  {"id":"ydb://import/8?id=281474976788395&kind=s3","ready":true, ... }
-  ```
+
+```json
+{"id":"ydb://import/8?id=281474976788395&kind=s3","ready":true, ... }
+```
+
 
 ### Import status {#status}
 
 {% include [import-operation-status-intro.md](import-operation-status-intro.md) %}
 
+
 ```bash
 {{ ydb-cli }} -p quickstart operation get "ydb://import/8?id=281474976788395&kind=s3"
 ```
+
 
 {% include [import-operation-status-after-get.md](import-operation-status-after-get.md) %}
 
@@ -94,17 +102,21 @@ If successful, the `import s3` command prints summary information about the enqu
 
 {% include [import-operation-forget-intro.md](import-operation-forget-intro.md) %}
 
+
 ```bash
 {{ ydb-cli }} -p quickstart operation forget "ydb://import/8?id=281474976788395&kind=s3"
 ```
+
 
 ### List of import operations {#list}
 
 To get a list of import operations, run the `operation list import/s3` command:
 
+
 ```bash
 {{ ydb-cli }} -p quickstart operation list import/s3
 ```
+
 
 {% include [import-operation-list-tail.md](import-operation-list-tail.md) %}
 
@@ -116,40 +128,47 @@ To get a list of import operations, run the `operation list import/s3` command:
 
 Importing to the database root the contents of the `export1` directory in the `mybucket` bucket using S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
 
+
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --source-prefix export1
 ```
 
+
 ### Importing multiple directories {#example-specific-dirs}
 
 Importing objects from the `dir1` and `dir2` directories of an export located in `export1` in the `mybucket` bucket to the same-name database directories using explicitly specified S3 authentication parameters:
+
 
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --source-prefix export1 \
+  --source-prefix export1
   --include dir1 --include dir2
 ```
+
 
 ### List objects in existing encrypted export {#example-list}
 
 Listing all object paths in an existing encrypted export located in `export1` in the `mybucket` bucket, using the secret key from the `~/my_secret_key` file:
 
+
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --source-prefix export1 \
-  --encryption-key-file ~/my_secret_key \
+  --source-prefix export1
+  --encryption-key-file ~/my_secret_key
   --list
 ```
+
 
 ### Importing encrypted export {#example-encryption}
 
 Importing one table that was exported to the path `dir/my_table` into the path `dir1/dir/my_table` from an encrypted export located at the `export1` prefix in the `mybucket` bucket, using the secret key from the `~/my_secret_key` file:
+
 
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
@@ -160,15 +179,19 @@ Importing one table that was exported to the path `dir/my_table` into the path `
   --encryption-key-file ~/my_secret_key
 ```
 
+
 ### Getting operation IDs {#example-list-oneline}
 
 To get a list of import operation IDs in a format suitable for bash scripts, use the [jq](https://stedolan.github.io/jq/download/) utility:
+
 
 ```bash
 {{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id"
 ```
 
+
 You'll get output where each line contains an operation ID, for example:
+
 
 ```text
 ydb://import/8?id=281474976789577&kind=s3
@@ -176,7 +199,9 @@ ydb://import/8?id=281474976789526&kind=s3
 ydb://import/8?id=281474976788779&kind=s3
 ```
 
+
 You can use these IDs, for example, to run a loop that completes all current operations:
+
 
 ```bash
 {{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done

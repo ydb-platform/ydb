@@ -22,7 +22,7 @@ void TNodeWarden::EstablishPipe() {
     }));
 
     YDB_LOG_DEBUG("EstablishPipe",
-        {"marker", "NW21"},
+        {"Marker", "NW21"},
         {"AvailDomainId", AvailDomainId},
         {"PipeClientId", PipeClientId},
         {"ControllerId", controllerId});
@@ -50,7 +50,7 @@ void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->Status != NKikimrProto::OK) {
         YDB_LOG_ERROR("TEvTabletPipe::TEvClientConnected",
-            {"marker", "NW71"},
+            {"Marker", "NW71"},
             {"Status", msg->Status},
             {"ClientId", msg->ClientId},
             {"ServerId", msg->ServerId},
@@ -59,7 +59,7 @@ void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         OnPipeError();
     } else {
         YDB_LOG_DEBUG("TEvTabletPipe::TEvClientConnected OK",
-            {"marker", "NW05"},
+            {"Marker", "NW05"},
             {"ClientId", msg->ClientId},
             {"ServerId", msg->ServerId},
             {"TabletId", msg->TabletId},
@@ -70,7 +70,7 @@ void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
     TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
     YDB_LOG_ERROR("Handle(TEvTabletPipe::TEvClientDestroyed)",
-        {"marker", "NW42"},
+        {"Marker", "NW42"},
         {"ClientId", msg->ClientId},
         {"ServerId", msg->ServerId},
         {"TabletId", msg->TabletId},
@@ -88,7 +88,7 @@ void TNodeWarden::OnPipeError() {
 
 void TNodeWarden::SendRegisterNode() {
     YDB_LOG_DEBUG("SendRegisterNode",
-        {"marker", "NW20"});
+        {"Marker", "NW20"});
 
     TVector<ui32> startedDynamicGroups, generations;
     for (const auto& [groupId, group] : Groups) {
@@ -150,7 +150,7 @@ void TNodeWarden::SendInitialGroupRequests() {
     }
     if (!groupIds.empty()) {
         YDB_LOG_DEBUG("SendInitialGroupRequests",
-            {"marker", "NW22"},
+            {"Marker", "NW22"},
             {"GroupIds", FormatList(groupIds)});
         SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(LocalNodeId,
             groupIds.begin(), groupIds.end()));

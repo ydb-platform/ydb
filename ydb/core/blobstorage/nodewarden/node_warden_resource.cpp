@@ -50,7 +50,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     }
 
     YDB_LOG_DEBUG("ApplyServiceSet",
-        {"marker", "NW18"},
+        {"Marker", "NW18"},
         {"IsStatic", isStatic},
         {"Comprehensive", comprehensive},
         {"Origin", origin},
@@ -179,7 +179,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
     FETCH_CONFIG(schemeBoard, SchemeBoard)
 
     YDB_LOG_DEBUG("ApplyStateStorageConfig",
-        {"marker", "NW55"},
+        {"Marker", "NW55"},
         {"StateStorageConfig", StorageConfig->GetStateStorageConfig()},
         {"NewStateStorageInfo", *stateStorageInfo},
         {"CurrentStateStorageInfo", StateStorageInfo.Get()},
@@ -233,7 +233,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
                     for (const auto& replicaId : ring.Replicas) {
                         if (replicaId.NodeId() == LocalNodeId) {
                             YDB_LOG_INFO("Local replica found",
-                                {"marker", "NW54"},
+                                {"Marker", "NW54"},
                                 {"Component", comp},
                                 {"ReplicaId", replicaId});
                             localActorIds.insert(replicaId);
@@ -252,7 +252,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
                     if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
                         if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {
                             YDB_LOG_INFO("starting state storage new replica",
-                                {"marker", "NW08"},
+                                {"Marker", "NW08"},
                                 {"Component", comp},
                                 {"ReplicaId", replicaId},
                                 {"Index", index},
@@ -286,7 +286,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
 
     // reconfigure proxy
     YDB_LOG_INFO("updating state storage proxy configuration",
-        {"marker", "NW50"});
+        {"Marker", "NW50"});
     if (StateStorageProxyConfigured) {
         Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(StateStorageInfo, BoardInfo,
             SchemeBoardInfo));
@@ -302,7 +302,7 @@ void TNodeWarden::ApplyStateStorageConfig() {
     for (const auto& replicaId : localActorIds) {
         if (!newActorIds.contains(replicaId)) {
             YDB_LOG_INFO("terminating useless state storage replica",
-                {"marker", "NW43"},
+                {"Marker", "NW43"},
                 {"ReplicaId", replicaId});
             const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
@@ -351,8 +351,8 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 void TNodeWarden::Handle(TEvNodeWardenNotifyConfigMismatch::TPtr ev) {
     //TODO: config mismatch with node
     auto *msg = ev->Get();
-    YDB_LOG_INFO("TEvNodeWardenNotifyConfigMismatch:",
-        {"marker", "NW51"},
+    YDB_LOG_INFO("TEvNodeWardenNotifyConfigMismatch",
+        {"Marker", "NW51"},
         {"NodeId", msg->NodeId},
         {"ClusterStateGeneration", msg->ClusterStateGeneration},
         {"ClusterStateGuid", msg->ClusterStateGuid});

@@ -42,7 +42,7 @@ namespace NKikimr::NStorage {
                     return FinishWithError("failed to parse JSON");
                 }
                 YDB_LOG_DEBUG("sending TEvNodeConfigInvokeOnRoot",
-                    {"marker", "NWDC04"},
+                    {"Marker", "NWDC04"},
                     {"Record", ev->Record});
 
                 // send it to the actor
@@ -54,7 +54,7 @@ namespace NKikimr::NStorage {
 
             void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
                 YDB_LOG_DEBUG("receive TEvNodeConfigInvokeOnRootResult",
-                    {"marker", "NWDC39"},
+                    {"Marker", "NWDC39"},
                     {"Record", ev->Get()->Record});
 
                 TString data;

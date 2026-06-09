@@ -127,13 +127,13 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume) {
         RunCommonChecks();
         YDB_LOG_DEBUG("TInvokeRequestHandlerActor::SelfHealStateStorage",
-            {"marker", "NW105"},
-            {"waitForConfigStep", waitForConfigStep},
-            {"forceHeal", forceHeal},
-            {"pileupReplicas", pileupReplicas},
-            {"overrideReplicasInRingCount", overrideReplicasInRingCount},
-            {"overrideRingsCount", overrideRingsCount},
-            {"replicasSpecificVolume", replicasSpecificVolume});
+            {"Marker", "NW105"},
+            {"WaitForConfigStep", waitForConfigStep},
+            {"ForceHeal", forceHeal},
+            {"PileupReplicas", pileupReplicas},
+            {"OverrideReplicasInRingCount", overrideReplicasInRingCount},
+            {"OverrideRingsCount", overrideRingsCount},
+            {"ReplicasSpecificVolume", replicasSpecificVolume});
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
         if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume) && !forceHeal) {
             throw TExError() << "Recommended configuration has faulty nodes and can not be applyed";
@@ -170,11 +170,11 @@ namespace NKikimr::NStorage {
             if (oldSSInfo->RingGroups == newSSInfo->RingGroups) {
                 (targetConfig.*clearFunc)();
                  YDB_LOG_DEBUG("needReconfig clear config",
-                     {"marker", "NW104"},
+                     {"Marker", "NW104"},
                      {"CurrentConfig", ss},
                      {"TargetConfig", targetSS},
-                     {"oldSSInfo", oldSSInfo->ToString()},
-                     {"newSSInfo", newSSInfo->ToString()});
+                     {"OldSSInfo", oldSSInfo->ToString()},
+                     {"NewSSInfo", newSSInfo->ToString()});
                 return ReconfigType::NONE;
             }
 
@@ -292,9 +292,9 @@ namespace NKikimr::NStorage {
         }
         if (nodesToReplace.size() == 1 && needReconfigSS != ReconfigType::FULL && needReconfigSSB != ReconfigType::FULL && needReconfigSB != ReconfigType::FULL) {
             YDB_LOG_DEBUG("Need to reconfig one node to",
-                {"marker", "NW100"},
-                {"first", nodesToReplace.begin()->first},
-                {"to_node", std::get<2>(nodesToReplace.begin()->second)},
+                {"Marker", "NW100"},
+                {"First", nodesToReplace.begin()->first},
+                {"ToNode", std::get<2>(nodesToReplace.begin()->second)},
                 {"CurrentConfig", currentConfig},
                 {"TargetConfig", targetConfig});
             auto *op = std::get_if<TInvokeExternalOperation>(&Query);
@@ -309,7 +309,7 @@ namespace NKikimr::NStorage {
         AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(&targetConfig);
 
         YDB_LOG_DEBUG("Need to reconfig, starting StateStorageSelfHealActor",
-            {"marker", "NW101"},
+            {"Marker", "NW101"},
             {"CurrentConfig", currentConfig},
             {"TargetConfig", targetConfig});
 
@@ -327,7 +327,7 @@ namespace NKikimr::NStorage {
         RunCommonChecks();
 
         YDB_LOG_DEBUG("TInvokeRequestHandlerActor::ReconfigStateStorage",
-            {"marker", "NW67"},
+            {"Marker", "NW67"},
             {"StateStorageConfig", cmd});
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
@@ -379,8 +379,8 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         YDB_LOG_DEBUG("TInvokeRequestHandlerActor::ReassignStateStorageNode",
-            {"marker", "NW67"},
-            {"config", config});
+            {"Marker", "NW67"},
+            {"Config", config});
         auto process = [&](const char *name, auto hasFunc, auto mutableFunc) {
             if (!(config.*hasFunc)()) {
                 throw TExError() << name << " configuration is not filled in";
@@ -456,9 +456,9 @@ namespace NKikimr::NStorage {
         F(StateStorageBoard)
         F(SchemeBoard)
 #undef F
-        YDB_LOG_DEBUG("TInvokeRequestHandlerActor::ReassignStateStorageNode new config ",
-            {"marker", "NW67"},
-            {"config", config});
+        YDB_LOG_DEBUG("TInvokeRequestHandlerActor::ReassignStateStorageNode new config",
+            {"Marker", "NW67"},
+            {"Config", config});
         StartProposition(&config);
     }
 

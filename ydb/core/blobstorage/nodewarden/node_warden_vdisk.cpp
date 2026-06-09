@@ -13,7 +13,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
         YDB_LOG_INFO("DestroyLocalVDisk",
-            {"marker", "NW35"},
+            {"Marker", "NW35"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()});
         Y_ABORT_UNLESS(!vdisk.RuntimeData);
@@ -29,7 +29,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
         YDB_LOG_INFO("PoisonLocalVDisk",
-            {"marker", "NW00"},
+            {"Marker", "NW00"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
             {"RuntimeData", vdisk.RuntimeData.has_value()});
@@ -73,7 +73,7 @@ namespace NKikimr::NStorage {
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
         YDB_LOG_DEBUG("StartLocalVDiskActor",
-            {"marker", "NW23"},
+            {"Marker", "NW23"},
             {"SlayInFlight", SlayInFlight.contains(vslotId)},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
@@ -368,7 +368,7 @@ namespace NKikimr::NStorage {
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
         YDB_LOG_DEBUG("StartLocalVDiskActor done",
-            {"marker", "NW24"},
+            {"Marker", "NW24"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
             {"PDiskGuid", pdiskGuid},
@@ -496,7 +496,7 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Slay(TVDiskRecord& vdisk) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
         YDB_LOG_INFO("Slay",
-            {"marker", "NW33"},
+            {"Marker", "NW33"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
             {"SlayInFlight", SlayInFlight.contains(vslotId)});
@@ -529,7 +529,7 @@ namespace NKikimr::NStorage {
         auto *msg = ev->Get();
         const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
         YDB_LOG_INFO("TEvDropDonor",
-            {"marker", "NW34"},
+            {"Marker", "NW34"},
             {"VSlotId", vslotId},
             {"VDiskId", msg->VDiskId});
         SendDropDonorQuery(msg->NodeId, msg->PDiskId, msg->VSlotId, msg->VDiskId);

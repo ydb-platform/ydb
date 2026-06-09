@@ -28,7 +28,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Bootstrap() {
         YDB_LOG_DEBUG("Bootstrap",
-            {"marker", "NWDC00"});
+            {"Marker", "NWDC00"});
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
@@ -380,7 +380,7 @@ namespace NKikimr::NStorage {
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
         YDB_LOG_DEBUG("StateWaitForInit event",
-            {"marker", "NWDC53"},
+            {"Marker", "NWDC53"},
             {"Type", ev->GetTypeRewrite()},
             {"StorageConfigLoaded", StorageConfigLoaded},
             {"NodeListObtained", NodeListObtained},
@@ -450,13 +450,13 @@ namespace NKikimr::NStorage {
         Y_DEFER {
             if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
                 YDB_LOG_WARN("StateFunc too long",
-                    {"marker", "NWDC01"},
+                    {"Marker", "NWDC01"},
                     {"Type", type},
                     {"Duration", duration});
             }
         };
         YDB_LOG_DEBUG("StateFunc",
-            {"marker", "NWDC15"},
+            {"Marker", "NWDC15"},
             {"Type", ev->GetTypeRewrite()},
             {"Sender", ev->Sender},
             {"SessionId", ev->InterconnectSession},

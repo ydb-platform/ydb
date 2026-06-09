@@ -99,7 +99,7 @@ namespace NKikimr::NStorage {
             }
             if (!found) {
                 YDB_LOG_DEBUG("FetchStorageConfig: requestor put to pending queue",
-                    {"marker", "NWDC62"},
+                    {"Marker", "NWDC62"},
                     {"SelfId", SelfId()},
                     {"Request", request});
                 DetachQuery();
@@ -234,7 +234,7 @@ namespace NKikimr::NStorage {
         for (const auto& node : config.GetAllNodes()) {
             if (requestorHosts.contains(node.GetHost()) && node.GetPort() == cmd.GetRequestorPort()) {
                 YDB_LOG_DEBUG("FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
-                    {"marker", "NWDC82"},
+                    {"Marker", "NWDC82"},
                     {"SelfId", SelfId()});
 
                 std::optional<TString> mainConfigYaml;
@@ -255,13 +255,13 @@ namespace NKikimr::NStorage {
             }
         }
         YDB_LOG_DEBUG("FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
-            {"marker", "NWDC86"},
+            {"Marker", "NWDC86"},
             {"SelfId", SelfId()});
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
         YDB_LOG_DEBUG("FetchStorageConfig: timed out",
-            {"marker", "NWDC87"},
+            {"Marker", "NWDC87"},
             {"SelfId", SelfId()});
         ReplyToFetchStorageConfig(std::nullopt, std::nullopt, false);
         PassAway();
@@ -537,7 +537,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("received TEvClientConnected",
-            {"marker", "NWDC65"},
+            {"Marker", "NWDC65"},
             {"SelfId", SelfId()},
             {"Status", msg.Status},
             {"ClientId", msg.ClientId},
@@ -552,7 +552,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("received TEvClientDestroyed",
-            {"marker", "NWDC79"},
+            {"Marker", "NWDC79"},
             {"SelfId", SelfId()},
             {"ClientId", msg.ClientId},
             {"ServerId", msg.ServerId});
@@ -564,7 +564,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
         YDB_LOG_DEBUG("received TEvControllerConfigResponse",
-            {"marker", "NWDC80"},
+            {"Marker", "NWDC80"},
             {"SelfId", SelfId()},
             {"Response", response});
         if (response.StatusSize() != 1 || response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_DISTCONF_CONTROL) {
@@ -645,7 +645,7 @@ namespace NKikimr::NStorage {
         };
 
         YDB_LOG_DEBUG("received TEvControllerDistconfResponse",
-            {"marker", "NWDC81"},
+            {"Marker", "NWDC81"},
             {"SelfId", SelfId()},
             {"Record", getRecord()});
 
@@ -687,7 +687,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
         const auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("received TEvControllerValidateConfigResponse",
-            {"marker", "NWDC77"},
+            {"Marker", "NWDC77"},
             {"SelfId", SelfId()},
             {"InternalError", ev->Get()->InternalError},
             {"Status", record.GetStatus()});

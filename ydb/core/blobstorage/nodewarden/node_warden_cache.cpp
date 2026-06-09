@@ -73,7 +73,7 @@ std::function<std::function<void()>(const TActorContext&)> TNodeWarden::WrapCach
             });
         } catch (...) {
             YDB_LOG_WARN("WrapCacheOp failed to update cache",
-                {"marker", "NW06"},
+                {"Marker", "NW06"},
                 {"Error", CurrentExceptionMessage()});
         }
         if (!res) { // no processor was actually called due to error

@@ -25,7 +25,7 @@ namespace NKikimr::NStorage {
                 ParentId = parentId;
 
                 YDB_LOG_DEBUG("TReaderActor bootstrap",
-                    {"marker", "NWDC40"},
+                    {"Marker", "NWDC40"},
                     {"Paths", Paths});
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
@@ -46,7 +46,7 @@ namespace NKikimr::NStorage {
                 auto& record = msg->Record;
 
                 YDB_LOG_DEBUG("TReaderActor result",
-                    {"marker", "NWDC50"},
+                    {"Marker", "NWDC50"},
                     {"Path", path},
                     {"Outcome", msg->Outcome},
                     {"Guid", msg->Guid},
@@ -108,7 +108,7 @@ namespace NKikimr::NStorage {
                 ParentId = parentId;
 
                 YDB_LOG_DEBUG("TWriterActor bootstrap",
-                    {"marker", "NWDC51"},
+                    {"Marker", "NWDC51"},
                     {"Records", Records});
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
@@ -127,7 +127,7 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(index < Drives.size());
                 const TString& path = Drives[index];
                 YDB_LOG_DEBUG("TWriterActor result",
-                    {"marker", "NWDC52"},
+                    {"Marker", "NWDC52"},
                     {"Path", path},
                     {"Outcome", ev->Get()->Outcome},
                     {"Guid", ev->Get()->Guid});
@@ -174,7 +174,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
         YDB_LOG_DEBUG("PersistConfig",
-            {"marker", "NWDC35"},
+            {"Marker", "NWDC35"},
             {"MetadataByPath", MetadataByPath});
 
         TPersistQueueItem& item = PersistQ.emplace_back();
@@ -207,7 +207,7 @@ namespace NKikimr::NStorage {
         auto& item = PersistQ.front();
 
         YDB_LOG_DEBUG("TEvStorageConfigStored",
-            {"marker", "NWDC36"},
+            {"Marker", "NWDC36"},
             {"NumOk", numOk},
             {"NumError", numError},
             {"Passed", TDuration::Seconds(item.Timer.Passed())});
@@ -235,7 +235,7 @@ namespace NKikimr::NStorage {
         auto& msg = *ev->Get();
 
         YDB_LOG_DEBUG("TEvStorageConfigLoaded",
-            {"marker", "NWDC32"},
+            {"Marker", "NWDC32"},
             {"Cookie", ev->Cookie},
             {"NumItemsRead", msg.MetadataPerPath.size()});
         if (ev->Cookie) {

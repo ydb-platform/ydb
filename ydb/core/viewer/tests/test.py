@@ -794,6 +794,12 @@ class TestViewer(object):
         }
 
     @classmethod
+    def test_viewer_groups_allocation_units_without_pool_name(cls):
+        return cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'AllocationUnits',
+        })
+
+    @classmethod
     def test_viewer_groups_with_invalid_database(cls):
         # Test that the endpoint doesn't crash when provided with an invalid database
         result = cls.call_viewer("/viewer/groups", {

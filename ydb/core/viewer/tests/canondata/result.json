@@ -7897,6 +7897,31 @@
             "text": "1\n"
         }
     },
+    "test.TestViewer.test_viewer_groups_allocation_units_without_pool_name": {
+        "FieldsAvailable": "000000100000100000100011111",
+        "FieldsRequired": "000000000000100000000000011",
+        "FoundGroups": 5,
+        "StorageGroups": [
+            {
+                "GroupId": "0"
+            },
+            {
+                "GroupId": "2181038080"
+            },
+            {
+                "GroupId": "2181038081"
+            },
+            {
+                "AllocationUnits": "34",
+                "GroupId": "2181038082"
+            },
+            {
+                "AllocationUnits": "54",
+                "GroupId": "2181038083"
+            }
+        ],
+        "TotalGroups": 5
+    },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
             "FieldsAvailable": "111110111111011111011110001",

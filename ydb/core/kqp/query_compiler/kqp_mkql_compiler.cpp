@@ -572,6 +572,13 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
         });
 
+    compiler->AddCallable("KqpStreamEnumerate",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 1, "KqpStreamEnumerate should have 1 argument");
+            auto input = MkqlBuildExpr(*node.Child(0), buildCtx);
+            return ctx.PgmBuilder().KqpStreamEnumerate(input);
+        });
+
     return compiler;
 }
 

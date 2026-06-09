@@ -1175,7 +1175,8 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
         return BuildReadTableIndex(read, tableData, indexName, withSystemColumns, ctx).Ptr();
     }
 
-    return BuildReadTable(read, tableData, view && view->PrimaryFlag, withSystemColumns, ctx).Ptr();
+    const bool forcePrimary = view && view->PrimaryFlag || kqpCtx->Config->IsAutoIndexSelectionDisabled();
+    return BuildReadTable(read, tableData, forcePrimary, withSystemColumns, ctx).Ptr();
 }
 
 TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputColumns,

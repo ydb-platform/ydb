@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr::NKqp {
@@ -2888,6 +2889,41 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only async-indexed tables are supported by BulkUpsert");
         }
+    }
+
+    const TTtlNotAllowedIndexTestConfig JsonTtlNotAllowedConfig{
+        .TextColumnType = "Json",
+        .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
+        .AlterAddIndex = R"(
+            ALTER TABLE TestTable ADD INDEX json_idx
+                GLOBAL USING json ON (Text);
+        )",
+        .ExpectedError = "Table with EIndexTypeGlobalJson index doesn't support TTL",
+    };
+
+    Y_UNIT_TEST(TtlNotAllowed_Both) {
+        auto kikimr = Kikimr();
+        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
+        auto kikimr = Kikimr();
+        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
+        auto kikimr = Kikimr();
+        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
+        auto kikimr = Kikimr();
+        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
+        auto kikimr = Kikimr();
+        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
     }
 }
 

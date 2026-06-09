@@ -14,6 +14,8 @@
 namespace NKikimr {
 namespace NGraph {
 
+class TTxMonitoring;
+
 class TGraphShard : public TActor<TGraphShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     TGraphShard(TTabletStorageInfo* info, const TActorId& tablet);
@@ -62,6 +64,11 @@ public:
     EBackendType BackendType = EBackendType::Memory;
     TMemoryBackend MemoryBackend;
     TLocalBackend LocalBackend;
+
+    friend class TTxMonitoring;
+
+private:
+    TString ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf baseQuery, ui64 backend, bool securePathMode) const;
 };
 
 } // NGraph

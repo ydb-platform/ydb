@@ -45,6 +45,8 @@ ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;
 
+ui32 gFulltextMaxSegment = 10000;
+
 // Avoid caching too many txIds when operations are cancelled en-masse
 size_t MaxCachedGlobalTxIds = 16;
 

@@ -4,10 +4,6 @@
 
 #include <util/generic/strbuf.h>
 
-namespace NActors {
-struct TActorId;
-} // namespace NActors
-
 namespace NKikimr {
 
 struct TAppData;
@@ -25,18 +21,15 @@ inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure
 // True if `pathInfo` is exactly `/app/secure` or starts with `/app/secure/`.
 bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
 
-// True if the tablet type may serve DevUI via `/app/secure` for the current request.
-// All-or-nothing tablets (DataShard, Hive) are always enabled
-// Whitelist tablets require EnableTabletDevUiSecurePath.
-bool UsesTabletDevUiSecurePath(TTabletTypes::EType type, bool enableSecurePathFlag);
+// True if the tablet type uses `/app/secure` and EnableTabletDevUiSecurePath is set.
+bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type);
 
-// Whitelist model: when secure-path mode is on, requests require `/app/secure` and admin.
-bool CheckTabletDevUiAccess(
+// Check, caller must reply with HTTPFORBIDDEN when false.
+bool IsTabletDevUiAccessAllowed(
     const TAppData* appData,
     bool securePathMode,
     TStringBuf pathInfo,
     const TString& userToken,
-    bool isPublicRequest,
-    const NActors::TActorId& sender);
+    bool isPublicRequest);
 
 } // namespace NKikimr

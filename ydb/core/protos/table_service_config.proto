@@ -70,8 +70,8 @@ message TTableServiceConfig {
             optional bool Enable = 1 [default = true];
             optional string Root = 2 [default = ""];
             optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
-            optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
-            optional uint64 MaxFilePartSize = 5 [default = 104857600]; // 100 MB
+            reserved 4, 5;
+            reserved "MaxFileSize", "MaxFilePartSize";
 
             message TIoThreadPoolConfig {
                 optional uint32 WorkersCount = 1 [default = 2];
@@ -532,4 +532,9 @@ message TTableServiceConfig {
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];
 
     optional bool UseKqpTasksGraphV2 = 134 [default = false, (InvalidateCompileCache) = true];
+
+    // Kill-switch for hybrid search (ORDER BY HybridRank(...) fusion). On by default; gates the
+    // KqpRewriteHybridRankTopSort logical rewrite, so it changes the compiled plan shape and must
+    // invalidate the compile cache when toggled.
+    optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
 };

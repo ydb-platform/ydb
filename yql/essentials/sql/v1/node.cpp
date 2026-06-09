@@ -1872,9 +1872,42 @@ std::pair<TNodePtr, bool> IAggregation::AggregationTraits(const TNodePtr& type, 
     return {distinct ? Q(Y(Q(Name_), wrapped, BuildQuotedAtom(Pos_, DistinctKey_))) : Q(Y(Q(Name_), wrapped)), true};
 }
 
+TStringBuf IAggregation::GetGroupByPhase(ISource* src) const {
+    if (!src) {
+        return "";
+    }
+
+    return src->GetGroupBySuffix();
+}
+
+bool IAggregation::IsOverStatePhase(ISource* src) const {
+    TStringBuf suffix = GetGroupByPhase(src);
+    return !(suffix.empty() || suffix == "Combine" || suffix == "Finalize");
+}
+
+bool IAggregation::IsManyPhase(ISource* src) const {
+    TStringBuf suffix = GetGroupByPhase(src);
+    return suffix == "MergeManyFinalize";
+}
+
+bool IAggregation::IsFinalizingPhase(ISource* src) const {
+    TStringBuf suffix = GetGroupByPhase(src);
+    return suffix.empty() ||
+           suffix == "Finalize" ||
+           suffix == "MergeFinalize" ||
+           suffix == "MergeManyFinalize";
+}
+
 TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const {
     if (!overState) {
         return input;
+    }
+
+    if (AggMode_ == EAggregateMode::Distinct ||
+        AggMode_ == EAggregateMode::OverWindowDistinct)
+    {
+        ctx.Error(Pos_) << "Distinct is not supported with aggregation phases";
+        return nullptr;
     }
 
     auto extractor = GetExtractor(many, ctx);

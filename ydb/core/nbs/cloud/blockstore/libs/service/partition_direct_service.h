@@ -37,6 +37,12 @@ struct IPartitionDirectService
     // local DB. Caller must ensure cfg.IsValid().
     virtual void UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
+
+    // Generates the next tablet-wide write LSN. Called by a vchunk on its
+    // executor thread when it starts processing a write, so generation and
+    // dirty-map registration happen on the same thread. Also drives periodic
+    // persistent buffer cleanup.
+    virtual ui64 GenerateLsn() = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

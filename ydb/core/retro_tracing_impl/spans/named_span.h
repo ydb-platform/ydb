@@ -2,7 +2,7 @@
 
 #include "retro_tracing.h"
 
-#include <ydb/library/actors/retro_tracing/typed_retro_span.h>
+#include <ydb/library/actors/retro_tracing/span/typed_retro_span.h>
 
 namespace NKikimr {
 

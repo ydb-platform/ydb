@@ -86,6 +86,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapFulltextAnalyze(callable, ctx);
             }
 
+            if (name == "KqpStreamEnumerate"sv) {
+                return WrapKqpStreamEnumerate(callable, ctx);
+            }
+
             return nullptr;
         };
 }

@@ -334,14 +334,14 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
     const auto& cgi = ev->Get()->Cgi();
     const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (!CheckTabletDevUiAccess(
+    if (!IsTabletDevUiAccessAllowed(
             AppData(ctx),
             securePathMode,
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            IsPublicPersQueueDevUiRequest(cgi),
-            ev->Sender))
+            IsPublicPersQueueDevUiRequest(cgi)))
     {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;
     }
     if (cgi.Has("SendReadSet")) {

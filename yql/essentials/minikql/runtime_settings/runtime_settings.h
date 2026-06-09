@@ -6,6 +6,16 @@
 
 namespace NYql {
 
+enum class EDatumValidationMode {
+    None,
+    Cheap,
+    Expensive,
+};
+
+constexpr EDatumValidationMode DefaultDatumValidationMode = EDatumValidationMode::None;
+
+constexpr EDatumValidationMode DefaultDatumTestValidationMode = EDatumValidationMode::Cheap;
+
 template <typename TType>
 class TRuntimeSetting {
 public:
@@ -39,7 +49,7 @@ struct TRuntimeSettings {
     virtual ~TRuntimeSettings();
 
     // =============================== Host settings ===============================
-    TRuntimeSetting<bool> DatumValidation{false};
+    TRuntimeSetting<EDatumValidationMode> DatumValidation{DefaultDatumValidationMode};
     // Noop feature.
     // Used for testing only.
     TRuntimeSetting<bool> TestHostSetting{false};
@@ -79,3 +89,6 @@ TRuntimeSettings::TPtr MakeRuntimeSettingsMutable(auto&&... args) {
 }
 
 } // namespace NYql
+
+template <>
+void Out<NYql::EDatumValidationMode>(IOutputStream& out, NYql::EDatumValidationMode value);

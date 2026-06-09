@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Shared KiKiMR config for functional/security tests, kept in a regular module for explicit imports."""
+
+import os
+import subprocess
 
 import os
 import subprocess

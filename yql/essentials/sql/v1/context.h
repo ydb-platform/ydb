@@ -432,7 +432,6 @@ public:
         EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
-    bool StrictWarningAsError = true;
     bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;

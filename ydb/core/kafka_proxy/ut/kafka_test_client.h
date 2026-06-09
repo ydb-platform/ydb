@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>

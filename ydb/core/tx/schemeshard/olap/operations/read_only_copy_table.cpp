@@ -583,7 +583,6 @@ public:
         srcPath->LastTxId = OperationId.GetTxId();
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
-        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);
 
         context.OnComplete.ActivateTx(OperationId);
 

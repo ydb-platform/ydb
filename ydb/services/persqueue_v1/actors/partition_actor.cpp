@@ -1450,6 +1450,7 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
     }
     if (maxSize) {
         read->SetBytes(maxSize);
+        read->SetReadToBlobEnd(true);
     }
     if (maxTimeLagMs) {
         read->SetMaxTimeLagMs(maxTimeLagMs);

@@ -10,14 +10,14 @@
 ydb [global options...] admin cluster diagnostics collect \
   --duration 200 \
   --period 15 \
-  --output diagnostics.tar.bz2
+  --output diagnostics.tar
 ```
 
 ### Параметры команды
 
 * `--duration` — количество секунд, в течение которых будет собираться информация о кластере.
 * `--period` — интервал в секундах между сборами метрик.
-* `--output` — путь и имя файла в формате `.tar.bz2`, в который будет записана вся собранная информация о кластере.
+* `--output` — путь и имя файла в формате `.tar`, в который будет записана вся собранная информация о кластере.
 
 Команда записывает в указанный файл внутреннее состояние узлов кластера на протяжении заданного времени. Каждые `period` секунд производится сбор метрик с каждого узла кластера и запись в файл.
 
@@ -45,7 +45,7 @@ ydb [global options...] admin cluster diagnostics collect \
 
 ```bash
 tools/cluster_diagnostics_view/cluster_diagnostics_view.py \
-  --results-file=diagnostics.tar.bz2 \
+  --results-file=diagnostics.tar \
   --solomon-token-file=token.txt \
   --cluster=some_external_cluster \
   --output=view.html

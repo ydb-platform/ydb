@@ -138,9 +138,16 @@ ui32 CountSharedShardsRows(TTestActorRuntime& runtime, ui64 localShardIdx = 0) {
     TString err;
     TString rangeBound;
     if (localShardIdx != 0) {
-        rangeBound = Sprintf("'('ShardIdx (Uint64 '%lu) (Uint64 '%lu))", localShardIdx, localShardIdx);
+        rangeBound = Sprintf(
+            "'('ShardIdx (Uint64 '%lu) (Uint64 '%lu)) "
+            "'('OwnerPathId (Null) (Void)) "
+            "'('LocalPathId (Null) (Void))",
+            localShardIdx, localShardIdx);
     } else {
-        rangeBound = "'('ShardIdx (Uint64 '0) (Void))";
+        rangeBound =
+            "'('ShardIdx (Null) (Void)) "
+            "'('OwnerPathId (Null) (Void)) "
+            "'('LocalPathId (Null) (Void))";
     }
     const TString query = Sprintf(R"___(
         (

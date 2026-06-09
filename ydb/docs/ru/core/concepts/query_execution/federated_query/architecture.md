@@ -29,23 +29,4 @@
 
 ## Перечень поддерживаемых внешних источников данных {#supported-datasources}
 
-### Стабильные источники данных
-
-{{ ydb-full-name }} имеет встроенную в `ydbd` поддержку следующих источников данных:
-
-- [S3](https://aws.amazon.com/ru/s3/)
-
-### Экспериментальные источники данных
-
-{% include [!](_includes/experimental_connectors_warning.md) %}
-
-Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) поддерживаются следующие внешние СУБД:
-
-- [ClickHouse](https://clickhouse.com/)
-- [Greenplum](https://greenplum.org/)
-- [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16)
-- [MySQL](https://www.mysql.org/)
-- [PostgreSQL](https://www.postgresql.org/)
-- [{{ ydb-short-name }}](https://ydb.tech/) (YDB-to-YDB)
-
-Подробнее см. в разделе [Источники данных на основе внешних коннекторов](experimental_external_connectors/index.md).
+{{ ydb-full-name }} имеет встроенную в `ydbd` поддержку доступа к [S3-совместимым объектным хранилищам](s3/external_table.md). Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) дополнительно поддерживается доступ к ряду внешних СУБД. Подробности см. в разделе [Источники данных на основе внешних коннекторов](experimental_external_connectors/index.md).

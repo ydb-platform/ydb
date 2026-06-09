@@ -242,7 +242,7 @@ WHERE e.user_id = p.user_id
 
 {% include [!](../concepts/query_execution/federated_query/_includes/experimental_connectors_warning.md) %}
 
-{% include [!](../concepts/query_execution/federated_query/_includes/supported_datasources_limitations.md) %}
+{% include [!](../concepts/query_execution/federated_query/_includes/experimental_eds.md) %}
 
 ```sql
 -- Параметры (для примера — как переменные)

@@ -1,6 +1,0 @@
-- [ClickHouse](../clickhouse.md#limitations)
-- [Greenplum](../greenplum.md#limitations)
-- [Microsoft SQL Server](../ms_sql_server.md#limitations)
-- [MySQL](../mysql.md#limitations)
-- [PostgreSQL](../postgresql.md#limitations)
-- [{{ ydb-short-name }}](../ydb.md#limitations)

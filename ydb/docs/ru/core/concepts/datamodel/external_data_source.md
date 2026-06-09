@@ -27,5 +27,11 @@ SELECT * FROM test_data_source.test_table;
 
 В качестве источников данных можно использовать:
 
-{% include [!](../query_execution/federated_query/_includes/supported_datasources.md) %}
+{% include [!](../query_execution/federated_query/_includes/supported_eds.md) %}
+
+{% cut "Экспериментальные источники данных" %}
+
+{% include [!](../query_execution/federated_query/_includes/experimental_eds.md) %}
+
+{% endcut %}
 

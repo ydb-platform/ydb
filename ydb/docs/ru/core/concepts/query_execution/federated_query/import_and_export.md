@@ -33,7 +33,13 @@ SELECT * FROM postgresql_datasource.source_table
 
 Подробнее про создание внешних источников данных и внешних таблиц, а также про запросы чтения данных из них можно прочитать в статьях:
 
-{% include [!](_includes/supported_datasources.md) %}
+{% include [!](_includes/supported_eds.md) %}
+
+{% cut "Экспериментальные источники данных" %}
+
+{% include [!](_includes/experimental_eds.md) %}
+
+{% endcut %}
 
 ## Экспорт данных {#export}
 

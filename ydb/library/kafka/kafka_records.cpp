@@ -10,6 +10,8 @@ namespace NKafka {
 
 namespace {
 
+static constexpr size_t WriteBufferChunkSize = 1 << 16;
+
 void EnsureSupportedCompressionType(ECompressionType compressionType) {
     switch (compressionType) {
         case ECompressionType::NONE:
@@ -86,13 +88,7 @@ TString SerializeRecordBatchRecords(
         RecordsMeta::ItemType,
         RecordsMeta::ItemTypeDesc>;
 
-    i64 payloadSize = NPrivate::TypeStrategy<
-        RecordsMeta, RecordsMeta::Type, NPrivate::TKafkaArrayDesc>::DoSize(version, records);
-    if (!includeArraySize) {
-        payloadSize -= NPrivate::ArraySize<RecordsMeta>(version, static_cast<TKafkaInt32>(records.size()));
-    }
-
-    TKafkaWriteBuffer buffer(payloadSize);
+    TKafkaWriteBuffer buffer(WriteBufferChunkSize);
     TKafkaWritable writable(buffer);
     if (includeArraySize) {
         NPrivate::TWriteCollector writeCollector;
@@ -704,10 +700,10 @@ void NPrivate::ReadLegacyRecordBatch(
     batch.LastOffsetDelta = batch.Records.empty() ? 0 : batch.Records.back().OffsetDelta;
 }
 
-TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version, bool allowCompressed) {
+TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
     TBuffer buffer(data.data(), data.size());
     TKafkaReadable readable(buffer);
-    readable.SetAllowCompressed(allowCompressed);
+    readable.SetAllowCompressed(true);
 
     TKafkaRecordBatch batch;
     batch.Read(readable, version);
@@ -718,7 +714,7 @@ TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version, b
 }
 
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
-    TKafkaWriteBuffer buffer(batch.Size(version));
+    TKafkaWriteBuffer buffer(WriteBufferChunkSize);
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
     return buffer.AsString();

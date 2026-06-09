@@ -316,8 +316,7 @@ void AssertKafkaProducerBatchSerialized(ECompressionType compressionType) {
     const TString serialized = KafkaProducerBatchBytes(compressionType);
     TKafkaRecordBatch parsed = ReadKafkaRecordBatch(
         serialized,
-        2,
-        true);
+        2);
 
     if (compressionType == ECompressionType::NONE) {
         UNIT_ASSERT_VALUES_EQUAL(WriteKafkaRecordBatch(parsed), serialized);

@@ -613,8 +613,7 @@ public:
 
 TKafkaRecordBatch ReadKafkaRecordBatch(
     TStringBuf data,
-    TKafkaVersion version = 2,
-    bool allowCompressed = true);
+    TKafkaVersion version = 2);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
 } // namespace NKafka

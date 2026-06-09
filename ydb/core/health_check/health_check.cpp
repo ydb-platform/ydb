@@ -921,7 +921,7 @@ public:
                     auto groupId = vDisk.GetVDiskID().GetGroupID();
                     if (NeedWhiteboardInfoForGroup(groupId)) {
                         YDB_LOG_DEBUG("Requesting whiteboard for group",
-                            {"groupId", groupId});
+                            {"GroupId", groupId});
                         RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
@@ -1006,14 +1006,14 @@ public:
     void RequestDone(const char* name) {
         --Requests;
         YDB_LOG_TRACE("RequestDone",
-            {"name", name},
+            {"Name", name},
             {"RemainRequests", Requests});
         if (Requests == 0) {
             ReplyAndPassAway();
         }
         if (Requests < 0) {
             YDB_LOG_CRIT("Requests < 0 in RequestDone",
-                {"name", name});
+                {"Name", name});
         }
     }
 
@@ -1765,7 +1765,7 @@ public:
             }
         } else {
             YDB_LOG_DEBUG("TEvNavigateKeySetResult",
-                {"error", response.GetError()});
+                {"Error", response.GetError()});
             if (response.GetError() == "PathErrorUnknown") {
                 auto result = MakeHolder<TEvSelfCheckResult>();
                 result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_UNSPECIFIED);
@@ -2956,8 +2956,8 @@ public:
         checker.ReportStatus(context);
 
         YDB_LOG_DEBUG("Group status",
-            {"groupId", groupId},
-            {"status", context.GetOverallStatus()});
+            {"GroupId", groupId},
+            {"Status", context.GetOverallStatus()});
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 

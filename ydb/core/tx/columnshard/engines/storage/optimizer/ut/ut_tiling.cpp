@@ -653,12 +653,12 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
 
         // Nothing to compact -> bored.
         UNIT_ASSERT(!tiling.GetNextOptimizationTask(NeverLocked()));
-        UNIT_ASSERT(tiling.State == TTestTiling::EState::BOARDED);
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::BORED);
 
         // Bored actualize promotes the wide portion despite the timer not being expired.
         tiling.DoActualize(insertTime + TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 2);
-        UNIT_ASSERT(tiling.State == TTestTiling::EState::BOARDED);
+        UNIT_ASSERT(tiling.State == TTestTiling::EState::BORED);
 
         // A last-level candidate (overlaps exactly one baseline) gives the planner work again.
         tiling.AddPortion(MakePortion(200, 0, 9, 1000));

@@ -60,6 +60,10 @@ public:
         return !Level && !InternalLevelWeight;
     }
 
+    bool IsZeroLevel() const {
+        return !Level;
+    }
+
     bool IsCritical() const {
         return Level >= 10;
     }

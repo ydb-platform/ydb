@@ -5992,6 +5992,116 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(GrantMergesPermissionsIntoSingleAce) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto driver = TDriver(TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken("root@builtin"));
+            auto client = NQuery::TQueryClient(driver);
+            AssertSuccessResult(client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/test_acl` (
+                    id Int64 NOT NULL,
+                    primary key (id)
+                );
+            )", NQuery::TTxControl::NoTx()).ExtractValueSync());
+            driver.Stop(true);
+        }
+
+        // Within a single request:
+        //  - one action grants {ydb.granular.update_row, ydb.granular.erase_row}: the names share the same
+        //    inheritance type and are merged into a single ACE whose mask (UpdateRow|EraseRow) collapses back
+        //    into the composite name "ydb.tables.modify";
+        //  - a separate action grants ydb.granular.update_row to the same subject: being a distinct action,
+        //    it produces its own ACE, so it is not folded into the merged one.
+        auto schemeClient = kikimr.GetSchemeClient();
+        AssertSuccessResult(schemeClient.ModifyPermissions("/Root/test_acl",
+                NYdb::NScheme::TModifyPermissionsSettings()
+                    .AddGrantPermissions(NYdb::NScheme::TPermissions("user1", {"ydb.granular.update_row", "ydb.granular.erase_row"}))
+                    .AddGrantPermissions(NYdb::NScheme::TPermissions("user1", {"ydb.granular.update_row"}))
+            ).ExtractValueSync()
+        );
+
+        CheckPermissions(session,
+            {
+                {.Path = "/Root/test_acl",
+                    .Permissions = {
+                                {"user1", {"ydb.tables.modify", "ydb.granular.update_row"}},
+                    }
+                },
+            }
+        );
+    }
+
+    Y_UNIT_TEST(DistinctInheritanceTypesInSingleGrant) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto driver = TDriver(TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken("root@builtin"));
+            auto client = NQuery::TQueryClient(driver);
+            AssertSuccessResult(client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/test_acl` (
+                    id Int64 NOT NULL,
+                    primary key (id)
+                );
+            )", NQuery::TTxControl::NoTx()).ExtractValueSync());
+            driver.Stop(true);
+        }
+
+        auto schemeClient = kikimr.GetSchemeClient();
+        auto result = schemeClient.ModifyPermissions("/Root/test_acl",
+                NYdb::NScheme::TModifyPermissionsSettings()
+                    .AddGrantPermissions(NYdb::NScheme::TPermissions("user1", {"ydb.database.connect", "ydb.generic.read"}))
+            ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Distinct inheritance types in one permission action");
+
+        CheckPermissions(session,
+            {
+                {.Path = "/Root/test_acl",
+                    .Permissions = {
+                    }
+                },
+            }
+        );
+    }
+
+    Y_UNIT_TEST(DistinctInheritanceTypesInSingleRevoke) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto driver = TDriver(TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken("root@builtin"));
+            auto client = NQuery::TQueryClient(driver);
+            AssertSuccessResult(client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/test_acl` (
+                    id Int64 NOT NULL,
+                    primary key (id)
+                );
+            )", NQuery::TTxControl::NoTx()).ExtractValueSync());
+            driver.Stop(true);
+        }
+
+        auto schemeClient = kikimr.GetSchemeClient();
+        auto result = schemeClient.ModifyPermissions("/Root/test_acl",
+                NYdb::NScheme::TModifyPermissionsSettings()
+                    .AddRevokePermissions(NYdb::NScheme::TPermissions("user1", {"ydb.database.connect", "ydb.generic.read"}))
+            ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Distinct inheritance types in one permission action");
+    }
 
     Y_UNIT_TEST(FamilyColumnTest) {
         TKikimrRunner kikimr;

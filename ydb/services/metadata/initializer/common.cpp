@@ -17,10 +17,13 @@ TACLModifierConstructor TACLModifierConstructor::GetReadOnlyModifier(const TStri
     TACLModifierConstructor result(path, id);
     result->set_clear_permissions(true);
     result->set_interrupt_inheritance(true);
-    auto* permission = result->add_actions();
-    permission->mutable_grant()->set_subject(AppData()->AllAuthenticatedUsers ? AppData()->AllAuthenticatedUsers : "USERS");
-    permission->mutable_grant()->add_permission_names("ydb.tables.read");
-    permission->mutable_grant()->add_permission_names("ydb.deprecated.describe_schema");
+    const TString subject = AppData()->AllAuthenticatedUsers ? AppData()->AllAuthenticatedUsers : "USERS";
+    auto* readPermission = result->add_actions();
+    readPermission->mutable_grant()->set_subject(subject);
+    readPermission->mutable_grant()->add_permission_names("ydb.tables.read");
+    auto* describePermission = result->add_actions();
+    describePermission->mutable_grant()->set_subject(subject);
+    describePermission->mutable_grant()->add_permission_names("ydb.deprecated.describe_schema");
     return result;
 }
 

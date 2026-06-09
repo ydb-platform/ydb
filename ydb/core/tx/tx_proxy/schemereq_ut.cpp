@@ -412,7 +412,10 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
 void SetPermissions(const TTestEnv& env, const TString& path, const TString& targetSid, const std::vector<std::string>& permissions) {
     auto client = CreateSchemeClient(env, env.RootToken);
     auto modify = NYdb::NScheme::TModifyPermissionsSettings();
-    auto status = client.ModifyPermissions(path, modify.AddSetPermissions({targetSid, permissions}))
+    for (const auto& permission : permissions) {
+        modify.AddGrantPermissions({targetSid, {permission}});
+    }
+    auto status = client.ModifyPermissions(path, modify)
         .ExtractValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 }

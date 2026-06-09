@@ -296,9 +296,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         {
             auto schemeClient = kikimr.GetSchemeClient();
-            NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
             AssertSuccessResult(schemeClient.ModifyPermissions("/Root/test_acl",
-                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                    NYdb::NScheme::TModifyPermissionsSettings()
+                        .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", {"ydb.deprecated.describe_schema"}))
+                        .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", {"ydb.deprecated.select_row"}))
                 ).ExtractValueSync()
             );
         }
@@ -405,9 +406,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         {
             auto schemeClient = kikimr.GetSchemeClient();
-            NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.erase_row", "ydb.deprecated.update_row"});
             AssertSuccessResult(schemeClient.ModifyPermissions("/Root/test_acl",
-                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                    NYdb::NScheme::TModifyPermissionsSettings()
+                        .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", {"ydb.deprecated.erase_row"}))
+                        .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", {"ydb.deprecated.update_row"}))
                 ).ExtractValueSync()
             );
         }
@@ -658,7 +660,8 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         AddConnectPermission(kikimr, UserName);
 
         for (const auto permission : {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"}) {
-            AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"});
+            AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema"});
+            AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.update_row"});
 
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())

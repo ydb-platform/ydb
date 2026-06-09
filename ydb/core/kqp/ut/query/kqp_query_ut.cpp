@@ -539,10 +539,14 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 }
             }
 
-            auto permissionsSettings =
-                NYdb::NScheme::TModifyPermissionsSettings()
-                .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", grantPermissions))
-                .AddRevokePermissions(NYdb::NScheme::TPermissions("user0@builtin", revokePermissions));
+            auto permissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
+            for (const auto& permission : grantPermissions) {
+                permissionsSettings.AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", {permission}));
+            }
+
+            for (const auto& permission : revokePermissions) {
+                permissionsSettings.AddRevokePermissions(NYdb::NScheme::TPermissions("user0@builtin", {permission}));
+            }
 
             auto schemeClient = kikimr.GetSchemeClient();
             auto result = schemeClient.ModifyPermissions("/Root/Test", permissionsSettings).ExtractValueSync();

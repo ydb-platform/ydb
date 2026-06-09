@@ -1419,10 +1419,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             edgeActor, TDuration::Seconds(5));
 
         UNIT_ASSERT_C(response, "Compile service did not respond in time");
-        UNIT_ASSERT_C(response->Get()->Record.HasStatus(), 
+        UNIT_ASSERT_C(response->Get()->Record.HasStatus(),
             "Response for tenant mismatch must have Status field");
         UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::UNAVAILABLE,
-            "Tenant mismatch must return UNAVAILABLE status, got " 
+            "Tenant mismatch must return UNAVAILABLE status, got "
             << static_cast<int>(response->Get()->Record.GetStatus()));
         UNIT_ASSERT_C(response->Get()->Record.GetIssues().size() > 0,
             "Response must contain error message in Issues");
@@ -1442,13 +1442,14 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             for (const auto& user : {"user1@builtin", "user2@builtin"}) {
                 TPermissions permissions(user,
                     {
-                        "ydb.database.connect",
                         "ydb.granular.describe_schema",
                         "ydb.granular.select_row",
                     }
                 );
                 auto result = schemeClient.ModifyPermissions("/Root",
-                    TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                    TModifyPermissionsSettings()
+                        .AddGrantPermissions(TPermissions(user, {"ydb.database.connect"}))
+                        .AddGrantPermissions(permissions)
                 ).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }

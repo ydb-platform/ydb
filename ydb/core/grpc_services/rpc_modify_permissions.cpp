@@ -65,24 +65,60 @@ private:
             switch (perm.action_case()) {
                 case Ydb::Scheme::PermissionsAction::kSet: {
                     acl.ClearAccessForSid(perm.set().subject());
+                    ui32 targetAccessMask = 0;
+                    std::optional<ui32> inheritanceType;
                     for (const auto& n : perm.set().permission_names()) {
                         auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
-                        acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.set().subject(), aclAttrs.InheritanceType);
+                        targetAccessMask |= aclAttrs.AccessMask;
+                        if (inheritanceType && aclAttrs.InheritanceType != *inheritanceType) {
+                            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                                << "Distinct inheritance types in one permission action";
+                        }
+
+                        inheritanceType = aclAttrs.InheritanceType;
+                    }
+
+                    if (targetAccessMask) {
+                        acl.AddAccess(NACLib::EAccessType::Allow, targetAccessMask, perm.set().subject(), *inheritanceType);
                     }
                 }
                 break;
                 case Ydb::Scheme::PermissionsAction::kGrant:
                 {
+                    ui32 targetAccessMask = 0;
+                    std::optional<ui32> inheritanceType;
                     for (const auto& n : perm.grant().permission_names()) {
                         auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
-                        acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.grant().subject(), aclAttrs.InheritanceType);
+                        targetAccessMask |= aclAttrs.AccessMask;
+                        if (inheritanceType && aclAttrs.InheritanceType != *inheritanceType) {
+                            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                                << "Distinct inheritance types in one permission action";
+                        }
+
+                        inheritanceType = aclAttrs.InheritanceType;
+                    }
+
+                    if (targetAccessMask) {
+                        acl.AddAccess(NACLib::EAccessType::Allow, targetAccessMask, perm.grant().subject(), *inheritanceType);
                     }
                 }
                 break;
                 case Ydb::Scheme::PermissionsAction::kRevoke: {
+                    ui32 targetAccessMask = 0;
+                    std::optional<ui32> inheritanceType;
                     for (const auto& n : perm.revoke().permission_names()) {
                         auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
-                        acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.revoke().subject(), aclAttrs.InheritanceType);
+                        targetAccessMask |= aclAttrs.AccessMask;
+                        if (inheritanceType && aclAttrs.InheritanceType != *inheritanceType) {
+                            throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
+                                << "Distinct inheritance types in one permission action";
+                        }
+
+                        inheritanceType = aclAttrs.InheritanceType;
+                    }
+
+                    if (targetAccessMask) {
+                        acl.RemoveAccess(NACLib::EAccessType::Allow, targetAccessMask, perm.revoke().subject(), *inheritanceType);
                     }
                 }
                 break;

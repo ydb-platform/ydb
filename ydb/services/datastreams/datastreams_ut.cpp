@@ -100,10 +100,12 @@ public:
 
         {
             NYdb::NScheme::TSchemeClient schemeClient(*Driver);
-            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.database.connect", "ydb.generic.read", "ydb.generic.write"});
+            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
 
             auto result = schemeClient.ModifyPermissions("/Root",
-                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                NYdb::NScheme::TModifyPermissionsSettings()
+                    .AddGrantPermissions(NYdb::NScheme::TPermissions("user@builtin", {"ydb.database.connect"}))
+                    .AddGrantPermissions(permissions)
             ).ExtractValueSync();
             Cerr << result.GetIssues().ToString() << "\n";
             UNIT_ASSERT(result.IsSuccess());
